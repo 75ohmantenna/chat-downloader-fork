@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 from enum import Enum
@@ -52,6 +53,37 @@ _SENSITIVE_LOG_KEYS = frozenset(
         "x-api-key",
     },
 )
+
+# Defense-in-depth: even after key-based redaction, raw token-like strings
+# embedded in serialized payload values (e.g. an Authorization header
+# concatenated into a log message, or a SAPISIDHASH copied into a string
+# body) should be scrubbed before the sample lands on disk.
+_TOKEN_REDACTION_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # Tokens carried as JSON string values for any of the named keys.
+    re.compile(
+        r'(?i)("(?:authorization|sapisid(?:hash)?|set-cookie|cookie|'
+        r'bearer|token|x-api-key|x-goog-authuser)"\s*:\s*")[^"]+',
+    ),
+    # Bare "Authorization: Bearer …" / "SAPISIDHASH …" style strings.
+    re.compile(
+        r"(?i)(authorization\s*[:=]\s*bearer\s+)[A-Za-z0-9._\-+/=]{8,}",
+    ),
+    re.compile(r"(?i)(sapisidhash\s+)[A-Za-z0-9_]{16,}"),
+    # JWT-shaped payloads: header.payload.signature.
+    re.compile(
+        r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}",
+    ),
+)
+
+
+def _scrub_token_like_strings(serialized: str) -> str:
+    """Redact token-like substrings from a JSON-serialized payload."""
+    for pattern in _TOKEN_REDACTION_PATTERNS:
+        if pattern.groups:
+            serialized = pattern.sub(rf"\1{REDACTED}", serialized)
+        else:
+            serialized = pattern.sub(REDACTED, serialized)
+    return serialized
 
 
 def set_testing_mode(new_mode: TestingModes) -> None:
@@ -158,6 +190,9 @@ def capture_debug_sample(label: str, payload: Any) -> str | None:
             indent=2,
             default=str,
         )
+        # Belt-and-braces scrub: tokens embedded in serialized string values
+        # bypass the key-based redaction above.
+        serialized = _scrub_token_like_strings(serialized)
         # Stable short digest for fixture names; not used for security
         # decisions.
         digest = hashlib.sha1(

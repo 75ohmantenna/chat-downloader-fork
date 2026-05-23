@@ -221,6 +221,48 @@ def test_capture_debug_sample_logs_fixture_hint() -> None:
         )
 
 
+def test_capture_debug_sample_scrubs_inline_tokens_in_values() -> None:
+    """Tokens embedded inside string values must be redacted even when the
+    parent key isn't in _SENSITIVE_LOG_KEYS (defense-in-depth)."""
+    synthetic_jwt = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+        ".eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+        ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+    )
+    payload = {
+        # Key not in allowlist -> the inline header value passes the key
+        # check but must still be scrubbed by the regex pass.
+        "log_line": (
+            f"Sent request with Authorization: Bearer {synthetic_jwt} "
+            "and SAPISIDHASH 1234567890_abcdef0987654321deadbeef"
+        ),
+        "ok": "hello world",
+    }
+
+    with (
+        tempfile.TemporaryDirectory() as temp_dir,
+        patch.dict(
+            os.environ,
+            {
+                "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES": "1",
+                "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR": temp_dir,
+            },
+            clear=False,
+        ),
+    ):
+        dbg.set_log_level("debug")
+        path = dbg.capture_debug_sample("inline-secret", payload)
+        assert path is not None
+        with open(path, encoding="utf-8") as fh:
+            contents = fh.read()
+
+    # The literal secret bytes must not appear anywhere in the sample.
+    assert synthetic_jwt not in contents
+    assert "1234567890_abcdef0987654321deadbeef" not in contents
+    # Untouched values survive.
+    assert "hello world" in contents
+
+
 def test_capture_debug_sample_is_disabled_without_env_flag() -> None:
     with (
         tempfile.TemporaryDirectory() as temp_dir,
