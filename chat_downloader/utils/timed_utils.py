@@ -182,6 +182,9 @@ class TimedGenerator:
         self.timer: threading.Timer | None = None
         self.inactivity_timer: threading.Timer | None = None
         self._closed = False
+        self._stop_requested = threading.Event()
+        self._worker_state_lock = threading.Lock()
+        self._worker_advancing = False
         self._start_time = time.monotonic()
         self._timeout_expired = threading.Event()
         self._inactivity_expired = threading.Event()
@@ -273,10 +276,18 @@ class TimedGenerator:
         )
 
     def _cancel_timers(self) -> None:
+        self._stop_requested.set()
         if self.timer is not None:
             self.timer.cancel()
         if self.inactivity_timer is not None:
             self.inactivity_timer.cancel()
+        with self._worker_state_lock:
+            worker_advancing = self._worker_advancing
+        if worker_advancing:
+            return
+        self._close_generator()
+
+    def _close_generator(self) -> None:
         close = getattr(self.generator, "close", None)
         if callable(close):
             try:
@@ -289,9 +300,18 @@ class TimedGenerator:
                 log("debug", f"Suppressed generator close() error: {error}")
 
     def _worker_loop(self) -> None:
-        while True:
+        while not self._stop_requested.is_set():
             try:
-                item = next(self.generator)
+                with self._worker_state_lock:
+                    self._worker_advancing = True
+                try:
+                    item = next(self.generator)
+                finally:
+                    with self._worker_state_lock:
+                        self._worker_advancing = False
+                if self._stop_requested.is_set():
+                    self._close_generator()
+                    return
                 self._result_queue.put(("item", item, time.monotonic()))
             except StopIteration:
                 self._result_queue.put(("stop", None, time.monotonic()))

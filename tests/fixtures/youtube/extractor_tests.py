@@ -242,12 +242,15 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
     },
     {
-        "name": "Members-only content",
+        "name": "Former members-only content with replay chat",
         "params": {
             "url": "https://www.youtube.com/watch?v=vprErlL1w2E",
+            "max_messages": 3,
         },
         "expected_result": {
-            "error": VideoUnplayable,
+            "message_types": ["text_message"],
+            "action_types": ["add_chat_item"],
+            "messages_condition": lambda messages: 0 < len(messages) <= 3,
         },
     },
     {
@@ -344,18 +347,20 @@ YOUTUBE_EXTRACTOR_TESTS = [
         "name": "Chat replay of clip (past broadcast)",
         "params": {
             "url": "https://www.youtube.com/clip/Ugy_1IfsnZUWZSXL6C94AaABCQ",
+            "max_messages": 3,
         },
         "expected_result": {
-            "messages_condition": lambda messages: len(messages) > 0,
+            "messages_condition": lambda messages: 0 < len(messages) <= 3,
         },
     },
     {
         "name": "Chat replay of clip (premiere)",
         "params": {
             "url": "https://www.youtube.com/clip/UgzNZCNnPzq-M3_Utjl4AaABCQ",
+            "max_messages": 3,
         },
         "expected_result": {
-            "messages_condition": lambda messages: len(messages) > 0,
+            "messages_condition": lambda messages: 0 < len(messages) <= 3,
         },
     },
     {

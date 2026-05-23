@@ -1,6 +1,42 @@
 # SPDX-License-Identifier: MIT
 
+import threading
+
 from chat_downloader.utils.timed_utils import TimedGenerator
+
+
+class BlockingCloseableIterator:
+    def __init__(self) -> None:
+        self.entered = threading.Event()
+        self.release = threading.Event()
+        self.closed = threading.Event()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self.entered.set()
+        self.release.wait(timeout=2)
+        return "late"
+
+    def close(self) -> None:
+        self.closed.set()
+
+
+def test_cancel_timers_defers_close_while_worker_is_advancing() -> None:
+    source = BlockingCloseableIterator()
+    tg = TimedGenerator(source)
+
+    assert source.entered.wait(timeout=1)
+
+    tg._cancel_timers()
+
+    assert not source.closed.is_set()
+
+    source.release.set()
+    tg._worker.join(timeout=1)
+
+    assert source.closed.is_set()
 
 
 def test_cancel_timers_suppresses_reentrant_generator_close_error(
