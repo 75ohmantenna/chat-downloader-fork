@@ -137,7 +137,6 @@ def test_execute_run_processes_messages_and_closes_downloader() -> None:
 
     execute_run(
         FakeDownloader,
-        "https://issues.example.invalid",
         url="https://www.youtube.com/watch?v=abc",
         max_messages=1,
     )
@@ -171,7 +170,6 @@ def test_execute_run_passes_dedup_cache_size_to_message_callback() -> None:
     try:
         execute_run(
             _FakeDownloader,
-            "https://issues.example.invalid",
             quiet=False,
             max_seen_message_ids=123,
         )
@@ -193,7 +191,6 @@ def test_execute_run_applies_typed_run_debug_controls(monkeypatch) -> None:
 
     execute_run(
         _FakeDownloader,
-        "https://issues.example.invalid",
         exit_on_debug=True,
         pause_on_debug=False,
     )
@@ -236,7 +233,7 @@ def test_execute_run_closes_chat_when_iteration_is_interrupted() -> None:
         def close(self) -> None:
             self.closed = True
 
-    execute_run(FakeDownloader, "https://issues.example.invalid")
+    execute_run(FakeDownloader)
 
     assert FakeDownloader.instance.chat.closed is True
     assert FakeDownloader.instance.closed is True
@@ -265,7 +262,6 @@ def test_execute_run_logs_expected_error_paths(
 
     execute_run(
         FakeDownloader,
-        "https://issues.example.invalid",
         url="https://www.youtube.com/watch?v=abc",
     )
 
@@ -284,7 +280,7 @@ def test_execute_run_logs_expected_error_paths(
         RuntimeTestingException("testing"),
     ],
 )
-def test_execute_run_reports_issue_url_for_generator_and_testing_errors(
+def test_execute_run_logs_error_message_for_generator_and_testing_errors(
     monkeypatch,
     error_to_raise,
 ) -> None:
@@ -298,16 +294,10 @@ def test_execute_run_reports_issue_url_for_generator_and_testing_errors(
 
     execute_run(
         FakeDownloader,
-        "https://issues.example.invalid",
         url="https://www.youtube.com/watch?v=abc",
     )
 
-    assert logged == [
-        (
-            "error",
-            f"{error_to_raise}. Please report this at https://issues.example.invalid",
-        ),
-    ]
+    assert logged == [("error", str(error_to_raise))]
 
 
 def test_execute_run_logs_and_continues_when_chat_close_fails(
@@ -328,7 +318,7 @@ def test_execute_run_logs_and_continues_when_chat_close_fails(
         lambda level, message: logged.append((level, str(message))),
     )
 
-    execute_run(_TrackingDownloader, "https://issues.example.invalid")
+    execute_run(_TrackingDownloader)
 
     assert ("warning", "Error finalizing chat output: close failed") in logged
     assert _TrackingDownloader._last.closed is True
@@ -344,7 +334,7 @@ def test_execute_run_does_not_swallow_non_io_chat_close_errors() -> None:
             return _RuntimeErrorChat()
 
     with pytest.raises(RuntimeError, match="programmer bug"):
-        execute_run(_Downloader, "https://issues.example.invalid")
+        execute_run(_Downloader)
 
 
 def test_execute_run_logs_cleanup_errors_when_primary_error_occurs(
@@ -381,12 +371,10 @@ def test_execute_run_logs_cleanup_errors_when_primary_error_occurs(
         lambda level, message: logged.append((level, str(message))),
     )
 
-    result = execute_run(FakeDownloader, "https://issues.example.invalid")
+    result = execute_run(FakeDownloader)
 
     assert result.success is False
-    assert result.error_message == (
-        "generator failed. Please report this at https://issues.example.invalid"
-    )
+    assert result.error_message == "generator failed"
     assert (
         "warning",
         "Error finalizing chat output: chat cleanup failed",
@@ -409,7 +397,7 @@ def test_execute_run_raises_downloader_close_error_when_no_primary_error(
             raise RuntimeError("downloader cleanup failed")
 
     with pytest.raises(RuntimeError, match="downloader cleanup failed"):
-        execute_run(_BadCloseDownloader, "https://issues.example.invalid")
+        execute_run(_BadCloseDownloader)
 
 
 def test_execute_run_logs_keyboard_interrupt_without_propagation(
@@ -425,7 +413,6 @@ def test_execute_run_logs_keyboard_interrupt_without_propagation(
 
     execute_run(
         FakeDownloader,
-        "https://issues.example.invalid",
         url="https://www.youtube.com/watch?v=abc",
     )
 
@@ -440,7 +427,6 @@ def test_execute_run_propagates_keyboard_interrupt_when_requested() -> None:
     with pytest.raises(KeyboardInterrupt):
         execute_run(
             FakeDownloader,
-            "https://issues.example.invalid",
             propagate_interrupt=True,
             url="https://www.youtube.com/watch?v=abc",
         )

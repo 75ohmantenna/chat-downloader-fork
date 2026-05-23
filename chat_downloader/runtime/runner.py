@@ -68,7 +68,6 @@ def create_message_callback(
 
 def execute_run(
     downloader_cls: type,
-    issues_url: str,
     propagate_interrupt: bool = False,
     **kwargs: Any,
 ) -> RunResult:
@@ -109,7 +108,7 @@ def execute_run(
 
     except (ChatGeneratorError, ParsingError, TestingException) as e:
         primary_error = True
-        result.error_message = f"{e}. Please report this at {issues_url}"
+        result.error_message = str(e)
         log("error", result.error_message)
     except ChatDownloaderError as e:
         primary_error = True

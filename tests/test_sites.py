@@ -24,13 +24,6 @@ def test_youtube() -> None:
             "type": "channel_id",
             "video_type": "live",
         },
-        # TODO: Find channel with 24/7 live stream
-        # {
-        #     'prefix': 'user/',
-        #     'id': '...',
-        #     'type': 'user_id',
-        #     'video_type': 'live'
-        # },
         {
             "prefix": "c/",
             "id": "LofiGirl",

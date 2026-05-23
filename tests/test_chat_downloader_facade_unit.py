@@ -62,13 +62,10 @@ def test_run_delegates_to_runtime_execute_run(monkeypatch) -> None:
 
     def fake_execute_run(
         downloader_cls,
-        issues_url,
         propagate_interrupt=False,
         **kwargs,
     ) -> None:
-        execute_calls.append(
-            (downloader_cls, issues_url, propagate_interrupt, kwargs)
-        )
+        execute_calls.append((downloader_cls, propagate_interrupt, kwargs))
 
     monkeypatch.setattr(
         "chat_downloader.chat_downloader.execute_run",
@@ -84,8 +81,6 @@ def test_run_delegates_to_runtime_execute_run(monkeypatch) -> None:
     assert execute_calls == [
         (
             ChatDownloader,
-            "
-            "chat-downloader-refactor/issues",
             True,
             {
                 "url": "https://www.youtube.com/watch?v=abc",

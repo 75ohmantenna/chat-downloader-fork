@@ -51,11 +51,6 @@ _DEFAULT_FORMAT = SiteDefault("format")
 if TYPE_CHECKING:
     from .sites.base import BaseChatDownloader
 
-# Error reporting URLs
-ISSUES_URL = (
-    "
-)
-
 # ===== Main ChatDownloader Class =====
 
 
@@ -417,7 +412,6 @@ def run(propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
     """
     return execute_run(
         ChatDownloader,
-        ISSUES_URL,
         propagate_interrupt=propagate_interrupt,
         **kwargs,
     )
