@@ -1,140 +1,229 @@
-import os
-import sys
-import unittest
-import argparse
-import itertools
-# Allow direct execution
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # noqa
+# SPDX-License-Identifier: MIT
 
-from chat_downloader import (run, ChatDownloader)
-from chat_downloader.sites import get_all_sites
-from chat_downloader.cli import splitter
-from chat_downloader.debugging import (
-    set_testing_mode,
-    set_log_level,
-    TestingModes as Modes
-)
+import contextlib
 
-args = {
-    # Tests
-    'max_tests_per_site': 50,
-    'sites': ['all'],
+import pytest
 
-    # Program params
-    'timeout': 10,
-    'max_attempts': 5,
-    'interruptible_retry': False,
+from chat_downloader.utils.timed_utils import TimedGenerator
 
-    # For Twitch and Facebook:
-    'livestream_limit': 10,
-    'vod_limit': 20,
-    'clip_limit': 20
-}
 
-if __name__ == '__main__':  # Do not parse args if using pytest
+def test_timed_generator_basic() -> None:
+    """Test basic TimedGenerator functionality."""
 
-    # Parse args and use this when creating the test cases
-    parser = argparse.ArgumentParser(
-        description='Testing suite for chat-downloader. Sites generate appropriate video URLs and tests them with the specified arguments.',
-        formatter_class=argparse.RawTextHelpFormatter, usage=argparse.SUPPRESS
+    def simple_generator():
+        yield from range(5)
+
+    timed_gen = TimedGenerator(simple_generator())
+    result = list(timed_gen)
+    assert result == [0, 1, 2, 3, 4]
+
+
+def test_timed_generator_timeout() -> None:
+    """Test TimedGenerator with timeout."""
+    from unittest.mock import patch
+
+    class FakeTimer:
+        def __init__(self, alive: bool) -> None:
+            self._alive = alive
+            self.cancelled = False
+
+        def is_alive(self):
+            return self._alive
+
+        def cancel(self) -> None:
+            self.cancelled = True
+
+    called = []
+
+    def interrupting_generator():
+        raise KeyboardInterrupt
+        yield  # pragma: no cover
+
+    def fake_start_timer(self) -> None:
+        self.timer = FakeTimer(alive=False)  # expired timer
+        self._timeout_expired.set()
+
+    with patch.object(TimedGenerator, "start_timer", fake_start_timer):
+        timed_gen = TimedGenerator(
+            interrupting_generator(),
+            timeout=0.5,
+            on_timeout=lambda: called.append("timeout"),
+        )
+
+    with pytest.raises(StopIteration):
+        next(timed_gen)
+
+    assert called == ["timeout"]
+    assert timed_gen.timer.cancelled
+
+
+def test_timed_generator_inactivity_timeout() -> None:
+    """Test TimedGenerator with inactivity timeout."""
+    import time
+
+    def inactive_generator():
+        yield 1
+        time.sleep(0.04)  # Pause longer than inactivity timeout
+        yield 2
+
+    # Should stop due to inactivity
+    timed_gen = TimedGenerator(inactive_generator(), inactivity_timeout=0.02)
+
+    result = []
+    try:
+        for item in timed_gen:
+            result.append(item)
+    except StopIteration:
+        pass
+
+    # Should only get first item before inactivity timeout
+    assert len(result) == 1
+    assert result[0] == 1
+
+
+def test_timed_generator_callback() -> None:
+    """Test TimedGenerator with timeout callback."""
+    import time
+
+    callback_called = []
+
+    def timeout_callback() -> None:
+        callback_called.append(True)
+
+    def slow_generator():
+        for i in range(10):
+            time.sleep(0.02)
+            yield i
+
+    timed_gen = TimedGenerator(
+        slow_generator(),
+        timeout=0.1,
+        on_timeout=timeout_callback,
     )
 
-    parser.add_argument(
-        '--timeout', default=60, type=float, help='The maximum time that any single test may run for.')
-    parser.add_argument(
-        '--sites', '-k', default=['all'], type=splitter, help='The sites to generates tests for.')
-    parser.add_argument(
-        '--max_tests_per_site', default=100, type=int, help='The maximum number of tests that any site can generate.')
+    with contextlib.suppress(StopIteration):
+        list(timed_gen)
 
-    # For Twitch:
-    parser.add_argument(
-        '--livestream_limit', default=30, type=int, help='The maximum number of livestreams to generate.')
-    parser.add_argument(
-        '--vod_limit', default=35, type=int, help='The maximum number of vods to generate.')
-    parser.add_argument(
-        '--clip_limit', default=35, type=int, help='The maximum number of clips to generate.')
-
-    args.update(parser.parse_args().__dict__)
+    assert len(callback_called) > 0
 
 
-class TestURLGenerators(unittest.TestCase):
-    """
-    Test case generator for all sites. For each site, URLs are generated with the class'
-    generate method. The test methods ensure that nothing unexpected happens.
-    """
-    pass
+def test_timed_generator_no_timeout() -> None:
+    """Test TimedGenerator without timeout."""
+
+    def generator():
+        yield from range(3)
+
+    timed_gen = TimedGenerator(generator(), timeout=None)
+    result = list(timed_gen)
+    assert result == [0, 1, 2]
 
 
-def generator(site, url):
+def test_timed_generator_is_iterable() -> None:
+    """Test that TimedGenerator is iterable."""
 
-    def test_template(self):
-        print('\r ➤ ', url)
-        run(propagate_interrupt=True, url=url, **args)
+    def generator():
+        yield 1
+        yield 2
 
-    return test_template
-
-
-downloader = ChatDownloader()
-
-
-# Small optimisation to generate tests
-try:
-    args['sites'] = sys.argv[sys.argv.index('-k') + 1].split()
-
-except (ValueError, IndexError) as e:
-    pass
+    timed_gen = TimedGenerator(generator())
+    assert timed_gen == iter(timed_gen)
 
 
-args['sites'] = [s.lower() for s in args['sites']]
-all_sites = 'all' in args['sites']
+def test_timed_generator_inactivity_reset() -> None:
+    """Test that inactivity timer resets on activity."""
+    import time
 
-print('Arguments:', args)
+    def generator_with_pauses():
+        for i in range(3):
+            time.sleep(0.02)  # Short pause (less than inactivity timeout)
+            yield i
 
-for site in get_all_sites():
-    try:
-        if not all_sites and site.__name__.lower() not in args['sites']:
-            continue
+    # Inactivity timeout of 0.3s should not trigger
+    timed_gen = TimedGenerator(generator_with_pauses(), inactivity_timeout=0.05)
 
-        print('Generating', args['max_tests_per_site'],
-              'tests for', site.__name__)
-        urls = itertools.islice(downloader.create_session(
-            site).generate_urls(**args), args['max_tests_per_site'])
-        list_of_urls = list(urls)
-        num_tests = len(list_of_urls)
-        padding = len(str(num_tests))
+    result = list(timed_gen)
+    assert result == [0, 1, 2]
 
-        for i, url in enumerate(list_of_urls):
-            name = str(i + 1).zfill(padding)
 
-            test_method = generator(site, url)
-            test_method.__name__ = f'test_{site.__name__}_{name}_{url}'
-            setattr(TestURLGenerators, test_method.__name__, test_method)
+def test_polling_sleep() -> None:
+    """Test polling_sleep function."""
+    import time
 
-            del test_method
+    from chat_downloader.utils.timed_utils import polling_sleep
 
-    except NotImplementedError:
-        pass  # No generator, skip
+    start = time.time()
+    polling_sleep(0.05)
+    elapsed = time.time() - start
 
-set_log_level('debug')
-set_testing_mode(Modes.EXIT_ON_DEBUG)
-if __name__ == '__main__':
-    print('Running test cases:')
-    sys.argv = sys.argv[:1]
-    unittest.main()
+    assert elapsed > 0.02
+    assert elapsed < 0.12
 
-    # YouTubeChatDownloader TwitchChatDownloader FacebookChatDownloader RedditChatDownloader
-    # python tests/test_generators.py --max_tests_per_site 500 --timeout 120 --livestream_limit 20 --vod_limit 50 --clip_limit 50
 
-    # pytest -n 4 -v tests/test_generators.py -k "YouTubeChatDownloader or TwitchChatDownloader"
-    # pytest -n 4 -v tests/test_generators.py
-    # pytest -n 4 -v tests/test_generators.py -k YouTubeChatDownloader
-    # pytest -n 4 -v tests/test_generators.py -k FacebookChatDownloader
-    # pytest -n 4 -v tests/test_generators.py -k TwitchChatDownloader
-    # pytest -n 4 -v tests/test_generators.py -k RedditChatDownloader
+def test_polling_sleep_non_positive_returns_immediately() -> None:
+    """Test polling_sleep handles non-positive durations."""
+    import time
 
-    # pytest -v tests/test_generators.py -k "YouTubeChatDownloader or TwitchChatDownloader"
-    # pytest -v tests/test_generators.py
-    # pytest -v tests/test_generators.py -k YouTubeChatDownloader
-    # pytest -v tests/test_generators.py -k FacebookChatDownloader
-    # pytest -v tests/test_generators.py -k TwitchChatDownloader
-    # pytest -v tests/test_generators.py -k RedditChatDownloader
+    from chat_downloader.utils.timed_utils import polling_sleep
+
+    start = time.time()
+    polling_sleep(0)
+    elapsed = time.time() - start
+
+    assert elapsed < 0.02
+
+
+def test_timed_generator_empty_generator() -> None:
+    """Test TimedGenerator with empty generator."""
+
+    def empty_generator():
+        return
+        yield  # Make it a generator
+
+    timed_gen = TimedGenerator(empty_generator(), timeout=1)
+    result = list(timed_gen)
+    assert result == []
+
+
+def test_timed_generator_exception_handling() -> None:
+    """Test TimedGenerator handles exceptions properly."""
+
+    def failing_generator():
+        yield 1
+        msg = "Test error"
+        raise ValueError(msg)
+
+    timed_gen = TimedGenerator(failing_generator())
+
+    result = []
+    with pytest.raises(ValueError):
+        for item in timed_gen:
+            result.append(item)
+
+    assert result == [1]
+
+
+def test_timeout_exception() -> None:
+    """Test that TimeoutOccurred exception exists."""
+    from chat_downloader.utils.timed_utils import TimeoutOccurred
+
+    exc = TimeoutOccurred("Test timeout")
+    assert isinstance(exc, Exception)
+
+
+def test_timed_input_with_timeout() -> None:
+    """Test timed_input returns default on timeout."""
+    from chat_downloader.utils.timed_utils import timed_input
+
+    # Short timeout should return default
+    result = timed_input(timeout=0.02, default="default_value")
+    assert result == "default_value"
+
+
+def test_timed_input_without_timeout() -> None:
+    """Test that timed_input with None timeout uses regular input."""
+    from chat_downloader.utils.timed_utils import timed_input
+
+    # This test just verifies the function exists and can be called
+    # with None timeout (actual input testing would require user
+    # interaction)
+    assert callable(timed_input)

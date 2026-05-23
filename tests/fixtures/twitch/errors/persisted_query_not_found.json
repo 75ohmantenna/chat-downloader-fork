@@ -1,0 +1,12 @@
+[
+  {
+    "errors": [
+      {
+        "message": "PersistedQueryNotFound",
+        "path": [
+          "video"
+        ]
+      }
+    ]
+  }
+]

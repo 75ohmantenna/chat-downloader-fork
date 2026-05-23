@@ -1,0 +1,17 @@
+[
+  {
+    "data": {
+      "user": {
+        "id": "12345",
+        "login": "testchan"
+      }
+    },
+    "errors": [
+      {
+        "message": "service error",
+        "path": ["user", "primaryTeam"],
+        "locations": [{"line": 1, "column": 1}]
+      }
+    ]
+  }
+]

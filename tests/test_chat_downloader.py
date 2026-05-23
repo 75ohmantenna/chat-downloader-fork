@@ -1,124 +1,96 @@
-import os
-import sys
-import unittest
+# SPDX-License-Identifier: MIT
 
-# Allow direct execution
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # noqa
+# This module exercises live site integrations via each site's `_TESTS`.
+# It is intentionally excluded from the default offline CI run.
+import pytest
+
+pytestmark = pytest.mark.network
 
 
 from chat_downloader import ChatDownloader
-from chat_downloader.sites import (
-    get_all_sites,
-    BaseChatDownloader
-)
-from chat_downloader.debugging import (
-    set_testing_mode,
-    set_log_level,
-    TestingModes as Modes
-)
+from chat_downloader.sites import BaseChatDownloader, get_all_sites
+from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
+from tests.fixtures.youtube.extractor_tests import YOUTUBE_EXTRACTOR_TESTS
+
+_SITE_TESTS: dict = {
+    YouTubeChatDownloader: YOUTUBE_EXTRACTOR_TESTS,
+}
+
+_ALL_SITE_TESTS = [
+    (site, test)
+    for site in get_all_sites(True)
+    for test in _SITE_TESTS.get(site, getattr(site, "_TESTS", []))
+]
 
 
-class TestChatDownloader(unittest.TestCase):
-    pass
+@pytest.mark.network
+@pytest.mark.parametrize("site,test", _ALL_SITE_TESTS)
+def test_site_integration(site, test) -> None:
+    site_object = ChatDownloader()
+    try:
+        params = dict(test["params"])
+        params.update(
+            {
+                "max_attempts": 5,
+                "interruptible_retry": False,
+            },
+        )
 
+        expected_result = test.get("expected_result") or {}
 
-def generator(site, test):
+        if not params:
+            msg = "No parameters specified."
+            raise Exception(msg)  # Invalid test
 
-    def test_template(self):
-
-        site_object = ChatDownloader()
+        messages_list = []
         try:
-            params = test['params']
-            params.update({
-                'max_attempts': 5,
-                'interruptible_retry': False,
-            })
+            chat = site_object.get_chat(**params)
 
-            expected_result = test.get('expected_result') or {}
+            # Ensure the site created matches the test site
+            if site is not BaseChatDownloader:
+                assert chat.site.__class__.__name__ == site.__name__
 
-            if not params:
-                raise Exception('No parameters specified.') # Invalid test
+            messages_list = list(chat)
 
-            messages_list = []
-            try:
-                chat = site_object.get_chat(**params)
+        except Exception as e:
+            errors = expected_result.get("error")
+            if not isinstance(errors, (list, tuple)):
+                errors = [errors]
 
-                # Ensure the site created matches the test site
-                if site is not BaseChatDownloader:
-                    self.assertEqual(
-                        chat.site.__class__.__name__, site.__name__)
+            correct_error = any(
+                error is not None and isinstance(e, error) for error in errors
+            )
+            if not correct_error:
+                raise
 
-                messages_list = list(chat)
+        messages_condition = expected_result.get("messages_condition")
 
-            except Exception as e:
-                errors = expected_result.get('error')
-                if not isinstance(errors, (list, tuple)):
-                    errors = [errors]
+        if messages_condition:
+            if callable(messages_condition):
+                assert messages_condition(messages_list)
+            else:
+                msg = "Message check is not callable."
+                raise Exception(msg)  # Invalid test
 
-                correct_error = any(error is not None and isinstance(e, error) for error in errors)
-                if not correct_error:
-                    raise e
+        actual_result = {"message_types": [], "action_types": []}
+        types_to_check = [
+            key for key in actual_result if key in expected_result
+        ]
 
-            messages_condition = expected_result.get('messages_condition')
+        if types_to_check:
+            for message in messages_list:
+                message_type = message.get("message_type")
+                if message_type not in actual_result["message_types"]:
+                    actual_result["message_types"].append(message_type)
 
-            if messages_condition:
-                if callable(messages_condition):
-                    self.assertTrue(messages_condition(messages_list))
-                else:
-                    raise Exception('Message check is not callable.') # Invalid test
+                action_type = message.get("action_type")
+                if action_type not in actual_result["action_types"]:
+                    actual_result["action_types"].append(action_type)
 
-            actual_result = {
-                'message_types': [],
-                'action_types': []
-            }
-            types_to_check = [
-                key for key in actual_result if key in expected_result]
+            for check in types_to_check:
+                assert set(expected_result.get(check)) == set(
+                    actual_result.get(check)
+                )
 
-            if types_to_check:
-                for message in messages_list:
-                    message_type = message.get('message_type')
-                    if message_type not in actual_result['message_types']:
-                        actual_result['message_types'].append(message_type)
-
-                    action_type = message.get('action_type')
-                    if action_type not in actual_result['action_types']:
-                        actual_result['action_types'].append(action_type)
-
-                for check in types_to_check:
-                    self.assertCountEqual(expected_result.get(
-                        check), actual_result.get(check))
-
-        finally:
-            site_object.close()
-
-    return test_template
-
-
-for site in get_all_sites(True):
-    test_cases = getattr(site, '_TESTS', [])
-
-    for test_number, test in enumerate(test_cases, start=1):
-        test_method = generator(site, test)
-        test_method.__name__ = f'test_{site.__name__}_{test_number}'
-
-        setattr(TestChatDownloader, test_method.__name__, test_method)
-
-        del test_method
-
-set_log_level('debug')
-set_testing_mode(Modes.EXIT_ON_DEBUG)
-if __name__ == '__main__':
-
-    # Test all sites:
-    # python tests/test_chat_downloader.py
-    # or
-    # pytest -v tests/test_chat_downloader.py
-
-    # Test specific case:
-    # python tests/test_chat_downloader.py TestChatDownloader.test_YouTubeChatDownloader_1
-    # or
-    # pytest -v tests/test_chat_downloader.py::TestChatDownloader::test_YouTubeChatDownloader_1
-    unittest.main()
-
-
-# pytest -v tests/test_chat_downloader.py::TestChatDownloader::test_YouTubeChatDownloader_1  --log-cli-level=DEBUG -s ttt/
+    finally:
+        site_object.close()
