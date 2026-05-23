@@ -1,23 +1,29 @@
-import threading
-import _thread
-import time
-import sys
+# SPDX-License-Identifier: MIT
 
+"""Timed input, interruptible sleep, and timeout-aware generator wrapper."""
+
+import io
+import queue as _queue
+import sys
+import threading
+import time
+from collections.abc import Callable, Generator, Iterator
+from typing import Any, Self
 
 POLLING_TIME = 0.1
 
-SP = ' '
-CR = '\r'
-LF = '\n'
+SP = " "
+CR = "\r"
+LF = "\n"
 CRLF = CR + LF
 
 
 class TimeoutOccurred(Exception):
-    """Thrown when a timeout has occurred"""
-    pass
+    """Thrown when a timeout has occurred."""
 
 
-def echo(text):
+def echo(text: str) -> None:
+    """Write ``text`` to stdout and flush immediately."""
     sys.stdout.write(text)
     sys.stdout.flush()
 
@@ -27,21 +33,35 @@ def echo(text):
 try:
     import msvcrt
 
-    def win_timed_input(timeout, prompt, newline):
+    def win_timed_input(timeout: float, prompt: str, newline: bool) -> str:
+        """Read a line from the Windows console within ``timeout`` seconds.
+
+        Args:
+            timeout: Maximum seconds to wait for input.
+            prompt: Prompt string shown to the user.
+            newline: If True, emit a newline when the timeout expires.
+
+        Returns:
+            The line of input typed by the user.
+
+        Raises:
+            TimeoutOccurred: If the user does not press Enter within
+                ``timeout``.
+        """
         echo(prompt)
         begin = time.monotonic()
         end = begin + timeout
-        line = ''
+        line = ""
 
         while time.monotonic() < end:
-            if msvcrt.kbhit():
-                c = msvcrt.getwche()
+            if msvcrt.kbhit():  # type: ignore[attr-defined]
+                c = msvcrt.getwche()  # type: ignore[attr-defined]
                 if c in (CR, LF):
                     echo(CRLF)
                     return line
-                if c == '\003':
+                if c == "\003":
                     raise KeyboardInterrupt
-                if c == '\b':
+                if c == "\b":
                     line = line[:-1]
                     cover = SP * len(prompt + line + SP)
                     echo(CR + cover + CR + prompt + line)
@@ -61,25 +81,72 @@ except ImportError:
     import selectors
     import termios
 
-    def posix_timed_input(timeout, prompt, newline):
+    def posix_timed_input(timeout: float, prompt: str, newline: bool) -> str:
+        """Read a line from stdin within ``timeout`` seconds on POSIX systems.
+
+        Args:
+            timeout: Maximum seconds to wait for input.
+            prompt: Prompt string shown to the user.
+            newline: If True, emit a newline when the timeout expires.
+
+        Returns:
+            The line of input typed by the user.
+
+        Raises:
+            TimeoutOccurred: If no input is received within ``timeout``.
+        """
         echo(prompt)
         sel = selectors.DefaultSelector()
-        sel.register(sys.stdin, selectors.EVENT_READ)
+        try:
+            sel.register(sys.stdin, selectors.EVENT_READ)
+        except (ValueError, AttributeError, io.UnsupportedOperation):
+            # Under pytest or other input-capturing environments, sys.stdin
+            # may not be a real file descriptor. Treat as a timeout so
+            # timed_input() returns its default.
+            if newline:
+                echo(LF)
+            raise TimeoutOccurred from None
+
         events = sel.select(timeout)
 
         if events:
             key, _ = events[0]
-            return key.fileobj.readline().rstrip(LF)
-        else:
-            if newline:
-                echo(LF)
+            return key.fileobj.readline().rstrip(LF)  # type: ignore[union-attr]
+        if newline:
+            echo(LF)
+        try:
             termios.tcflush(sys.stdin, termios.TCIFLUSH)
-            raise TimeoutOccurred
+        except (
+            OSError,
+            termios.error,
+            ValueError,
+            AttributeError,
+            io.UnsupportedOperation,
+        ):
+            # Best-effort only (stdin may not support tcflush).
+            pass
+        raise TimeoutOccurred
 
     _timed_input = posix_timed_input
 
 
-def timed_input(timeout=None, prompt='', newline=False, default=None):
+def timed_input(
+    timeout: float | None = None,
+    prompt: str = "",
+    newline: bool = False,
+    default: Any = None,
+) -> str | Any:
+    """Read a line of input with an optional timeout.
+
+    Args:
+        timeout: Seconds to wait; ``None`` means wait indefinitely.
+        prompt: Prompt string displayed to the user.
+        newline: If True, emit a newline after timeout expiry.
+        default: Value returned when the timeout elapses without input.
+
+    Returns:
+        The user's input string, or ``default`` on timeout.
+    """
     if timeout is None:
         return input(prompt)
     try:
@@ -89,14 +156,22 @@ def timed_input(timeout=None, prompt='', newline=False, default=None):
 
 
 class TimedGenerator:
-    """
-    Add timing functionality to generator objects.
+    """Add timing functionality to generator objects.
 
-    Used to create timed-generator objects as well as add inactivity functionality
-    (i.e. return if no items have been generated in a given time period)
+    Used to create timed-generator objects as well as add inactivity
+    functionality (i.e. return if no items have been generated in a given time
+    period)
     """
 
-    def __init__(self, generator, timeout=None, inactivity_timeout=None, on_timeout=None, on_inactivity_timeout=None):
+    def __init__(
+        self,
+        generator: Generator | Iterator,
+        timeout: float | None = None,
+        inactivity_timeout: float | None = None,
+        on_timeout: Callable | None = None,
+        on_inactivity_timeout: Callable | None = None,
+    ) -> None:
+        """Wrap a generator with overall and inactivity timeout handling."""
         self.generator = generator
         self.timeout = timeout
         self.inactivity_timeout = inactivity_timeout
@@ -104,7 +179,20 @@ class TimedGenerator:
         self.on_timeout = on_timeout
         self.on_inactivity_timeout = on_inactivity_timeout
 
-        self.timer = self.inactivity_timer = None
+        self.timer: threading.Timer | None = None
+        self.inactivity_timer: threading.Timer | None = None
+        self._closed = False
+        self._start_time = time.monotonic()
+        self._timeout_expired = threading.Event()
+        self._inactivity_expired = threading.Event()
+        self._timeout_deadline: float | None = (
+            self._start_time + timeout if timeout is not None else None
+        )
+        self._inactivity_deadline: float | None = (
+            self._start_time + inactivity_timeout
+            if inactivity_timeout is not None
+            else None
+        )
 
         if self.timeout is not None:
             self.start_timer()
@@ -112,75 +200,196 @@ class TimedGenerator:
         if self.inactivity_timeout is not None:
             self.start_inactivity_timer()
 
-    def start_timer(self):
-        self.timer = threading.Timer(self.timeout, _thread.interrupt_main)
+        # Persistent worker — avoids spawning a new thread on every __next__()
+        # call.
+        self._result_queue: _queue.Queue[tuple[str, Any, float]] = _queue.Queue(
+            maxsize=1
+        )
+        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+        self._worker.start()
+
+    def start_timer(self) -> None:
+        """Start (or restart) the overall timeout timer."""
+        assert self.timeout is not None
+        self._timeout_expired.clear()
+        self._timeout_deadline = time.monotonic() + self.timeout
+
+        def on_timeout() -> None:
+            self._timeout_expired.set()
+
+        self.timer = threading.Timer(self.timeout, on_timeout)
         self.timer.start()
 
-    def start_inactivity_timer(self):
+    def start_inactivity_timer(self) -> None:
+        """Start (or restart) the inactivity timeout timer."""
+        assert self.inactivity_timeout is not None
+        self._inactivity_expired.clear()
+        self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
+
+        def on_inactivity_timeout() -> None:
+            self._inactivity_expired.set()
+
         self.inactivity_timer = threading.Timer(
-            self.inactivity_timeout, _thread.interrupt_main)
+            self.inactivity_timeout,
+            on_inactivity_timeout,
+        )
         self.inactivity_timer.start()
 
-    def reset_inactivity_timer(self):
+    def reset_inactivity_timer(self) -> None:
+        """Cancel the current inactivity timer and start a fresh one."""
         if self.inactivity_timer:
             self.inactivity_timer.cancel()
             self.start_inactivity_timer()
 
-    def __iter__(self):
+    def __iter__(self) -> Self:
+        """Return this object as its own iterator."""
         return self
 
-    def __next__(self):
-        to_raise = None
-        set_timers = [timer for timer in (
-            self.timer, self.inactivity_timer) if timer is not None]
+    def _timeout_reason(self, at_time: float | None = None) -> str | None:
+        if self._timeout_expired.is_set():
+            return "timeout"
+        if self._inactivity_expired.is_set():
+            return "inactivity"
+
+        now = time.monotonic() if at_time is None else at_time
+        if self._timeout_deadline is not None and now >= self._timeout_deadline:
+            return "timeout"
+        if (
+            self._inactivity_deadline is not None
+            and now >= self._inactivity_deadline
+        ):
+            return "inactivity"
+
+        return None
+
+    @staticmethod
+    def _is_reentrant_generator_close_error(error: Exception) -> bool:
+        """Return True when close() raced with an active generator
+        iteration.
+        """
+        return (
+            isinstance(error, ValueError)
+            and str(error) == "generator already executing"
+        )
+
+    def _cancel_timers(self) -> None:
+        if self.timer is not None:
+            self.timer.cancel()
+        if self.inactivity_timer is not None:
+            self.inactivity_timer.cancel()
+        close = getattr(self.generator, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception as error:
+                if self._is_reentrant_generator_close_error(error):
+                    return
+                from chat_downloader.debugging import log
+
+                log("debug", f"Suppressed generator close() error: {error}")
+
+    def _worker_loop(self) -> None:
+        while True:
+            try:
+                item = next(self.generator)
+                self._result_queue.put(("item", item, time.monotonic()))
+            except StopIteration:
+                self._result_queue.put(("stop", None, time.monotonic()))
+                return
+            except BaseException as error:
+                if isinstance(error, (SystemExit, GeneratorExit)):
+                    raise
+                self._result_queue.put(("error", error, time.monotonic()))
+                return
+
+    def __next__(self) -> Any:
+        """Return the next item or stop when configured timers expire."""
+        if self._closed:
+            raise StopIteration
+
+        def deadline_wait() -> float | None:
+            times = []
+            if self._timeout_deadline is not None:
+                times.append(self._timeout_deadline - time.monotonic())
+            if self._inactivity_deadline is not None:
+                times.append(self._inactivity_deadline - time.monotonic())
+            if not times:
+                return None
+            return max(0.0, min(times))
+
+        wait = deadline_wait()
 
         try:
-            next_item = next(self.generator)
-            self.reset_inactivity_timer()
-            return next_item
+            kind, value, completed_at = self._result_queue.get(timeout=wait)
+        except _queue.Empty:
+            to_raise = self._timeout_reason()
+            if to_raise is None:
+                to_raise = "timeout" if self.timer is not None else "inactivity"
+            self._cancel_timers()
+            self._closed = True
+            if to_raise == "timeout":
+                self._run_function(self.on_timeout)
+            else:
+                self._run_function(self.on_inactivity_timeout)
+            raise StopIteration from None
 
-        except KeyboardInterrupt as e:
+        if kind == "error":
+            captured_error = value
+            reason = self._timeout_reason(completed_at)
+            if isinstance(captured_error, StopIteration):
+                self._cancel_timers()
+                self._closed = True
+                raise captured_error
+            if isinstance(captured_error, KeyboardInterrupt):
+                if reason is None:
+                    self._cancel_timers()
+                    self._closed = True
+                    raise captured_error
+                self._cancel_timers()
+                self._closed = True
+                if reason == "timeout":
+                    self._run_function(self.on_timeout)
+                else:
+                    self._run_function(self.on_inactivity_timeout)
+                raise StopIteration
+            raise captured_error
 
-            if not set_timers:
-                # Neither timer has been set, so we treat this
-                # as a normal KeyboardInterrupt. No need to cancel
-                # timers afterwards, we can exit here.
-                raise e
+        if kind == "stop":
+            self._cancel_timers()
+            self._closed = True
+            raise StopIteration
 
-            # get expired timers
-            expired_timers = [
-                timer for timer in set_timers if not timer.is_alive()]
-            if expired_timers:
-                # Some timer expired
-                first_expired = expired_timers[0]
+        # Handle a completed item result.
+        next_item = value
+        reason = self._timeout_reason(completed_at)
+        if reason is not None:
+            self._cancel_timers()
+            self._closed = True
+            if reason == "timeout":
+                self._run_function(self.on_timeout)
+            else:
+                self._run_function(self.on_inactivity_timeout)
+            raise StopIteration
 
-                to_raise = StopIteration
-                function = self.on_timeout if (
-                    first_expired == self.timer) else self.on_inactivity_timeout
-                self._run_function(function)
+        self.reset_inactivity_timer()
+        return next_item
 
-            else:  # both timers are still active, user sent a keyboard interrupt
-                to_raise = e
-
-        except Exception as e:
-            # Some other error. Always propogate.
-            # If e is StopIteration, there are no more items to get.
-            # We can close the timers before exiting
-            to_raise = e
-
-        if to_raise:  # Something happened which will cause the generator to exit, cancel timers
-            for timer in set_timers:
-                timer.cancel()
-
-            raise to_raise
-
-    def _run_function(self, function):
+    def _run_function(self, function: Callable[[], Any] | None) -> None:
         if callable(function):
             function()
 
 
-def interruptible_sleep(secs, poll_time=POLLING_TIME):
+def polling_sleep(secs: float, poll_time: float = POLLING_TIME) -> None:
+    """Sleep for ``secs`` seconds using short polling intervals.
+
+    Args:
+        secs: Total duration to sleep in seconds.
+        poll_time: Length of each polling interval in seconds.
+    """
+    if secs <= 0:
+        return
+
     start_time = time.time()
 
-    while time.time() - start_time <= secs:
+    while time.time() - start_time < secs:
         time.sleep(poll_time)
