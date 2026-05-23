@@ -1,0 +1,78 @@
+# SPDX-License-Identifier: MIT
+
+"""YouTube URLs and regex patterns used by the extractor."""
+
+# URL regex patterns for initial data extraction
+_YT_INITIAL_BOUNDARY_RE = r"\s*(?:var\s+(?:meta|head)|</script|\n)"
+_YT_INITIAL_DATA_RE = (
+    r'(?:window\s*\[\s*["\']ytInitialData["\']\s*\]|ytInitialData)\s*=\s*'
+    r"({.+?})\s*;" + _YT_INITIAL_BOUNDARY_RE
+)
+_YT_INITIAL_PLAYER_RESPONSE_RE = (
+    r"ytInitialPlayerResponse\s*=\s*({.+?})\s*;" + _YT_INITIAL_BOUNDARY_RE
+)
+_YT_CFG_RE = r"ytcfg\.set\s*\(\s*({.+?})\s*\)\s*;"
+
+# URL base
+_YT_HOME = "https://www.youtube.com"
+
+# URL matching patterns
+_VALID_URLS = {
+    "_get_chat_by_video_id": r"""(?x)^
+                 (
+                     # http(s):// or protocol-independent URL
+                     (?:https?://|//)
+                     (?:(?:(?:(?:\w+\.)?[yY][oO][uU][tT][uU][bB][eE](?:-nocookie|kids)?\.com/|
+                        youtube\.googleapis\.com/)  # various hostnames
+                     (?:.*?\#/)?  # handle anchor (#/) redirect urls
+                     (?:  # the various things that can precede the ID:
+                         # v/ embed/ e/ shorts/ live/ or watch/
+                         (?:(?:v|embed|e|shorts|live|watch)/(?!videoseries))
+                         |(?:  # or the v= param in all its forms
+                             # preceding watch(_popup|.php) or nothing
+                             (?:(?:watch|movie)(?:_popup)?(?:\.php)?/?)?
+                             (?:\?|\#!?)  # the params delimiter ? or # or #!
+                             # any other preceding param
+                             (?:.*?[&;])??
+                             v=
+                         )
+                     ))
+                     |(?:
+                        youtu\.be  # just youtu.be/xxxx
+                     )/)
+                 )?  # all until now is optional -> pass naked ID
+                 # here is it! the YouTube video ID
+                 (?P<id>[0-9A-Za-z_-]{11})""",
+    "_get_chat_by_clip_id": r"""(?x)
+            (?:https?://|//)
+                (?:\w+\.)?
+                (?:
+                    youtube?\.com
+                )/clip/
+                (?P<id>[a-zA-Z0-9_-]+)""",
+    # while this does match 'watch' urls, it will never
+    # return this since the above regex is run before this
+    "_get_chat_by_user": r"""(?x)
+            (?:https?://|//)
+                (?:\w+\.)?
+                (?:
+                    youtube(?:kids)?\.com
+                )/
+                (?:
+                    (?P<type>channel/|c/|user/|@)
+                )?
+                (?P<id>[a-zA-Z0-9_-]+)""",
+}
+
+# Live playlist used for discovery tests
+_LIVE_PLAYLIST_URL = _YT_HOME + "/channel/UC4R8DWoMoI7CAwX8_LjQHig"
+
+_VIDEO_TYPE_REMAPPING = {
+    # Name : url component
+    "videos": "videos",
+    "shorts": "shorts",
+    "live": "streams",
+}
+
+# Consent ID regex
+_CONSENT_ID_REGEX = r"PENDING\+(\d+)"
