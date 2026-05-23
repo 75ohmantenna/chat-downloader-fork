@@ -97,14 +97,26 @@ class _SeenMessageCache:
     """Track recently seen message IDs with bounded FIFO eviction."""
 
     def __init__(self, limit: int = DEFAULT_MAX_SEEN_MESSAGE_IDS) -> None:
-        normalized_limit = int(limit) if limit is not None and limit > 0 else 0
-        self.limit = (
-            normalized_limit
-            if normalized_limit > 0
-            else DEFAULT_MAX_SEEN_MESSAGE_IDS
-        )
+        try:
+            normalized_limit = int(limit)
+        except (TypeError, ValueError):
+            normalized_limit = 0
+        if normalized_limit <= 0:
+            log(
+                "warning",
+                f"_SeenMessageCache: ignoring invalid limit {limit!r}; "
+                f"falling back to default {DEFAULT_MAX_SEEN_MESSAGE_IDS}.",
+            )
+            normalized_limit = DEFAULT_MAX_SEEN_MESSAGE_IDS
+        self.limit = normalized_limit
         self.message_ids: OrderedDict[str, None] = OrderedDict()
         self.evictions = 0
+
+    def __repr__(self) -> str:
+        return (
+            f"_SeenMessageCache(limit={self.limit}, "
+            f"size={len(self.message_ids)}, evictions={self.evictions})"
+        )
 
     def register(self, message_id: str) -> tuple[bool, str | None]:
         """Register a message id and report whether it was new."""

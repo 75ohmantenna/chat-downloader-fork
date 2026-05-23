@@ -24,6 +24,10 @@ from .irc_transport import (
     get_chat_messages_by_stream_id,
 )
 
+# Twitch live IRC dedup window. Tuned for multi-day captures and reconnect
+# storms; ~5 MB of IDs in memory at full capacity.
+_LIVE_SEEN_MESSAGE_LIMIT = 50_000
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -77,7 +81,10 @@ def iter_stream_chat_messages(
     twitch_chat_irc = create_connection()
     message_count = 0
     badge_set = downloader.badge_cache.snapshot()
-    seen_message_cache = _SeenMessageCache()
+    # Live Twitch chat can deliver tens of msg/s on busy channels. A larger
+    # window protects against duplicate emission after IRC reconnects,
+    # which can replay several minutes of messages.
+    seen_message_cache = _SeenMessageCache(limit=_LIVE_SEEN_MESSAGE_LIMIT)
 
     try:
         while True:
