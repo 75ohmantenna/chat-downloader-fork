@@ -10,7 +10,6 @@ from .chat_pipeline import (
     configure_output_writer,
     configure_timeouts,
     is_live_stream,
-    maybe_upgrade_to_jsonl,
 )
 from .cli_bridge import categorize_parameters
 from .runner import RunResult, create_message_callback, execute_run
@@ -52,7 +51,6 @@ __all__ = [
     "get_cookie_value",
     "handle_unsupported_url",
     "is_live_stream",
-    "maybe_upgrade_to_jsonl",
     "propagate_cookie",
     "resolve_site_defaults",
     "setup_testing_mode",

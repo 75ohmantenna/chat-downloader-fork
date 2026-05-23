@@ -19,7 +19,6 @@ def test_multiple_output_formats(tmp_path) -> None:
     set_log_level("warning")  # Reduce log noise during tests
 
     # Setup output file paths
-    json_output = str(tmp_path / "output.json")
     jsonl_output = str(tmp_path / "output.jsonl")
     txt_output = str(tmp_path / "output.txt")
 
@@ -30,7 +29,7 @@ def test_multiple_output_formats(tmp_path) -> None:
         url="https://www.youtube.com/watch?v=wXspodtIxYU",
         max_messages=5,
         timeout=30,
-        output=[json_output, jsonl_output, txt_output],
+        output=[jsonl_output, txt_output],
     )
 
     # Consume the chat iterator to trigger writes
@@ -40,17 +39,8 @@ def test_multiple_output_formats(tmp_path) -> None:
     assert len(messages) > 0, "Should retrieve at least one message"
     assert len(messages) <= 5, "Should not exceed max_messages"
 
-    # Verify all output files were created
-    assert os.path.exists(json_output), "JSON output file should exist"
     assert os.path.exists(jsonl_output), "JSONL output file should exist"
     assert os.path.exists(txt_output), "TXT output file should exist"
-
-    # Verify JSON output is valid and contains correct number of messages
-    with open(json_output, encoding="utf-8") as f:
-        json_data = json.load(f)
-        assert len(json_data) == len(messages), (
-            "JSON should contain same number of messages"
-        )
 
     # Verify JSONL output has correct number of lines
     with open(jsonl_output, encoding="utf-8") as f:
@@ -73,23 +63,20 @@ def test_single_output_still_works(tmp_path) -> None:
     """Test that single output (legacy behavior) still works."""
     set_log_level("warning")
 
-    json_output = str(tmp_path / "single_output.json")
+    jsonl_output = str(tmp_path / "single_output.jsonl")
 
     downloader = ChatDownloader()
     chat = downloader.get_chat(
         url="https://www.youtube.com/watch?v=wXspodtIxYU",
         max_messages=3,
         timeout=30,
-        output=json_output,  # Single output, not a list
+        output=jsonl_output,  # Single output, not a list
     )
 
     messages = list(chat)
 
     assert len(messages) > 0, "Should retrieve at least one message"
-    assert os.path.exists(json_output), "Single output file should be created"
+    assert os.path.exists(jsonl_output), "Single output file should be created"
 
-    with open(json_output, encoding="utf-8") as f:
-        json_data = json.load(f)
-        assert len(json_data) == len(messages), (
-            "JSON should contain same number of messages"
-        )
+    with open(jsonl_output, encoding="utf-8") as f:
+        assert len(f.readlines()) == len(messages)

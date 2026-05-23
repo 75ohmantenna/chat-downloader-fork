@@ -3,6 +3,7 @@ testing/
 cookies.txt
 data/
 .claude/
+.sbx/
 
 # Python bytecode
 __pycache__/

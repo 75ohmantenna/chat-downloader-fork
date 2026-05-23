@@ -6,8 +6,7 @@ import csv
 import json
 import os
 import pathlib
-import shutil
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -15,19 +14,11 @@ from chat_downloader.output.continuous_write import (
     ContinuousFileWriter,
     ContinuousWriter,
     CsvContinuousWriter,
-    JsonContinuousWriter,
     JsonLinesContinuousWriter,
     TextContinuousWriter,
 )
 
 # --- path helpers ---
-
-
-def _json_path(tmp_path: pathlib.Path, name: str = "test.json") -> str:
-    """Pre-create an empty file; JsonContinuousWriter requires rb+ mode."""
-    path = tmp_path / name
-    path.touch()
-    return str(path)
 
 
 def _csv_path(tmp_path: pathlib.Path, name: str = "test.csv") -> str:
@@ -80,185 +71,6 @@ def test_close_oserror_is_logged_and_reraised(tmp_path: pathlib.Path) -> None:
     writer.file_name = path
     with pytest.raises(OSError):
         writer.close()
-
-
-# --- JsonContinuousWriter ---
-
-
-def test_json_write_single_item_no_indent(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path)
-    writer.write({"key": "value"})
-    writer.close()
-    with open(path) as f:
-        assert json.load(f) == [{"key": "value"}]
-
-
-def test_json_write_single_item_with_indent(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path, indent=2)
-    writer.write({"key": "value"})
-    writer.close()
-    with open(path) as f:
-        content = f.read()
-    assert "\n" in content
-    assert json.loads(content) == [{"key": "value"}]
-
-
-def test_json_write_multiple_items(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path)
-    writer.write({"a": 1})
-    writer.write({"b": 2})
-    writer.write({"c": 3})
-    writer.close()
-    with open(path) as f:
-        data = json.load(f)
-    assert len(data) == 3
-    assert data[0] == {"a": 1}
-    assert data[2] == {"c": 3}
-
-
-def test_json_write_multiple_items_with_indent(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path, indent=2)
-    writer.write({"a": 1})
-    writer.write({"b": 2})
-    writer.close()
-    with open(path) as f:
-        assert len(json.load(f)) == 2
-
-
-def test_json_is_first_flag(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path)
-    assert writer._is_first
-    writer.write({"x": 1})
-    assert not writer._is_first
-    writer.close()
-
-
-def test_json_write_with_flush(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path)
-    writer.write({"key": "value"}, flush=True)
-    writer.close()
-    with open(path) as f:
-        assert json.load(f) == [{"key": "value"}]
-
-
-def test_json_flush_with_file_open(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path)
-    writer.write({"a": 1})
-    writer.flush()  # should not raise
-    writer.close()
-
-
-def test_json_overwrite_false_loads_previous(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    w1 = JsonContinuousWriter(path, overwrite=True)
-    w1.write({"first": True})
-    w1.close()
-
-    w2 = JsonContinuousWriter(path, overwrite=False)
-    w2.write({"second": True})
-    w2.close()
-
-    with open(path) as f:
-        data = json.load(f)
-    assert len(data) == 2
-    assert data[0] == {"first": True}
-    assert data[1] == {"second": True}
-
-
-def test_json_recover_from_corrupted_json(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    with open(path, "w") as f:
-        f.write("not valid json at all {{{")
-
-    writer = JsonContinuousWriter(path, overwrite=False)
-    writer.write({"recovered": True})
-    writer.close()
-
-    backup_files = [p for p in tmp_path.iterdir() if ".corrupted." in p.name]
-    assert len(backup_files) > 0
-
-    with open(path) as f:
-        assert json.load(f) == [{"recovered": True}]
-
-
-def test_json_recover_from_corrupted_json_backup_oserror(
-    tmp_path: pathlib.Path,
-) -> None:
-    path = _json_path(tmp_path)
-    with open(path, "w") as f:
-        f.write("not valid json {{{")
-
-    with patch.object(shutil, "copyfileobj", side_effect=OSError("no space")):
-        writer = JsonContinuousWriter(path, overwrite=False)
-        writer.write({"recovered": True})
-        writer.close()
-
-
-def test_json_append_to_empty_array_writes_valid_separator(
-    tmp_path: pathlib.Path,
-) -> None:
-    path = _json_path(tmp_path)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("[]")
-
-    writer = JsonContinuousWriter(path, overwrite=False)
-    writer.write({"first": 1})
-    writer.write({"second": 2})
-    writer.close()
-
-    with open(path, encoding="utf-8") as f:
-        assert json.load(f) == [{"first": 1}, {"second": 2}]
-
-
-@pytest.mark.parametrize(
-    "indent,expected",
-    [(4, "    "), (None, "")],
-)
-def test_json_calculate_padding(
-    tmp_path: pathlib.Path, indent: int | None, expected: str
-) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path, indent=indent)
-    assert writer._calculate_padding() == expected
-    writer.close()
-
-
-def test_json_multiline_indent(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path, indent=2)
-    result = writer._multiline_indent("line1\nline2\nline3")
-    assert all(line.startswith("  ") for line in result.split("\n") if line)
-    writer.close()
-
-
-@pytest.mark.parametrize(
-    "indent,expected",
-    [(2, "\n"), (None, "")],
-)
-def test_json_newline_padding(
-    tmp_path: pathlib.Path, indent: int | None, expected: str
-) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path, indent=indent)
-    assert writer._newline_padding == expected
-    writer.close()
-
-
-def test_json_sort_keys(tmp_path: pathlib.Path) -> None:
-    path = _json_path(tmp_path)
-    writer = JsonContinuousWriter(path, sort_keys=True)
-    writer.write({"z": 3, "a": 1, "m": 2})
-    writer.close()
-    with open(path) as f:
-        content = f.read()
-    assert content.index('"a"') < content.index('"z"')
 
 
 # --- CsvContinuousWriter ---
@@ -469,9 +281,9 @@ def test_txt_overwrite_true_truncates_existing_file(
 
 def test_factory_json_extension(tmp_path: pathlib.Path) -> None:
     path = _ext_path(tmp_path, "json")
-    with ContinuousWriter(path, overwrite=True) as writer:
-        writer.write({"key": "value"})
-    assert isinstance(writer.writer, JsonContinuousWriter)
+    with pytest.raises(ValueError, match=r"Use a \.jsonl output path"):
+        ContinuousWriter(path, overwrite=True)
+    assert not os.path.exists(path)
 
 
 def test_factory_jsonl_extension(tmp_path: pathlib.Path) -> None:
@@ -502,15 +314,14 @@ def test_factory_unknown_extension_uses_text(tmp_path: pathlib.Path) -> None:
     assert isinstance(writer.writer, TextContinuousWriter)
 
 
-def test_factory_format_override(tmp_path: pathlib.Path) -> None:
+def test_factory_format_json_rejected(tmp_path: pathlib.Path) -> None:
     path = _ext_path(tmp_path, "txt")
-    with ContinuousWriter(path, overwrite=True, format="json") as writer:
-        writer.write({"key": "value"})
-    assert isinstance(writer.writer, JsonContinuousWriter)
+    with pytest.raises(ValueError, match=r"Use a \.jsonl output path"):
+        ContinuousWriter(path, overwrite=True, format="json")
 
 
 def test_factory_lazy_initialise_true(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True, lazy_initialise=True)
     assert not writer.is_initialised()
     assert not os.path.exists(path)
@@ -521,7 +332,7 @@ def test_factory_lazy_initialise_true(tmp_path: pathlib.Path) -> None:
 
 
 def test_factory_lazy_initialise_false(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True, lazy_initialise=False)
     assert os.path.exists(path)
     assert writer.is_initialised()
@@ -531,7 +342,7 @@ def test_factory_lazy_initialise_false(tmp_path: pathlib.Path) -> None:
 def test_factory_initialize_if_needed_idempotent(
     tmp_path: pathlib.Path,
 ) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True, lazy_initialise=True)
     writer._initialize_if_needed()
     writer._initialize_if_needed()
@@ -540,7 +351,7 @@ def test_factory_initialize_if_needed_idempotent(
 
 
 def test_factory_initialize_public_alias(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True, lazy_initialise=True)
     writer.initialize()
     assert writer.is_initialised()
@@ -573,7 +384,7 @@ def test_factory_lazy_init_can_recover_after_validation_failure(
 
 
 def test_factory_file_name_property(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "txt")
     writer = ContinuousWriter(path, lazy_initialise=True)
     assert writer.file_name == path
     new_path = _ext_path(tmp_path, "jsonl")
@@ -582,7 +393,7 @@ def test_factory_file_name_property(tmp_path: pathlib.Path) -> None:
 
 
 def test_factory_overwrite_property(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     assert ContinuousWriter(
         path, overwrite=True, lazy_initialise=True
     ).overwrite
@@ -592,7 +403,7 @@ def test_factory_overwrite_property(tmp_path: pathlib.Path) -> None:
 
 
 def test_factory_format_property(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     assert (
         ContinuousWriter(path, format="csv", lazy_initialise=True).format
         == "csv"
@@ -600,25 +411,22 @@ def test_factory_format_property(tmp_path: pathlib.Path) -> None:
 
 
 def test_factory_lazy_initialise_property(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     assert ContinuousWriter(path, lazy_initialise=True).lazy_initialise
 
 
 def test_factory_explicit_writer_option_properties(
     tmp_path: pathlib.Path,
 ) -> None:
-    path = _ext_path(tmp_path, "json")
-    writer = ContinuousWriter(
-        path, lazy_initialise=True, indent=4, sort_keys=True
-    )
-    assert writer.indent == 4
+    path = _ext_path(tmp_path, "jsonl")
+    writer = ContinuousWriter(path, lazy_initialise=True, sort_keys=True)
     assert writer.sort_keys
 
 
 def test_factory_unknown_kwargs_not_accessible_as_attributes(
     tmp_path: pathlib.Path,
 ) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, lazy_initialise=True, custom_option="value")
     assert writer._writer_kwargs["custom_option"] == "value"
     with pytest.raises(AttributeError):
@@ -626,7 +434,7 @@ def test_factory_unknown_kwargs_not_accessible_as_attributes(
 
 
 def test_factory_unknown_attribute_raises(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, lazy_initialise=True)
     with pytest.raises(AttributeError):
         _ = writer.nonexistent_attribute
@@ -640,8 +448,8 @@ def test_factory_is_default_true_for_txt(tmp_path: pathlib.Path) -> None:
     writer.close()
 
 
-def test_factory_is_default_false_for_json(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+def test_factory_is_default_false_for_jsonl(tmp_path: pathlib.Path) -> None:
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True)
     assert not writer.is_default()
     assert writer.output_mode == "raw"
@@ -649,14 +457,14 @@ def test_factory_is_default_false_for_json(tmp_path: pathlib.Path) -> None:
 
 
 def test_factory_context_manager_enter(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True, lazy_initialise=True)
     assert writer.__enter__() is writer
     writer.close()
 
 
 def test_factory_context_manager_exit(tmp_path: pathlib.Path) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     with ContinuousWriter(path, overwrite=True) as writer:
         writer.write({"key": "value"})
 
@@ -671,7 +479,7 @@ def test_factory_write_triggers_lazy_init(tmp_path: pathlib.Path) -> None:
 
 
 def test_factory_parent_directory_created(tmp_path: pathlib.Path) -> None:
-    nested_path = str(tmp_path / "nested" / "deep" / "test.json")
+    nested_path = str(tmp_path / "nested" / "deep" / "test.jsonl")
     with ContinuousWriter(nested_path, overwrite=True) as writer:
         writer.write({"key": "value"})
     assert os.path.exists(nested_path)
@@ -680,7 +488,7 @@ def test_factory_parent_directory_created(tmp_path: pathlib.Path) -> None:
 def test_factory_del_suppresses_io_cleanup_errors(
     tmp_path: pathlib.Path,
 ) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True)
     writer.write({"key": "value"})
     writer.close = Mock(side_effect=OSError("cleanup error"))
@@ -690,65 +498,12 @@ def test_factory_del_suppresses_io_cleanup_errors(
 def test_factory_del_suppresses_non_io_cleanup_errors(
     tmp_path: pathlib.Path,
 ) -> None:
-    path = _ext_path(tmp_path, "json")
+    path = _ext_path(tmp_path, "jsonl")
     writer = ContinuousWriter(path, overwrite=True)
     writer.write({"key": "value"})
     writer.close = Mock(side_effect=RuntimeError("cleanup error"))
     writer.__del__()  # should not raise during interpreter shutdown
     writer.close = Mock()
-
-
-def test_json_writer_rethrows_configure_existing_array_failure(
-    tmp_path, monkeypatch
-) -> None:
-    path = tmp_path / "broken.json"
-    path.write_text("[]", encoding="utf-8")
-
-    def boom(self):
-        raise RuntimeError("configure failed")
-
-    monkeypatch.setattr(
-        JsonContinuousWriter, "_configure_existing_json_array", boom
-    )
-
-    with pytest.raises(RuntimeError, match="configure failed"):
-        JsonContinuousWriter(str(path), overwrite=False)
-
-
-def test_json_writer_runtime_guards_and_multiline_format(tmp_path) -> None:
-    path = tmp_path / "sample.json"
-    path.write_text("", encoding="utf-8")
-    real = JsonContinuousWriter(str(path), indent="  ")
-    formatted = real._format_item_as_json({"a": 1, "b": {"c": 2}})
-    assert "\n" in formatted
-    real.close()
-
-    detached = JsonContinuousWriter(str(path))
-    detached.file = None
-    with pytest.raises(RuntimeError, match="initialized"):
-        detached.write({"a": 1})
-
-
-def test_json_writer_string_indent_is_not_double_prefixed(tmp_path) -> None:
-    path = tmp_path / "tabs.json"
-    writer = JsonContinuousWriter(str(path), indent="\t")
-
-    writer.write({"a": 1})
-    writer.close()
-
-    content = path.read_text(encoding="utf-8")
-    assert '\t"a"' in content
-    assert '\t\t"a"' not in content
-    assert json.loads(content) == [{"a": 1}]
-
-
-def test_json_writer_configure_existing_array_requires_file(tmp_path) -> None:
-    path = tmp_path / "sample.json"
-    path.write_text("", encoding="utf-8")
-    writer = JsonContinuousWriter(str(path))
-    writer.file = None
-    with pytest.raises(RuntimeError, match="initialized"):
-        writer._configure_existing_json_array()
 
 
 def test_csv_and_continuous_writer_runtime_guards(tmp_path) -> None:
@@ -774,30 +529,6 @@ def test_continuous_file_writer_closed_file_branch() -> None:
     assert writer.file is None
 
 
-def test_json_continuous_writer_empty_existing_file_and_close_error(
-    monkeypatch, tmp_path
-) -> None:
-    from types import SimpleNamespace
-
-    path = tmp_path / "empty.json"
-    path.write_text("", encoding="utf-8")
-
-    writer = JsonContinuousWriter(str(path), overwrite=False)
-    writer.close()
-    assert path.read_text(encoding="utf-8") == "[]"
-
-    failing = JsonContinuousWriter(str(tmp_path / "close-error.json"))
-    failing.write({"x": 1})
-    mock_file = SimpleNamespace(
-        closed=False,
-        write=lambda _text: (_ for _ in ()).throw(OSError("disk full")),
-        close=lambda: None,
-    )
-    failing.file = mock_file
-    with pytest.raises(OSError):
-        failing.close()
-
-
 def test_csv_jsonl_text_and_continuous_writer_edge_paths(tmp_path) -> None:
     csv_writer = ContinuousWriter(
         str(tmp_path / "sample.csv"), lazy_initialise=True
@@ -820,9 +551,8 @@ def test_csv_jsonl_text_and_continuous_writer_edge_paths(tmp_path) -> None:
     with pytest.raises(ValueError, match="File name not set"):
         lazy.initialize()
     broken = ContinuousWriter(
-        str(tmp_path / "broken.json"), lazy_initialise=True
+        str(tmp_path / "broken.jsonl"), lazy_initialise=True
     )
-    broken._file_name = str(tmp_path / "broken.json")
     broken._open_writer = lambda _file_name: (_ for _ in ()).throw(
         RuntimeError("open failed")
     )  # type: ignore[method-assign]

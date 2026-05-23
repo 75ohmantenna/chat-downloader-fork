@@ -17,7 +17,6 @@ from .metadata import __version__
 from .models import (
     DEFAULT_BUFFER_SIZE,
     DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_JSON_INDENT,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
     DEFAULT_READ_TIMEOUT,
@@ -206,7 +205,6 @@ class ChatDownloader:
         output: str | list[str] | None = None,
         overwrite: bool = True,
         sort_keys: bool = True,
-        indent: int | str = DEFAULT_JSON_INDENT,
         # Formatting
         format: Any = _DEFAULT_FORMAT,
         format_file: str | None = None,
@@ -265,17 +263,14 @@ class ChatDownloader:
 
         Output options:
         :param output: Output file path (None = print to stdout). Extension
-            determines format (.json/.jsonl/.csv/.txt). For live streams a
-            .json extension is automatically upgraded to .jsonl (crash-safe);
-            pass --format json to override.
+            determines format (.jsonl/.csv/.txt). JSON-array `.json` output
+            is not supported; use `.jsonl` for structured output.
         :type output: str, optional
         :param overwrite: Overwrite existing output file
             (default: True)
         :type overwrite: bool, optional
         :param sort_keys: Sort JSON keys in output (default: True)
         :type sort_keys: bool, optional
-        :param indent: JSON indentation spaces or string (default: 4)
-        :type indent: int | str, optional
 
         Formatting:
         :param format: Message format template name
@@ -322,7 +317,6 @@ class ChatDownloader:
             output=output,
             overwrite=overwrite,
             sort_keys=sort_keys,
-            indent=indent,
             format=format,
             format_file=format_file,
             chat_type=chat_type,

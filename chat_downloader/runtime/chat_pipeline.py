@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import itertools
-import os
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -111,30 +110,6 @@ def is_live_stream(chat: Chat) -> bool:
     return getattr(chat, "status", None) in LIVE_STATUSES
 
 
-def maybe_upgrade_to_jsonl(
-    output_file: str,
-    is_live: bool,
-    output_format: str | None = None,
-) -> str:
-    """Upgrade a ``.json`` output path to ``.jsonl`` for live captures."""
-    if not is_live:
-        return output_file
-    if output_format == "json":
-        return output_file
-
-    stem, ext = os.path.splitext(output_file)
-    if ext.lower() == ".json":
-        new_file = stem + ".jsonl"
-        log(
-            "warning",
-            f"Live stream detected: switching output from '{output_file}' "
-            f"to '{new_file}' (JSONL is crash-safe for live captures). "
-            f"Use --format json to keep JSON array output.",
-        )
-        return new_file
-    return output_file
-
-
 def build_output_writer(
     output_file: str,
     request: ChatRequest,
@@ -143,7 +118,6 @@ def build_output_writer(
     """Create an output writer from a request's writer-relevant settings."""
     return writer_factory(
         output_file,
-        indent=request.indent,
         sort_keys=request.sort_keys,
         overwrite=request.overwrite,
         lazy_initialise=True,
@@ -162,17 +136,12 @@ def configure_output_writer(
     outputs = (
         request.output if isinstance(request.output, list) else [request.output]
     )
-    live = is_live_stream(chat)
-
     seen: set[str] = set()
     for output_file in outputs:
-        fmt = request.format if isinstance(request.format, str) else None
-        output_file = maybe_upgrade_to_jsonl(output_file, live, fmt)
         if output_file in seen:
             log(
                 "warning",
-                "Duplicate output path after live promotion: "
-                f"'{output_file}' — skipping.",
+                f"Duplicate output path '{output_file}' — skipping.",
             )
             continue
         seen.add(output_file)

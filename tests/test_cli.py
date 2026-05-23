@@ -388,7 +388,6 @@ _CLI_CHAT_PARAMS = frozenset(
         "output",
         "overwrite",
         "sort_keys",
-        "indent",
     }
 )
 

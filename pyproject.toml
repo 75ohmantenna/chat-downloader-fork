@@ -58,7 +58,7 @@ version = { attr = "chat_downloader.metadata.__version__" }
 include = ["chat_downloader", "chat_downloader.*"]
 
 [tool.setuptools.package-data]
-chat_downloader = ["formatting/*.json"]
+chat_downloader = ["formatting/*.json", "py.typed"]
 
 [tool.ruff]
 line-length = 80

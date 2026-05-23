@@ -16,7 +16,6 @@ import pytest
 
 from chat_downloader.models import (
     DEFAULT_BUFFER_SIZE,
-    DEFAULT_JSON_INDENT,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MAX_SEEN_MESSAGE_IDS,
     DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
@@ -47,7 +46,6 @@ _EXPECTED_LEGACY_KEYS = frozenset(
         "output",
         "overwrite",
         "sort_keys",
-        "indent",
         "format",
         "format_file",
         "chat_type",
@@ -189,10 +187,6 @@ def test_default_buffer_size(sample_request: ChatRequest) -> None:
     assert sample_request.buffer_size == DEFAULT_BUFFER_SIZE
 
 
-def test_default_indent(sample_request: ChatRequest) -> None:
-    assert sample_request.indent == DEFAULT_JSON_INDENT
-
-
 def test_default_overwrite(sample_request: ChatRequest) -> None:
     assert sample_request.overwrite
 
@@ -312,10 +306,9 @@ def test_from_kwargs_round_trip_all_fields() -> None:
         timeout=30.0,
         inactivity_timeout=5.0,
         message_types=["text_message"],
-        output="chat.json",
+        output="chat.jsonl",
         overwrite=False,
         sort_keys=False,
-        indent=2,
         format_file="custom.json",
         chat_type="top",
         ignore=["baduser"],
@@ -337,7 +330,6 @@ def test_from_kwargs_round_trip_all_fields() -> None:
         "output",
         "overwrite",
         "sort_keys",
-        "indent",
         "format_file",
         "chat_type",
         "ignore",
@@ -377,7 +369,6 @@ def test_as_dict_url_value(sample_request_dict: dict) -> None:
 def test_as_dict_default_values_preserved(sample_request_dict: dict) -> None:
     assert sample_request_dict["max_attempts"] == DEFAULT_MAX_ATTEMPTS
     assert sample_request_dict["buffer_size"] == DEFAULT_BUFFER_SIZE
-    assert sample_request_dict["indent"] == DEFAULT_JSON_INDENT
     assert sample_request_dict["message_receive_timeout"] == pytest.approx(
         DEFAULT_MESSAGE_RECEIVE_TIMEOUT
     )
@@ -417,14 +408,14 @@ def test_as_dict_explicit_values_passed_through() -> None:
     req = ChatRequest(
         url="https://twitch.tv/channel",
         max_messages=100,
-        output=["out.json", "out.txt"],
+        output=["out.jsonl", "out.txt"],
         chat_type="top",
         buffer_size=2048,
     )
     d = req.as_dict()
     assert d["url"] == "https://twitch.tv/channel"
     assert d["max_messages"] == 100
-    assert d["output"] == ["out.json", "out.txt"]
+    assert d["output"] == ["out.jsonl", "out.txt"]
     assert d["chat_type"] == "top"
     assert d["buffer_size"] == 2048
 
@@ -492,10 +483,6 @@ def test_default_max_attempts_positive() -> None:
 
 def test_default_buffer_size_positive() -> None:
     assert DEFAULT_BUFFER_SIZE > 0
-
-
-def test_default_json_indent_non_negative() -> None:
-    assert DEFAULT_JSON_INDENT >= 0
 
 
 def test_default_message_receive_timeout_positive() -> None:

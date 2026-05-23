@@ -28,19 +28,10 @@ def test_multiple_writers_attached(tmp_path: pathlib.Path) -> None:
     formatter = ItemFormatter()
     chat.set_formatter(lambda msg: formatter.format(msg, format_name="default"))
 
-    json_output = str(tmp_path / "test.json")
     jsonl_output = str(tmp_path / "test.jsonl")
     csv_output = str(tmp_path / "test.csv")
+    txt_output = str(tmp_path / "test.txt")
 
-    chat.attach_writer(
-        ContinuousWriter(
-            json_output,
-            indent=4,
-            sort_keys=True,
-            overwrite=True,
-            lazy_initialise=True,
-        )
-    )
     chat.attach_writer(
         ContinuousWriter(
             jsonl_output, sort_keys=True, overwrite=True, lazy_initialise=True
@@ -51,20 +42,18 @@ def test_multiple_writers_attached(tmp_path: pathlib.Path) -> None:
             csv_output, sort_keys=True, overwrite=True, lazy_initialise=True
         )
     )
+    chat.attach_writer(
+        ContinuousWriter(txt_output, overwrite=True, lazy_initialise=True)
+    )
 
     assert len(chat._output_dispatcher.writers) == 3
 
     messages = list(chat)
     assert len(messages) == 3
 
-    assert (tmp_path / "test.json").exists()
     assert (tmp_path / "test.jsonl").exists()
     assert (tmp_path / "test.csv").exists()
-
-    with open(json_output, encoding="utf-8") as f:
-        json_data = json.load(f)
-        assert len(json_data) == 3
-        assert json_data[0]["message"] == "Test message 0"
+    assert (tmp_path / "test.txt").exists()
 
     with open(jsonl_output, encoding="utf-8") as f:
         lines = f.readlines()
@@ -85,16 +74,14 @@ def test_single_writer_backwards_compatibility(tmp_path: pathlib.Path) -> None:
     formatter = ItemFormatter()
     chat.set_formatter(lambda msg: formatter.format(msg, format_name="default"))
 
-    json_output = str(tmp_path / "single.json")
+    jsonl_output = str(tmp_path / "single.jsonl")
     chat.attach_writer(
-        ContinuousWriter(
-            json_output, indent=4, overwrite=True, lazy_initialise=True
-        )
+        ContinuousWriter(jsonl_output, overwrite=True, lazy_initialise=True)
     )
 
     assert len(chat._output_dispatcher.writers) == 1
     assert len(list(chat)) == 1
-    assert (tmp_path / "single.json").exists()
+    assert (tmp_path / "single.jsonl").exists()
 
 
 def test_no_writers_attached(tmp_path: pathlib.Path) -> None:

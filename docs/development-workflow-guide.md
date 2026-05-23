@@ -25,7 +25,7 @@ disclosures that apply to all changes in this repository.
 | `chat_downloader/models.py` | `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata |
 | `chat_downloader/runtime/cli_bridge.py` | Split `run()` kwargs into init, chat-request, and runtime controls |
 | `chat_downloader/runtime/site_dispatch.py` | URL validation, site matching, site-default resolution |
-| `chat_downloader/runtime/chat_pipeline.py` | Message limits, timeouts, formatters, output writers, live JSONL promotion |
+| `chat_downloader/runtime/chat_pipeline.py` | Message limits, timeouts, formatters, output writers |
 | `chat_downloader/runtime/runner.py` | CLI-style execution loop, stdout callback, cleanup, error mapping |
 | `chat_downloader/runtime/session_lifecycle.py` | Session creation, cookies, shared site session cleanup |
 | `chat_downloader/sites/base.py` | Shared site-session base behavior |
@@ -45,7 +45,8 @@ disclosures that apply to all changes in this repository.
 Install the project in editable mode with development dependencies:
 
 ```bash
-python3 -m pip install -e ".[dev]"
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 ```
 
 ## Daily Workflow
@@ -151,8 +152,8 @@ to be stable consumer-facing API.
 ## Output and Debugging Notes
 
 - `jsonl` is the safest format for live or long-running captures
-- live `.json` outputs are upgraded to `.jsonl` by the runtime pipeline unless
-  the caller explicitly selects a different format
+- JSON-array `.json` output is not supported; use `.jsonl` for structured
+  output
 - Use `--logging debug` or `--verbose` when investigating parser or transport
   issues
 - Use `--testing` for debug logging plus `pause_on_debug`

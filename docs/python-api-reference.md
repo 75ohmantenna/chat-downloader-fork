@@ -151,7 +151,6 @@ Common fields:
 | `inactivity_timeout` | `None` | Stop after idle period |
 | `overwrite` | `True` | Replace existing output files |
 | `sort_keys` | `True` | Sort keys in JSON output |
-| `indent` | `4` | JSON indentation spaces or string |
 
 For YouTube live chats, the site default text format renders absolute
 timestamps before elapsed replay offsets. Replay chats keep the standard
@@ -238,13 +237,8 @@ for item in chat:
   limits
 
 The runtime can attach multiple output writers when `output` is a list or when
-the CLI receives repeated `--output` flags. A live capture targeting a `.json`
-path is upgraded to `.jsonl` so the file is usable during long-running or
-interrupted runs.
-
-When appending to an existing JSON array with `overwrite=False`, the JSON writer
-preserves valid prior entries and creates a `.corrupted.<timestamp>` backup if
-the existing file cannot be treated as a JSON array.
+the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
+output. JSON-array `.json` output is not supported.
 
 ## Debugging Helpers
 

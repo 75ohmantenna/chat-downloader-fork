@@ -49,7 +49,6 @@ from .sites.models import SiteDefault
 DEFAULT_MAX_ATTEMPTS: int = 15
 DEFAULT_MESSAGE_RECEIVE_TIMEOUT: float = 0.1
 DEFAULT_BUFFER_SIZE: int = 4096
-DEFAULT_JSON_INDENT: int = 4
 # ---------------------------------------------------------------------------
 # CLI metadata helper
 # ---------------------------------------------------------------------------
@@ -191,7 +190,7 @@ class ChatRequest:
         ``chat_type``, ``ignore``, ``message_receive_timeout``,
         ``buffer_size``, ``max_attempts``, ``retry_timeout``,
         ``interruptible_retry``, ``timeout``, ``inactivity_timeout``,
-        ``overwrite``, ``sort_keys``, ``indent``.
+        ``overwrite``, ``sort_keys``.
     """
 
     # ── Core ──────────────────────────────────────────────────────────────────
@@ -303,8 +302,8 @@ class ChatRequest:
             "cli": _cli(
                 "Output file path (None = print to stdout). Extension "
                 "determines"
-                " format (.json/.jsonl/.csv/.txt). For live streams a .json"
-                " extension is automatically upgraded to .jsonl (crash-safe).",
+                " format (.jsonl/.csv/.txt). JSON-array .json output is no"
+                " longer supported; use .jsonl for structured output.",
                 group="output",
                 flags=["-o"],
             ),
@@ -319,12 +318,6 @@ class ChatRequest:
     sort_keys: bool = field(
         default=True,
         metadata={"cli": _cli("Sort JSON keys in output", group="output")},
-    )
-    indent: int | str = field(
-        default=DEFAULT_JSON_INDENT,
-        metadata={
-            "cli": _cli("JSON indentation spaces or string", group="output")
-        },
     )
 
     # ── Formatting ────────────────────────────────────────────────────────────
@@ -552,7 +545,6 @@ __all__ = [
     "CHAT_PARAM_NAMES",
     "DEFAULT_BUFFER_SIZE",
     "DEFAULT_CONNECT_TIMEOUT",
-    "DEFAULT_JSON_INDENT",
     "DEFAULT_MAX_ATTEMPTS",
     "DEFAULT_MESSAGE_RECEIVE_TIMEOUT",
     "DEFAULT_MAX_SEEN_MESSAGE_IDS",

@@ -10,9 +10,9 @@ Personal fork of `xenova/chat-downloader`; no upstream support. See README.
 
 ## Architecture
 - `models.py`: `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata
-- `runtime/`: `cli_bridge.py` (strict `run()` param categorization), `site_dispatch.py` (URL→site + site defaults), `chat_pipeline.py` (limits/timeouts/format/output/live JSONL promotion), `runner.py` (run loop + cleanup), `session_lifecycle.py` (cookies/sessions/cookie-domain validation), `testing.py`
+- `runtime/`: `cli_bridge.py` (strict `run()` param categorization), `site_dispatch.py` (URL→site + site defaults), `chat_pipeline.py` (limits/timeouts/format/output), `runner.py` (run loop + cleanup), `session_lifecycle.py` (cookies/sessions/cookie-domain validation), `testing.py`
 - `sites/`: `base.py`, `session.py` (proxy URL validation), `retry.py`, `filters.py` (message group validation), `models.py`, `remap.py`
-- `output/`: `ContinuousWriter`, JSON array/JSONL/CSV/TXT writers; `formatting/`: `ItemFormatter`
+- `output/`: `ContinuousWriter`, JSONL/CSV/TXT writers; `formatting/`: `ItemFormatter`
 - `debugging.py`: logging and testing modes, sanitization, opt-in debug sample capture; `debug_sample_utils.py`: fixture naming hints
 - `tests/fixtures/`: curated parser, error, and live-event fixtures
 
@@ -21,7 +21,7 @@ Personal fork of `xenova/chat-downloader`; no upstream support. See README.
 - Twitch: live = IRC; VOD, clips, metadata = GraphQL persisted queries; badge state is instance-owned. Hash rotation breaks `graphql_client.py` and `constants.py` first.
 
 ## Output formats
-- `json` / `jsonl` / `csv` / `txt`. `json` auto-upgrades to `jsonl` for live streams.
+- `jsonl` / `csv` / `txt`. JSON-array `.json` output is not supported.
 
 ## Debug
 - `--logging debug` or `--verbose` for parser and transport issues

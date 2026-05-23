@@ -4,6 +4,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
 
+import pytest
+
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.chat_pipeline import (
     apply_message_limit,
@@ -21,13 +23,11 @@ class _FakeWriter:
         self,
         output_file: str,
         *,
-        indent: int,
         sort_keys: bool,
         overwrite: bool,
         lazy_initialise: bool,
     ) -> None:
         self.output_file = output_file
-        self.indent = indent
         self.sort_keys = sort_keys
         self.overwrite = overwrite
         self.lazy_initialise = lazy_initialise
@@ -230,8 +230,7 @@ def test_configure_output_writer_supports_multiple_outputs() -> None:
     )
     request = ChatRequest(
         url="https://www.youtube.com/watch?v=abc",
-        output=["first.json", "second.txt"],
-        indent=4,
+        output=["first.jsonl", "second.txt"],
         sort_keys=False,
         overwrite=False,
     )
@@ -242,14 +241,13 @@ def test_configure_output_writer_supports_multiple_outputs() -> None:
         "first.jsonl",
         "second.txt",
     ]
-    assert attached[0].indent == 4
     assert attached[0].sort_keys is False
     assert attached[0].overwrite is False
     assert attached[0].lazy_initialise is True
 
 
-def test_configure_output_writer_deduplicates_live_json(tmp_path) -> None:
-    output_path = str(tmp_path / "out.json")
+def test_configure_output_writer_deduplicates_duplicate_paths(tmp_path) -> None:
+    output_path = str(tmp_path / "out.jsonl")
     request = ChatRequest(
         url="https://www.youtube.com/watch?v=abc",
         output=[output_path, output_path],
@@ -259,14 +257,23 @@ def test_configure_output_writer_deduplicates_live_json(tmp_path) -> None:
     writer_factory = MagicMock(return_value=MagicMock())
 
     configure_output_writer(chat, request, writer_factory=writer_factory)
-    # Both paths promote to the same .jsonl; second is skipped
     assert len(chat._output_dispatcher.writers) == 1
+
+
+def test_configure_output_writer_rejects_json_output(tmp_path) -> None:
+    request = ChatRequest(
+        url="https://www.youtube.com/watch?v=abc",
+        output=str(tmp_path / "out.json"),
+    )
+    chat = Chat(status="live")
+
+    with pytest.raises(ValueError, match=r"Use a \.jsonl output path"):
+        configure_output_writer(chat, request)
 
 
 def test_build_output_writer_copies_request_output_settings() -> None:
     request = ChatRequest(
         url="https://www.youtube.com/watch?v=abc",
-        indent=2,
         sort_keys=False,
         overwrite=False,
     )
@@ -276,7 +283,6 @@ def test_build_output_writer_copies_request_output_settings() -> None:
     )
 
     assert writer.output_file == "chat.jsonl"
-    assert writer.indent == 2
     assert writer.sort_keys is False
     assert writer.overwrite is False
     assert writer.lazy_initialise is True

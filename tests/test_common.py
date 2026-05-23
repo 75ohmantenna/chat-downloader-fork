@@ -169,7 +169,7 @@ def test_chat_closes_writers_when_generator_raises(
         msg = "boom"
         raise RuntimeError(msg)
 
-    path = str(tmp_path / "output.json")
+    path = str(tmp_path / "output.jsonl")
     chat = FormattedChat(chat=broken_generator(), title="Test", id="chat-1")
     chat.attach_writer(
         ContinuousWriter(path, overwrite=True, lazy_initialise=True)
@@ -182,4 +182,4 @@ def test_chat_closes_writers_when_generator_raises(
         next(chat)
 
     with open(path, encoding="utf-8") as fh:
-        assert json.load(fh) == [{"message": "first"}]
+        assert json.loads(fh.readline()) == {"message": "first"}

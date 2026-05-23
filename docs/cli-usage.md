@@ -61,16 +61,12 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
 
 | Format | Notes |
 | --- | --- |
-| `json`  | Final JSON array written on close. Best for finite captures. |
 | `jsonl` | One JSON object per line. Best for long or live captures. |
 | `csv`   | Flattens nested fields and rewrites the file when new columns appear. |
 | `txt`   | Applies the configured message formatter. |
 
-When a live capture targets a `.json` path, the runtime promotes it to
-`.jsonl` so the output stays crash-safe. Pass `--format json` only when you
-explicitly want JSON-array output for a live capture. Use `jsonl` for any
-long-running live capture; plain `json` is finalized only when the writer
-closes cleanly.
+JSON-array `.json` output is no longer supported. Use `jsonl` for structured
+chat output, especially for long-running live captures.
 
 ## Common Flags
 
@@ -109,8 +105,7 @@ Debug and automation:
   cookies, a slower request pace, or both.
 - `CaptchaChallengeRequired` means Twitch or YouTube returned an explicit
   challenge response that the library cannot solve automatically.
-- Use `jsonl` for long or live captures; plain `json` is finalized only when
-  the writer closes cleanly.
+- Use `jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `chat_downloader/sites/`.
 - For deeper platform behavior, see

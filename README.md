@@ -36,14 +36,20 @@ security audit and do not replace your own review. **Use at your own risk.**
 
 ```bash
 git clone https://github.com/75ohmantenna/chat-downloader-fork
-python3 -m pip install .
 pipx install .
 ```
 
 SOCKS proxy support requires an extra:
 
 ```bash
-pip install ".[proxy]"
+pipx install ".[proxy]"
+```
+
+For development, use an editable virtualenv install:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e ".[dev]"
 ```
 
 ## First Run

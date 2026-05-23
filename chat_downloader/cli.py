@@ -13,7 +13,6 @@ from .debugging import disable_logger, set_log_level
 from .metadata import __program__, __summary__, __version__
 from .models import ChatRequest, DownloaderConfig, RunConfig, get_field_default
 from .request_profiles import REQUEST_PROFILES, get_request_profile_headers
-from .utils.conversion_utils import int_or_none
 
 HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
@@ -283,7 +282,6 @@ def main(cli_args: Sequence[str] | None = None) -> None:
     add_chat_param(
         output_group, "--sort_keys", type=str2bool, nargs="?", const=True
     )
-    add_chat_param(output_group, "--indent", type=lambda x: int_or_none(x, x))
 
     # Debugging only available from the CLI
     debug_group = parser.add_argument_group("Debugging/Testing Arguments")
