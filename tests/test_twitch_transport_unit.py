@@ -153,13 +153,22 @@ def test_download_base_gql_raises_captcha_challenge_required_on_challenge_respon
 
 
 def test_download_gql_rejects_missing_hash_mapping() -> None:
+    from chat_downloader.metadata import __version__
+
     with pytest.raises(ParsingError) as excinfo:
         graphql_client._download_gql(
             Mock(),
             [{"operationName": "NonexistentOperation", "variables": {}}],
         )
 
-    assert "Missing Twitch persisted GraphQL hash mapping" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "Missing Twitch persisted GraphQL hash mapping" in message
+    # Actionable diagnostics: name the bad op, the package version, the
+    # exact file to patch, and how to find the new hash.
+    assert "NonexistentOperation" in message
+    assert __version__ in message
+    assert "chat_downloader/sites/twitch/constants.py" in message
+    assert "persistedQuery" in message
 
 
 def test_twitch_chat_irc_join_channel_is_idempotent() -> None:

@@ -155,12 +155,18 @@ def _download_gql(
     ]
     if missing_operation_names:
         from chat_downloader.errors import ParsingError
+        from chat_downloader.metadata import __version__
 
         missing_text = ", ".join(missing_operation_names)
         msg = (
             "Missing Twitch persisted GraphQL hash mapping for "
-            f"{missing_text}. Update OPERATION_HASHES before calling "
-            "_download_gql()."
+            f"{missing_text}. chat-downloader-fork {__version__} ships a "
+            "fixed set of hashes; Twitch may have rotated them. Update "
+            "OPERATION_HASHES in "
+            "chat_downloader/sites/twitch/constants.py — current values "
+            "can be observed in the Twitch web client's Network tab "
+            "(look for GraphQL POST requests carrying a "
+            "persistedQuery.sha256Hash extension)."
         )
         raise ParsingError(
             msg,
