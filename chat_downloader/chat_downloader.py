@@ -50,9 +50,6 @@ _DEFAULT_FORMAT = SiteDefault("format")
 if TYPE_CHECKING:
     from .sites.base import BaseChatDownloader
 
-# Error reporting URLs
-ISSUES_URL = "https://github.com/75ohmantenna/chat-downloader-fork/issues"
-
 # ===== Main ChatDownloader Class =====
 
 

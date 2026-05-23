@@ -294,15 +294,14 @@ def test_execute_run_logs_error_message_for_generator_and_testing_errors(
 
     execute_run(
         FakeDownloader,
-        issues_url="https://issues.example.invalid",
         url="https://www.youtube.com/watch?v=abc",
     )
 
     assert logged == [
         (
             "error",
-            f"{error_to_raise}. Please report this at "
-            "https://issues.example.invalid",
+            f"{error_to_raise}. This usually means the site response "
+            "changed. Re-run with --logging debug for details.",
         ),
     ]
 
@@ -378,13 +377,12 @@ def test_execute_run_logs_cleanup_errors_when_primary_error_occurs(
         lambda level, message: logged.append((level, str(message))),
     )
 
-    result = execute_run(
-        FakeDownloader, issues_url="https://issues.example.invalid"
-    )
+    result = execute_run(FakeDownloader)
 
     assert result.success is False
     assert result.error_message == (
-        "generator failed. Please report this at https://issues.example.invalid"
+        "generator failed. This usually means the site response changed. "
+        "Re-run with --logging debug for details."
     )
     assert (
         "warning",

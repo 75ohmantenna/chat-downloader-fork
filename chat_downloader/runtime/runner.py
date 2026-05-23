@@ -24,8 +24,9 @@ from chat_downloader.sites.models import (
 from .cli_bridge import categorize_parameters
 from .testing import setup_testing_mode
 
-DEFAULT_ISSUES_URL = (
-    "https://github.com/75ohmantenna/chat-downloader-fork/issues"
+SITE_CHANGE_ERROR_HINT = (
+    "This usually means the site response changed. Re-run with "
+    "--logging debug for details."
 )
 
 if TYPE_CHECKING:
@@ -73,8 +74,6 @@ def create_message_callback(
 def execute_run(
     downloader_cls: type,
     propagate_interrupt: bool = False,
-    *,
-    issues_url: str = DEFAULT_ISSUES_URL,
     **kwargs: Any,
 ) -> RunResult:
     """Execute a complete chat download session with error handling.
@@ -114,7 +113,7 @@ def execute_run(
 
     except (ChatGeneratorError, ParsingError, TestingException) as e:
         primary_error = True
-        result.error_message = f"{e}. Please report this at {issues_url}"
+        result.error_message = f"{e}. {SITE_CHANGE_ERROR_HINT}"
         log("error", result.error_message)
     except ChatDownloaderError as e:
         primary_error = True
