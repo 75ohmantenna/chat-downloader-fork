@@ -1,8 +1,45 @@
 # Changelog
 
-## 1.0.0 — 2026-05-17
+## Unreleased
 
-First numbered release of this personal fork. Forked from
+### Build and tooling
+
+- Promote `PySocks` to a core dependency; SOCKS proxy support no longer
+  requires a `[proxy]` install extra
+
+### CLI
+
+- Translate `SIGTERM` into `KeyboardInterrupt` for graceful shutdown so output
+  writers flush before exit; a second signal restores the default handler and
+  exits immediately
+
+### Output
+
+- Flush every record to the OS on write and `fsync` periodically (~60s) for
+  crash-resilient captures
+- Reject naive datetimes at the JSONL output boundary, raising `ValueError` to
+  keep serialized timestamps unambiguous
+- Escape CSV cells beginning with formula-trigger characters to prevent
+  spreadsheet formula injection
+
+### YouTube
+
+- Classify member-only chats as `VideoUnplayable`
+- Bound the continuation loop on repeated no-progress responses
+
+### Twitch
+
+- Stop VOD pagination on no-progress signals
+- Make GraphQL hash-rotation failures actionable in the raised error
+- Bump the live dedup window and validate the dedup cache limit
+
+### Debugging
+
+- Scrub token-shaped strings from captured debug samples
+
+## Initial release — 2026-05-17
+
+First release of this personal fork. Forked from
 [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader) at
 upstream version `0.2.8`.
 

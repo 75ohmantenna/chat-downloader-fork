@@ -240,6 +240,11 @@ The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
 output. JSON-array `.json` output is not supported.
 
+File writers are crash-resilient: each record is flushed to the OS on write and
+the file is `fsync`-ed periodically (about every 60 seconds). Datetime values
+serialized to JSONL output must be timezone-aware (UTC); a naive `datetime`
+raises `ValueError` at the output boundary to keep timestamps unambiguous.
+
 ## Debugging Helpers
 
 `chat_downloader.debugging` provides:

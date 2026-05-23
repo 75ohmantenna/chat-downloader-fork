@@ -68,6 +68,10 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
 JSON-array `.json` output is no longer supported. Use `jsonl` for structured
 chat output, especially for long-running live captures.
 
+File output is crash-resilient: every record is flushed to the OS as it is
+written, and the file is `fsync`-ed periodically (about every 60 seconds), so
+captures survive process crashes and power loss with minimal data loss.
+
 ## Common Flags
 
 Run `chat_downloader --help` for the complete argument list. The CLI is
@@ -108,6 +112,10 @@ Debug and automation:
 - Use `jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `chat_downloader/sites/`.
+- On `SIGTERM` (e.g. `systemd` stopping the service, or `kill <pid>`) the CLI
+  shuts down gracefully: the signal is translated into a `KeyboardInterrupt` so
+  output writers flush before exit. Sending a second signal restores the
+  default handler and exits immediately.
 - For deeper platform behavior, see
   [`youtube-integration-guide.md`](youtube-integration-guide.md) and
   [`twitch-integration-guide.md`](twitch-integration-guide.md).

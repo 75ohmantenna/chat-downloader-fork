@@ -39,11 +39,9 @@ git clone https://github.com/75ohmantenna/chat-downloader-fork
 pipx install .
 ```
 
-SOCKS proxy support requires an extra:
-
-```bash
-pipx install ".[proxy]"
-```
+SOCKS, HTTP, and HTTPS proxies are supported out of the box — PySocks is a
+core dependency, so no install extra is needed. Select a proxy at runtime with
+`--proxy` on the CLI or `DownloaderConfig(proxy=...)` in the API.
 
 For development, use an editable virtualenv install:
 
