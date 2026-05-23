@@ -1,389 +1,423 @@
-"""Main module."""
+# SPDX-License-Identifier: MIT
+
+"""Main module for ChatDownloader.
+
+Orchestrates chat retrieval from streaming platforms.
+"""
+
+from __future__ import annotations
+
 import sys
-import itertools
-import time
-import json
+from http.cookiejar import MozillaCookieJar
+from typing import TYPE_CHECKING, Any, Literal
 
-from urllib.parse import urlparse
-
+from .debugging import log, sanitize_for_log
+from .errors import InvalidParameter
 from .metadata import __version__
-
-from .sites.common import (
-    SiteDefault,
-    BaseChatDownloader
+from .models import (
+    DEFAULT_BUFFER_SIZE,
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_JSON_INDENT,
+    DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
+    DEFAULT_READ_TIMEOUT,
+    ChatRequest,
+    DownloaderConfig,
 )
-from .sites import get_all_sites
+from .runtime import (
+    RunResult,
+    clear_all_cookies,
+    close_sessions,
+    execute_run,
+    handle_unsupported_url,
+    propagate_cookie,
+    try_create_chat_from_sites,
+    validate_url,
+)
+from .runtime import (
+    create_session as create_runtime_session,
+)
+from .runtime import (
+    get_cookie_value as get_runtime_cookie_value,
+)
+from .sites.models import Chat, SiteDefault
 
-from .formatting.format import ItemFormatter
-from .utils.core import (
-    safe_print,
-    get_default_args,
-    update_dict_without_overwrite
+# Module-level sentinel defaults for get_chat() keyword arguments.
+# Using module-level singletons avoids the B008 lint warning about
+# calling SiteDefault() inside a function-argument default expression.
+_DEFAULT_MESSAGE_GROUPS = SiteDefault("message_groups")
+_DEFAULT_FORMAT = SiteDefault("format")
+
+if TYPE_CHECKING:
+    from .sites.base import BaseChatDownloader
+
+# Error reporting URLs
+ISSUES_URL = (
+    "
 )
 
-from .utils.timed_utils import TimedGenerator
-
-from .debugging import (
-    log,
-    set_testing_mode,
-    TestingModes,
-    TestingException
-)
-
-from .output.continuous_write import ContinuousWriter
+# ===== Main ChatDownloader Class =====
 
 
-from requests.exceptions import (
-    RequestException,
-    ConnectionError
-)
+class ChatDownloader:
+    """Main class for downloading chat messages from streaming platforms.
 
-from .errors import (
-    URLNotProvided,
-    SiteNotSupported,
-    InvalidURL,
-    ChatDownloaderError,
-    ChatGeneratorError,
-    ParsingError
-)
+    ChatDownloader orchestrates the retrieval of chat messages from
+    various streaming services (YouTube, Twitch). It manages
+    sessions for each site, handles URL routing, and provides a unified
+    interface for chat retrieval with support for filtering, formatting,
+    and output options.
 
+    Thread-safety: Not thread-safe. Create separate instances for
+    concurrent use.
+    """
 
-class ChatDownloader():
-    """Class used to create sessions and download chats."""
+    def __init__(
+        self,
+        headers: dict[str, str] | None = None,
+        cookies: str | None = None,
+        proxy: str | None = None,
+        connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
+        read_timeout: float = DEFAULT_READ_TIMEOUT,
+        request_profile: str | None = None,
+        auto_profile_fallback: bool = True,
+        twitch_client_id: str | None = None,
+    ) -> None:
+        """Initialize a new ChatDownloader session.
 
-    def __init__(self,
-                 headers=None,
-                 cookies=None,
-                 proxy=None,
-                 ):
-        """Initialise a new session for making requests. Parameters are saved
-        and are sent to the relevant constructor when creating a new session.
+        Creates a session manager that can instantiate site-specific
+        downloaders on demand. The provided parameters are applied to
+        all subsequent site sessions.
 
-        :param headers: Headers to use for subsequent requests, defaults to None
+        :param headers: Custom HTTP headers for requests, defaults to
+            None
         :type headers: dict, optional
-        :param cookies: Path of cookies file, defaults to None
-        :type cookies: str, optional
-        :param proxy: Use the specified HTTP/HTTPS/SOCKS proxy. To enable SOCKS
-            proxy, specify a proper scheme. For example socks5://127.0.0.1:1080/.
-            Pass in an empty string (--proxy "") for direct connection. Defaults
+        :param cookies: Path to Netscape-format cookies file, defaults
             to None
+        :type cookies: str, optional
+        :param proxy: Proxy URL (supports HTTP/HTTPS/SOCKS). Examples:
+            - HTTP: "http://proxy.example.com:8080"
+            - SOCKS5: "socks5://127.0.0.1:1080"
+            - Direct connection: "" (empty string)
+            Defaults to None (system proxy settings)
         :type proxy: str, optional
+        :param connect_timeout: TCP connect timeout in seconds,
+            defaults to 10
+        :type connect_timeout: float, optional
+        :param read_timeout: HTTP read timeout in seconds, defaults
+            to 30
+        :type read_timeout: float, optional
+        :param request_profile: Optional preset request profile
+            (youtube_web/youtube_android/youtube_ios/twitch_web)
+        :type request_profile: str, optional
+        :param auto_profile_fallback: Whether to automatically rotate
+            YouTube request profiles after repeated incomplete continuation
+            responses. Defaults to True.
+        :type auto_profile_fallback: bool, optional
+        :param twitch_client_id: Optional Twitch Client-ID override.
+        :type twitch_client_id: str, optional
         """
+        if proxy and cookies is not None:
+            raise InvalidParameter(
+                "A proxy must not be used with cookie authentication: "
+                "credentials would be exposed to the proxy."
+            )
 
-        self.init_params = locals()
-        self.init_params.pop('self')
+        self.config = DownloaderConfig(
+            headers=headers,
+            cookies=cookies,
+            proxy=proxy,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+            request_profile=request_profile,
+            auto_profile_fallback=auto_profile_fallback,
+            twitch_client_id=twitch_client_id,
+        )
 
-        log('debug', f'Python version: {sys.version}')
-        log('debug', f'Program version: {__version__}')
-        log('debug', f'Initialisation parameters: {self.init_params}')
+        log("debug", f"Python version: {sys.version}")
+        log("debug", f"Program version: {__version__}")
+        log(
+            "debug",
+            "Initialisation parameters: "
+            f"{sanitize_for_log(self.config.as_dict())}",
+        )
 
-        # Track sessions using a dictionary (allows for reusing)
-        self.sessions = {}
+        # Session cache: {site_class_name: site_instance}
+        self.sessions: dict[str, BaseChatDownloader] = {}
+        # Local cookie jar to support setting cookies before any site session
+        # exists.
+        self._cookie_jar = MozillaCookieJar()
 
-    def get_chat(self, url=None,
-                 start_time=None,
-                 end_time=None,
-                 max_attempts=15,
-                 retry_timeout=None,
-                 interruptible_retry=True,
-                 timeout=None,
-                 inactivity_timeout=None,
-                 max_messages=None,
+    def clear_cookies(self) -> None:
+        """Clear cookies for this ChatDownloader and all existing site
+        sessions.
+        """
+        clear_all_cookies(self)
 
-                 message_groups=SiteDefault('message_groups'),
-                 message_types=None,
+    def set_cookie_value(
+        self,
+        domain: str,
+        name: str,
+        value: str,
+        expire_time: int | None = None,
+        port: str | None = None,
+        path: str = "/",
+        secure: bool = False,
+        discard: bool = False,
+        rest: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        """Set a cookie value on this ChatDownloader and all existing sessions.
 
-                 # Output
-                 output=None,
-                 overwrite=True,
-                 sort_keys=True,
-                 indent=4,
+        This mirrors BaseChatDownloader.set_cookie_value so callers can set
+        cookies before any site session is created.
+        """
+        propagate_cookie(
+            self,
+            domain=domain,
+            name=name,
+            value=value,
+            expire_time=expire_time,
+            port=port,
+            path=path,
+            secure=secure,
+            discard=discard,
+            rest=rest,
+            **kwargs,
+        )
 
-                 # Formatting
-                 format=SiteDefault('format'),
-                 format_file=None,
+    def get_cookie_value(self, name: str, default: Any = None) -> Any:
+        """Get a cookie value from the ChatDownloader cookie jar.
 
-                 # YouTube
-                 chat_type='live',
-                 ignore=None,
+        Falls back to checking existing sessions if the local jar doesn't have
+        it.
+        """
+        return get_runtime_cookie_value(self, name, default)
 
-                 # Twitch
-                 message_receive_timeout=0.1,
-                 buffer_size=4096
-                 ):
-        """Used to get chat messages from a livestream, video, clip or past broadcast.
+    def get_chat(
+        self,
+        url: str | None = None,
+        start_time: Any = None,
+        end_time: Any = None,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        retry_timeout: float | None = None,
+        interruptible_retry: bool = True,
+        timeout: float | None = None,
+        inactivity_timeout: float | None = None,
+        max_messages: int | None = None,
+        message_groups: Any = _DEFAULT_MESSAGE_GROUPS,
+        message_types: list[str] | None = None,
+        # Output
+        output: str | list[str] | None = None,
+        overwrite: bool = True,
+        sort_keys: bool = True,
+        indent: int | str = DEFAULT_JSON_INDENT,
+        # Formatting
+        format: Any = _DEFAULT_FORMAT,
+        format_file: str | None = None,
+        # YouTube
+        chat_type: Literal["live", "top"] = "live",
+        ignore: list[str] | None = None,
+        # Twitch
+        message_receive_timeout: float = DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
+        buffer_size: int = DEFAULT_BUFFER_SIZE,
+    ) -> Chat:
+        """Retrieve chat messages from a stream, video, clip or broadcast.
 
-        :param url: The URL of the livestream, video, clip or past broadcast,
-            defaults to None
-        :type url: str, optional
-        :param start_time: Start time in seconds or hh:mm:ss, defaults
-            to None (as early as possible)
+        This is the main entry point for chat retrieval. It automatically
+        detects the streaming platform from the URL, creates the
+        appropriate site session, and returns a Chat object containing
+        a generator of messages.
+
+        :param url: URL of the stream/video (required)
+        :type url: str
+
+        Time filtering:
+        :param start_time: Start time in seconds or hh:mm:ss
+            (None = from beginning)
         :type start_time: float, optional
-        :param end_time: End time in seconds or hh:mm:ss, defaults to
-            None (until the end)
+        :param end_time: End time in seconds or hh:mm:ss
+            (None = until end)
         :type end_time: float, optional
-        :param max_attempts: Maximum number of attempts to retrieve chat
-            messages, defaults to 15
-        :type max_attempts: int, optional
-        :param retry_timeout: Number of seconds to wait before retrying. Setting
-            this to a negative number will wait for user input. Default is None
-            (use exponential backoff, i.e. immediate, 1s, 2s, 4s, 8s, ...)
-        :type retry_timeout: float, optional
-        :param interruptible_retry: Have the option to skip waiting and
-            immediately retry. Defaults to True
-        :type interruptible_retry: bool, optional
-        :param timeout: Stop retrieving chat after a certain duration
-            (in seconds), defaults to None
+        :param timeout: Maximum duration to retrieve messages in
+            seconds
         :type timeout: float, optional
-        :param inactivity_timeout: Stop getting messages after not receiving
-            anything for a certain duration (in seconds), defaults to None
+        :param inactivity_timeout: Stop if no messages received for
+            this many seconds
         :type inactivity_timeout: float, optional
-        :param max_messages: Maximum number of messages to retrieve, defaults
-            to None (unlimited)
+
+        Retry behavior:
+        :param max_attempts: Maximum retry attempts (default: 15)
+        :type max_attempts: int, optional
+        :param retry_timeout: Seconds to wait before retry
+            (None = exponential backoff, negative = wait for user
+            input)
+        :type retry_timeout: float, optional
+        :param interruptible_retry: Allow skipping wait to retry
+            immediately (default: True)
+        :type interruptible_retry: bool, optional
+
+        Message filtering:
+        :param max_messages: Maximum number of messages to retrieve
+            (None = unlimited)
         :type max_messages: int, optional
-        :param message_groups: List of messages groups (a predefined,
-            site-specific collection of message types) to include
+        :param message_groups: Predefined message groups to include
+            (site-specific)
         :type message_groups: SiteDefault, optional
-        :param message_types: List of messages types to include, defaults to None
+        :param message_types: Specific message types to include
+            (overrides message_groups)
         :type message_types: list, optional
-        :param output: Path of the output file, defaults to None (print to
-            standard output)
+
+        Output options:
+        :param output: Output file path (None = print to stdout). Extension
+            determines format (.json/.jsonl/.csv/.txt). For live streams a
+            .json extension is automatically upgraded to .jsonl (crash-safe);
+            pass --format json to override.
         :type output: str, optional
-        :param overwrite: If True, overwrite output file. Otherwise, append
-            to the end of the file. Defaults to True. In both cases, the file
-            (and directories) is created if it does not exist.
+        :param overwrite: Overwrite existing output file
+            (default: True)
         :type overwrite: bool, optional
-        :param sort_keys: Sort keys when outputting to a file, defaults to True
+        :param sort_keys: Sort JSON keys in output (default: True)
         :type sort_keys: bool, optional
-        :param indent: Number of spaces to indent JSON objects by. If
-            nonnumerical input is provided, this will be used to indent
-            the objects. Defaults to 4
-        :type indent: Union[int, str], optional
-        :param format: Specify how messages should be formatted for printing,
-            defaults to the site's default value
+        :param indent: JSON indentation spaces or string (default: 4)
+        :type indent: int | str, optional
+
+        Formatting:
+        :param format: Message format template name
+            (site-specific default)
         :type format: SiteDefault, optional
-        :param format_file: Specify the path of the format file to choose
-            formats from, defaults to None
+        :param format_file: Path to custom format definition file
         :type format_file: str, optional
-        :param chat_type: Specify chat type, defaults to 'live'
+
+        Site-specific (YouTube):
+        :param chat_type: Chat type ('live', 'top', etc.)
+            (default: 'live')
         :type chat_type: str, optional
-        :param ignore: Ignore a list of video ids, defaults to None
+        :param ignore: List of video IDs to ignore
         :type ignore: list, optional
-        :param message_receive_timeout: Time before requesting for new messages,
-            defaults to 0.1
+
+        Site-specific (Twitch):
+        :param message_receive_timeout: Seconds between message
+            requests (default: 0.1)
         :type message_receive_timeout: float, optional
-        :param buffer_size: Specify a buffer size for retrieving messages,
-            defaults to 4096
+        :param buffer_size: Buffer size for message retrieval
+            (default: 4096)
         :type buffer_size: int, optional
-        :raises URLNotProvided: if no URL is provided
-        :raises ChatGeneratorError: if no valid generator can be found for a site
-        :raises SiteNotSupported: if no matching site can be found
-        :raises InvalidURL: if the URL provided is not valid
-        :return: The appropriate Chat object, given these parameters
+
+        :raises URLNotProvided: No URL provided
+        :raises ChatGeneratorError: No valid generator found for site
+        :raises SiteNotSupported: URL's site not supported
+        :raises InvalidURL: Invalid URL format
+
+        :return: Chat object with message generator
         :rtype: Chat
         """
+        request = ChatRequest(
+            url="" if url is None else url,
+            start_time=start_time,
+            end_time=end_time,
+            max_attempts=max_attempts,
+            retry_timeout=retry_timeout,
+            interruptible_retry=interruptible_retry,
+            timeout=timeout,
+            inactivity_timeout=inactivity_timeout,
+            max_messages=max_messages,
+            message_groups=message_groups,
+            message_types=message_types,
+            output=output,
+            overwrite=overwrite,
+            sort_keys=sort_keys,
+            indent=indent,
+            format=format,
+            format_file=format_file,
+            chat_type=chat_type,
+            ignore=ignore,
+            message_receive_timeout=message_receive_timeout,
+            buffer_size=buffer_size,
+        )
+        return self.get_chat_request(request)
 
-        # TODO params to add
-        # If True, program will not sleep when a timeout instruction is given
-        # force_no_timeout=False,
-        # :param force_no_timeout: Force no timeout between subsequent requests
-        #  force_encoding=None, # use default
+    def get_chat_request(self, request: ChatRequest) -> Chat:
+        """Preferred typed entry point for chat retrieval via
+        :class:`ChatRequest`.
+        """
+        validate_url(request.url)
 
-        if not url:
-            raise URLNotProvided('No URL provided.')
+        # URL dispatch flow:
+        # 1. Try to match URL against all registered sites
+        # 2. If match found, create site session and get chat
+        # 3. If no match, attempt URL correction (add https://) or raise error
+        chat = try_create_chat_from_sites(self, request.url, request)
+        if chat:
+            return chat
 
-        original_params = locals()
-        original_params.pop('self')
+        return handle_unsupported_url(self, request.url, request)
 
-        # loop through all websites and
-        # get corresponding website parser
-        # based on matching url with predefined regex
-        for site in get_all_sites():
-            match_info = site.matches(url)
-            if match_info:  # match found
+    def create_session(
+        self,
+        chat_downloader_class: type[BaseChatDownloader],
+        overwrite: bool = False,
+    ) -> BaseChatDownloader:
+        """Create or retrieve a session for a chat downloader class.
 
-                function_name, match = match_info
+        :param chat_downloader_class: The ChatDownloader class to create
+            session for
+        :param overwrite: Whether to overwrite existing session
+        :return: The session instance
+        :raises TypeError: if class is invalid
+        """
+        return create_runtime_session(self, chat_downloader_class, overwrite)
 
-                # Create new session
-                self.create_session(site)
-                site_object = self.sessions[site.__name__]
+    def get_session(
+        self,
+        chat_downloader_class: type[BaseChatDownloader],
+    ) -> BaseChatDownloader | None:
+        """Get existing session for a chat downloader class.
 
-                # Parse site-defaults
-                params = {}
-                for k, v in original_params.items():
-                    params[k] = site_object.get_site_value(v)
-
-                log('info', f'Site: {site_object._NAME}')
-                log('debug', f'Program parameters: {params}')
-
-                get_chat = getattr(site_object, function_name, None)
-                if not get_chat:
-                    raise NotImplementedError(
-                        f'{function_name} has not been implemented in {site.__name__}.')
-
-                chat = get_chat(match, params)
-                log('debug',
-                    f'Match found: "{match}". Running "{function_name}" function in "{site.__name__}".')
-
-                if chat is None:
-                    raise ChatGeneratorError(
-                        f'No valid generator found in {site.__name__} for url "{url}"')
-
-                if isinstance(params['max_messages'], int):
-                    chat.chat = itertools.islice(
-                        chat.chat, params['max_messages'])
-                else:
-                    pass  # TODO throw error
-
-                if params['timeout'] is not None or params['inactivity_timeout'] is not None:
-                    # Generator requires timing functionality
-
-                    chat.chat = TimedGenerator(
-                        chat.chat, params['timeout'], params['inactivity_timeout'])
-
-                    if isinstance(params['timeout'], (float, int)):
-                        start = time.time()
-
-                        def log_on_timeout():
-                            log('debug',
-                                f'Timeout occurred after {time.time() - start} seconds.')
-                        setattr(chat.chat, 'on_timeout', log_on_timeout)
-
-                    if isinstance(params['inactivity_timeout'], (float, int)):
-                        def log_on_inactivity_timeout():
-                            log('debug',
-                                f"Inactivity timeout occurred after {params['inactivity_timeout']} seconds.")
-                        setattr(chat.chat, 'on_inactivity_timeout',
-                                log_on_inactivity_timeout)
-
-                formatter = ItemFormatter(params['format_file'])
-                chat.format = lambda x: formatter.format(
-                    x, format_name=params['format'])
-
-                if params['output']:
-                    chat.attach_writer(ContinuousWriter(
-                        params['output'],
-                        indent=params['indent'],
-                        sort_keys=params['sort_keys'],
-                        overwrite=params['overwrite'],
-                        lazy_initialise=True
-                    ))
-
-                chat.site = site_object
-
-                log('debug', f'Chat information: {chat.__dict__}')
-                log('info', f'Retrieving chat for "{chat.title}".')
-
-                return chat
-
-        parsed = urlparse(url)
-        log('debug', str(parsed))
-
-        if parsed.netloc:
-            raise SiteNotSupported(f'Site not supported: {parsed.netloc}')
-        elif not parsed.scheme:  # No scheme, try to correct
-            original_params['url'] = 'https://' + url
-            chat = self.get_chat(**original_params)
-            if chat:
-                return chat
-        else:
-            raise InvalidURL(f'Invalid URL: "{url}"')
-
-    def create_session(self, chat_downloader_class, overwrite=False):
-        if not issubclass(chat_downloader_class, BaseChatDownloader):
-            raise TypeError(
-                f'Unable to create session, class must extend BaseChatDownloader. Class given: {chat_downloader_class}')
-        elif chat_downloader_class == BaseChatDownloader:
-            raise TypeError(
-                'Unable to create session, class may not be BaseChatDownloader.')
-
-        session_name = chat_downloader_class.__name__
-        log('debug', f'Created {session_name} session.')
-
-        if session_name not in self.sessions or overwrite:
-            self.sessions[session_name] = chat_downloader_class(
-                **self.init_params)
-
-        return self.sessions[session_name]
-
-    def get_session(self, chat_downloader_class):
+        :param chat_downloader_class: The ChatDownloader class
+        :return: The session instance or None if not found
+        """
         return self.sessions.get(chat_downloader_class.__name__)
 
-    def close(self):
-        """Close all sessions associated with the object"""
-        for session in self.sessions.values():
-            session.close()
-
-        self.sessions = {}
+    def close(self) -> None:
+        """Close all sessions associated with the object."""
+        close_sessions(self)
 
 
-def run(propagate_interrupt=False, **kwargs):
+# ===== Module-Level Functions =====
+
+
+def run(propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
+    """Execute a complete chat download session with error handling.
+
+    This is a convenience function that creates a ChatDownloader
+    instance, retrieves chat messages, and handles common errors. It
+    automatically:
+    - Separates init parameters from get_chat parameters
+    - Iterates through all chat messages
+    - Logs messages unless quiet=True
+    - Handles and logs errors appropriately
+    - Cleans up resources via downloader.close()
+
+    :param propagate_interrupt: If True, re-raise KeyboardInterrupt
+        instead of catching it. Useful when embedding in other
+        applications. (default: False)
+    :type propagate_interrupt: bool, optional
+    :param kwargs: Combined parameters for ChatDownloader.__init__()
+        and get_chat(). Will be automatically separated based on
+        method signatures.
+    :type kwargs: dict
+
+    :return: Structured execution summary.
+    :rtype: RunResult
+
+    Example:
+        >>> run(url='https://www.youtube.com/watch?v=...',
+        ...     max_messages=100)
     """
-    Create a single session and get the chat using the specified parameters.
-    """
-
-    # Set testing mode
-    if kwargs.get('exit_on_debug'):
-        set_testing_mode(TestingModes.EXIT_ON_DEBUG)
-    elif kwargs.get('pause_on_debug'):
-        set_testing_mode(TestingModes.PAUSE_ON_DEBUG)
-
-    init_param_names = get_default_args(ChatDownloader.__init__)
-    program_param_names = get_default_args(ChatDownloader.get_chat)
-
-    update_dict_without_overwrite(kwargs, init_param_names)
-    update_dict_without_overwrite(kwargs, program_param_names)
-
-    chat_params = {}
-    init_params = {}
-
-    for arg in kwargs:
-        value = kwargs[arg]
-
-        if arg in program_param_names:
-            chat_params[arg] = value
-        elif arg in init_param_names:
-            init_params[arg] = value
-
-    downloader = ChatDownloader(**init_params)
-
-    try:
-        chat = downloader.get_chat(**chat_params)
-
-        if kwargs.get('quiet'):  # Only check if quiet once
-            def callback(item):
-                pass
-        else:
-            def callback(item):
-                chat.print_formatted(item)
-
-        for message in chat:
-            callback(message)
-
-        log('info', 'Finished retrieving chat messages.')
-
-    except (
-        ChatGeneratorError,
-        ParsingError,
-        TestingException
-    ) as e:  # Errors which may be bugs
-        log('error', f'{e}. Please report this at https://github.com/xenova/chat-downloader/issues/new/choose')
-
-    except ChatDownloaderError as e:  # Expected errors
-        log('error', e)
-
-    except ConnectionError as e:
-        log(
-            'error', f'Unable to establish a connection. Please check your internet connection. {e}')
-
-    except RequestException as e:
-        log('error', e)
-
-    except KeyboardInterrupt as e:
-        if propagate_interrupt:
-            raise e
-        else:
-            log('error', 'Keyboard Interrupt')
-
-    finally:
-        downloader.close()
+    return execute_run(
+        ChatDownloader,
+        ISSUES_URL,
+        propagate_interrupt=propagate_interrupt,
+        **kwargs,
+    )

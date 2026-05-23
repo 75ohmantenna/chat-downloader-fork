@@ -1,6 +1,95 @@
-"""Top-level package for chat-downloader."""
+# SPDX-License-Identifier: MIT
 
-from .chat_downloader import (
-    ChatDownloader,
-    run
+"""Top-level package for chat-downloader.
+
+This is a fork of xenova's chat-downloader with 2026 enhancements. Portions of
+this codebase have been developed with AI assistance.
+"""
+
+from .chat_downloader import ChatDownloader, run
+from .errors import (
+    CaptchaChallengeRequired,
+    ChatDisabled,
+    ChatDownloaderError,
+    ChatGeneratorError,
+    CookieError,
+    FormatError,
+    FormatFileNotFound,
+    FormatNotFound,
+    IncompleteContinuationError,
+    InvalidParameter,
+    InvalidURL,
+    LoginRequired,
+    NoChatReplay,
+    NoContinuation,
+    NoVideos,
+    ParsingError,
+    RetriesExceeded,
+    SiteError,
+    SiteNotSupported,
+    UnexpectedError,
+    URLNotProvided,
+    UserNotFound,
+    VideoNotFound,
+    VideoUnavailable,
+    VideoUnplayable,
 )
+from .formatting import ItemFormatter
+from .metadata import __version__
+from .models import ChatRequest, DownloaderConfig
+from .output import ContinuousFileWriter, ContinuousWriter
+from .sites import get_all_sites
+from .sites.base import BaseChatDownloader
+from .sites.models import Chat, Image
+from .sites.remap import Remapper
+from .sites.twitch import TwitchChatDownloader, TwitchError
+from .sites.youtube import YouTubeChatDownloader
+from .utils.timed_utils import TimedGenerator
+
+__all__ = [
+    "BaseChatDownloader",
+    "CaptchaChallengeRequired",
+    "Chat",
+    "ChatDisabled",
+    # Main classes
+    "ChatDownloader",
+    # Errors
+    "ChatDownloaderError",
+    "ChatGeneratorError",
+    "ChatRequest",
+    "CookieError",
+    "ContinuousFileWriter",
+    "ContinuousWriter",
+    # Typed config/request objects
+    "DownloaderConfig",
+    "FormatError",
+    "FormatFileNotFound",
+    "FormatNotFound",
+    "Image",
+    "IncompleteContinuationError",
+    "ItemFormatter",
+    "InvalidParameter",
+    "InvalidURL",
+    "LoginRequired",
+    "NoChatReplay",
+    "NoContinuation",
+    "NoVideos",
+    "ParsingError",
+    "Remapper",
+    "RetriesExceeded",
+    "SiteError",
+    "SiteNotSupported",
+    "TimedGenerator",
+    "TwitchChatDownloader",
+    "TwitchError",
+    "URLNotProvided",
+    "UnexpectedError",
+    "UserNotFound",
+    "VideoNotFound",
+    "VideoUnavailable",
+    "VideoUnplayable",
+    "YouTubeChatDownloader",
+    "__version__",
+    "get_all_sites",
+    "run",
+]

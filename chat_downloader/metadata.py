@@ -1,10 +1,22 @@
-"""Set metadata for chat-downloader"""
+# SPDX-License-Identifier: MIT
 
-__title__ = 'chat-downloader'
-__program__ = 'chat_downloader'
-__summary__ = 'A simple tool used to retrieve chat messages from livestreams, videos, clips and past broadcasts. No authentication needed!'
-__author__ = 'xenova'
-__email__ = 'admin@xenova.com'
-__copyright__ = '2020-2023 xenova'
-__url__ = 'https://github.com/xenova/chat-downloader'
-__version__ = '0.2.8'
+"""Set metadata for chat-downloader.
+
+Note: Portions of this codebase have been developed with AI assistance.
+"""
+
+__title__ = "chat-downloader"
+__program__ = "chat_downloader"
+__summary__ = (
+    "A simple tool used to retrieve chat messages from livestreams, "
+    "videos, clips and past broadcasts. No authentication needed!"
+)
+__author__ = "xenova"  # Original author
+__maintainer__ = "75ohmantenna"  # Current maintainer of this fork
+__email__ = "75ohmantenna@proton.me"
+__copyright__ = "2020-2026 xenova (original), 75ohmantenna (modifications)"
+__url__ = "
+__upstream_url__ = (
+    "https://github.com/xenova/chat-downloader"  # Original upstream project
+)
+__version__ = "0.6.2"
