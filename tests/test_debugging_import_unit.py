@@ -21,6 +21,7 @@ def _reload_debugging(
     colorama_module=None,
     colorlog_module=None,
 ):
+    original_stdout = sys.stdout
     original_colorama = sys.modules.get("colorama")
     original_colorlog = sys.modules.get("colorlog")
     original_handlers = {
@@ -41,12 +42,20 @@ def _reload_debugging(
         sys.modules["colorlog"] = colorlog_module
 
     module = importlib.reload(dbg)
-    return module, original_colorama, original_colorlog, original_handlers
+    return (
+        module,
+        original_stdout,
+        original_colorama,
+        original_colorlog,
+        original_handlers,
+    )
 
 
 def _restore_debugging(
-    original_colorama, original_colorlog, original_handlers
+    original_stdout, original_colorama, original_colorlog, original_handlers
 ) -> None:
+    sys.stdout = original_stdout
+
     if original_colorama is None:
         sys.modules.pop("colorama", None)
     else:
@@ -128,12 +137,16 @@ def test_debugging_import_handles_colorama_init_oserror(monkeypatch) -> None:
         init=lambda: (_ for _ in ()).throw(OSError("boom"))
     )
 
-    module, original_colorama, original_colorlog, original_handlers = (
-        _reload_debugging(
-            monkeypatch,
-            colorama_module=fake_colorama,
-            colorlog_module=None,
-        )
+    (
+        module,
+        original_stdout,
+        original_colorama,
+        original_colorlog,
+        original_handlers,
+    ) = _reload_debugging(
+        monkeypatch,
+        colorama_module=fake_colorama,
+        colorlog_module=None,
     )
 
     try:
@@ -141,7 +154,10 @@ def test_debugging_import_handles_colorama_init_oserror(monkeypatch) -> None:
         assert isinstance(module.handler, logging.StreamHandler)
     finally:
         _restore_debugging(
-            original_colorama, original_colorlog, original_handlers
+            original_stdout,
+            original_colorama,
+            original_colorlog,
+            original_handlers,
         )
 
 
@@ -169,13 +185,17 @@ def test_debugging_import_uses_colorlog_when_colour_supported(
     )
     fake_colorama = SimpleNamespace(init=lambda: None)
 
-    module, original_colorama, original_colorlog, original_handlers = (
-        _reload_debugging(
-            monkeypatch,
-            stdout=_FakeTTY(),
-            colorama_module=fake_colorama,
-            colorlog_module=fake_colorlog,
-        )
+    (
+        module,
+        original_stdout,
+        original_colorama,
+        original_colorlog,
+        original_handlers,
+    ) = _reload_debugging(
+        monkeypatch,
+        stdout=_FakeTTY(),
+        colorama_module=fake_colorama,
+        colorlog_module=fake_colorlog,
     )
 
     try:
@@ -195,7 +215,10 @@ def test_debugging_import_uses_colorlog_when_colour_supported(
         ]
     finally:
         _restore_debugging(
-            original_colorama, original_colorlog, original_handlers
+            original_stdout,
+            original_colorama,
+            original_colorlog,
+            original_handlers,
         )
 
 
