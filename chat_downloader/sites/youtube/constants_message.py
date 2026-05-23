@@ -222,6 +222,9 @@ _KEYS_TO_IGNORE = [
     "rendererContext",
     "image",
     "imageA11yLabel",
+    "authorAvatar",
+    "giftImage",
+    "giftImageA11yLabel",
     # ticker UI state metadata (not chat content)
     "dynamicStateData",
     # paid sticker purchase/logging metadata

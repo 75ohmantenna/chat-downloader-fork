@@ -78,6 +78,7 @@ _KNOWN_POLL_ACTION_TYPES: dict[str, list[str]] = {
 }
 
 _KNOWN_IGNORE_ACTION_TYPES: dict[str, list[str]] = {
+    "addInteractivityWidgetAction": [],
     "liveChatReportModerationStateCommand": [],
     "showCreatorGoalTickerChipCommand": [],
 }

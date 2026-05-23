@@ -113,6 +113,9 @@ def test_process_action_gift_message_view_model(monkeypatch) -> None:
                     "rendererContext": {},
                     "image": {},
                     "imageA11yLabel": "Jewels",
+                    "authorAvatar": {"avatarViewModel": {}},
+                    "giftImage": {"sources": []},
+                    "giftImageA11yLabel": "Image of Jewels",
                 },
             },
         },
@@ -125,6 +128,37 @@ def test_process_action_gift_message_view_model(monkeypatch) -> None:
     assert finalized["message_id"] == "gift-1"
     assert finalized["message"] == "sent 100 for 2 Jewels"
     assert finalized["author"]["name"] == "@K1NGBOB1212 "
+    assert logs == []
+    assert samples == []
+
+
+def test_process_action_ignores_interactivity_widget_action(
+    monkeypatch,
+) -> None:
+    logs = []
+    samples = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_router.debug_log",
+        lambda *parts: logs.append(parts),
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_router.capture_debug_sample",
+        lambda *parts: samples.append(parts),
+    )
+
+    action = {
+        "addInteractivityWidgetAction": {
+            "widgetRenderer": {
+                "interactivityWidgetRenderer": {
+                    "id": "gift-overlay",
+                    "content": {"giftOverlayItemViewModel": {}},
+                    "type": "INTERACTIVITY_WIDGET_TYPE_GIFT",
+                },
+            },
+        },
+    }
+
+    assert process_action(action) is None
     assert logs == []
     assert samples == []
 
