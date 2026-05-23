@@ -3,6 +3,7 @@
 """Continuous file writers for streaming chat messages to disk."""
 
 import csv
+import datetime as _dt
 import json
 import os
 import time
@@ -34,6 +35,28 @@ UNSUPPORTED_JSON_EXTENSION_MESSAGE = (
 # Wall-clock seconds between fsync()s. Per-record flush handles process
 # crashes; fsync also survives OS-level events like power loss.
 _FSYNC_INTERVAL_SECONDS = 60.0
+
+
+def _assert_utc_aware(item: Any) -> None:
+    """Guard against naive datetimes ending up in serialized output.
+
+    The codebase contract is "timestamps are UTC, either as integer
+    microseconds or as tz-aware datetimes." This is a cheap top-level
+    scan that fails loudly if a regression introduces a naive datetime,
+    which would otherwise be silently misinterpreted by downstream
+    consumers as local-time.
+    """
+    if not isinstance(item, dict):
+        return
+    for key, value in item.items():
+        if isinstance(value, _dt.datetime) and value.tzinfo is None:
+            msg = (
+                f"Output field {key!r} contains a naive datetime "
+                f"({value!r}); chat_downloader emits UTC-aware datetimes "
+                "only. Convert with .replace(tzinfo=datetime.UTC) before "
+                "writing."
+            )
+            raise ValueError(msg)
 
 
 class ContinuousFileWriter(ABC):
@@ -224,6 +247,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         """Write *item* as a single JSON line."""
         if self.file is None:
             raise RuntimeError("File must be initialized before use")
+        _assert_utc_aware(item)
         self.file.write(json.dumps(item, sort_keys=self.sort_keys) + "\n")
         self._persist_after_write()
         if flush:
