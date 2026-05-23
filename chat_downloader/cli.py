@@ -4,12 +4,14 @@
 
 import argparse
 import re
+import signal
 from collections.abc import Sequence
 from dataclasses import fields as dc_fields
+from types import FrameType
 from typing import Any, Literal, Protocol, TypedDict
 
 from .chat_downloader import run
-from .debugging import disable_logger, set_log_level
+from .debugging import disable_logger, log, set_log_level
 from .metadata import __program__, __summary__, __version__
 from .models import ChatRequest, DownloaderConfig, RunConfig, get_field_default
 from .request_profiles import REQUEST_PROFILES, get_request_profile_headers
@@ -162,12 +164,47 @@ def _rename_default_argument_groups(parser: argparse.ArgumentParser) -> None:
     parser._optionals.title = "General Arguments"
 
 
+def _install_cli_signal_handlers() -> None:
+    """Translate SIGTERM into KeyboardInterrupt so the runner's finally
+    block flushes writers. A second signal restores the default handler
+    so a stuck shutdown can still be force-killed.
+
+    SIGINT is already raised as KeyboardInterrupt by the Python runtime,
+    so we only wrap it to support the second-signal escape hatch.
+    """
+    state = {"triggered": False}
+
+    def handler(signum: int, _frame: FrameType | None) -> None:
+        if state["triggered"]:
+            signal.signal(signum, signal.SIG_DFL)
+            log("warning", "Second signal received; exiting immediately.")
+            raise KeyboardInterrupt
+        state["triggered"] = True
+        log(
+            "info",
+            f"Signal {signum} received; finalizing output "
+            "(send again to force exit).",
+        )
+        raise KeyboardInterrupt
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            signal.signal(sig, handler)
+        except (AttributeError, ValueError, OSError):
+            # The signal may be unavailable (e.g. SIGTERM on some Windows
+            # configs) or we may not be on the main thread; soft fail so
+            # library callers using CLI helpers from a worker keep working.
+            pass
+
+
 def main(cli_args: Sequence[str] | None = None) -> None:
     """Parse CLI arguments and run the chat downloader.
 
     Args:
         cli_args: Argument list to parse; defaults to ``sys.argv[1:]``.
     """
+    _install_cli_signal_handlers()
+
     parser = argparse.ArgumentParser(
         description=__summary__,
     )
