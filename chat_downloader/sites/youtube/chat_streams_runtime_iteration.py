@@ -481,6 +481,13 @@ def _get_chat_messages(
     """
     ctx = _build_chat_context(self, initial_info, ytcfg, params)
     ended_cleanly = False
+    # Defensive bounds: live chat normally produces actions or rotates the
+    # continuation token within seconds. If neither happens for several
+    # polls in a row, YouTube has effectively stopped serving us.
+    max_no_progress_polls = 5
+    max_profile_fallbacks = 3
+    no_progress_count = 0
+    fallback_count = 0
 
     while True:
         continuation_params = build_continuation_params(
@@ -488,6 +495,7 @@ def _get_chat_messages(
             ctx.loop_state,
             ctx.is_replay,
         )
+        token_before_request = ctx.loop_state.continuation
 
         try:
             yt_info = _get_continuation_info(
@@ -497,6 +505,15 @@ def _get_chat_messages(
                 json=continuation_params,
             )
         except IncompleteContinuationError:
+            fallback_count += 1
+            if fallback_count > max_profile_fallbacks:
+                log(
+                    "warning",
+                    "Exhausted profile fallbacks "
+                    f"({max_profile_fallbacks}) for incomplete continuation "
+                    "responses; surfacing the underlying error.",
+                )
+                raise
             if not _attempt_profile_fallback(self):
                 raise
             ctx.innertube_context = _profiled_innertube_context(
@@ -540,6 +557,22 @@ def _get_chat_messages(
         if _advance_continuation_loop(ctx, yt_info):
             ended_cleanly = True
             break
+
+        # No-progress guard for live chat: zero actions AND the token
+        # didn't rotate means YouTube has effectively stopped advancing us.
+        if not actions and ctx.loop_state.continuation == token_before_request:
+            no_progress_count += 1
+            if no_progress_count >= max_no_progress_polls:
+                msg = (
+                    "No progress on YouTube continuation: "
+                    f"{max_no_progress_polls} consecutive empty polls with "
+                    "an unchanged continuation token. The live chat may "
+                    "have ended without a terminator, or the token is "
+                    "stale."
+                )
+                raise NoContinuation(msg)
+        else:
+            no_progress_count = 0
 
     if ended_cleanly:
         end_msg: dict[str, Any] = {
