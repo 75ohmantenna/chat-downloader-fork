@@ -333,3 +333,83 @@ def test_replay_service_get_chat_by_clip_id_retries_before_success() -> None:
 def test_replay_service_get_chat_by_clip_id_rejects_zero_attempts() -> None:
     with pytest.raises(ValueError, match="max_attempts"):
         ChatRequest(url="https://clips.twitch.tv/clip123", max_attempts=0)
+
+
+def test_iter_vod_stops_on_repeated_empty_pages_with_has_next_page() -> None:
+    """Pagination must terminate when Twitch keeps returning empty edges
+    with hasNextPage=true (no-progress guard)."""
+    downloader = SimpleNamespace(
+        _session_post=Mock(),
+        _download_gql=Mock(),
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/videos/123",
+        max_attempts=1,
+        message_groups=["messages"],
+    )
+    empty_response = (
+        {"edges": [], "pageInfo": {"hasNextPage": True}},
+        {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
+    )
+    # If the guard didn't fire, this generator would loop forever; cap to a
+    # finite list so the test fails fast on regression.
+    fetch_messages = Mock(side_effect=[empty_response] * 50)
+
+    result = list(
+        replay_service.iter_vod_chat_messages(
+            cast("Any", downloader),
+            "vod123",
+            request,
+            max_duration=120,
+            fetch_messages=fetch_messages,
+        ),
+    )
+
+    assert result == []
+    # Guard breaks after 3 consecutive empties — fetch should be called
+    # exactly 3 times, not 50.
+    assert fetch_messages.call_count == 3
+
+
+def test_iter_vod_stops_when_cursor_does_not_advance() -> None:
+    """If a non-empty page returns the same cursor as before, stop."""
+    downloader = SimpleNamespace(
+        _session_post=Mock(),
+        _download_gql=Mock(),
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/videos/123",
+        max_attempts=1,
+        message_groups=["messages"],
+    )
+    stuck_response = (
+        {
+            "edges": [
+                {
+                    "__typename": "VideoCommentEdge",
+                    # No "cursor" key on edges → outer `cursor` never advances.
+                    "node": {"__typename": "UnexpectedNode"},
+                },
+            ],
+            "pageInfo": {"hasNextPage": True},
+        },
+        {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
+    )
+    fetch_messages = Mock(side_effect=[stuck_response] * 10)
+
+    list(
+        replay_service.iter_vod_chat_messages(
+            cast("Any", downloader),
+            "vod123",
+            request,
+            max_duration=120,
+            fetch_messages=fetch_messages,
+        ),
+    )
+
+    # Loop runs once, then stops because cursor didn't advance.
+    assert fetch_messages.call_count == 1

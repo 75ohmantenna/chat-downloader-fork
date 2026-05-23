@@ -194,6 +194,8 @@ def iter_vod_chat_messages(
     cursor = ""
     first_iteration = True
     badge_set = downloader.badge_cache.snapshot()
+    consecutive_empty_pages = 0
+    max_empty_pages = 3
 
     while True:
         comments, info = _fetch_vod_page(
@@ -219,8 +221,27 @@ def iter_vod_chat_messages(
         if not comments:
             break
 
+        edges = comments.get("edges") or []
+        has_next_page = bool(multi_get(comments, "pageInfo", "hasNextPage"))
+
+        if not edges:
+            consecutive_empty_pages += 1
+            if consecutive_empty_pages >= max_empty_pages:
+                log(
+                    "warning",
+                    f"VOD {vod_id}: {max_empty_pages} consecutive empty "
+                    "pages with hasNextPage=true and no cursor advance; "
+                    "stopping pagination to avoid an infinite loop.",
+                )
+                break
+            if not has_next_page:
+                break
+            continue
+
+        consecutive_empty_pages = 0
         creator_channel_id = multi_get(info or {}, "creator", "channel", "id")
-        for edge in comments.get("edges") or []:
+        previous_cursor = cursor
+        for edge in edges:
             new_cursor = edge.get("cursor")
             if new_cursor:
                 cursor = new_cursor
@@ -243,7 +264,16 @@ def iter_vod_chat_messages(
 
         log("debug", f"Total number of messages: {message_count}")
 
-        if not multi_get(comments, "pageInfo", "hasNextPage"):
+        if not has_next_page:
+            break
+        # Cursor must advance on a page that had edges; if Twitch returns
+        # the same cursor we'd loop on identical data.
+        if cursor == previous_cursor:
+            log(
+                "warning",
+                f"VOD {vod_id}: cursor did not advance after a non-empty "
+                "page; stopping pagination.",
+            )
             break
 
 
