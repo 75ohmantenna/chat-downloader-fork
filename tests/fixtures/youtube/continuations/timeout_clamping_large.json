@@ -1,0 +1,17 @@
+{
+  "responseContext": {},
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [],
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutMs": 20000,
+            "continuation": "CLAMPED_TIMEOUT_TOKEN",
+            "clickTrackingParams": "CLAMP_TRACKING"
+          }
+        }
+      ]
+    }
+  }
+}

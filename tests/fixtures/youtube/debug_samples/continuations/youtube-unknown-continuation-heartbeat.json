@@ -1,0 +1,22 @@
+{
+  "continuation_entry": {
+    "timeoutMs": 250
+  },
+  "continuation_key": "heartbeat",
+  "payload_summary": {
+    "actions_count": 0,
+    "continuation_contents_keys": [
+      "liveChatContinuation"
+    ],
+    "continuation_keys": [
+      "heartbeat"
+    ],
+    "live_chat_keys": [
+      "actions",
+      "continuations"
+    ],
+    "top_level_keys": [
+      "continuationContents"
+    ]
+  }
+}

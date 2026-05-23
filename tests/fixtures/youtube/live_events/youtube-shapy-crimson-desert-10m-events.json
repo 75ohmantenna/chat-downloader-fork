@@ -1,0 +1,40 @@
+[
+  {
+    "action_type": "add_banner_to_live_chat",
+    "message": null,
+    "message_type": "banner"
+  },
+  {
+    "action_type": "add_banner_to_live_chat",
+    "author": {
+      "id": "UCXxq4dniJhVRkaHjg3jspfA",
+      "name": "@shapyxavier"
+    },
+    "message": "\u3010:sparkles:\u8d64\u8840\u6c99\u6f20PS5\u5be6\u9ad4\u7248\u8cfc\u8cb7\u9023\u7d50:sparkles:\u3011 https://www.igamers.com.tw/zh-TW/products/crimson-desert1-20260121172500",
+    "message_id": "ChwKGkNPdTJpcnowcTVNREZYM0F3Z1FkVFRRdFd3",
+    "message_type": "banner",
+    "time_in_seconds": 0.0,
+    "time_text": "0:00",
+    "timestamp": 1773921477243565
+  },
+  {
+    "action_type": "remove_chat_item",
+    "message": null,
+    "message_type": "ban_user",
+    "target_message_id": "ChwKGkNNbkVnOXVhclpNREZjN0N3Z1FkcV9BVVdn"
+  },
+  {
+    "action": {
+      "text": "Learn more",
+      "url": "https://support.google.com/youtube/answer/2853856?hl=en#safe"
+    },
+    "action_type": "add_chat_item",
+    "icon": "YOUTUBE_ROUND",
+    "message": "Welcome to live chat! Remember to guard your privacy and abide by our community guidelines.",
+    "message_id": "CjEKL0NPTU1VTklUWV9HVUlERUxJTkVTX1ZFTTIwMjYvMDMvMTktMTc6MjM6MDMuNDE3",
+    "message_type": "viewer_engagement_message",
+    "time_in_seconds": 0.129,
+    "time_text": "0:00",
+    "timestamp": 1773966183417035
+  }
+]

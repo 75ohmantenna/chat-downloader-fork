@@ -1,0 +1,16 @@
+{
+  "responseContext": {},
+  "continuationContents": {
+    "liveChatContinuation": {
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutMs": 5000,
+            "continuation": "HEARTBEAT_TOKEN_NEXT",
+            "clickTrackingParams": "HEARTBEAT_TRACKING"
+          }
+        }
+      ]
+    }
+  }
+}

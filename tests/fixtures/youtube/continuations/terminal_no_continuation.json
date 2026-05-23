@@ -1,0 +1,24 @@
+{
+  "responseContext": {
+    "visitorData": "CgtBQkNERUZHSElKSyjtmrO3BjIKCgJVUxIEGgAgMQ%3D%3D"
+  },
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "id": "msg-last-001",
+                "timestampUsec": "1700001000000000",
+                "authorName": {"simpleText": "FinalUser"},
+                "message": {"runs": [{"text": "Last message before stream ends"}]}
+              }
+            }
+          }
+        }
+      ],
+      "continuations": []
+    }
+  }
+}

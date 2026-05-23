@@ -1,0 +1,10 @@
+{
+  "action": {
+    "someNewAction": {
+      "foo": "bar"
+    }
+  },
+  "parsed_data": {
+    "action_type": "some_new"
+  }
+}

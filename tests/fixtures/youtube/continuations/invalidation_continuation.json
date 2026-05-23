@@ -1,0 +1,38 @@
+{
+  "responseContext": {
+    "visitorData": "CgtBQkNERUZHSElKSyjtmrO3BjIKCgJVUxIEGgAgMQ%3D%3D"
+  },
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "id": "msg-invalidation-001",
+                "timestampUsec": "1700000010000000",
+                "authorName": {"simpleText": "LiveUser"},
+                "message": {"runs": [{"text": "live chat message"}]}
+              }
+            }
+          }
+        }
+      ],
+      "continuations": [
+        {
+          "invalidationContinuationData": {
+            "invalidationId": {
+              "objectSource": 1056,
+              "objectId": "encodedId==",
+              "topic": "chat~video-id-live~1",
+              "subscribeToGcmTopics": true,
+              "protoCreationTimestampMs": "1700000009500"
+            },
+            "timeoutMs": 3000,
+            "continuation": "LIVE_INVALIDATION_TOKEN_456"
+          }
+        }
+      ]
+    }
+  }
+}

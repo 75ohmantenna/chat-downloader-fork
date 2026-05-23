@@ -1,0 +1,45 @@
+{
+  "responseContext": {
+    "visitorData": "CgtBQkNERUZHSElKSyjtmrO3BjIKCgJVUxIEGgAgMQ%3D%3D",
+    "serviceTrackingParams": []
+  },
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "id": "msg-id-001",
+                "timestampUsec": "1700000001000000",
+                "authorName": {"simpleText": "TestUser"},
+                "message": {"runs": [{"text": "Hello stream!"}]}
+              }
+            }
+          }
+        },
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatTextMessageRenderer": {
+                "id": "msg-id-002",
+                "timestampUsec": "1700000002000000",
+                "authorName": {"simpleText": "AnotherUser"},
+                "message": {"runs": [{"text": "Great content"}]}
+              }
+            }
+          }
+        }
+      ],
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutMs": 5000,
+            "continuation": "NEXT_TOKEN_ABC123",
+            "clickTrackingParams": "CLICK_PARAMS_XYZ"
+          }
+        }
+      ]
+    }
+  }
+}

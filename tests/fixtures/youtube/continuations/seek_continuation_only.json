@@ -1,0 +1,15 @@
+{
+  "responseContext": {},
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [],
+      "continuations": [
+        {
+          "playerSeekContinuationData": {
+            "continuation": "SEEK_ONLY_TOKEN_789"
+          }
+        }
+      ]
+    }
+  }
+}

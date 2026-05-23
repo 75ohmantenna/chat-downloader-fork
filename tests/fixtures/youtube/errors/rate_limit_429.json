@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": 429,
+    "message": "Rate Limit Exceeded",
+    "status": "RESOURCE_EXHAUSTED",
+    "details": []
+  }
+}

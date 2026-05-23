@@ -1,0 +1,12 @@
+{
+  "missing_keys": [
+    "unknownField2026XYZ"
+  ],
+  "original_action_type": "addChatItemAction",
+  "original_item": {
+    "liveChatMadeUpRenderer": {
+      "unknownField2026XYZ": "value"
+    }
+  },
+  "original_message_type": "liveChatMadeUpRenderer"
+}
