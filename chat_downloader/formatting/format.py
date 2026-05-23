@@ -1,170 +1,325 @@
-import re
-import os
-import json
+# SPDX-License-Identifier: MIT
 
-from ..utils.core import (
-    nested_update,
-    multi_get,
+"""ItemFormatter: template-driven rendering of chat message dicts."""
+
+import json
+import os
+import re
+import string
+from copy import deepcopy
+from typing import Any
+
+from chat_downloader.errors import FormatFileNotFound, FormatNotFound
+from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_utils import nested_update
+from chat_downloader.utils.time_utils import (
     microseconds_to_timestamp,
     seconds_to_time,
-    time_to_seconds
+    time_to_seconds,
 )
-from copy import deepcopy
 
 
-from ..errors import (
-    FormatNotFound,
-    FormatFileNotFound
-)
+class _SafeFormatter(string.Formatter):
+    """Formatter that disallows attribute and index access in templates.
+
+    Prevents ``{0.attr}`` and ``{0[key]}`` patterns that could expose
+    internal object state when templates come from user-supplied files.
+    """
+
+    def get_field(self, field_name: str, args: Any, kwargs: Any) -> Any:
+        if "." in field_name or "[" in field_name:
+            msg = (
+                "Attribute/index access not allowed in format template "
+                f"field: {field_name!r}"
+            )
+            raise ValueError(msg)
+        return super().get_field(field_name, args, kwargs)
+
+
+_SAFE_FORMATTER = _SafeFormatter()
 
 
 class ItemFormatter:
     """Class used to control the formatting of chat items."""
 
-    _INDEX_REGEX = r'(?<!\\){(.+?)(?<!\\)}'
+    # Regex pattern for finding placeholder fields in templates
+    _INDEX_REGEX = r"(?<!\\){(.+?)(?<!\\)}"
 
-    # 'always_show': True (default False)
+    # Format object keys
+    KEY_TEMPLATE = "template"
+    KEY_KEYS = "keys"
+    KEY_MATCHING = "matching"
+    KEY_INHERIT = "inherit"
+    KEY_FORMAT = "format"
+    KEY_SEPARATOR = "separator"
+    KEY_COLLAPSE_LEADING_ZEROES = "collapse_leading_zeroes"
 
-    def __init__(self, path=None):
-        """Create an ItemFormatter object
+    # Special field names that require custom formatting
+    FIELD_TIMESTAMP = "timestamp"
+    FIELD_TIME_TEXT = "time_text"
+    FIELD_AUTHOR_BADGES = "author.badges"
 
-        :param path: Path of the format file, defaults to None
-        :type path: str, optional
+    # Standard keys
+    KEY_MESSAGE_TYPE = "message_type"
+    DEFAULT_FORMAT_NAME = "default"
+    MATCH_ALL = "all"
+
+    # Default values
+    DEFAULT_TEMPLATE = ""
+    # Keep plain-printable text output resilient to control chars commonly
+    # present in moderation/bot messages (eg. ASCII 0x01).
+    CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+
+    def __init__(self, path: str | None = None) -> None:
+        """Create an ItemFormatter object.
+
+        Raises FormatFileNotFound if a custom format file path is given but
+        does not exist.
         """
-        default_path = os.path.join(os.path.dirname(
-            os.path.realpath(__file__)), 'custom_formats.json')
+        self.format_file = self._load_format_files(path)
 
-        with open(default_path) as default_formats:
-            self.format_file = json.load(default_formats)
+    def _load_format_files(self, custom_path: str | None) -> dict[str, Any]:
+        """Load default and optional custom format files, merged."""
+        default_path = os.path.join(
+            os.path.dirname(__file__), "custom_formats.json"
+        )
 
-        if path is not None:
-            if not os.path.exists(path):
-                raise FormatFileNotFound(
-                    f'Format file not found: "{path}"')
+        with open(default_path, encoding="utf-8") as default_formats:
+            format_file = json.load(default_formats)
 
-            with open(path) as custom_formats:
-                self.format_file.update(json.load(custom_formats))
+        if custom_path is not None:
+            if not os.path.exists(custom_path):
+                msg = f'Format file not found: "{custom_path}"'
+                raise FormatFileNotFound(msg)
 
-    def _replace(self, match, item, format_object):
-        """Replace a match object with
+            with open(custom_path, encoding="utf-8") as custom_formats:
+                format_file.update(json.load(custom_formats))
 
-        :param match: The match object
-        :type match: re.Match
-        :param item: The chat item to choose the value to replace the key with
-        :type item: dict
-        :param format_object: The format object which defines how the
-            replacement should be done
-        :type format_object: dict
-        :return: The replacement value as a string
-        :rtype: str
+        return format_file
+
+    def format(
+        self,
+        item: dict[str, Any],
+        format_name: str = DEFAULT_FORMAT_NAME,
+        format_object: dict[str, Any] | None = None,
+    ) -> str:
+        """Format a chat item according to a format specification.
+
+        Raises FormatNotFound if format_name is not found.
         """
+        format_object = self._resolve_format_object(
+            format_name, format_object, item
+        )
 
-        split = match.group(1).split('|')
+        if not format_object:
+            msg = f'No valid format found for "{format_name}"'
+            raise FormatNotFound(msg)
 
-        for index in split:
-            value = multi_get(item, *index.split('.'))
+        format_object = self._apply_inheritance(format_object)
+
+        return self._sanitize_output(self._apply_template(format_object, item))
+
+    def _sanitize_output(self, text: str) -> str:
+        """Remove unsupported control characters from formatted output lines."""
+        return self.CONTROL_CHARS_RE.sub("", text)
+
+    def _resolve_format_object(
+        self,
+        format_name: str,
+        format_object: dict[str, Any] | list[Any] | None,
+        item: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Return the format object to use, by name or matched from list."""
+        if format_object is None:
+            format_object = self._get_format_by_name(format_name)
+
+        if isinstance(format_object, list):
+            return self._match_format_from_list(format_object, item)
+
+        return format_object
+
+    def _get_format_by_name(
+        self, format_name: str
+    ) -> dict[str, Any] | list[Any] | None:
+        """Return the format entry for *format_name*, or the default."""
+        format_object = self.format_file.get(format_name)
+
+        if not format_object and format_name != self.DEFAULT_FORMAT_NAME:
+            msg = f'Format not found: "{format_name}"'
+            raise FormatNotFound(msg)
+
+        if not format_object:
+            format_object = self._get_default_format()
+
+        return format_object
+
+    def _get_default_format(self) -> dict[str, Any] | None:
+        """Return the default format object."""
+        return self.format_file.get(self.DEFAULT_FORMAT_NAME)
+
+    def _match_format_from_list(
+        self,
+        format_list: list[Any],
+        item: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Return the first matching format from *format_list* for *item*."""
+        message_type = item.get(self.KEY_MESSAGE_TYPE)
+
+        for format_candidate in format_list:
+            if self._does_format_match(format_candidate, message_type):
+                return format_candidate
+
+        return self._get_default_format()
+
+    def _does_format_match(
+        self,
+        format_object: dict[str, Any],
+        message_type: str | None,
+    ) -> bool:
+        """Return True when *format_object* matches *message_type*."""
+        matching = format_object.get(self.KEY_MATCHING)
+
+        if matching == self.MATCH_ALL:
+            return True
+
+        if isinstance(matching, list):
+            return message_type in matching
+
+        return matching == message_type
+
+    def _apply_inheritance(
+        self, format_object: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Return *format_object* merged onto its inherited parent, if any."""
+        inherit = format_object.get(self.KEY_INHERIT)
+
+        if not inherit:
+            return format_object
+
+        parent = self.format_file.get(inherit) or {}
+        return nested_update(deepcopy(parent), format_object)
+
+    def _apply_template(
+        self,
+        format_object: dict[str, Any],
+        item: dict[str, Any],
+    ) -> str:
+        """Substitute template placeholders with values from *item*."""
+        template = format_object.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
+        keys = format_object.get(self.KEY_KEYS, {})
+
+        return re.sub(
+            self._INDEX_REGEX,
+            lambda match: self._replace_placeholder(match, item, keys),
+            template,
+        )
+
+    def _replace_placeholder(
+        self,
+        match: re.Match[str],
+        item: dict[str, Any],
+        format_keys: dict[str, Any],
+    ) -> str:
+        """Replace a single template placeholder with its formatted value."""
+        fallback_keys = match.group(1).split("|")
+
+        for field_path in fallback_keys:
+            value = multi_get(item, *field_path.split("."))
 
             if value is None:
                 continue
 
-            formatting_info = format_object.get(index)
-            if formatting_info is None:
-                return str(value)
+            return self._format_field_value(field_path, value, format_keys)
 
-            template = ''
-            if isinstance(formatting_info, str):
-                template = formatting_info
-            elif isinstance(formatting_info, dict):
-                template = formatting_info.get('template') or ''
-                formatting = formatting_info.get('format')
-                if formatting:
-                    if index == 'timestamp':
-                        value = microseconds_to_timestamp(
-                            value, formatting)
-                    elif index == 'time_text':
-                        collapse_leading_zeroes = formatting_info.get(
-                            'collapse_leading_zeroes')
-                        value = seconds_to_time(time_to_seconds(
-                            value), formatting, collapse_leading_zeroes)
-                    else:
-                        pass   # TODO add others
+        return ""
 
-                # Apply separator
-                separator = formatting_info.get('separator')
-                if separator:
-                    if index == 'author.badges':
-                        value = separator.join(
-                            filter(None, map(lambda key: key.get('title'), value))
-                        )
-                    elif isinstance(value, (tuple, list)):
-                        value = separator.join(
-                            map(lambda x: str(x), value))
-                    else:
-                        pass
-            else:
-                pass
+    def _format_field_value(
+        self,
+        field_path: str,
+        value: Any,
+        format_keys: dict[str, Any],
+    ) -> str:
+        """Format *value* at *field_path* according to its format spec."""
+        field_config = format_keys.get(field_path)
 
-            return template.format(value)
+        if field_config is None:
+            return str(value)
 
-        return ''  # no match, return empty
+        template = self._extract_template(field_config)
+        formatted_value = self._apply_field_formatting(
+            field_path, value, field_config
+        )
 
-    def format(self, item, format_name='default', format_object=None):
-        """Format a chat item according to a format (specified by its name),
-            found in the format_object
+        return _SAFE_FORMATTER.format(template, formatted_value)
 
-        :param item: The chat item to be formatted
-        :type item: dict
-        :param format_name: The name of the format to be applied, defaults
-            to 'default'
-        :type format_name: str, optional
-        :param format_object: The format object from which the format will
-            be chosen, defaults to None
-        :type format_object: dict, optional
-        :return: The string representation of the chat item
-        :rtype: str
-        """
-        default_format_object = self.format_file.get('default')
-        if format_object is None:
-            format_object = self.format_file.get(format_name)
-            if not format_object:
-                if format_name != 'default':
-                    raise FormatNotFound(
-                        f'Format not found: "{format_name}"')
-                else:
-                    format_object = default_format_object  # Set to default
+    def _extract_template(self, field_config: Any) -> str:
+        """Return the template string from a field config entry."""
+        if isinstance(field_config, str):
+            return field_config
 
-        if isinstance(format_object, list):
-            does_match = False
+        if isinstance(field_config, dict):
+            return field_config.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
 
-            for fmt in format_object:
-                matching = fmt.get('matching')
-                message_type = item.get('message_type')
-                if isinstance(matching, list):
-                    does_match = message_type in matching
-                else:
-                    does_match = matching == 'all' or message_type == matching
+        return self.DEFAULT_TEMPLATE
 
-                if does_match:
-                    format_object = fmt
-                    break
+    def _apply_field_formatting(
+        self,
+        field_path: str,
+        value: Any,
+        field_config: Any,
+    ) -> Any:
+        """Apply type-specific formatting and separator logic to *value*."""
+        if not isinstance(field_config, dict):
+            return value
 
-            if not does_match:
-                format_object = default_format_object
-            # format_object = next((x for x in format_object if item.get(
-            #     'message_type') in x.get('matching') or x.get('matching') == 'all'), None)
+        value = self._apply_format_by_type(field_path, value, field_config)
+        return self._apply_separator(field_path, value, field_config)
 
-        if not format_object:
-            return  # raise no format given
+    def _apply_format_by_type(
+        self,
+        field_path: str,
+        value: Any,
+        field_config: dict[str, Any],
+    ) -> Any:
+        """Apply timestamp or time-text formatting when configured."""
+        format_string = field_config.get(self.KEY_FORMAT)
 
-        inherit = format_object.get('inherit')
-        if inherit:
-            parent = self.format_file.get(inherit) or {}
-            format_object = nested_update(deepcopy(parent), format_object)
+        if not format_string:
+            return value
 
-        template = format_object.get('template') or ''
-        keys = format_object.get('keys') or {}
+        if field_path == self.FIELD_TIMESTAMP:
+            return microseconds_to_timestamp(value, format_string)
 
-        substitution = re.sub(self._INDEX_REGEX, lambda match: self._replace(
-            match, item, keys), template)
+        if field_path == self.FIELD_TIME_TEXT:
+            collapse_leading_zeroes: bool = bool(
+                field_config.get(self.KEY_COLLAPSE_LEADING_ZEROES)
+            )
+            return seconds_to_time(
+                time_to_seconds(value),
+                format_string,
+                collapse_leading_zeroes,
+            )
 
-        return substitution
+        return value
+
+    def _apply_separator(
+        self,
+        field_path: str,
+        value: Any,
+        field_config: dict[str, Any],
+    ) -> Any:
+        """Join list/tuple values with a separator when configured."""
+        separator = field_config.get(self.KEY_SEPARATOR)
+
+        if not separator:
+            return value
+
+        if field_path == self.FIELD_AUTHOR_BADGES:
+            return separator.join(
+                filter(None, (badge.get("title") for badge in value))
+            )
+
+        if isinstance(value, (tuple, list)):
+            return separator.join(map(str, value))
+
+        return value
