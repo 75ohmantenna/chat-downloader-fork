@@ -8,6 +8,28 @@ import shutil
 import tempfile
 from typing import IO, Any
 
+# Leading characters that spreadsheet apps (Excel, Sheets, LibreOffice)
+# interpret as the start of a formula. Chat messages are untrusted text;
+# unescaped, a hostile message can execute on open.
+_CSV_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe_value(value: Any) -> Any:
+    """Prefix string values starting with formula-trigger characters with a
+    single quote so spreadsheet apps treat them as text, not formulas.
+
+    Non-string values are returned unchanged.
+    """
+    if isinstance(value, str) and value and value[0] in _CSV_FORMULA_LEAD:
+        return "'" + value
+    return value
+
+
+def csv_safe_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of ``item`` with every cell value passed through
+    :func:`csv_safe_value`."""
+    return {key: csv_safe_value(value) for key, value in item.items()}
+
 
 def rewrite_csv_with_new_columns(
     *,
@@ -34,8 +56,9 @@ def rewrite_csv_with_new_columns(
         csv_dict_writer.writeheader()
 
         current_file.seek(0)
+        # Existing rows were already escaped when first written; copy as-is.
         csv_dict_writer.writerows(csv.DictReader(current_file))
-        csv_dict_writer.writerow(item)
+        csv_dict_writer.writerow(csv_safe_item(item))
         new_file_path = new_file.name
 
     current_file.close()

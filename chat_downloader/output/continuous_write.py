@@ -10,7 +10,10 @@ from abc import ABC, abstractmethod
 from typing import IO, Any, Self
 
 from chat_downloader.debugging import log
-from chat_downloader.output.csv_rewrite import rewrite_csv_with_new_columns
+from chat_downloader.output.csv_rewrite import (
+    csv_safe_item,
+    rewrite_csv_with_new_columns,
+)
 from chat_downloader.utils.json_utils import flatten_json
 
 # File operation constants
@@ -165,7 +168,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
         if self._has_new_columns(item):
             self._handle_new_columns(item)
         else:
-            self.csv_dict_writer.writerow(item)
+            self.csv_dict_writer.writerow(csv_safe_item(item))
 
         self._persist_after_write()
         if flush:
