@@ -294,10 +294,17 @@ def test_execute_run_logs_error_message_for_generator_and_testing_errors(
 
     execute_run(
         FakeDownloader,
+        issues_url="https://issues.example.invalid",
         url="https://www.youtube.com/watch?v=abc",
     )
 
-    assert logged == [("error", str(error_to_raise))]
+    assert logged == [
+        (
+            "error",
+            f"{error_to_raise}. Please report this at "
+            "https://issues.example.invalid",
+        ),
+    ]
 
 
 def test_execute_run_logs_and_continues_when_chat_close_fails(
@@ -371,10 +378,14 @@ def test_execute_run_logs_cleanup_errors_when_primary_error_occurs(
         lambda level, message: logged.append((level, str(message))),
     )
 
-    result = execute_run(FakeDownloader)
+    result = execute_run(
+        FakeDownloader, issues_url="https://issues.example.invalid"
+    )
 
     assert result.success is False
-    assert result.error_message == "generator failed"
+    assert result.error_message == (
+        "generator failed. Please report this at https://issues.example.invalid"
+    )
     assert (
         "warning",
         "Error finalizing chat output: chat cleanup failed",

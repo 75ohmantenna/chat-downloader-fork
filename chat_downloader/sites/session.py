@@ -81,7 +81,7 @@ def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
             msg = f'The file "{cookies}" could not be found.'
             raise CookieError(msg)
 
-    owner.session.cookies = cookie_jar
+    cast(Any, owner.session).cookies = cookie_jar
     owner._has_initial_auth_cookies = owner._has_auth_cookies
     owner._cookie_rotation_warned = False
 

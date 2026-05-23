@@ -40,7 +40,7 @@ All commands below assume the venv exists. Activate with
 - `.venv/bin/python3 -m pytest -q -p no:rerunfailures -m "not network"` — offline test suite (default loop)
 - `.venv/bin/python3 -m pytest tests/FILE.py -q` — single file
 - `.venv/bin/python3 -m pytest tests/FILE.py::test_name -q` — single test
-- `.venv/bin/python3 -m pytest -v -m network` — opt-in network tests
+- `.venv/bin/python3 -m pytest -v -m network --run-network` — opt-in network tests
 - `.venv/bin/python3 -m ruff check chat_downloader tests` — lint
 - `.venv/bin/python3 -m ruff format --check chat_downloader tests` — format check
 - `.venv/bin/python3 -m ruff format chat_downloader tests` — apply formatting
