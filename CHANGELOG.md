@@ -1,0 +1,91 @@
+# Changelog
+
+## 1.0.0 — 2026-05-17
+
+First numbered release of this personal fork. Forked from
+[`xenova/chat-downloader`](https://github.com/xenova/chat-downloader) at
+upstream version `0.2.8`.
+
+### Build and tooling
+
+- Move build metadata to `pyproject.toml`; drop `setup.py`, `setup.cfg`,
+  `MANIFEST.in`, `Makefile`, and `tox.ini`
+- Replace `pylint` with `ruff`; add `FURB` rule family and autofixes
+- Raise minimum Python requirement to 3.12
+- Drop PyPI release infrastructure, pre-commit hook setup, and upstream CI
+
+### Architecture
+
+- Extract runtime orchestration into `chat_downloader/runtime/` package:
+  `cli_bridge`, `chat_pipeline`, `runner`, `session_lifecycle`,
+  `site_dispatch`
+- Split `utils.py` monolith into focused modules under
+  `chat_downloader/utils/`: `color_utils`, `console_utils`,
+  `conversion_utils`, `dict_utils`, `json_utils`, `retry_utils`,
+  `string_utils`, `time_utils`, `timed_utils`
+- Split YouTube site into ~45 focused modules under `sites/youtube/`,
+  grouped into bootstrap, client, continuation, discovery, parsing, and
+  video subsystems
+- Split Twitch site into focused modules under `sites/twitch/`: GraphQL
+  client, IRC transport, live and replay services, badge handling, and
+  parsing
+- Extract shared site layer: `sites/base`, `session`, `retry`, `filters`,
+  `models`, `remap`
+- Split output writers into dedicated modules under
+  `chat_downloader/output/`
+
+### Typed API
+
+- Add `DownloaderConfig`, `ChatRequest`, `RunConfig` typed dataclasses in
+  `models.py`; drive the CLI from dataclass metadata
+- Validate proxy URLs, cookie domains, and unknown `run()` kwargs at
+  system boundaries
+- Add default HTTP connect and read timeouts
+- Add safe cookie defaults; raise `InvalidParameter` for unscoped or
+  malformed cookie domains
+- Expose `propagate_interrupt` on `run()` for embedding in larger
+  applications
+
+### YouTube
+
+- Harden auth client: SAPISIDHASH-style authorization from cookie jar
+- Initialize `PREF` cookie with `hl=en` and `tz=UTC`
+- Honor message-type filters and recognize creator-goal actions
+- Validate message groups; raise on exhausted initial 5xx retries
+- Add request-profile fallback: rotate `youtube_web`, `youtube_android`,
+  `youtube_ios` after repeated incomplete continuation payloads
+- Centralize poll-delay policy; clamp continuation delay to 0.5–8 seconds
+
+### Twitch
+
+- Forward Twitch auth-token cookie to GraphQL requests
+- Validate proxy URLs; raise early when PySocks is missing for SOCKS
+  proxies
+- Coerce Twitch sub-plan strings and preserve new IRC tag variants
+- Refresh persisted GraphQL operation hashes
+- Preserve Shared Chat attribution fields in parsed messages
+
+### Output
+
+- Promote live JSON captures to JSONL; skip duplicate output paths
+- Add crash-safe `ContinuousWriter` and `ContinuousFileWriter` lifecycle
+- Suppress writer-close and destructor errors on shutdown
+- Add `formatting/` package with `ItemFormatter` and safer live format
+  variants
+
+### Testing
+
+- Migrate test suite from `unittest.TestCase` to `pytest`
+- Add offline unit suites for runtime, output, YouTube, and Twitch
+  subsystems
+- Add curated fixture library under `tests/fixtures/` for parser,
+  error, and live-event regression cases
+- Gate all network-dependent tests with `@pytest.mark.network`
+- Enforce 100% offline coverage as a quality gate
+
+### Documentation
+
+- Add Markdown `README.md`; retire `README.rst`
+- Add `docs/`: CLI usage guide, Python API reference, YouTube integration
+  guide, Twitch integration guide, and development workflow guide
+- Add `CLAUDE.md` and `AGENTS.md` for AI-assisted development workflow

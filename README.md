@@ -35,9 +35,15 @@ security audit and do not replace your own review. **Use at your own risk.**
 ## Installation
 
 ```bash
-git clone <repo-url>      # clone the repo
-python3 -m pip install .  # install with pip
-pipx install .            # install with pipx
+git clone https://github.com/75ohmantenna/chat-downloader-fork
+python3 -m pip install .
+pipx install .
+```
+
+SOCKS proxy support requires an extra:
+
+```bash
+pip install ".[proxy]"
 ```
 
 ## First Run
