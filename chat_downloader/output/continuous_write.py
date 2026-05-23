@@ -5,6 +5,7 @@
 import csv
 import json
 import os
+import time
 from abc import ABC, abstractmethod
 from typing import IO, Any, Self
 
@@ -27,6 +28,10 @@ UNSUPPORTED_JSON_EXTENSION_MESSAGE = (
     "for structured chat output."
 )
 
+# Wall-clock seconds between fsync()s. Per-record flush handles process
+# crashes; fsync also survives OS-level events like power loss.
+_FSYNC_INTERVAL_SECONDS = 60.0
+
 
 class ContinuousFileWriter(ABC):
     """Abstract base for continuous file writers.
@@ -40,6 +45,7 @@ class ContinuousFileWriter(ABC):
         self.file_name = file_name
         self.overwrite = overwrite
         self.file: IO[Any] | None = None
+        self._last_fsync_monotonic = time.monotonic()
 
     def close(self) -> None:
         """Close the underlying file handle if open."""
@@ -63,6 +69,37 @@ class ContinuousFileWriter(ABC):
         """Flush the underlying file buffer."""
         if self.file:
             self.file.flush()
+
+    def _persist_after_write(self) -> None:
+        """Flush after every record; fsync at most once per interval.
+
+        Per-message flush moves bytes from Python buffers into the OS,
+        protecting against SIGKILL. fsync forces the OS to commit them
+        to disk, protecting against power events. fsync per record is
+        too expensive on long live streams, so it runs on a timer.
+        """
+        if self.file is None:
+            return
+        try:
+            self.file.flush()
+        except OSError as e:
+            log(
+                "warning",
+                f"flush() failed on {self.file_name}: {e}",
+            )
+            return
+        now = time.monotonic()
+        if now - self._last_fsync_monotonic < _FSYNC_INTERVAL_SECONDS:
+            return
+        self._last_fsync_monotonic = now
+        try:
+            os.fsync(self.file.fileno())
+        except (OSError, AttributeError, ValueError) as e:
+            # AttributeError/ValueError: in-memory or non-fd files (tests).
+            log(
+                "debug",
+                f"fsync() skipped on {self.file_name}: {e}",
+            )
 
 
 class CsvContinuousWriter(ContinuousFileWriter):
@@ -130,6 +167,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
         else:
             self.csv_dict_writer.writerow(item)
 
+        self._persist_after_write()
         if flush:
             self.flush()
 
@@ -184,6 +222,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         if self.file is None:
             raise RuntimeError("File must be initialized before use")
         self.file.write(json.dumps(item, sort_keys=self.sort_keys) + "\n")
+        self._persist_after_write()
         if flush:
             self.file.flush()
 
@@ -202,6 +241,7 @@ class TextContinuousWriter(ContinuousFileWriter):
         if self.file is None:
             raise RuntimeError("File must be initialized before use")
         self.file.write(str(item) + "\n")
+        self._persist_after_write()
         if flush:
             self.file.flush()
 

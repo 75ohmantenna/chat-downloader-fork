@@ -56,7 +56,12 @@ def test_jsonl_single_item(tmp_path: pathlib.Path) -> None:
 
 
 def test_jsonl_uses_direct_write_not_print(tmp_path: pathlib.Path) -> None:
-    """Verify write() uses file.write(), not print()."""
+    """Verify write() uses file.write(), not print().
+
+    Per-record flush is always on (live captures need to survive SIGKILL),
+    so we assert write() ran and don't constrain flush() beyond "at least
+    once".
+    """
     w = JsonLinesContinuousWriter(_jsonl_path(tmp_path), sort_keys=True)
     mock_file = MagicMock()
     w.file = mock_file
@@ -64,10 +69,11 @@ def test_jsonl_uses_direct_write_not_print(tmp_path: pathlib.Path) -> None:
     w.write({"k": "v"})
 
     mock_file.write.assert_called_once()
-    mock_file.flush.assert_not_called()
+    assert mock_file.flush.call_count >= 1
 
 
 def test_jsonl_flush_when_requested(tmp_path: pathlib.Path) -> None:
+    """flush=True forces an explicit flush in addition to the implicit one."""
     w = JsonLinesContinuousWriter(_jsonl_path(tmp_path), sort_keys=True)
     mock_file = MagicMock()
     w.file = mock_file
@@ -75,7 +81,8 @@ def test_jsonl_flush_when_requested(tmp_path: pathlib.Path) -> None:
     w.write({"k": "v"}, flush=True)
 
     mock_file.write.assert_called_once()
-    mock_file.flush.assert_called_once()
+    # Implicit flush (per-record persistence) + explicit flush (flush=True).
+    assert mock_file.flush.call_count == 2
 
 
 def test_jsonl_sort_keys_applied(tmp_path: pathlib.Path) -> None:
