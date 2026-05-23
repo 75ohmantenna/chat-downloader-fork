@@ -1,22 +1,41 @@
-"""Lists the sites that are supported"""
+# SPDX-License-Identifier: MIT
 
+"""Lists the sites that are supported."""
+
+from .base import BaseChatDownloader
+from .models import Chat, Image
+from .remap import Remapper
+from .twitch import TwitchChatDownloader, TwitchError
 from .youtube import YouTubeChatDownloader
-from .twitch import TwitchChatDownloader
-from .zoom import ZoomChatDownloader
-from .common import BaseChatDownloader
+
+__all__ = [
+    "BaseChatDownloader",
+    "Chat",
+    "Image",
+    "Remapper",
+    "TwitchChatDownloader",
+    "TwitchError",
+    "YouTubeChatDownloader",
+    "get_all_sites",
+]
+
+_SITE_CLASSES: tuple[type[BaseChatDownloader], ...] = (
+    TwitchChatDownloader,
+    YouTubeChatDownloader,
+)
 
 
-def get_all_sites(include_parent=False):
+def get_all_sites(
+    include_parent: bool = False,
+) -> list[type[BaseChatDownloader]]:
     """Get all supported sites.
 
-    :param include_parent: Whether to include the BaseChatDownloader, defaults to False
+    :param include_parent: Whether to include the BaseChatDownloader, defaults
+        to False
     :type include_parent: bool, optional
     :return: A list of all supported ChatDownloader classes
     :rtype: list
     """
-    return [
-        value
-        for value in globals().values()
-        # not the base class
-        if isinstance(value, type) and issubclass(value, BaseChatDownloader) and (include_parent or value != BaseChatDownloader)
-    ]
+    if include_parent:
+        return [BaseChatDownloader, *_SITE_CLASSES]
+    return list(_SITE_CLASSES)
