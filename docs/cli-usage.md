@@ -1,0 +1,118 @@
+# CLI Usage
+
+End-user reference for the `chat_downloader` command-line interface: common
+recipes, the supported output formats, the most useful flags, and a short
+troubleshooting guide.
+
+For the embeddable Python API see
+[`python-api-reference.md`](python-api-reference.md). For the development
+workflow see [`developer-workflow-guide.md`](developer-workflow-guide.md).
+
+## Quick Start
+
+Print messages to stdout:
+
+```bash
+chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" --max_messages 20
+```
+
+Capture a Twitch VOD to JSONL:
+
+```bash
+chat_downloader "https://www.twitch.tv/videos/123456789" \
+  --output vod-chat.jsonl \
+  --max_messages 500
+```
+
+Write the same run to two formats at once:
+
+```bash
+chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+  --output chat.jsonl \
+  --output chat.txt
+```
+
+Use cookies and custom headers:
+
+```bash
+chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+  --cookies cookies.txt \
+  --request_profile youtube_android \
+  --header "Accept-Language: en-US,en;q=0.9"
+```
+
+Enable automatic YouTube profile fallback on incomplete continuations:
+
+```bash
+chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+  --request_profile youtube_web \
+  --auto_profile_fallback true
+```
+
+Restrict output to a time window:
+
+```bash
+chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+  --start_time 00:10:00 \
+  --end_time 00:12:30
+```
+
+## Output Formats
+
+| Format | Notes |
+| --- | --- |
+| `json`  | Final JSON array written on close. Best for finite captures. |
+| `jsonl` | One JSON object per line. Best for long or live captures. |
+| `csv`   | Flattens nested fields and rewrites the file when new columns appear. |
+| `txt`   | Applies the configured message formatter. |
+
+When a live capture targets a `.json` path, the runtime promotes it to
+`.jsonl` so the output stays crash-safe. Pass `--format json` only when you
+explicitly want JSON-array output for a live capture. Use `jsonl` for any
+long-running live capture; plain `json` is finalized only when the writer
+closes cleanly.
+
+## Common Flags
+
+Run `chat_downloader --help` for the complete argument list. The CLI is
+generated from metadata on `DownloaderConfig`, `ChatRequest`, and `RunConfig`
+in `chat_downloader/models.py`.
+
+Filtering and output:
+
+- `--message_groups` or `--message_types` — filter events.
+- `--format` or `--format_file` — change rendered text output.
+- `--output` — write one or more files (repeatable).
+- `--max_messages`, `--start_time`, `--end_time` — bound the capture.
+- `--timeout`, `--inactivity_timeout` — bound long-running captures.
+
+Request control:
+
+- `--connect_timeout`, `--read_timeout` — HTTP timeouts.
+- `--proxy`, `--cookies` — proxy and cookie jar.
+- `--request_profile` — Grayjay-inspired request header presets.
+- `--auto_profile_fallback` — rotate YouTube request profiles when
+  continuation payloads are repeatedly incomplete.
+- `--twitch_client_id` — override the public Twitch Client-ID for GraphQL
+  and replay requests.
+- `--user-agent`, `--header "Name: Value"` (repeatable) — request headers.
+
+Debug and automation:
+
+- `--logging debug`, `--verbose` — transport and parser debugging.
+- `--quiet`, `--testing`, `--pause_on_debug`, `--exit_on_debug` — automation
+  and parser-debug workflows.
+
+## Troubleshooting
+
+- `403`, `429`, or `LoginRequired` errors usually mean the platform wants
+  cookies, a slower request pace, or both.
+- `CaptchaChallengeRequired` means Twitch or YouTube returned an explicit
+  challenge response that the library cannot solve automatically.
+- Use `jsonl` for long or live captures; plain `json` is finalized only when
+  the writer closes cleanly.
+- If a platform changes its private APIs, rerun with `--logging debug` and
+  inspect the site-specific code under `chat_downloader/sites/`.
+- For deeper platform behavior, see
+  [`youtube-integration-guide.md`](youtube-integration-guide.md) and
+  [`twitch-integration-guide.md`](twitch-integration-guide.md).
