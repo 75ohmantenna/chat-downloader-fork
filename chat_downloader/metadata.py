@@ -15,7 +15,7 @@ __author__ = "xenova"  # Original author
 __maintainer__ = "75ohmantenna"  # Current maintainer of this fork
 __email__ = "75ohmantenna@proton.me"
 __copyright__ = "2020-2026 xenova (original), 75ohmantenna (modifications)"
-__url__ = "
+__url__ = "https://github.com/75ohmantenna/chat-downloader-fork"
 __upstream_url__ = (
     "https://github.com/xenova/chat-downloader"  # Original upstream project
 )

@@ -7,16 +7,34 @@ name = "chat-downloader"
 dynamic = ["version"]
 description = "Enhanced YouTube and Twitch livestream chat logging and retrieval tool"
 authors = [
-    { name = "75ohmantenna" },
+    { name = "75ohmantenna", email = "75ohmantenna@proton.me" },
 ]
 requires-python = ">=3.12"
 license = "MIT"
+keywords = ["youtube", "twitch", "chat", "livestream", "downloader"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Internet",
+    "Topic :: Multimedia :: Video",
+    "Typing :: Typed",
+]
 dependencies = [
     "requests>=2.28.0,<3.0.0",
     "colorlog>=6.7.0,<7.0.0",
 ]
 
 [project.optional-dependencies]
+proxy = [
+    "PySocks>=1.7.1",
+]
 dev = [
     "ruff>=0.15,<1.0",
     "mypy>=1.15,<2.0",
