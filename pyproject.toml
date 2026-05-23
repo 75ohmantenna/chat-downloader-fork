@@ -5,6 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chat-downloader"
 dynamic = ["version"]
+description = "Enhanced YouTube and Twitch livestream chat logging and retrieval tool"
+authors = [
+    { name = "75ohmantenna" },
+]
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
@@ -22,6 +26,10 @@ dev = [
 
 [project.scripts]
 chat_downloader = "chat_downloader.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/75ohmantenna/chat-downloader-fork"
+Repository = "https://github.com/75ohmantenna/chat-downloader-fork"
 
 [tool.setuptools]
 include-package-data = true

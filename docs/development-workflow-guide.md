@@ -1,8 +1,7 @@
-# Developer Workflow Guide
+# Development Workflow Guide
 
-Canonical development reference for `chat-downloader`. Covers local setup,
-validation, workflow expectations, architectural guardrails, and contributor
-guidance.
+Canonical development reference for `chat-downloader-fork`. Covers local setup,
+validation, workflow expectations, and architectural guardrails.
 
 This is a personal fork of `xenova/chat-downloader` with no upstream support
 commitment. See the [README](../README.md) for the support and AI-assistance
@@ -137,7 +136,7 @@ Common doc targets:
 - `docs/python-api-reference.md`: public Python API and dataclass reference
 - `docs/youtube-integration-guide.md`: YouTube capture flow and module guide
 - `docs/twitch-integration-guide.md`: Twitch capture flow and module guide
-- `AGENTS.md` and `CLAUDE.md`: contributor and agent workflow notes
+- `AGENTS.md` and `CLAUDE.md`: agent workflow notes
 
 When the public import surface changes, keep these files aligned:
 
@@ -168,7 +167,7 @@ Capture is opt-in and only active when debug logging is enabled:
 
 ```bash
 CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
-chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" --logging debug
+chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" --logging debug
 ```
 
 Captured files land in a temp directory and use stable labels from

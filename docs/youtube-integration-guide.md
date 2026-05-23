@@ -1,6 +1,6 @@
 # YouTube Integration Guide
 
-How the YouTube integration works in `chat-downloader`. For maintainers and
+How the YouTube integration works in `chat-downloader-fork`. For maintainers and
 advanced users who need a reliable mental model of the capture pipeline.
 
 ## What It Covers

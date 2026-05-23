@@ -1,6 +1,6 @@
 # Twitch Integration Guide
 
-How the Twitch integration works in `chat-downloader`. For maintainers
+How the Twitch integration works in `chat-downloader-fork`. For maintainers
 debugging the live IRC path or the GraphQL-backed replay path.
 
 The Twitch stack is split across two transport families:

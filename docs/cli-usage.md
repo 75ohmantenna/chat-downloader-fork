@@ -6,14 +6,14 @@ troubleshooting guide.
 
 For the embeddable Python API see
 [`python-api-reference.md`](python-api-reference.md). For the development
-workflow see [`developer-workflow-guide.md`](developer-workflow-guide.md).
+workflow see [`development-workflow-guide.md`](development-workflow-guide.md).
 
 ## Quick Start
 
 Print messages to stdout:
 
 ```bash
-chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" --max_messages 20
+chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" --max_messages 20
 ```
 
 Capture a Twitch VOD to JSONL:
@@ -27,7 +27,7 @@ chat_downloader "https://www.twitch.tv/videos/123456789" \
 Write the same run to two formats at once:
 
 ```bash
-chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
   --output chat.jsonl \
   --output chat.txt
 ```
@@ -35,7 +35,7 @@ chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
 Use cookies and custom headers:
 
 ```bash
-chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
   --cookies cookies.txt \
   --request_profile youtube_android \
   --header "Accept-Language: en-US,en;q=0.9"
@@ -44,7 +44,7 @@ chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
 Enable automatic YouTube profile fallback on incomplete continuations:
 
 ```bash
-chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
   --request_profile youtube_web \
   --auto_profile_fallback true
 ```
@@ -52,7 +52,7 @@ chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
 Restrict output to a time window:
 
 ```bash
-chat_downloader "https://www.youtube.com/watch?v=jfKfPfyJRdk" \
+chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
   --start_time 00:10:00 \
   --end_time 00:12:30
 ```
