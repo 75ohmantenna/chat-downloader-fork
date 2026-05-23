@@ -233,6 +233,33 @@ def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
             {"contents": {"twoColumnWatchNextResults": {}}}
         )
 
+    # Member-only chats are reported via availabilityMessage; the runtime
+    # used to fall through to NoChatReplay. Now classified as VideoUnplayable.
+    with pytest.raises(VideoUnplayable, match=r"(?i)members"):
+        _raise_for_replay_unavailable(
+            {
+                "contents": {
+                    "twoColumnWatchNextResults": {
+                        "conversationBar": {
+                            "conversationBarRenderer": {
+                                "availabilityMessage": {
+                                    "messageRenderer": {
+                                        "text": {
+                                            "runs": [
+                                                {
+                                                    "text": "This chat is for members only.",
+                                                },
+                                            ],
+                                        },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        )
+
 
 def test_raise_if_playability_error_delegates_to_popup_and_replay_checks() -> (
     None

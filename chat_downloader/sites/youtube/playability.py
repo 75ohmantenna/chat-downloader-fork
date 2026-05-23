@@ -182,6 +182,12 @@ def _raise_for_replay_unavailable(yt_initial_data: dict) -> None:
         else "Video does not have a chat replay."
     )
 
+    lowered = error_message.lower()
+    if "members" in lowered or "membership" in lowered:
+        # Per errors.py, VideoUnplayable is the documented exception for
+        # member-only chats. Fast-fail instead of letting the continuation
+        # loop spin against an inaccessible chat surface.
+        raise VideoUnplayable(error_message)
     if "disabled" in error_message:
         raise ChatDisabled(error_message)
     raise NoChatReplay(error_message)
