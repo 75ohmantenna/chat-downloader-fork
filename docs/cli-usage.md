@@ -112,6 +112,8 @@ Debug and automation:
 - Use `jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `chat_downloader/sites/`.
+- The CLI exits with a nonzero status on failure or when interrupted
+  (`KeyboardInterrupt` / `SIGTERM`); exit status `0` means a clean run.
 - On `SIGTERM` (e.g. `systemd` stopping the service, or `kill <pid>`) the CLI
   shuts down gracefully: the signal is translated into a `KeyboardInterrupt` so
   output writers flush before exit. Sending a second signal restores the

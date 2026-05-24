@@ -98,9 +98,9 @@ That keeps CLI/API drift visible when parameters move between dataclasses.
 | --- | --- | --- |
 | `headers` | `None` | Custom HTTP headers |
 | `cookies` | `None` | Path to a Netscape-format cookies file |
-| `proxy` | `None` | HTTP, HTTPS, or SOCKS proxy URL; `InvalidParameter` raised for unknown schemes or missing host |
-| `connect_timeout` | `10.0` | TCP connect timeout in seconds |
-| `read_timeout` | `30.0` | HTTP read timeout in seconds |
+| `proxy` | `None` | HTTP, HTTPS, or SOCKS proxy URL; `InvalidParameter` raised for unknown schemes or missing host. Using `proxy` together with `cookies` raises `InvalidParameter` for remote proxies; loopback proxies (`127.x.x.x`, `::1`, `localhost`) emit a warning instead. |
+| `connect_timeout` | `10.0` | TCP connect timeout in seconds; must be finite and positive (`ValueError` otherwise) |
+| `read_timeout` | `30.0` | HTTP read timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `request_profile` | `None` | Optional request-header preset (`youtube_web`, `youtube_android`, `youtube_ios`, `twitch_web`) |
 | `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after repeated incomplete continuation responses |
 | `twitch_client_id` | `None` | Optional Twitch Client-ID override for GraphQL and VOD comment requests |
@@ -165,9 +165,10 @@ Additional fields are available for retry and transport tuning:
 - `message_receive_timeout`
 - `buffer_size`
 
-Validation currently rejects non-positive `max_messages`, `max_attempts < 1`,
-non-positive `buffer_size`, and unknown `chat_type` values outside `"live"` and
-`"top"`.
+Validation raises `ValueError` for: non-positive `max_messages`; `max_attempts < 1`;
+non-positive `buffer_size`; `chat_type` outside `"live"` and `"top"`; non-positive
+`timeout` or `inactivity_timeout` when set (they may be `None`); non-positive
+`message_receive_timeout` when set.
 
 Helpers:
 

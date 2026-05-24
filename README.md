@@ -36,19 +36,7 @@ do not constitute a security audit and do not replace your own review.
 ## Installation
 
 ```bash
-git clone https://github.com/75ohmantenna/chat-downloader-fork
-pipx install .
-```
-
-SOCKS, HTTP, and HTTPS proxies are supported out of the box — PySocks is a
-core dependency, so no install extra is needed. Select a proxy at runtime with
-`--proxy` on the CLI or `DownloaderConfig(proxy=...)` in the API.
-
-For development, use an editable virtualenv install:
-
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git
 ```
 
 ## First Run
