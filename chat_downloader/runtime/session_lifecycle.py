@@ -10,8 +10,10 @@ from http.cookiejar import Cookie
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
-from chat_downloader.errors import InvalidParameter
 from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.sites.session import (
+    _validate_cookie_domain as _validate_cookie_domain,
+)
 
 if TYPE_CHECKING:
     from chat_downloader.runtime._protocols import ChatDownloaderProto
@@ -52,18 +54,6 @@ def build_cookie(
         None,
         cookie_rest,
     )
-
-
-def _validate_cookie_domain(domain: str) -> None:
-    """Reject empty or unscoped cookie domains."""
-    normalized_domain = domain.strip()
-    if (
-        normalized_domain != domain
-        or not normalized_domain
-        or "." not in normalized_domain.lstrip(".")
-    ):
-        msg = f"Invalid cookie domain: {domain!r}"
-        raise InvalidParameter(msg)
 
 
 def clear_all_cookies(owner: ChatDownloaderProto) -> None:

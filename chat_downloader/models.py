@@ -29,6 +29,7 @@ CLI metadata keys:
 """
 
 import dataclasses
+import math
 from dataclasses import dataclass, field, replace
 from dataclasses import fields as dc_fields
 from typing import Any, Literal, Self
@@ -159,6 +160,17 @@ class DownloaderConfig:
             ),
         },
     )
+
+    def __post_init__(self) -> None:
+        """Validate timeout fields."""
+        for name, value in (
+            ("connect_timeout", self.connect_timeout),
+            ("read_timeout", self.read_timeout),
+        ):
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(
+                    f"{name} must be a finite positive number, got {value!r}"
+                )
 
     def as_dict(self) -> dict[str, Any]:
         """Return all fields as a plain ``dict``.
@@ -391,6 +403,22 @@ class ChatRequest:
         if self.chat_type not in ("live", "top"):
             raise ValueError(
                 f"chat_type must be 'live' or 'top', got {self.chat_type!r}"
+            )
+        for name, value in (
+            ("timeout", self.timeout),
+            ("inactivity_timeout", self.inactivity_timeout),
+        ):
+            if value is not None and (not math.isfinite(value) or value <= 0):
+                raise ValueError(
+                    f"{name} must be a finite positive number or None, "
+                    f"got {value!r}"
+                )
+        if not math.isfinite(self.message_receive_timeout) or (
+            self.message_receive_timeout <= 0
+        ):
+            raise ValueError(
+                "message_receive_timeout must be a finite positive number, "
+                f"got {self.message_receive_timeout!r}"
             )
 
     @classmethod

@@ -606,3 +606,84 @@ def test_chat_type_allowed(chat_type: str) -> None:
 def test_chat_type_invalid_raises(chat_type: str) -> None:
     with pytest.raises(ValueError, match="chat_type"):
         ChatRequest(chat_type=chat_type)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# ChatRequest — timeout field validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0.0, -1.0, float("nan"), float("inf"), float("-inf")],
+)
+def test_timeout_invalid_raises(value: float) -> None:
+    with pytest.raises(ValueError, match="timeout"):
+        ChatRequest(timeout=value)
+
+
+def test_timeout_none_allowed() -> None:
+    assert ChatRequest(timeout=None).timeout is None
+
+
+def test_timeout_positive_allowed() -> None:
+    assert ChatRequest(timeout=30.0).timeout == pytest.approx(30.0)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0.0, -1.0, float("nan"), float("inf"), float("-inf")],
+)
+def test_inactivity_timeout_invalid_raises(value: float) -> None:
+    with pytest.raises(ValueError, match="inactivity_timeout"):
+        ChatRequest(inactivity_timeout=value)
+
+
+def test_inactivity_timeout_none_allowed() -> None:
+    assert ChatRequest(inactivity_timeout=None).inactivity_timeout is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0.0, -1.0, float("nan"), float("inf"), float("-inf")],
+)
+def test_message_receive_timeout_invalid_raises(value: float) -> None:
+    with pytest.raises(ValueError, match="message_receive_timeout"):
+        ChatRequest(message_receive_timeout=value)
+
+
+def test_message_receive_timeout_positive_allowed() -> None:
+    assert ChatRequest(
+        message_receive_timeout=0.5
+    ).message_receive_timeout == pytest.approx(0.5)
+
+
+# ---------------------------------------------------------------------------
+# DownloaderConfig — timeout field validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("connect_timeout", 0.0),
+        ("connect_timeout", -1.0),
+        ("connect_timeout", float("nan")),
+        ("connect_timeout", float("inf")),
+        ("read_timeout", 0.0),
+        ("read_timeout", -5.0),
+        ("read_timeout", float("nan")),
+        ("read_timeout", float("inf")),
+    ],
+)
+def test_downloader_config_timeout_invalid_raises(
+    field_name: str, value: float
+) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        DownloaderConfig(**{field_name: value})
+
+
+def test_downloader_config_valid_timeouts() -> None:
+    cfg = DownloaderConfig(connect_timeout=5.0, read_timeout=30.0)
+    assert cfg.connect_timeout == pytest.approx(5.0)
+    assert cfg.read_timeout == pytest.approx(30.0)

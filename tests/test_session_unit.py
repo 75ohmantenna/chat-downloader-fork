@@ -572,3 +572,29 @@ def test_init_session_state_rejects_invalid_proxy_url(proxy: str) -> None:
 
     with pytest.raises(InvalidParameter, match="Invalid proxy URL"):
         init_session_state(owner, proxy=proxy)
+
+
+# ---------------------------------------------------------------------------
+# set_cookie_value — domain validation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("domain", ["", ".", "localhost", " example.com"])
+def test_set_cookie_value_rejects_invalid_domain(domain: str) -> None:
+    from unittest.mock import MagicMock
+
+    from chat_downloader.errors import InvalidParameter
+
+    owner = MagicMock()
+    with pytest.raises(InvalidParameter, match="Invalid cookie domain"):
+        set_cookie_value(owner, domain=domain, name="sid", value="abc")
+
+
+def test_set_cookie_value_accepts_valid_domain() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    jar = MagicMock()
+    owner = SimpleNamespace(session=SimpleNamespace(cookies=jar))
+    set_cookie_value(owner, domain=".example.com", name="sid", value="abc")
+    jar.set_cookie.assert_called_once()

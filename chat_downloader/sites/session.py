@@ -29,6 +29,18 @@ _ALLOWED_PROXY_SCHEMES = frozenset(
 )
 
 
+def _validate_cookie_domain(domain: str) -> None:
+    """Reject empty or unscoped cookie domains."""
+    normalized_domain = domain.strip()
+    if (
+        normalized_domain != domain
+        or not normalized_domain
+        or "." not in normalized_domain.lstrip(".")
+    ):
+        msg = f"Invalid cookie domain: {domain!r}"
+        raise InvalidParameter(msg)
+
+
 def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
     """Initialize HTTP session, headers, proxies, cookies, and timeout
     state.
@@ -250,6 +262,7 @@ def set_cookie_value(
     **kwargs: Any,
 ) -> None:
     """Set a cookie value on the session cookie jar."""
+    _validate_cookie_domain(domain)
     _set_cookie_from_spec(
         owner,
         CookieSpec(
