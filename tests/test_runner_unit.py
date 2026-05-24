@@ -449,6 +449,7 @@ def test_execute_run_propagates_keyboard_interrupt_when_requested() -> None:
     [
         ({"exit_on_debug": True}, "EXIT_ON_DEBUG"),
         ({"pause_on_debug": True}, "PAUSE_ON_DEBUG"),
+        ({}, "NONE"),
     ],
 )
 def test_setup_testing_mode_sets_expected_mode(
@@ -466,3 +467,20 @@ def test_setup_testing_mode_sets_expected_mode(
     setup_testing_mode(kwargs)
 
     assert seen_modes == [expected_mode]
+
+
+def test_setup_testing_mode_resets_to_none_when_no_flags(monkeypatch) -> None:
+    """setup_testing_mode must reset to NONE when neither flag is set."""
+    seen_modes = []
+
+    monkeypatch.setattr(
+        "chat_downloader.runtime.testing.set_testing_mode",
+        lambda mode: seen_modes.append(mode.name),
+    )
+
+    from chat_downloader.runtime.testing import setup_testing_mode
+
+    setup_testing_mode({"exit_on_debug": True})
+    setup_testing_mode({})
+
+    assert seen_modes == ["EXIT_ON_DEBUG", "NONE"]

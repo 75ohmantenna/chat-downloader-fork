@@ -11,3 +11,5 @@ def setup_testing_mode(kwargs: dict) -> None:
         set_testing_mode(TestingModes.EXIT_ON_DEBUG)
     elif kwargs.get("pause_on_debug"):
         set_testing_mode(TestingModes.PAUSE_ON_DEBUG)
+    else:
+        set_testing_mode(TestingModes.NONE)

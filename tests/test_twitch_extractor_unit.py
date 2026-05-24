@@ -663,3 +663,20 @@ def test_get_chat_by_clip_id_clip_is_none_raises() -> None:
 
     with pytest.raises(ParsingError, match="Unable to retrieve clip data"):
         get_chat_by_clip_id(mock_downloader, "test_clip", request)
+
+
+# ---------------------------------------------------------------------------
+# twitch_client_id preservation
+# ---------------------------------------------------------------------------
+
+
+def test_twitch_client_id_preserved_after_init() -> None:
+    """twitch_client_id kwarg must survive TwitchChatDownloader.__init__."""
+    downloader = TwitchChatDownloader(twitch_client_id="my-custom-id")
+    assert downloader._twitch_client_id == "my-custom-id"
+
+
+def test_twitch_client_id_none_when_not_provided() -> None:
+    """_twitch_client_id defaults to None when kwarg is absent."""
+    downloader = TwitchChatDownloader()
+    assert downloader._twitch_client_id is None

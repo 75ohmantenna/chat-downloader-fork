@@ -130,7 +130,6 @@ class TwitchChatDownloader(BaseChatDownloader):
         """
         super().__init__(**kwargs)
         self.badge_cache = BadgeCache()
-        self._twitch_client_id: str | None = None
 
     def _update_badge_info(self, channel: str) -> None:
         """Fetch badge data from the Twitch API and update the instance cache.

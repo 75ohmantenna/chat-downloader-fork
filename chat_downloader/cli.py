@@ -5,6 +5,7 @@
 import argparse
 import re
 import signal
+import sys
 from collections.abc import Sequence
 from dataclasses import fields as dc_fields
 from types import FrameType
@@ -434,4 +435,6 @@ def main(cli_args: Sequence[str] | None = None) -> None:
         d["headers"] = headers
 
     # Run with these arguments
-    run(**d)
+    result = run(**d)
+    if not result.success or result.interrupted:
+        sys.exit(1)

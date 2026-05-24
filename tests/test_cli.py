@@ -15,6 +15,7 @@ from chat_downloader.cli import (
     str2bool,
 )
 from chat_downloader.models import ChatRequest, DownloaderConfig, RunConfig
+from chat_downloader.runtime.runner import RunResult
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -25,8 +26,9 @@ def _run_and_capture(*extra_args) -> dict:
     """Run main() with a dummy URL; return the full kwargs dict passed to run()."""
     captured: dict = {}
 
-    def fake_run(**kwargs) -> None:
+    def fake_run(**kwargs) -> RunResult:
         captured.update(kwargs)
+        return RunResult(success=True)
 
     with patch("chat_downloader.cli.run", side_effect=fake_run):
         main(["https://example.com/watch?v=fake", *extra_args])
@@ -41,8 +43,34 @@ def _run_and_capture(*extra_args) -> dict:
 def test_cli_calls_run() -> None:
     url = "https://www.youtube.com/watch?v=jfKfPfyJRdk"
     with patch("chat_downloader.cli.run") as mock_run:
+        mock_run.return_value = RunResult(success=True)
         main([url, "--timeout", "10"])
     mock_run.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        RunResult(success=False, error_message="boom"),
+        RunResult(success=True, interrupted=True),
+    ],
+    ids=["failed", "interrupted"],
+)
+def test_cli_exits_nonzero_on_failure(result: RunResult) -> None:
+    url = "https://www.youtube.com/watch?v=jfKfPfyJRdk"
+    with patch("chat_downloader.cli.run", return_value=result):
+        with pytest.raises(SystemExit) as exc_info:
+            main([url])
+    assert exc_info.value.code == 1
+
+
+def test_cli_no_exit_on_success() -> None:
+    url = "https://www.youtube.com/watch?v=jfKfPfyJRdk"
+    with patch(
+        "chat_downloader.cli.run",
+        return_value=RunResult(success=True),
+    ):
+        main([url])  # must not raise SystemExit
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +131,10 @@ def test_str2bool_invalid_raises() -> None:
 
 def test_testing_flag_sets_logging_and_pause() -> None:
     with (
-        patch("chat_downloader.cli.run") as mock_run,
+        patch(
+            "chat_downloader.cli.run",
+            return_value=RunResult(success=True),
+        ) as mock_run,
         patch("chat_downloader.cli.set_log_level") as mock_set_level,
     ):
         main(["https://example.com/watch?v=fake", "--testing"])
@@ -115,7 +146,10 @@ def test_testing_flag_sets_logging_and_pause() -> None:
 
 def test_verbose_flag_sets_logging_debug() -> None:
     with (
-        patch("chat_downloader.cli.run") as mock_run,
+        patch(
+            "chat_downloader.cli.run",
+            return_value=RunResult(success=True),
+        ) as mock_run,
         patch("chat_downloader.cli.set_log_level") as mock_set_level,
     ):
         main(["https://example.com/watch?v=fake", "--verbose"])
@@ -125,20 +159,24 @@ def test_verbose_flag_sets_logging_debug() -> None:
 
 
 def test_pause_on_debug_flag() -> None:
-    with patch("chat_downloader.cli.run") as mock_run:
+    with patch(
+        "chat_downloader.cli.run", return_value=RunResult(success=True)
+    ) as mock_run:
         main(["https://example.com/watch?v=fake", "--pause_on_debug"])
     assert mock_run.call_args.kwargs["pause_on_debug"]
 
 
 def test_exit_on_debug_flag() -> None:
-    with patch("chat_downloader.cli.run") as mock_run:
+    with patch(
+        "chat_downloader.cli.run", return_value=RunResult(success=True)
+    ) as mock_run:
         main(["https://example.com/watch?v=fake", "--exit_on_debug"])
     assert mock_run.call_args.kwargs["exit_on_debug"]
 
 
 def test_quiet_flag_disables_logger() -> None:
     with (
-        patch("chat_downloader.cli.run"),
+        patch("chat_downloader.cli.run", return_value=RunResult(success=True)),
         patch("chat_downloader.cli.disable_logger") as mock_disable,
         patch("chat_downloader.cli.set_log_level") as mock_set_level,
     ):
@@ -149,7 +187,7 @@ def test_quiet_flag_disables_logger() -> None:
 
 def test_logging_none_disables_logger() -> None:
     with (
-        patch("chat_downloader.cli.run"),
+        patch("chat_downloader.cli.run", return_value=RunResult(success=True)),
         patch("chat_downloader.cli.disable_logger") as mock_disable,
     ):
         main(["https://example.com/watch?v=fake", "--logging", "none"])
@@ -158,7 +196,10 @@ def test_logging_none_disables_logger() -> None:
 
 def test_quiet_can_be_combined_with_logging() -> None:
     with (
-        patch("chat_downloader.cli.run") as mock_run,
+        patch(
+            "chat_downloader.cli.run",
+            return_value=RunResult(success=True),
+        ) as mock_run,
         patch("chat_downloader.cli.disable_logger") as mock_disable,
         patch("chat_downloader.cli.set_log_level") as mock_set_level,
     ):
@@ -177,7 +218,9 @@ def test_quiet_can_be_combined_with_logging() -> None:
 
 
 def test_default_run_debug_flags_are_false() -> None:
-    with patch("chat_downloader.cli.run") as mock_run:
+    with patch(
+        "chat_downloader.cli.run", return_value=RunResult(success=True)
+    ) as mock_run:
         main(["https://example.com/watch?v=fake"])
     assert mock_run.call_args.kwargs["quiet"] is False
     assert mock_run.call_args.kwargs["pause_on_debug"] is False
@@ -321,7 +364,10 @@ def test_metadata_flags_are_added_when_not_explicitly_declared() -> None:
             "chat_downloader.cli._build_field_info",
             side_effect=fake_build_field_info,
         ),
-        patch("chat_downloader.cli.run") as mock_run,
+        patch(
+            "chat_downloader.cli.run",
+            return_value=RunResult(success=True),
+        ) as mock_run,
     ):
         main(["https://example.com/watch?v=fake", "-T", "12.5"])
 

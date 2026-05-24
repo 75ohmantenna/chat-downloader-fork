@@ -7,7 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from requests.exceptions import ConnectionError, RequestException
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import RequestException
 
 from chat_downloader.debugging import TestingException, log
 from chat_downloader.errors import (
@@ -46,7 +47,7 @@ class RunResult:
 
 
 def create_message_callback(
-    quiet: Any,
+    quiet: bool,
     chat: Chat,
     *,
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
@@ -119,7 +120,7 @@ def execute_run(
         primary_error = True
         result.error_message = str(e)
         log("error", e)
-    except ConnectionError as e:
+    except RequestsConnectionError as e:
         primary_error = True
         result.error_message = (
             f"Unable to establish a connection. Please check your "
