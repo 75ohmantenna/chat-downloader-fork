@@ -240,6 +240,72 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
     assert any("writer two failed" in message for message in logs)
 
 
+def test_pre_initialised_writer_receives_emit_callback() -> None:
+    """A writer that is already initialised when attached must still receive
+    emitted items — its callback must be installed even though _initialise_writers
+    skips the writer.initialize() call."""
+    received: list[Any] = []
+
+    class PreInitWriter:
+        file_name = "x"
+        output_mode = "raw"
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            raise AssertionError("initialize() must not be called")
+
+        def write(
+            self, item: dict[str, Any] | str, flush: bool = False
+        ) -> None:
+            received.append(item)
+
+        def close(self) -> None:
+            pass
+
+    chat = Chat(iter(()), title="Example")
+    dispatcher = _ChatOutputDispatcher(chat)
+    dispatcher.attach_writer(PreInitWriter())
+
+    dispatcher.emit({"message": "hello"})
+
+    assert len(received) == 1
+    assert received[0] == {"message": "hello"}
+
+
+def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
+    """Multiple emit() calls must not install the callback more than once."""
+    received: list[Any] = []
+
+    class PreInitWriter:
+        file_name = "x"
+        output_mode = "raw"
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            pass
+
+        def write(
+            self, item: dict[str, Any] | str, flush: bool = False
+        ) -> None:
+            received.append(item)
+
+        def close(self) -> None:
+            pass
+
+    chat = Chat(iter(()), title="Example")
+    dispatcher = _ChatOutputDispatcher(chat)
+    dispatcher.attach_writer(PreInitWriter())
+
+    dispatcher.emit({"message": "first"})
+    dispatcher.emit({"message": "second"})
+
+    assert len(received) == 2
+
+
 def test_get_field_default_with_default_factory() -> None:
     @dataclass
     class _Model:

@@ -57,7 +57,7 @@ DEFAULT_BUFFER_SIZE: int = 4096
 
 def _cli(
     help: str, group: str = "general", flags: list[str] | None = None
-) -> dict:
+) -> dict[str, Any]:
     """Build the ``"cli"`` metadata dict for a dataclass field.
 
     :param help: Help text shown in ``--help`` output.

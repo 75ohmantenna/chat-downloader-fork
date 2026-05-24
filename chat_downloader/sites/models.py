@@ -100,14 +100,22 @@ class _SeenMessageCache:
         try:
             normalized_limit = int(limit)
         except (TypeError, ValueError):
-            normalized_limit = 0
-        if normalized_limit <= 0:
             log(
                 "warning",
                 f"_SeenMessageCache: ignoring invalid limit {limit!r}; "
                 f"falling back to default {DEFAULT_MAX_SEEN_MESSAGE_IDS}.",
             )
             normalized_limit = DEFAULT_MAX_SEEN_MESSAGE_IDS
+        else:
+            if normalized_limit < 0:
+                log(
+                    "warning",
+                    f"_SeenMessageCache: ignoring invalid limit {limit!r}; "
+                    f"falling back to default {DEFAULT_MAX_SEEN_MESSAGE_IDS}.",
+                )
+                normalized_limit = DEFAULT_MAX_SEEN_MESSAGE_IDS
+            elif normalized_limit == 0:
+                normalized_limit = DEFAULT_MAX_SEEN_MESSAGE_IDS
         self.limit = normalized_limit
         self.message_ids: OrderedDict[str, None] = OrderedDict()
         self.evictions = 0
@@ -143,6 +151,7 @@ class _ChatOutputDispatcher:
         self._chat = chat
         self.writers: list[ChatOutputWriter] = []
         self.callbacks: list[Callable[[dict[str, Any]], None]] = []
+        self._writers_with_callbacks: set[int] = set()
         self.closed = False
 
     def _build_formatted_callback(
@@ -176,22 +185,22 @@ class _ChatOutputDispatcher:
     def _initialise_writers(self) -> None:
         """Initialise attached writers once and install their callbacks."""
         for writer in self.writers:
-            if writer.is_initialised():
+            if id(writer) in self._writers_with_callbacks:
                 continue
 
-            safe_title = sanitize_filename_component(self._chat.title).replace(
-                "..", "_"
-            )
-            safe_id = sanitize_filename_component(self._chat.id).replace(
-                "..", "_"
-            )
-            writer.file_name = writer.file_name.format(
-                title=safe_title,
-                id=safe_id,
-            )
-
-            log("debug", f"Writing to file: {writer.file_name}")
-            writer.initialize()
+            if not writer.is_initialised():
+                safe_title = sanitize_filename_component(
+                    self._chat.title
+                ).replace("..", "_")
+                safe_id = sanitize_filename_component(self._chat.id).replace(
+                    "..", "_"
+                )
+                writer.file_name = writer.file_name.format(
+                    title=safe_title,
+                    id=safe_id,
+                )
+                log("debug", f"Writing to file: {writer.file_name}")
+                writer.initialize()
 
             callback = (
                 self._build_formatted_callback(writer)
@@ -199,6 +208,7 @@ class _ChatOutputDispatcher:
                 else self._build_raw_callback(writer)
             )
             self.callbacks.append(callback)
+            self._writers_with_callbacks.add(id(writer))
 
     def attach_writer(self, writer: ChatOutputWriter) -> None:
         """Attach a writer to the chat."""

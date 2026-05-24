@@ -45,21 +45,31 @@ def rewrite_csv_with_new_columns(
     - All existing rows from ``current_file``
     - The current ``item`` row
     """
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        newline="",
-        dir=os.path.dirname(file_name) or None,
-        delete=False,
-    ) as new_file:
-        csv_dict_writer = csv.DictWriter(new_file, fieldnames=columns)
-        csv_dict_writer.writeheader()
+    new_file_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            newline="",
+            dir=os.path.dirname(file_name) or None,
+            delete=False,
+        ) as new_file:
+            new_file_path = new_file.name
+            csv_dict_writer = csv.DictWriter(new_file, fieldnames=columns)
+            csv_dict_writer.writeheader()
 
-        current_file.seek(0)
-        # Existing rows were already escaped when first written; copy as-is.
-        csv_dict_writer.writerows(csv.DictReader(current_file))
-        csv_dict_writer.writerow(csv_safe_item(item))
-        new_file_path = new_file.name
+            current_file.seek(0)
+            # Existing rows were already escaped when first written; copy as-is.
+            csv_dict_writer.writerows(csv.DictReader(current_file))
+            csv_dict_writer.writerow(csv_safe_item(item))
 
-    current_file.close()
-    shutil.move(new_file_path, file_name)
+        current_file.close()
+        shutil.move(new_file_path, file_name)
+        new_file_path = None
+    except BaseException:
+        if new_file_path is not None:
+            try:
+                os.unlink(new_file_path)
+            except OSError:
+                pass
+        raise

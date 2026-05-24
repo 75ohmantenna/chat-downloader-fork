@@ -2,10 +2,12 @@
 
 """Testing-mode runtime helpers."""
 
+from typing import Any
+
 from chat_downloader.debugging import TestingModes, set_testing_mode
 
 
-def setup_testing_mode(kwargs: dict) -> None:
+def setup_testing_mode(kwargs: dict[str, Any]) -> None:
     """Configure testing mode based on provided arguments."""
     if kwargs.get("exit_on_debug"):
         set_testing_mode(TestingModes.EXIT_ON_DEBUG)

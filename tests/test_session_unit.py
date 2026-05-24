@@ -512,19 +512,6 @@ def test_disable_configured_cookie_source_no_config_attr() -> None:
     _disable_configured_cookie_source(owner)  # Should return silently
 
 
-def test_init_session_state_socks_proxy_without_pysocks() -> None:
-    from unittest.mock import MagicMock, patch
-
-    from chat_downloader.errors import InvalidParameter
-
-    owner = MagicMock()
-    owner._has_auth_cookies = False
-
-    with patch.dict("sys.modules", {"socks": None}):
-        with pytest.raises(InvalidParameter, match="PySocks"):
-            init_session_state(owner, proxy="socks5://127.0.0.1:1080")
-
-
 def test_init_session_state_empty_proxy_disables_trust_env() -> None:
     from unittest.mock import MagicMock
 

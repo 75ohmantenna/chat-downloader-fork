@@ -21,13 +21,13 @@ def test_seen_message_cache_repr_includes_limit_and_size() -> None:
     assert "evictions=0" in text
 
 
-@pytest.mark.parametrize("bad_limit", [0, -1, -100, None, "nope"])
+@pytest.mark.parametrize("bad_limit", [-1, -100, None, "nope"])
 def test_seen_message_cache_warns_on_invalid_limit(
     bad_limit: object,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Non-positive or non-numeric limits fall back to the default and emit
-    a warning so the user notices the misconfiguration."""
+    """Negative or non-numeric limits fall back to the default and emit a
+    warning so the user notices the misconfiguration."""
     with caplog.at_level(logging.WARNING):
         cache = _SeenMessageCache(limit=bad_limit)  # type: ignore[arg-type]
 
@@ -35,6 +35,22 @@ def test_seen_message_cache_warns_on_invalid_limit(
     assert any(
         "ignoring invalid limit" in record.message for record in caplog.records
     )
+
+
+def test_seen_message_cache_zero_limit_silent_fallback_to_default(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """limit=0 is an expected 'use default' signal; it must not emit a warning
+    but should still give a functional bounded cache."""
+    with caplog.at_level(logging.WARNING):
+        cache = _SeenMessageCache(limit=0)
+    assert cache.limit == DEFAULT_MAX_SEEN_MESSAGE_IDS
+    assert not any(
+        "ignoring invalid limit" in r.message for r in caplog.records
+    )
+    # Dedup still works with the default limit.
+    assert cache.register("a")[0] is True
+    assert cache.register("a")[0] is False
 
 
 def test_seen_message_cache_accepts_fractional_via_int_cast(

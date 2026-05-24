@@ -71,15 +71,6 @@ def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
             proxies = {}
         else:
             _validate_proxy_url(proxy)
-            if urlparse(proxy).scheme.lower().startswith("socks"):
-                try:
-                    import socks  # type: ignore[import-untyped]  # noqa: F401
-                except ImportError as exc:
-                    msg = (
-                        "SOCKS proxy support requires PySocks. "
-                        "Install it with: pip install requests[socks]"
-                    )
-                    raise InvalidParameter(msg) from exc
             proxies = {"http": proxy, "https": proxy}
         owner.session.proxies.update(proxies)
 
