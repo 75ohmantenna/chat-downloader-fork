@@ -103,7 +103,15 @@ def sanitize_for_log(value: Any) -> Any:
         for key, item in value.items():
             normalized_key = key.lower() if isinstance(key, str) else key
             if normalized_key == "headers" and isinstance(item, dict):
-                sanitized[key] = dict.fromkeys(item, REDACTED)
+                sanitized[key] = {
+                    k: (
+                        REDACTED
+                        if isinstance(k, str)
+                        and k.lower() in _SENSITIVE_LOG_KEYS
+                        else v
+                    )
+                    for k, v in item.items()
+                }
             elif (
                 isinstance(normalized_key, str)
                 and normalized_key in _SENSITIVE_LOG_KEYS

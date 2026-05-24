@@ -132,12 +132,31 @@ def test_redacts_sensitive_init_fields_and_header_values() -> None:
     ) == {
         "headers": {
             "Authorization": dbg.REDACTED,
-            "User-Agent": dbg.REDACTED,
+            "User-Agent": "TestAgent/1.0",
         },
         "proxy": dbg.REDACTED,
         "cookies": dbg.REDACTED,
         "connect_timeout": 10.0,
     }
+
+
+def test_non_sensitive_headers_are_not_redacted() -> None:
+    result = dbg.sanitize_for_log(
+        {
+            "headers": {
+                "Content-Type": "application/json",
+                "Accept": "*/*",
+                "Accept-Language": "en-US",
+                "Authorization": "Bearer tok",
+                "Cookie": "sid=abc",
+            }
+        }
+    )
+    assert result["headers"]["Content-Type"] == "application/json"
+    assert result["headers"]["Accept"] == "*/*"
+    assert result["headers"]["Accept-Language"] == "en-US"
+    assert result["headers"]["Authorization"] == dbg.REDACTED
+    assert result["headers"]["Cookie"] == dbg.REDACTED
 
 
 def test_redacts_nested_sensitive_keys_in_sequences() -> None:
