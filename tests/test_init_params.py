@@ -37,6 +37,50 @@ def test_proxy_with_cookies_raises() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "proxy",
+    [
+        "http://127.0.0.1:8080",
+        "http://127.0.0.2:9999",
+        "http://localhost:8888",
+        "http://[::1]:8080",
+    ],
+)
+def test_loopback_proxy_with_cookies_warns_not_raises(
+    proxy: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    with caplog.at_level(logging.WARNING):
+        session = ChatDownloader(proxy=proxy, cookies=None)
+    session.close()
+
+    # Loopback with no cookies — no warning expected.
+    assert not any("local proxy" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize(
+    "proxy",
+    [
+        "http://127.0.0.1:8080",
+        "http://localhost:8888",
+    ],
+)
+def test_loopback_proxy_with_cookies_emits_warning(
+    proxy: str, tmp_path, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING):
+        session = ChatDownloader(proxy=proxy, cookies=str(cookie_file))
+    session.close()
+
+    assert any("local proxy" in r.message for r in caplog.records)
+
+
 @pytest.mark.network
 def test_proxy(local_http_proxy: str) -> None:
     for proxy in ("", None):

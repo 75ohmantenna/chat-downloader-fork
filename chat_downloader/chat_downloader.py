@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Any, Literal
+from urllib.parse import urlparse
 
 from .debugging import log, sanitize_for_log
 from .errors import InvalidParameter
@@ -112,10 +113,21 @@ class ChatDownloader:
         :type twitch_client_id: str, optional
         """
         if proxy and cookies is not None:
-            raise InvalidParameter(
-                "A proxy must not be used with cookie authentication: "
-                "credentials would be exposed to the proxy."
+            host = urlparse(proxy).hostname or ""
+            _is_loopback = (
+                host == "localhost" or host == "::1" or host.startswith("127.")
             )
+            if _is_loopback:
+                log(
+                    "warning",
+                    "Using a local proxy with cookie authentication; "
+                    "credentials will be visible to the local proxy process.",
+                )
+            else:
+                raise InvalidParameter(
+                    "A proxy must not be used with cookie authentication: "
+                    "credentials would be exposed to the proxy."
+                )
 
         self.config = DownloaderConfig(
             headers=headers,

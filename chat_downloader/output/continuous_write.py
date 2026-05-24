@@ -297,7 +297,7 @@ class ContinuousWriter:
         self.lazy_initialise = lazy_initialise
         self._writer: ContinuousFileWriter | None = None
         self._writer_kwargs = kwargs
-        self._resolve_extension(file_name)
+        self._validate_extension(file_name)
 
         if not self.lazy_initialise:
             self._initialize_if_needed()
@@ -347,23 +347,25 @@ class ContinuousWriter:
             self._writer = None
             raise
 
-    def _resolve_extension(self, file_name: str | None) -> str:
-        """Return the requested output format, rejecting removed JSON arrays."""
-        extension = self.format
-        if extension is None and file_name is not None:
-            extension = os.path.splitext(file_name)[EXTENSION_INDEX][
+    def _get_extension(self, file_name: str | None) -> str:
+        """Return the file extension derived from format or file name."""
+        ext = self.format
+        if ext is None and file_name is not None:
+            ext = os.path.splitext(file_name)[EXTENSION_INDEX][
                 DOT_PREFIX_LENGTH:
             ].lower()
-        if extension is None:
-            return ""
-        if extension == "json":
+        return ext or ""
+
+    def _validate_extension(self, file_name: str | None) -> None:
+        """Raise ValueError if the resolved extension is unsupported."""
+        if self._get_extension(file_name) == "json":
             raise ValueError(UNSUPPORTED_JSON_EXTENSION_MESSAGE)
-        return extension
 
     def _open_writer(self, file_name: str) -> None:
         """Create parent directories, seed the file, and instantiate writer."""
         file_name = os.path.normpath(file_name)
-        extension = self._resolve_extension(file_name)
+        self._validate_extension(file_name)
+        extension = self._get_extension(file_name)
         if not os.path.exists(file_name) or self.overwrite:
             directory = os.path.dirname(file_name)
             if directory:
