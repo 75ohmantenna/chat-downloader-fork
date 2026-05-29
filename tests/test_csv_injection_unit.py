@@ -28,6 +28,13 @@ def test_csv_safe_value_passes_through_non_strings() -> None:
     assert csv_safe_value(3.14) == 3.14
 
 
+def test_csv_safe_value_leaves_leading_whitespace_formula_untouched() -> None:
+    # Only value[0] is checked; a leading space disables formula evaluation in
+    # spreadsheets, so the value is intentionally not prefixed. Locks in
+    # current behavior.
+    assert csv_safe_value(" =1+1") == " =1+1"
+
+
 def test_csv_safe_item_copies_dict() -> None:
     original = {"msg": "=danger", "ok": "fine"}
     safe = csv_safe_item(original)

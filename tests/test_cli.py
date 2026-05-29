@@ -9,6 +9,7 @@ import pytest
 import chat_downloader.cli as cli_module
 from chat_downloader.cli import (
     REQUEST_PROFILES,
+    _build_request_headers,
     main,
     parse_header,
     splitter,
@@ -489,3 +490,37 @@ def test_run_config_cli_flags_match_metadata() -> None:
 def test_parse_header_empty_key_raises() -> None:
     with pytest.raises(argparse.ArgumentTypeError, match="NAME:VALUE"):
         parse_header(":somevalue")  # key="" after strip → raises
+
+
+# ---------------------------------------------------------------------------
+# _build_request_headers
+# ---------------------------------------------------------------------------
+
+
+def test_build_request_headers_empty_when_no_inputs() -> None:
+    args = {"request_profile": None}
+    assert _build_request_headers(args) == {}
+
+
+def test_build_request_headers_pops_cli_only_keys() -> None:
+    args = {"request_profile": None, "user_agent": "UA", "headers_list": {}}
+    _build_request_headers(args)
+    assert "user_agent" not in args
+    assert "headers_list" not in args
+
+
+def test_build_request_headers_precedence_header_overrides_user_agent() -> None:
+    args = {
+        "request_profile": None,
+        "user_agent": "from-ua",
+        "headers_list": {"User-Agent": "from-header"},
+    }
+    assert _build_request_headers(args)["User-Agent"] == "from-header"
+
+
+def test_build_request_headers_user_agent_overrides_profile() -> None:
+    args = {"request_profile": "youtube_web", "user_agent": "custom-ua"}
+    headers = _build_request_headers(args)
+    assert headers["User-Agent"] == "custom-ua"
+    # Non-overridden profile headers are preserved.
+    assert headers["Accept-Language"] == "en-US,en;q=0.9"

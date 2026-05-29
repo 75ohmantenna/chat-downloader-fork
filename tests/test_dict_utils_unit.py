@@ -199,3 +199,42 @@ def test_move_to_dict_accepts_keyword_info_keys() -> None:
         "author_id": "1",
         "message": "hello",
     }
+
+
+def test_move_to_dict_collects_and_strips_prefix() -> None:
+    info = {"author_id": 1, "author_name": "x", "other": 2}
+    sub = move_to_dict(info, "author")
+    assert sub == {"id": 1, "name": "x"}
+    assert info == {"other": 2, "author": {"id": 1, "name": "x"}}
+
+
+def test_move_to_dict_drops_empty_values_keeps_falsey_scalars() -> None:
+    info = {"a_id": None, "a_tags": [], "a_meta": {}, "a_n": 0, "a_s": ""}
+    sub = move_to_dict(info, "a")
+    assert sub == {"n": 0, "s": ""}
+
+
+def test_move_to_dict_create_when_empty() -> None:
+    info = {"unrelated": 1}
+    move_to_dict(info, "author", create_when_empty=True)
+    assert info["author"] == {}
+
+
+def test_move_to_dict_merges_into_existing_subdict() -> None:
+    info = {"author": {"id": 1}, "author_name": "x"}
+    move_to_dict(info, "author")
+    assert info["author"] == {"id": 1, "name": "x"}
+
+
+def test_move_to_dict_replace_is_global_not_just_prefix() -> None:
+    # Documents substring + replace-all behavior (potential gotcha): every
+    # occurrence of "a_" is stripped, not just a leading prefix.
+    info = {"a_foo_a_bar": "v"}
+    sub = move_to_dict(info, "a")  # replace_key == "a_"
+    assert sub == {"foo_bar": "v"}
+
+
+def test_multi_get_bool_key_indexes_list_as_int() -> None:
+    # bool is an int subclass, so a bool key indexes lists.
+    assert multi_get([10, 20, 30], True) == 20  # True == 1
+    assert multi_get([10, 20, 30], False) == 10  # False == 0

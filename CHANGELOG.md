@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.2 — 2026-05-29
+
+### Security
+
+- Restrict the loopback-proxy exemption for cookie authentication to genuine
+  loopback hosts (validated via `ipaddress`); spoofed names such as
+  `127.0.0.1.attacker.com` are no longer treated as local and now raise
+  `InvalidParameter`
+
+### Fixed
+
+- Parse RFC 3339 timestamps with comma decimal separators and explicit
+  `+hh:mm`/`-hh:mm` offsets in `timestamp_to_microseconds`; previously only `Z`
+  and dot-separated fractions were handled correctly
+
 ## 1.0.1 — 2026-05-29
 
 ### Output

@@ -7,6 +7,7 @@ Orchestrates chat retrieval from streaming platforms.
 
 from __future__ import annotations
 
+import ipaddress
 import sys
 from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Any, Literal
@@ -50,6 +51,23 @@ _DEFAULT_FORMAT = SiteDefault("format")
 
 if TYPE_CHECKING:
     from .sites.base import BaseChatDownloader
+
+
+def _is_loopback_host(host: str) -> bool:
+    """Return True only for genuine loopback hosts.
+
+    Uses :mod:`ipaddress` so the whole ``127.0.0.0/8`` range and ``::1`` are
+    recognised, while spoofed names like ``127.0.0.1.attacker.com`` (which a
+    naive ``startswith("127.")`` check would wrongly accept) are rejected.
+    ``urlparse`` already strips IPv6 brackets, so ``::1`` arrives bare here.
+    """
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
 
 # ===== Main ChatDownloader Class =====
 
@@ -114,10 +132,7 @@ class ChatDownloader:
         """
         if proxy and cookies is not None:
             host = urlparse(proxy).hostname or ""
-            _is_loopback = (
-                host == "localhost" or host == "::1" or host.startswith("127.")
-            )
-            if _is_loopback:
+            if _is_loopback_host(host):
                 log(
                     "warning",
                     "Using a local proxy with cookie authentication; "

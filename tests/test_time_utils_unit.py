@@ -71,6 +71,27 @@ def test_time_to_seconds(text: str | None, expected: int) -> None:
     assert time_to_seconds(text) == expected
 
 
+def test_timestamp_to_microseconds_comma_decimal_matches_dot() -> None:
+    """Comma is an RFC3339-valid fractional separator and must match the dot."""
+    assert timestamp_to_microseconds(
+        "2020-01-01T00:00:00,123Z"
+    ) == timestamp_to_microseconds("2020-01-01T00:00:00.123Z")
+
+
+def test_timestamp_to_microseconds_utc_offset_equals_z() -> None:
+    """A +00:00 offset is the same instant as Z."""
+    assert timestamp_to_microseconds(
+        "2020-01-01T00:00:00+00:00"
+    ) == timestamp_to_microseconds("2020-01-01T00:00:00Z")
+
+
+def test_timestamp_to_microseconds_positive_offset_shifts_epoch() -> None:
+    """+01:00 means the same wall clock is one hour earlier in UTC."""
+    z = timestamp_to_microseconds("2020-01-01T01:00:00Z")
+    plus1 = timestamp_to_microseconds("2020-01-01T01:00:00+01:00")
+    assert z - plus1 == 3600 * MICROSECONDS_PER_SECOND
+
+
 def test_seconds_to_time_negative() -> None:
     """Test negative seconds conversion (lines 132-137)."""
     assert seconds_to_time(-90) == "-1:30"

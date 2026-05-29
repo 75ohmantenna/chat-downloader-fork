@@ -62,8 +62,8 @@ UTC = datetime.UTC
 def timestamp_to_microseconds(timestamp: str) -> int:
     """Convert an RFC3339 timestamp to microseconds since the Unix epoch.
 
-    ``datetime.datetime.strptime()`` does not support nanosecond precision,
-    so the fractional seconds are handled manually.
+    Delegates to :func:`parse_iso8601`, which handles ``Z``, ``+hh:mm``/
+    ``-hh:mm`` offsets, and both ``.``/``,`` fractional-second separators.
 
     Args:
         timestamp: RFC3339 timestamp string (e.g.
@@ -72,23 +72,7 @@ def timestamp_to_microseconds(timestamp: str) -> int:
     Returns:
         Number of microseconds since the Unix epoch.
     """
-    # Split timestamp into seconds and fractional parts
-    parts = list(filter(None, re.split(r"[\.|Z]{1}", timestamp)))
-
-    # Ensure we have fractional seconds (default to 0)
-    parts = [*parts, "0"]
-
-    # Parse the datetime part
-    dt = datetime.datetime.strptime(
-        f"{parts[0]}Z", "%Y-%m-%dT%H:%M:%SZ"
-    ).replace(tzinfo=UTC)
-    seconds_since_epoch = dt.timestamp()
-
-    # Add fractional seconds
-    fractional_seconds = float(f"0.{parts[1]}")
-    total_seconds = seconds_since_epoch + fractional_seconds
-
-    return round(total_seconds * MICROSECONDS_PER_SECOND)
+    return round(parse_iso8601(timestamp))
 
 
 def time_to_seconds(time: str) -> int:
