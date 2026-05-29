@@ -19,4 +19,4 @@ __url__ = "https://github.com/75ohmantenna/chat-downloader-fork"
 __upstream_url__ = (
     "https://github.com/xenova/chat-downloader"  # Original upstream project
 )
-__version__ = "1.0.0"
+__version__ = "1.0.1"

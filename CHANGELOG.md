@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.1 — 2026-05-29
+
+### Output
+
+- Close the CSV file handle if `CsvContinuousWriter` initialization fails after
+  opening the file, preventing a descriptor leak on malformed appends
+
+### API
+
+- Drop the unused `**kwargs` passthrough from `set_cookie_value` and `retry`;
+  unknown keyword arguments now raise `TypeError` instead of being silently
+  ignored
+
 ## 1.0.0 — 2026-05-24
 
 ### Build and tooling

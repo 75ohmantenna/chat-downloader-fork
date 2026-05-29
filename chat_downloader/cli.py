@@ -419,22 +419,22 @@ def main(cli_args: Sequence[str] | None = None) -> None:
         set_log_level(args.logging)
 
     # Build headers dict from --user-agent / --header flags
-    d = vars(args).copy()
-    d.pop("logging", None)
-    d.pop("testing", None)
-    d.pop("verbose", None)
-    request_profile = d.get("request_profile")
+    args_dict = vars(args).copy()
+    args_dict.pop("logging", None)
+    args_dict.pop("testing", None)
+    args_dict.pop("verbose", None)
+    request_profile = args_dict.get("request_profile")
     headers: dict[str, str] = get_request_profile_headers(request_profile)
-    user_agent = d.pop("user_agent", None)
-    headers_list = d.pop("headers_list", None)
+    user_agent = args_dict.pop("user_agent", None)
+    headers_list = args_dict.pop("headers_list", None)
     if user_agent:
         headers["User-Agent"] = user_agent
     if headers_list:
         headers.update(headers_list)
     if headers:
-        d["headers"] = headers
+        args_dict["headers"] = headers
 
     # Run with these arguments
-    result = run(**d)
+    result = run(**args_dict)
     if not result.success or result.interrupted:
         sys.exit(1)

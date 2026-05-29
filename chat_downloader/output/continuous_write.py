@@ -146,13 +146,16 @@ class CsvContinuousWriter(ContinuousFileWriter):
             newline="",
             encoding="utf-8",
         )
+        try:
+            self.columns: list[str] = []
 
-        self.columns: list[str] = []
+            if not self.overwrite:
+                self._load_existing_columns()
 
-        if not self.overwrite:
-            self._load_existing_columns()
-
-        self._reset_csv_writer()
+            self._reset_csv_writer()
+        except BaseException:
+            self.file.close()
+            raise
 
     def _load_existing_columns(self) -> None:
         """Load existing CSV columns without reading all rows into memory."""

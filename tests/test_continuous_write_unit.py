@@ -6,6 +6,7 @@ import csv
 import json
 import os
 import pathlib
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -107,6 +108,36 @@ def test_csv_write_with_new_columns(tmp_path: pathlib.Path) -> None:
         content = f.read()
     assert "age" in content
     assert "name" in content
+
+
+def test_csv_init_failure_closes_file(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _csv_path(tmp_path)
+    opened_files: list[Any] = []
+    real_open = open
+
+    def tracking_open(*args: Any, **kwargs: Any) -> Any:
+        handle = real_open(*args, **kwargs)
+        opened_files.append(handle)
+        return handle
+
+    monkeypatch.setattr(
+        "chat_downloader.output.continuous_write.open",
+        tracking_open,
+        raising=False,
+    )
+
+    def boom(self: CsvContinuousWriter) -> None:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(CsvContinuousWriter, "_reset_csv_writer", boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        CsvContinuousWriter(path, overwrite=True)
+
+    assert opened_files
+    assert opened_files[-1].closed
 
 
 def test_csv_overwrite_false_loads_previous(tmp_path: pathlib.Path) -> None:

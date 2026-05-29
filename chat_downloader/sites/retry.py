@@ -37,7 +37,6 @@ def retry(
     text: Any = None,
     interruptible_retry: bool = True,
     request: ChatRequest | None = None,
-    **kwargs: Any,
 ) -> None:
     """Retry after an error occurs using the shared retry policy."""
     if request is not None:

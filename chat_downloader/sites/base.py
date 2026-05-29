@@ -165,7 +165,6 @@ class BaseChatDownloader:
         secure: bool = False,
         discard: bool = False,
         rest: dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> None:
         """Set a cookie on the HTTP session.
 
@@ -179,7 +178,6 @@ class BaseChatDownloader:
             secure: Whether the cookie is secure-only.
             discard: Whether the cookie is a session cookie.
             rest: Additional cookie attributes.
-            **kwargs: Passed through to the underlying session helper.
         """
         set_session_cookie_value(
             self,
@@ -192,7 +190,6 @@ class BaseChatDownloader:
             secure=secure,
             discard=discard,
             rest=rest,
-            **kwargs,
         )
 
     def get_cookie_value(self, name: str, default: Any = None) -> Any:
@@ -272,7 +269,6 @@ class BaseChatDownloader:
         text: Any = None,
         interruptible_retry: bool = True,
         request: ChatRequest | None = None,
-        **kwargs: Any,
     ) -> None:
         """Enforce the retry policy, sleeping or raising as appropriate.
 
@@ -286,7 +282,6 @@ class BaseChatDownloader:
             interruptible_retry: Allow the user to skip the sleep by pressing
                 Enter.
             request: The active ``ChatRequest``, used for per-request overrides.
-            **kwargs: Forwarded to the underlying retry helper.
 
         Raises:
             RetriesExceeded: When ``attempt_number >= max_attempts``.
@@ -299,7 +294,6 @@ class BaseChatDownloader:
             text=text,
             interruptible_retry=interruptible_retry,
             request=request,
-            **kwargs,
         )
 
     @staticmethod

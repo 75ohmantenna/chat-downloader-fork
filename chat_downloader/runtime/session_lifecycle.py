@@ -92,7 +92,6 @@ def propagate_cookie(
     secure: bool = False,
     discard: bool = False,
     rest: dict[str, Any] | None = None,
-    **kwargs: Any,
 ) -> None:
     """Store a cookie locally and mirror it to existing site sessions."""
     cookie_rest = {} if rest is None else rest
@@ -120,7 +119,6 @@ def propagate_cookie(
             secure=secure,
             discard=discard,
             rest=cookie_rest,
-            **kwargs,
         )
 
 

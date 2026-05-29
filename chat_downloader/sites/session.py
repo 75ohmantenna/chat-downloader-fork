@@ -250,7 +250,6 @@ def set_cookie_value(
     secure: bool = False,
     discard: bool = False,
     rest: dict[str, Any] | None = None,
-    **kwargs: Any,
 ) -> None:
     """Set a cookie value on the session cookie jar."""
     _validate_cookie_domain(domain)

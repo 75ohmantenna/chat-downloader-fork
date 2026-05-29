@@ -585,3 +585,17 @@ def test_set_cookie_value_accepts_valid_domain() -> None:
     owner = SimpleNamespace(session=SimpleNamespace(cookies=jar))
     set_cookie_value(owner, domain=".example.com", name="sid", value="abc")
     jar.set_cookie.assert_called_once()
+
+
+def test_set_cookie_value_rejects_unknown_keyword() -> None:
+    from unittest.mock import MagicMock
+
+    owner = MagicMock()
+    with pytest.raises(TypeError):
+        set_cookie_value(
+            owner,
+            domain=".example.com",
+            name="sid",
+            value="abc",
+            httponly=True,  # type: ignore[call-arg]
+        )

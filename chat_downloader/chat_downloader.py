@@ -171,7 +171,6 @@ class ChatDownloader:
         secure: bool = False,
         discard: bool = False,
         rest: dict[str, Any] | None = None,
-        **kwargs: Any,
     ) -> None:
         """Set a cookie value on this ChatDownloader and all existing sessions.
 
@@ -189,7 +188,6 @@ class ChatDownloader:
             secure=secure,
             discard=discard,
             rest=rest,
-            **kwargs,
         )
 
     def get_cookie_value(self, name: str, default: Any = None) -> Any:
