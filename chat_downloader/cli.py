@@ -198,14 +198,26 @@ def _install_cli_signal_handlers() -> None:
             pass
 
 
-def main(cli_args: Sequence[str] | None = None) -> None:
-    """Parse CLI arguments and run the chat downloader.
+def _build_request_headers(args_dict: dict[str, Any]) -> dict[str, str]:
+    """Assemble the request headers dict from parsed CLI args.
 
-    Args:
-        cli_args: Argument list to parse; defaults to ``sys.argv[1:]``.
+    Mutates ``args_dict`` to remove the CLI-only ``user_agent`` and
+    ``headers_list`` keys so they are not forwarded to :func:`run`. Header
+    precedence: request-profile headers, then ``--user-agent``, then
+    ``--header`` entries (later wins).
     """
-    _install_cli_signal_handlers()
+    headers = get_request_profile_headers(args_dict.get("request_profile"))
+    user_agent = args_dict.pop("user_agent", None)
+    headers_list = args_dict.pop("headers_list", None)
+    if user_agent:
+        headers["User-Agent"] = user_agent
+    if headers_list:
+        headers.update(headers_list)
+    return headers
 
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the fully-configured argparse parser for the CLI."""
     parser = argparse.ArgumentParser(
         description=__summary__,
     )
@@ -403,9 +415,21 @@ def main(cli_args: Sequence[str] | None = None) -> None:
 
     _rename_default_argument_groups(parser)
 
+    return parser
+
+
+def main(cli_args: Sequence[str] | None = None) -> None:
+    """Parse CLI arguments and run the chat downloader.
+
+    Args:
+        cli_args: Argument list to parse; defaults to ``sys.argv[1:]``.
+    """
+    _install_cli_signal_handlers()
+
+    parser = _build_arg_parser()
     args = parser.parse_args(args=cli_args)
 
-    # Modify debugging args:
+    # Resolve CLI-only debugging flags
     if args.testing:  # (only for CLI)
         args.logging = "debug"
         args.pause_on_debug = True
@@ -418,19 +442,11 @@ def main(cli_args: Sequence[str] | None = None) -> None:
     else:
         set_log_level(args.logging)
 
-    # Build headers dict from --user-agent / --header flags
     args_dict = vars(args).copy()
-    args_dict.pop("logging", None)
-    args_dict.pop("testing", None)
-    args_dict.pop("verbose", None)
-    request_profile = args_dict.get("request_profile")
-    headers: dict[str, str] = get_request_profile_headers(request_profile)
-    user_agent = args_dict.pop("user_agent", None)
-    headers_list = args_dict.pop("headers_list", None)
-    if user_agent:
-        headers["User-Agent"] = user_agent
-    if headers_list:
-        headers.update(headers_list)
+    for cli_only in ("logging", "testing", "verbose"):
+        args_dict.pop(cli_only, None)
+
+    headers = _build_request_headers(args_dict)
     if headers:
         args_dict["headers"] = headers
 
