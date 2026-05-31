@@ -2,8 +2,8 @@
 
 """Top-level package for chat-downloader.
 
-This is a fork of xenova's chat-downloader with 2026 enhancements. Portions of
-this codebase have been developed with AI assistance.
+This is 75ohmantenna's fork of xenova's MIT-licensed chat-downloader with 2026
+enhancements. Portions of this codebase have been developed with AI assistance.
 """
 
 from .chat_downloader import ChatDownloader, run

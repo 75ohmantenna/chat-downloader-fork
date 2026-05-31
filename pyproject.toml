@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -45,6 +46,7 @@ chat_downloader = "chat_downloader.cli:main"
 [project.urls]
 Homepage = "https://github.com/75ohmantenna/chat-downloader-fork"
 Repository = "https://github.com/75ohmantenna/chat-downloader-fork"
+"Original upstream" = "https://github.com/xenova/chat-downloader"
 
 [tool.setuptools]
 include-package-data = true

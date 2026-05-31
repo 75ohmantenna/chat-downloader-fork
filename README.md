@@ -63,10 +63,15 @@ in [`docs/cli-usage.md`](docs/cli-usage.md).
 
 ## Credit
 
-All credit for the core idea and the original YouTube and Twitch
-implementations belongs to [`xenova`](https://github.com/xenova) and the
-upstream [`chat-downloader`](https://github.com/xenova/chat-downloader)
-contributors. Thank you.
+This fork is maintained by
+[`75ohmantenna`](https://github.com/75ohmantenna). Fork-specific
+modifications, enhancements, documentation, and packaging changes are credited
+to `75ohmantenna`.
+
+Credit for the core idea and the original YouTube and Twitch implementations
+belongs to [`xenova`](https://github.com/xenova) and the upstream
+[`chat-downloader`](https://github.com/xenova/chat-downloader) contributors.
+Their original MIT license notice is preserved in [`LICENSE`](LICENSE).
 
 ## License
 
