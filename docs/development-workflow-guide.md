@@ -87,6 +87,22 @@ PYTHONHASHSEED=0 python3 -m coverage run --source chat_downloader -m pytest -q -
 python3 -m coverage report -m --precision=2
 ```
 
+### Using Make
+
+The project `Makefile` wraps the commands above into convenient targets:
+
+| Target | Equivalent to |
+| --- | --- |
+| `make setup` | Create `.venv` and install dev deps |
+| `make test` | pytest offline suite |
+| `make lint` | ruff check |
+| `make fmt` | ruff format (apply) |
+| `make fmt-check` | ruff format --check |
+| `make typecheck` | mypy |
+| `make check` | lint + fmt-check + typecheck + test |
+
+Each target auto-bootstraps `.venv` if it is absent.
+
 ## Test Strategy
 
 The repository defaults to deterministic offline validation.

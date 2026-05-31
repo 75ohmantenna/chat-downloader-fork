@@ -46,6 +46,7 @@ All commands below assume the venv exists. Activate with
 - `.venv/bin/python3 -m ruff format chat_downloader tests` — apply formatting
 - `.venv/bin/python3 -m mypy .` — type check (config in `mypy.ini`)
 - Coverage: `.venv/bin/python3 -m coverage erase && PYTHONHASHSEED=0 .venv/bin/python3 -m coverage run --source chat_downloader -m pytest -q -m "not network" && .venv/bin/python3 -m coverage report -m --precision=2`
+- Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (all).
 
 ## Style
 - Python 3.12+. Ruff formatter, 80-char lines, double quotes.
@@ -66,13 +67,14 @@ Default to the offline suite (`-m "not network"`). Mark live-network tests
 or runtime change. Keep curated fixtures under `tests/fixtures/`.
 
 ## Done means
-A behavior or runtime change is not done until:
+A behavior, runtime, or tooling change is not done until:
 - regression test added or updated under `tests/` (curated fixture if parser)
 - `.venv/bin/python3 -m ruff check chat_downloader tests` clean
 - `.venv/bin/python3 -m ruff format --check chat_downloader tests` clean
 - `.venv/bin/python3 -m mypy .` clean
 - `.venv/bin/python3 -m pytest -q -p no:rerunfailures -m "not network"` green
-- docs touched in the same commit when user-facing behavior changed
+- docs touched in the same commit when user-facing behavior, tooling, or
+  project structure changed
 
 ## Debug
 - `--logging debug` or `--verbose` for parser and transport issues
@@ -88,7 +90,7 @@ A behavior or runtime change is not done until:
 
 ## Agent Notes
 - Prefer current module boundaries over broad legacy-style helpers.
-- Behavior changes ship with their doc updates in the same commit.
+- Behavior, tooling, and structural changes ship with their doc updates in the same commit.
 - README edits are limited to user-facing summaries.
 - This is a personal fork with no upstream support. Do not file issues or
   PRs against [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader)
