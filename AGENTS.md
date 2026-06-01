@@ -8,16 +8,18 @@ For deeper context see [`docs/development-workflow-guide.md`](docs/development-w
 - `src/chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI in `cli.py`; typed shapes in `models.py`.
 - `src/chat_downloader/runtime/`: `cli_bridge`, `site_dispatch`, `chat_pipeline`, `runner`, `session_lifecycle`, `testing`.
 - `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).
-- `src/chat_downloader/output/`: `ContinuousWriter` plus jsonl/csv/txt writers; `formatting/`: `ItemFormatter` and bundled templates.
+- `src/chat_downloader/output/`: `ContinuousWriter` plus JSON-lines, CSV, and text writer subclasses.
+- `src/chat_downloader/formatting/`: `ItemFormatter` and bundled `custom_formats.json`.
 - `src/chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `string_utils`, `retry_utils`, `timed_utils`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`).
 - `tests/`: pytest suite with curated fixtures under `tests/fixtures/`; network tests gated by `@pytest.mark.network`.
-- `docs/`: `development-workflow-guide.md`, `python-api-reference.md`, and the YouTube/Twitch integration guides.
+- `docs/`: `cli-usage.md`, `development-workflow-guide.md`, `python-api-reference.md`, and the YouTube/Twitch integration guides.
 
 ## Architecture
 - `models.py`: `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata
 - `runtime/`: `cli_bridge.py` (strict `run()` param categorization), `site_dispatch.py` (URL→site + site defaults), `chat_pipeline.py` (limits/timeouts/format/output), `runner.py` (run loop + cleanup), `session_lifecycle.py` (cookies/sessions/cookie-domain validation), `testing.py`
 - `sites/`: `base.py`, `session.py` (proxy URL validation), `retry.py`, `filters.py` (message group validation), `models.py`, `remap.py`
-- `output/`: `ContinuousWriter`, JSONL/CSV/TXT writers; `formatting/`: `ItemFormatter`
+- `output/`: `ContinuousWriter`, JSON-lines/CSV/text writer subclasses
+- `formatting/`: `ItemFormatter` and bundled `custom_formats.json`
 - `debugging.py`: logging and testing modes, sanitization, opt-in debug sample capture; `debug_sample_utils.py`: fixture naming hints
 - `tests/fixtures/`: curated parser, error, and live-event fixtures
 

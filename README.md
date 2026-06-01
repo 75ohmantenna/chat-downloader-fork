@@ -36,13 +36,13 @@ do not constitute a security audit and do not replace your own review.
 ## Installation
 
 ```bash
-pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git
+uv tool install git+https://github.com/75ohmantenna/chat-downloader-fork.git
 ```
 
-Or with uv:
+Or with pipx:
 
 ```bash
-uv tool install git+https://github.com/75ohmantenna/chat-downloader-fork.git
+pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git
 ```
 
 ## First Run
