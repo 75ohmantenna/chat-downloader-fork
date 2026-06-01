@@ -6,6 +6,7 @@ on:
     branches:
       - master
       - "chore/**"
+      - "fix/**"
   pull_request:
     branches:
       - master

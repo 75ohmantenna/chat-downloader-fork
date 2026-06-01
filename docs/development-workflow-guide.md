@@ -216,6 +216,27 @@ The offline test `tests/test_release_metadata_unit.py` fails if the topmost
 numbered changelog heading does not match the package version.
 All five steps and the passing test must land in one commit.
 
+## GitHub Actions CI
+
+GitHub Actions is the repository's supported hosted CI platform.
+
+Workflow file: `.github/workflows/ci.yml`
+
+CI validates Python: 3.12, 3.13, and 3.14.
+
+Automatic push triggers:
+
+- `master`
+- `chore/**`
+- `fix/**`
+
+Pull requests targeting `master` are also validated. Manual runs are available
+via `workflow_dispatch` from the GitHub Actions interface.
+
+Network tests are opt-in and excluded from the default CI suite (`-m "not network"`).
+
+Do not add Gitea, Forgejo, Codeberg, or Woodpecker CI workflows to this repository.
+
 ## Deep Ruff Passes
 
 The normal workflow uses the curated Ruff rule set in `pyproject.toml`.

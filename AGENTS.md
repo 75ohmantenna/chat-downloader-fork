@@ -89,6 +89,20 @@ A behavior, runtime, or tooling change is not done until:
 - Body (when needed): `- ` bullets, one per logical change, no prose
   paragraphs, wrap at 72 columns.
 
+## CI
+
+GitHub Actions is the only supported hosted CI platform. Workflow file:
+`.github/workflows/ci.yml`. Preserve:
+
+- Push coverage for `master`, `chore/**`, and `fix/**`
+- Pull-request coverage targeting `master`
+- `workflow_dispatch` for manual runs
+- Python matrix: `["3.12", "3.13", "3.14"]`
+- uv-based install, cache, lint, format, type-check, test, and build steps
+- Network tests opt-in only (`-m "not network"` is the default)
+
+Do not add Gitea, Forgejo, Codeberg, or Woodpecker CI configuration.
+
 ## Agent Notes
 - Prefer current module boundaries over broad legacy-style helpers.
 - Behavior, tooling, and structural changes ship with their doc updates in the same commit.
