@@ -74,6 +74,8 @@ A behavior, runtime, or tooling change is not done until:
 - `uv run pytest -q -p no:rerunfailures -m "not network"` green
 - docs touched in the same commit when user-facing behavior, tooling, or
   project structure changed
+- every version bump updates `CHANGELOG.md` in the same commit; the topmost
+  numbered release heading must match `src/chat_downloader/metadata.py::__version__`
 
 ## Debug
 - `--logging debug` or `--verbose` for parser and transport issues
@@ -91,6 +93,8 @@ A behavior, runtime, or tooling change is not done until:
 - Prefer current module boundaries over broad legacy-style helpers.
 - Behavior, tooling, and structural changes ship with their doc updates in the same commit.
 - README edits are limited to user-facing summaries.
+- `CHANGELOG.md` entries summarize user-visible, tooling, compatibility, and
+  structural changes; do not rewrite historical release entries.
 - This is a personal fork with no upstream support. Do not file issues or
   PRs against [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader)
   for problems originating in this fork.

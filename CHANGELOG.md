@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.0.5 — 2026-06-01
+
+### Build and tooling
+
+- Add Python 3.14 support while preserving 3.12 and 3.13; validate all three
+  versions in GitHub and Gitea CI
+- Add `.python-versions` for the uv-managed local validation matrix
+- Require `CHANGELOG.md` updates alongside every version bump; the latest
+  numbered release heading must match `src/chat_downloader/metadata.py::__version__`
+- Add automated offline test (`tests/test_release_metadata_unit.py`) that
+  fails if the current package version is not the topmost numbered changelog release
+
+### Documentation
+
+- Add version-bump checklist to the development workflow guide
+- Repair missing 1.0.4 changelog coverage
+
+## 1.0.4 — 2026-06-01
+
+### Build and tooling
+
+- Adopt uv for locking, dependency sync, developer commands, and builds;
+  add `uv.lock` and `.python-version` for reproducible environments
+- Replace pip/venv targets in `Makefile` with `uv run` equivalents
+- Convert GitHub and Gitea CI workflows to install uv, cache the uv store,
+  run checks on chore branches, and scope the uv cache key per Python version
+- setuptools remains the PEP 517 build backend; uv manages the project
+
+### Architecture
+
+- Move package from flat `chat_downloader/` layout to `src/chat_downloader/`
+  (src layout); update `pyproject.toml`, `mypy.ini`, CI, and tooling paths
+  accordingly
+
+### Documentation
+
+- Align `AGENTS.md`, `CLAUDE.md`, and developer docs with uv commands and
+  src layout paths
+- Surface `uv tool install` before pipx in the `README.md` Installation section;
+  fix `AGENTS.md` architecture section to match actual directory structure
+
 ## 1.0.3 — 2026-06-01
 
 ### Build and tooling

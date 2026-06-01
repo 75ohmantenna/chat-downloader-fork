@@ -192,6 +192,30 @@ Captured files land in a temp directory and use stable labels from
 `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. Review generated files before promoting
 them into `tests/fixtures/`.
 
+## Version Bumps
+
+1. Update `src/chat_downloader/metadata.py` — change `__version__`.
+2. Add a new topmost numbered release entry to `CHANGELOG.md`; the heading
+   must match the new version exactly (`## X.Y.Z — YYYY-MM-DD`).
+3. Leave `pyproject.toml` unchanged — setuptools loads the version dynamically
+   from `chat_downloader.metadata.__version__`.
+4. Validate:
+   ```bash
+   uv lock
+   uv lock --check
+   uv sync --locked
+   uv run --locked pytest -q -p no:rerunfailures -m "not network"
+   uv build
+   ```
+5. Inspect wheel metadata and confirm the expected version:
+   ```bash
+   unzip -p dist/chat_downloader-*.whl '*.dist-info/METADATA' | grep '^Version:'
+   ```
+
+The offline test `tests/test_release_metadata_unit.py` fails if the topmost
+numbered changelog heading does not match the package version.
+All five steps and the passing test must land in one commit.
+
 ## Deep Ruff Passes
 
 The normal workflow uses the curated Ruff rule set in `pyproject.toml`.
