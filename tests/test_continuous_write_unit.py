@@ -3,14 +3,16 @@
 """Unit tests for continuous_write.py to improve coverage."""
 
 import csv
+import gc
 import json
 import os
 import pathlib
 from typing import Any
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
+import chat_downloader.debugging as _debugging
 from chat_downloader.output.continuous_write import (
     ContinuousFileWriter,
     ContinuousWriter,
@@ -524,6 +526,33 @@ def test_factory_del_suppresses_io_cleanup_errors(
     writer.write({"key": "value"})
     writer.close = Mock(side_effect=OSError("cleanup error"))
     writer.__del__()  # should not raise
+    del writer
+    gc.collect()
+
+
+def test_factory_del_io_error_log_contained_in_test(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Regression: __del__ debug log for a suppressed OSError must not escape.
+
+    In Python 3.14 the incremental GC can delay object finalisation past the
+    test boundary, causing the suppression log to fire while a later test has
+    patched dbg.logger.debug, corrupting that test's mock call history.
+    """
+    path = _ext_path(tmp_path, "jsonl")
+    writer = ContinuousWriter(path, overwrite=True)
+    writer.write({"key": "value"})
+    writer.close = Mock(side_effect=OSError("disk full"))
+
+    with patch.object(_debugging.logger, "debug") as mock_debug:
+        writer.__del__()  # must not raise
+        del writer
+        gc.collect()
+
+    logged = [call.args[0] for call in mock_debug.call_args_list]
+    assert any(
+        "Suppressed error" in msg and "disk full" in msg for msg in logged
+    )
 
 
 def test_factory_del_suppresses_non_io_cleanup_errors(
