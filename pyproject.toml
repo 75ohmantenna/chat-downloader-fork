@@ -56,6 +56,7 @@ include-package-data = true
 version = { attr = "chat_downloader.metadata.__version__" }
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["chat_downloader", "chat_downloader.*"]
 
 [tool.setuptools.package-data]
@@ -78,7 +79,7 @@ convention = "google"
 source = ["chat_downloader"]
 omit = [
     "*/__main__.py",
-    "chat_downloader/runtime/_protocols.py",
+    "src/chat_downloader/runtime/_protocols.py",
 ]
 
 [tool.coverage.report]

@@ -5,11 +5,11 @@ Personal fork of `xenova/chat-downloader`; no upstream support. See README.
 For deeper context see [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md).
 
 ## Structure
-- `chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI in `cli.py`; typed shapes in `models.py`.
-- `chat_downloader/runtime/`: `cli_bridge`, `site_dispatch`, `chat_pipeline`, `runner`, `session_lifecycle`, `testing`.
-- `chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).
-- `chat_downloader/output/`: `ContinuousWriter` plus jsonl/csv/txt writers; `formatting/`: `ItemFormatter` and bundled templates.
-- `chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `string_utils`, `retry_utils`, `timed_utils`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`).
+- `src/chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI in `cli.py`; typed shapes in `models.py`.
+- `src/chat_downloader/runtime/`: `cli_bridge`, `site_dispatch`, `chat_pipeline`, `runner`, `session_lifecycle`, `testing`.
+- `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).
+- `src/chat_downloader/output/`: `ContinuousWriter` plus jsonl/csv/txt writers; `formatting/`: `ItemFormatter` and bundled templates.
+- `src/chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `string_utils`, `retry_utils`, `timed_utils`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`).
 - `tests/`: pytest suite with curated fixtures under `tests/fixtures/`; network tests gated by `@pytest.mark.network`.
 - `docs/`: `development-workflow-guide.md`, `python-api-reference.md`, and the YouTube/Twitch integration guides.
 
@@ -38,9 +38,9 @@ uv sync
 - `uv run pytest tests/FILE.py -q` — single file
 - `uv run pytest tests/FILE.py::test_name -q` — single test
 - `uv run pytest -v -m network --run-network` — opt-in network tests
-- `uv run ruff check chat_downloader tests` — lint
-- `uv run ruff format --check chat_downloader tests` — format check
-- `uv run ruff format chat_downloader tests` — apply formatting
+- `uv run ruff check src/chat_downloader tests` — lint
+- `uv run ruff format --check src/chat_downloader tests` — format check
+- `uv run ruff format src/chat_downloader tests` — apply formatting
 - `uv run mypy .` — type check (config in `mypy.ini`)
 - Coverage: `uv run coverage erase && PYTHONHASHSEED=0 uv run coverage run --source chat_downloader -m pytest -q -m "not network" && uv run coverage report -m --precision=2`
 - Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (all).
@@ -66,8 +66,8 @@ or runtime change. Keep curated fixtures under `tests/fixtures/`.
 ## Done means
 A behavior, runtime, or tooling change is not done until:
 - regression test added or updated under `tests/` (curated fixture if parser)
-- `uv run ruff check chat_downloader tests` clean
-- `uv run ruff format --check chat_downloader tests` clean
+- `uv run ruff check src/chat_downloader tests` clean
+- `uv run ruff format --check src/chat_downloader tests` clean
 - `uv run mypy .` clean
 - `uv run pytest -q -p no:rerunfailures -m "not network"` green
 - docs touched in the same commit when user-facing behavior, tooling, or

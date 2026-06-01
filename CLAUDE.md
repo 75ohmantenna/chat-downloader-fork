@@ -20,8 +20,8 @@ uv sync
 Preferred commands:
 ```
 uv run pytest -q -p no:rerunfailures -m "not network"
-uv run ruff check chat_downloader tests
-uv run ruff format --check chat_downloader tests
-uv run ruff format chat_downloader tests
+uv run ruff check src/chat_downloader tests
+uv run ruff format --check src/chat_downloader tests
+uv run ruff format src/chat_downloader tests
 uv run mypy .
 ```

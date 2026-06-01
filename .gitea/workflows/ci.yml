@@ -32,10 +32,10 @@ jobs:
         run: uv lock --check
 
       - name: Lint
-        run: uv run --locked ruff check chat_downloader tests
+        run: uv run --locked ruff check src/chat_downloader tests
 
       - name: Format check
-        run: uv run --locked ruff format --check chat_downloader tests
+        run: uv run --locked ruff format --check src/chat_downloader tests
 
       - name: Type check
         run: uv run --locked mypy .

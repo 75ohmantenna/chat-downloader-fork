@@ -12,13 +12,13 @@ test:
 	$(UV) run pytest -q -p no:rerunfailures -m "not network"
 
 lint:
-	$(UV) run ruff check chat_downloader tests
+	$(UV) run ruff check src/chat_downloader tests
 
 fmt:
-	$(UV) run ruff format chat_downloader tests
+	$(UV) run ruff format src/chat_downloader tests
 
 fmt-check:
-	$(UV) run ruff format --check chat_downloader tests
+	$(UV) run ruff format --check src/chat_downloader tests
 
 typecheck:
 	$(UV) run mypy .

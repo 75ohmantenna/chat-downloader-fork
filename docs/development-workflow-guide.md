@@ -68,8 +68,8 @@ uv run pytest -q -p no:rerunfailures -m "not network"
 Run formatting and lint checks:
 
 ```bash
-uv run ruff check chat_downloader tests
-uv run ruff format --check chat_downloader tests
+uv run ruff check src/chat_downloader tests
+uv run ruff format --check src/chat_downloader tests
 ```
 
 Run type checking:
