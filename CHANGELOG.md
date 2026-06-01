@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.3 — 2026-06-01
+
+### Build and tooling
+
+- Rewrite Ruff configuration; trim redundant pyproject.toml fields
+- Add Makefile with `.venv`-scoped targets; expand doc-update policy in
+  `AGENTS.md` to require changelog entries for user-visible changes
+- Fix D205 docstring summaries and replace manual `try/except` blocks with
+  `contextlib.suppress` throughout `src`
+- Apply same D205 and `contextlib.suppress` fixes to the test suite; move
+  `pytestmark` assignments to module scope (E402) and mark long lines with
+  `noqa: E501`
+- Parameterize bare `Callable` generics, fix bare collection generics, and
+  add `cast` calls required by `mypy --strict`
+- Credit fork maintainer in project metadata
+
 ## 1.0.2 — 2026-05-29
 
 ### Security

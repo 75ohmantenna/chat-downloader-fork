@@ -20,4 +20,4 @@ __copyright__ = (
 __url__ = "https://github.com/75ohmantenna/chat-downloader-fork"
 __original_author__ = "xenova"
 __upstream_url__ = "https://github.com/xenova/chat-downloader"
-__version__ = "1.0.2"
+__version__ = "1.0.3"
