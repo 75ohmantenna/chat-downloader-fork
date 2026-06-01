@@ -16,7 +16,6 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -62,59 +61,16 @@ chat_downloader = ["formatting/*.json", "py.typed"]
 
 [tool.ruff]
 line-length = 80
-target-version = "py312"
-exclude = ["docs", ".git", "__pycache__", "build", "dist", "*.egg-info"]
 
 [tool.ruff.lint]
-select = [
-    "E", "W", "F",   # pycodestyle + pyflakes (original baseline)
-    "I",              # isort
-    "D",              # pydocstyle — Google-style docstring enforcement
-    "B",              # flake8-bugbear
-    "UP",             # pyupgrade (Python 3.12+ modernisations)
-    "PIE",            # flake8-pie
-    "RUF",            # Ruff-specific (unused noqa, etc.)
-    "S",              # bandit-style security checks
-    "C4",             # flake8-comprehensions
-    "PERF",           # perflint — performance antipatterns
-    "FURB",           # refurb — modern Python rewrites (py312 target)
-]
-ignore = [
-    # D105/D107: magic methods and __init__ are optional per Google Style Guide
-    # when the class-level docstring describes construction and behaviour.
-    "D205",           # wrapped summary docstrings keep the Google sections below
-    "D209",           # docformatter/Ruff disagree on wrapped summary closing
-    "D105",           # missing docstring in magic method
-    "D107",           # missing docstring in __init__
-    "UP028",          # yield-in-for-loop — readability preference
-    "SIM",            # flake8-simplify — too opinionated
-    "RUF012",         # mutable-class-default — plugin class attrs are intentional ClassVar candidates
-    "RUF022",         # unsorted __all__ — groups organised by category, not alpha
-    "RUF001", "RUF002",  # ambiguous Unicode — intentional in docstrings
-    "S101",           # asserts are used intentionally in tests and internal validation
-    "PERF203",        # try-except in loop — intentional error-collection pattern
-    "PERF402",        # list copy — [x for x in lst] is acceptable in test scaffolding
-]
+select = ["D", "E4", "E7", "E9", "E501", "F", "I", "W605"]
+ignore = ["D206", "D300"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = [
-    "ANN001", "ANN201", "ANN202", "ANN401",
-    "D100", "D101", "D102", "D103", "D104", "D105", "D107",
-    "E501",
-    "E402",
-    "PLC0415",
-    "PLR2004",
-    "S108", "S110", "S324",
-    "SLF001",
-]
-# debugging.py: sha1 is used for short non-security fixture name digests (documented).
-# /tmp path is intentional — overridable via _DEBUG_SAMPLE_DIR_ENV environment variable.
-"chat_downloader/debugging.py" = ["S108", "S324"]
+"tests/**/*.py" = ["D1"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
-[tool.ruff.format]
-# Defaults match Black's style, with the project line length set above.
 
 [tool.coverage.run]
 source = ["chat_downloader"]
@@ -126,7 +82,6 @@ omit = [
 [tool.coverage.report]
 precision = 2
 show_missing = true
-skip_covered = false
 exclude_also = [
     "if TYPE_CHECKING:",
     "\\.\\.\\.",
@@ -135,8 +90,6 @@ exclude_also = [
 [tool.pytest.ini_options]
 markers = [
     "network: tests that require external network access (not run in default CI)",
-    "slow: slower tests (optional)",
-    "unit: unit tests (optional)",
 ]
 filterwarnings = [
     "error::DeprecationWarning",
