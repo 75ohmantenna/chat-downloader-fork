@@ -16,7 +16,7 @@ The YouTube implementation is responsible for:
 
 Primary entry point:
 
-- `chat_downloader/sites/youtube/extractor.py`
+- `src/chat_downloader/sites/youtube/extractor.py`
 
 Public site methods are assembled from focused mixins and include
 `get_chat_by_video_id`, `get_chat_by_clip_id`, `get_chat_by_channel_id`,
@@ -25,8 +25,8 @@ Public site methods are assembled from focused mixins and include
 
 Main implementation areas:
 
-- `chat_downloader/sites/youtube/`
-- `chat_downloader/sites/youtube/parsing/`
+- `src/chat_downloader/sites/youtube/`
+- `src/chat_downloader/sites/youtube/parsing/`
 
 ## End-to-End Flow
 
@@ -227,7 +227,7 @@ normalizes to `message_type = "deleted_message"`.
 
 The mapping from wire action key to output `action_type` and `message_type`
 lives in `_KNOWN_REMOVE_ACTION_TYPES` in
-`chat_downloader/sites/youtube/constants_actions_messages_core.py`.
+`src/chat_downloader/sites/youtube/constants_actions_messages_core.py`.
 
 ## Common Failure Points
 

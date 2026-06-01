@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for chat_downloader/debugging.py to improve coverage."""
+"""Unit tests for src/chat_downloader/debugging.py to improve coverage."""
 
 import json
 import os

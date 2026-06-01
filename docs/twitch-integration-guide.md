@@ -20,7 +20,7 @@ The Twitch implementation is responsible for:
 
 Primary entry point:
 
-- `chat_downloader/sites/twitch/extractor.py`
+- `src/chat_downloader/sites/twitch/extractor.py`
 
 Public site methods include `get_chat_by_stream_id`, `get_chat_by_vod_id`,
 `get_chat_by_clip_id`, and `generate_urls`. URL matching routes live stream,
@@ -28,8 +28,8 @@ VOD, and clip URLs to those methods through `BaseChatDownloader.matches()`.
 
 Main implementation areas:
 
-- `chat_downloader/sites/twitch/`
-- `chat_downloader/sites/twitch/parsing/`
+- `src/chat_downloader/sites/twitch/`
+- `src/chat_downloader/sites/twitch/parsing/`
 
 ## End-to-End Flow
 

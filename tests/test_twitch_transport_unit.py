@@ -167,7 +167,7 @@ def test_download_gql_rejects_missing_hash_mapping() -> None:
     # exact file to patch, and how to find the new hash.
     assert "NonexistentOperation" in message
     assert __version__ in message
-    assert "chat_downloader/sites/twitch/constants.py" in message
+    assert "src/chat_downloader/sites/twitch/constants.py" in message
     assert "persistedQuery" in message
 
 

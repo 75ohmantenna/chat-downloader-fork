@@ -163,7 +163,7 @@ def _download_gql(
             f"{missing_text}. chat-downloader-fork {__version__} ships a "
             "fixed set of hashes; Twitch may have rotated them. Update "
             "OPERATION_HASHES in "
-            "chat_downloader/sites/twitch/constants.py — current values "
+            "src/chat_downloader/sites/twitch/constants.py — current values "
             "can be observed in the Twitch web client's Network tab "
             "(look for GraphQL POST requests carrying a "
             "persistedQuery.sha256Hash extension)."

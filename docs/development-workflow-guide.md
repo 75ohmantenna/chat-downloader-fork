@@ -14,30 +14,30 @@ disclosures that apply to all changes in this repository.
 - Test framework: `pytest`
 - Formatter and primary linter: `ruff`
 - Type checker: `mypy` with configuration in `mypy.ini`
-- CLI/API parameter source of truth: `chat_downloader/models.py`
+- CLI/API parameter source of truth: `src/chat_downloader/models.py`
 
 ## Repository Map
 
 | Path | Responsibility |
 | --- | --- |
-| `chat_downloader/chat_downloader.py` | Thin public facade, `ChatDownloader`, `run()` |
-| `chat_downloader/cli.py` | Argparse CLI generated from dataclass metadata plus CLI-only flags |
-| `chat_downloader/models.py` | `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata |
-| `chat_downloader/runtime/cli_bridge.py` | Split `run()` kwargs into init, chat-request, and runtime controls |
-| `chat_downloader/runtime/site_dispatch.py` | URL validation, site matching, site-default resolution |
-| `chat_downloader/runtime/chat_pipeline.py` | Message limits, timeouts, formatters, output writers |
-| `chat_downloader/runtime/runner.py` | CLI-style execution loop, stdout callback, cleanup, error mapping |
-| `chat_downloader/runtime/session_lifecycle.py` | Session creation, cookies, shared site session cleanup |
-| `chat_downloader/sites/base.py` | Shared site-session base behavior |
-| `chat_downloader/sites/session.py` | Request sessions, cookies, headers, profiles |
-| `chat_downloader/sites/retry.py` | Shared retry helper |
-| `chat_downloader/sites/filters.py` | Message and time-range filters |
-| `chat_downloader/sites/youtube/` | YouTube bootstrap, continuation, discovery, parsing |
-| `chat_downloader/sites/twitch/` | Twitch GraphQL, IRC, replay, badges, parsing |
-| `chat_downloader/output/` | Continuous writers and crash-safe JSONL handling |
-| `chat_downloader/formatting/` | Text formatting engine and bundled format definitions |
-| `chat_downloader/debugging.py` | Logging, sanitization, testing modes, opt-in debug sample capture |
-| `chat_downloader/debug_sample_utils.py` | Debug sample naming and fixture hint helpers |
+| `src/chat_downloader/chat_downloader.py` | Thin public facade, `ChatDownloader`, `run()` |
+| `src/chat_downloader/cli.py` | Argparse CLI generated from dataclass metadata plus CLI-only flags |
+| `src/chat_downloader/models.py` | `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata |
+| `src/chat_downloader/runtime/cli_bridge.py` | Split `run()` kwargs into init, chat-request, and runtime controls |
+| `src/chat_downloader/runtime/site_dispatch.py` | URL validation, site matching, site-default resolution |
+| `src/chat_downloader/runtime/chat_pipeline.py` | Message limits, timeouts, formatters, output writers |
+| `src/chat_downloader/runtime/runner.py` | CLI-style execution loop, stdout callback, cleanup, error mapping |
+| `src/chat_downloader/runtime/session_lifecycle.py` | Session creation, cookies, shared site session cleanup |
+| `src/chat_downloader/sites/base.py` | Shared site-session base behavior |
+| `src/chat_downloader/sites/session.py` | Request sessions, cookies, headers, profiles |
+| `src/chat_downloader/sites/retry.py` | Shared retry helper |
+| `src/chat_downloader/sites/filters.py` | Message and time-range filters |
+| `src/chat_downloader/sites/youtube/` | YouTube bootstrap, continuation, discovery, parsing |
+| `src/chat_downloader/sites/twitch/` | Twitch GraphQL, IRC, replay, badges, parsing |
+| `src/chat_downloader/output/` | Continuous writers and crash-safe JSONL handling |
+| `src/chat_downloader/formatting/` | Text formatting engine and bundled format definitions |
+| `src/chat_downloader/debugging.py` | Logging, sanitization, testing modes, opt-in debug sample capture |
+| `src/chat_downloader/debug_sample_utils.py` | Debug sample naming and fixture hint helpers |
 | `tests/fixtures/` | Curated offline fixtures |
 
 ## Local Setup
@@ -122,17 +122,17 @@ Coverage reproducibility notes:
 
 ## Architecture Guardrails
 
-- Treat `chat_downloader/chat_downloader.py` as the public facade
+- Treat `src/chat_downloader/chat_downloader.py` as the public facade
 - Add CLI/API parameters to `DownloaderConfig`, `ChatRequest`, or `RunConfig`
   before wiring them elsewhere
 - Prefer `DownloaderConfig`, `ChatRequest`, and `RunConfig` over ad hoc
   parameter paths
 - Keep `run()` keyword categorization in `runtime/cli_bridge.py`; unknown
   `run()` kwargs should fail fast instead of being silently ignored
-- Keep runtime orchestration in `chat_downloader/runtime/`; avoid pushing
+- Keep runtime orchestration in `src/chat_downloader/runtime/`; avoid pushing
   output, timeout, run-loop, or URL-dispatch behavior into site modules
 - Keep site-specific behavior inside the YouTube and Twitch site packages
-- Prefer focused utility modules under `chat_downloader/utils/`
+- Prefer focused utility modules under `src/chat_downloader/utils/`
   (e.g. `time_utils.py`, `json_utils.py`, `string_utils.py`) over adding
   broad utility or compatibility-style aggregator modules
 - Use current Twitch boundaries: `graphql_client.py`, `irc_transport.py`,
@@ -157,8 +157,8 @@ Common doc targets:
 
 When the public import surface changes, keep these files aligned:
 
-- `chat_downloader/__init__.py`
-- package `__init__.py` files under `chat_downloader/`
+- `src/chat_downloader/__init__.py`
+- package `__init__.py` files under `src/chat_downloader/`
 - `docs/python-api-reference.md`
 - import-surface tests under `tests/`
 
@@ -188,7 +188,7 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" --logging debug
 ```
 
 Captured files land in a temp directory and use stable labels from
-`chat_downloader/debug_sample_utils.py`. Override the output directory with
+`src/chat_downloader/debug_sample_utils.py`. Override the output directory with
 `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. Review generated files before promoting
 them into `tests/fixtures/`.
 

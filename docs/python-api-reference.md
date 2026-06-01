@@ -1,8 +1,8 @@
 # Python API Reference
 
 The stable Python surface exposed by `chat-downloader-fork`. The authoritative
-sources are `chat_downloader/__init__.py`, `chat_downloader/chat_downloader.py`,
-and `chat_downloader/models.py`; this document reflects them.
+sources are `src/chat_downloader/__init__.py`, `src/chat_downloader/chat_downloader.py`,
+and `src/chat_downloader/models.py`; this document reflects them.
 
 ## Quick Start
 

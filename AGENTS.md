@@ -51,7 +51,7 @@ uv sync
   and the source of truth for CLI and Python API shape. Add user-facing
   request, init, or runtime fields there first so CLI help and the typed API
   stay aligned.
-- `chat_downloader/chat_downloader.py` is a thin facade — keep it that way;
+- `src/chat_downloader/chat_downloader.py` is a thin facade — keep it that way;
   runtime orchestration lives in `runtime/`.
 - Site logic lives in `sites/youtube/` and `sites/twitch/`.
 - CLI help is generated from dataclass metadata; change the dataclass first.

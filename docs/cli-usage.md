@@ -76,7 +76,7 @@ captures survive process crashes and power loss with minimal data loss.
 
 Run `chat_downloader --help` for the complete argument list. The CLI is
 generated from metadata on `DownloaderConfig`, `ChatRequest`, and `RunConfig`
-in `chat_downloader/models.py`.
+in `src/chat_downloader/models.py`.
 
 Filtering and output:
 
@@ -111,7 +111,7 @@ Debug and automation:
   challenge response that the library cannot solve automatically.
 - Use `jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
-  inspect the site-specific code under `chat_downloader/sites/`.
+  inspect the site-specific code under `src/chat_downloader/sites/`.
 - The CLI exits with a nonzero status on failure or when interrupted
   (`KeyboardInterrupt` / `SIGTERM`); exit status `0` means a clean run.
 - On `SIGTERM` (e.g. `systemd` stopping the service, or `kill <pid>`) the CLI
