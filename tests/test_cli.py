@@ -24,7 +24,7 @@ from chat_downloader.runtime.runner import RunResult
 
 
 def _run_and_capture(*extra_args) -> dict:
-    """Run main() with a dummy URL; return the full kwargs dict passed to run()."""
+    """Run main() with a dummy URL; return the kwargs dict passed to run()."""
     captured: dict = {}
 
     def fake_run(**kwargs) -> RunResult:
@@ -59,9 +59,11 @@ def test_cli_calls_run() -> None:
 )
 def test_cli_exits_nonzero_on_failure(result: RunResult) -> None:
     url = "https://www.youtube.com/watch?v=jfKfPfyJRdk"
-    with patch("chat_downloader.cli.run", return_value=result):
-        with pytest.raises(SystemExit) as exc_info:
-            main([url])
+    with (
+        patch("chat_downloader.cli.run", return_value=result),
+        pytest.raises(SystemExit) as exc_info,
+    ):
+        main([url])
     assert exc_info.value.code == 1
 
 
@@ -455,7 +457,7 @@ def test_all_chat_request_fields_are_in_cli() -> None:
 
 def test_cli_chat_params_match_expected_legacy_keys() -> None:
     legacy_keys = set(ChatRequest(url="").as_dict().keys())
-    assert _CLI_CHAT_PARAMS == legacy_keys
+    assert legacy_keys == _CLI_CHAT_PARAMS
 
 
 def test_cli_registration_fails_fast_without_dataclass_metadata(

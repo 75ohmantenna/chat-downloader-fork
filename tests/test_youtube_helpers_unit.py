@@ -16,7 +16,7 @@ def test_safe_get_dict_returns_empty_dict_for_missing_or_falsy_values() -> None:
     assert _safe_get_dict({"value": {"ok": True}}, "value") == {"ok": True}
 
 
-def test_extract_browse_continuation_token_handles_invalid_and_missing_inputs() -> (
+def test_extract_browse_continuation_token_handles_invalid_and_missing_inputs() -> (  # noqa: E501
     None
 ):
     assert _extract_browse_continuation_token(None) is None
@@ -101,7 +101,7 @@ def test_extract_menu_continuation_token_supports_all_known_shapes() -> None:
     )
 
 
-def test_extract_chat_submenu_continuations_uses_fallback_labels_and_ignores_invalid_items() -> (
+def test_extract_chat_submenu_continuations_uses_fallback_labels_and_ignores_invalid_items() -> (  # noqa: E501
     None
 ):
     yt_data = {
@@ -170,7 +170,7 @@ def test_extract_chat_submenu_continuations_rejects_non_list_menu() -> None:
     )
 
 
-def test_extract_browse_continuation_token_from_response_checks_fallback_locations() -> (
+def test_extract_browse_continuation_token_from_response_checks_fallback_locations() -> (  # noqa: E501
     None
 ):
     assert (

@@ -194,15 +194,15 @@ def test_get_chat_messages_by_vod_id_prefers_cursor_over_offset() -> None:
     assert "contentOffsetSeconds" not in calls["query"][0]["variables"]
 
 
-def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric() -> (
+def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric() -> (  # noqa: E501
     None
 ):
     readbuffer = (
         "PING :tmi.twitch.tv\r\n"
         "PONG :tmi.twitch.tv\r\n"
-        ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n"
+        ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n"  # noqa: E501
         ":tmi.twitch.tv 001 justinfan67420 :Welcome, GLHF!\r\n"
-        ":justinfan67420.tmi.twitch.tv 353 justinfan67420 = #idubbbz :foo bar baz\r\n"
+        ":justinfan67420.tmi.twitch.tv 353 justinfan67420 = #idubbbz :foo bar baz\r\n"  # noqa: E501
         ":user!user@user.tmi.twitch.tv JOIN #idubbbz\r\n"
         ":user!user@user.tmi.twitch.tv PART #idubbbz\r\n"
     )
@@ -228,9 +228,7 @@ def test_benign_unmatched_irc_buffer_detection_keeps_unknown_lines() -> None:
     ],
 )
 def test_update_badge_info_logs_warning_on_network_error(exc, caplog) -> None:
-    """update_badge_info should log a warning and not raise on expected
-    errors.
-    """
+    """update_badge_info warns and does not raise on expected errors."""
     import logging
 
     def download_gql_func(_session_post, _ops, client_id=None) -> NoReturn:
@@ -250,9 +248,7 @@ def test_update_badge_info_logs_warning_on_network_error(exc, caplog) -> None:
 
 
 def test_update_badge_info_does_not_swallow_unexpected_exceptions() -> None:
-    """Unexpected exception types should propagate (not caught by narrowed
-    clause).
-    """
+    """Unexpected exception types propagate past the narrowed clause."""
 
     class _WeirdError(RuntimeError):
         pass

@@ -455,7 +455,7 @@ def test_initial_video_info_adds_replay_chat_continuations(monkeypatch) -> None:
                                 "continuations": [
                                     {
                                         "reloadContinuationData": {
-                                            "continuation": "client-replay-token",
+                                            "continuation": "client-replay-token",  # noqa: E501
                                         },
                                     },
                                 ],
@@ -485,14 +485,14 @@ def test_initial_video_info_adds_replay_chat_continuations(monkeypatch) -> None:
                                         {
                                             "continuation": {
                                                 "reloadContinuationData": {
-                                                    "continuation": "top-replay",
+                                                    "continuation": "top-replay",  # noqa: E501
                                                 },
                                             },
                                         },
                                         {
                                             "continuation": {
                                                 "reloadContinuationData": {
-                                                    "continuation": "live-replay",
+                                                    "continuation": "live-replay",  # noqa: E501
                                                 },
                                             },
                                         },
@@ -543,7 +543,7 @@ def test_initial_video_info_uses_fallback_labels_for_unlabeled_replay_submenus(
                                 "continuations": [
                                     {
                                         "reloadContinuationData": {
-                                            "continuation": "client-replay-token",
+                                            "continuation": "client-replay-token",  # noqa: E501
                                         },
                                     },
                                 ],
@@ -573,7 +573,7 @@ def test_initial_video_info_uses_fallback_labels_for_unlabeled_replay_submenus(
                                         {
                                             "continuation": {
                                                 "reloadContinuationData": {
-                                                    "continuation": "top-replay",
+                                                    "continuation": "top-replay",  # noqa: E501
                                                 },
                                             },
                                         },

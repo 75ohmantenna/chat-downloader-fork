@@ -129,7 +129,7 @@ def test_download_gql_handles_list_error_response() -> None:
         )
 
 
-def test_download_base_gql_raises_captcha_challenge_required_on_challenge_response() -> (
+def test_download_base_gql_raises_captcha_challenge_required_on_challenge_response() -> (  # noqa: E501
     None
 ):
     def session_post(_url, json, headers):
@@ -229,7 +229,7 @@ def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
     assert fake_socket.sendall.call_args_list == [
         (
             (
-                b"CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",
+                b"CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",  # noqa: E501
             ),
             {},
         ),
@@ -251,7 +251,7 @@ def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
         (":user!user@user.tmi.twitch.tv PART #example\r\n", True),
         (":tmi.twitch.tv 001 justinfan :Welcome\r\n", True),
         (
-            ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",
+            ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",  # noqa: E501
             True,
         ),
         (":tmi.twitch.tv NOTICE * :hello\r\n", False),
@@ -308,7 +308,7 @@ def test_process_irc_buffer_keeps_partial_tail_without_final_newline() -> None:
     full_line = _privmsg("1", "one")
     partial = (
         "@badge-info=;badges=;color=;display-name=User;emotes=;id=2;mod=0;room-id=1;"
-        "subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;user-type= :user!user@user.tmi.twitch.tv PRIVMSG #example :par"
+        "subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;user-type= :user!user@user.tmi.twitch.tv PRIVMSG #example :par"  # noqa: E501
     )
     readbuffer_tail, matches = irc_transport._process_irc_buffer(
         f"{full_line}\r\n{partial}",
@@ -320,7 +320,7 @@ def test_process_irc_buffer_keeps_partial_tail_without_final_newline() -> None:
     assert matches[0].group(3) == "one"
 
 
-def test_consume_irc_buffer_returns_unmatched_full_buffer_only_for_complete_lines() -> (
+def test_consume_irc_buffer_returns_unmatched_full_buffer_only_for_complete_lines() -> (  # noqa: E501
     None
 ):
     remaining, matches, unmatched_full_buffer = (
@@ -410,7 +410,7 @@ def test_irc_transport_logs_unknown_full_buffer_when_no_matches() -> None:
     mock_log.assert_any_call("debug", 'No matches found in "\nUNKNOWN LINE\n"')
 
 
-def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive() -> (
+def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive() -> (  # noqa: E501
     None
 ):
     class FakeIRC:
@@ -504,7 +504,7 @@ def test_irc_transport_does_not_log_progress_every_250_messages() -> None:
     mock_log.assert_not_called()
 
 
-def test_irc_transport_preserves_trailing_unmatched_buffer_after_complete_match() -> (
+def test_irc_transport_preserves_trailing_unmatched_buffer_after_complete_match() -> (  # noqa: E501
     None
 ):
     class FakeIRC:
@@ -562,9 +562,7 @@ def test_irc_transport_swallows_timeout_and_continues_until_disconnect() -> (
 
 
 def test_irc_transport_pong_oserror_raises_connection_error() -> None:
-    """OSError from send_raw(PONG) must become ConnectionError to trigger
-    reconnect.
-    """
+    """OSError from send_raw(PONG) becomes ConnectionError for reconnect."""
 
     class FakeIRC:
         def __init__(self) -> None:
@@ -587,14 +585,13 @@ def test_irc_transport_pong_oserror_raises_connection_error() -> None:
 
 
 def test_irc_transport_ping_oserror_raises_connection_error() -> None:
-    """OSError from send_raw(PING) must become ConnectionError to trigger
-    reconnect.
-    """
+    """OSError from send_raw(PING) becomes ConnectionError for reconnect."""
 
     class FakeIRC:
         def __init__(self) -> None:
-            # First recv returns a full buffer with no IRC matches (benign line);
-            # the ping check then runs and send_raw("PING") raises OSError.
+            # First recv returns a full buffer with no IRC matches (benign
+            # line); the ping check then runs and send_raw("PING") raises
+            # OSError.
             self.responses = iter(["UNKNOWN LINE\r\n"])
 
         def recv(self, _buffer_size: int) -> str:
@@ -661,9 +658,7 @@ def test_twitch_chat_irc_constructor_closes_socket_on_send_raw_oserror(
 def test_twitch_chat_irc_close_connection_sends_quit_before_closing(
     monkeypatch,
 ) -> None:
-    """close_connection() must send QUIT and shutdown before closing the
-    socket.
-    """
+    """close_connection() sends QUIT and shutdown before closing the socket."""
     irc = irc_transport.TwitchChatIRC.__new__(irc_transport.TwitchChatIRC)
     irc.socket = Mock()
     irc.socket.shutdown = Mock()
@@ -696,9 +691,7 @@ def test_download_base_gql_raises_http_error_for_non_captcha_4xx() -> None:
 
 
 def test_update_badge_info_skips_malformed_badge_and_keeps_others() -> None:
-    """A single malformed badge ID must not drop the rest of the channel's
-    badges.
-    """
+    """One malformed badge ID must not drop the channel's other badges."""
     import base64
 
     def make_badge_id(set_id: str, version: str, channel_id: str) -> str:

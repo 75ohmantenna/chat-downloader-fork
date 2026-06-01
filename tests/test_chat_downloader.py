@@ -4,13 +4,12 @@
 # It is intentionally excluded from the default offline CI run.
 import pytest
 
-pytestmark = pytest.mark.network
-
-
 from chat_downloader import ChatDownloader
 from chat_downloader.sites import BaseChatDownloader, get_all_sites
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
 from tests.fixtures.youtube.extractor_tests import YOUTUBE_EXTRACTOR_TESTS
+
+pytestmark = pytest.mark.network
 
 _SITE_TESTS: dict = {
     YouTubeChatDownloader: YOUTUBE_EXTRACTOR_TESTS,

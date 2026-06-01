@@ -5,11 +5,10 @@ import tempfile
 
 import pytest
 
-pytestmark = pytest.mark.network
-
-
 from chat_downloader import ChatDownloader
 from chat_downloader.output.continuous_write import _WRITER_CLASSES
+
+pytestmark = pytest.mark.network
 
 
 def test_writers() -> None:

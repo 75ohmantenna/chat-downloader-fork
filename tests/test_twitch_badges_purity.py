@@ -86,7 +86,7 @@ def test_parse_badge_info_uses_badge_set_global() -> None:
 
 
 def test_parse_badge_info_uses_badge_set_channel() -> None:
-    """_parse_badge_info uses badge_set.channel_badges, ignores module global."""
+    """_parse_badge_info uses badge_set.channel_badges, not module global."""
     badge_set = _make_badge_set(
         channel_badge=_make_badge_dict("CORRECT_CHANNEL"),
         channel_id="999",
@@ -174,9 +174,7 @@ def test_parse_item_uses_badge_set() -> None:
 
 
 def test_update_badge_info_called_with_cache_dicts() -> None:
-    """_update_badge_info passes badge_cache dict references to
-    update_badge_info.
-    """
+    """_update_badge_info passes badge_cache dict refs to update_badge_info."""
     from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 
     downloader = TwitchChatDownloader.__new__(TwitchChatDownloader)
@@ -234,7 +232,7 @@ def test_snapshot_reflects_current_state() -> None:
 
 
 def test_in_place_mutation_visible_before_snapshot() -> None:
-    """update_badge_info mutates the dicts in-place; new snapshot reflects it."""
+    """update_badge_info mutates dicts in-place; snapshot reflects it."""
     cache = BadgeCache()
     # Simulate what update_badge_info does:
     cache.global_badges[("mod", "1")] = {"title": "Moderator"}

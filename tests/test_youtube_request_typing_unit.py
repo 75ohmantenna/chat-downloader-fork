@@ -115,7 +115,7 @@ def test_youtube_clip_entry_match_wrapper_calls_clip_entry() -> None:
     assert called_request is request
 
 
-def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -> (
+def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -> (  # noqa: E501
     None
 ):
     class DummyVideoInitialization:
@@ -191,7 +191,7 @@ def test_youtube_clip_entry_updates_times_without_mutating_request() -> None:
     assert downloader.message_params.end_time == 70
 
 
-def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -> (
+def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -> (  # noqa: E501
     None
 ):
     class DummyYouTubeUsers(YouTubeChatUsersRetrievalMixin):

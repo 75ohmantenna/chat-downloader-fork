@@ -89,6 +89,7 @@ def test_rewrite_csv_cleans_up_temp_file_on_write_failure(
     tmp_path: Path,
 ) -> None:
     """If the write to the temp file fails, no orphan temp file is left."""
+    import contextlib
     import glob
     import io
 
@@ -99,15 +100,13 @@ def test_rewrite_csv_cleans_up_temp_file_on_write_failure(
     broken_file = io.StringIO("a\nval\n")
     broken_file.seek = lambda *_: (_ for _ in ()).throw(OSError("seek failed"))  # type: ignore[method-assign]
 
-    try:
+    with contextlib.suppress(OSError):
         rewrite_csv_with_new_columns(
             current_file=broken_file,
             file_name=str(tmp_path / "chat.csv"),
             columns=["a", "b"],
             item={"a": "x", "b": "y"},
         )
-    except OSError:
-        pass
 
     after = set(glob.glob(str(tmp_path / "*")))
     assert after == before, f"orphan temp files left: {after - before}"

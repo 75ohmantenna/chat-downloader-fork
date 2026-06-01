@@ -58,7 +58,7 @@ def test_shu_live_event_fixture_covers_paid_membership_and_ticker_paths() -> (
     assert null_membership["header_secondary_text"] == "Welcome to Yaminions!"
 
 
-def test_crimson_live_event_fixture_covers_banner_moderation_and_engagement() -> (
+def test_crimson_live_event_fixture_covers_banner_moderation_and_engagement() -> (  # noqa: E501
     None
 ):
     items = _load_fixture("youtube-shapy-crimson-desert-10m-events.json")

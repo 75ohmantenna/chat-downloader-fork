@@ -81,7 +81,7 @@ def test_retry_logs_json_decode_context_and_page_title(monkeypatch) -> None:
         "warning",
         [
             "prefix",
-            "Retry #1/2 (sleep for 0.0s). bad json: line 1 column 5 (char 4) (JSONDecodeError)",
+            "Retry #1/2 (sleep for 0.0s). bad json: line 1 column 5 (char 4) (JSONDecodeError)",  # noqa: E501
         ],
     )
     assert sleeps == [0.0]
@@ -120,7 +120,7 @@ def test_retry_skips_page_title_log_when_title_missing(monkeypatch) -> None:
         (
             "warning",
             [
-                "Retry #1/2 (sleep for 0.0s). bad json: line 1 column 1 (char 0) (JSONDecodeError)",
+                "Retry #1/2 (sleep for 0.0s). bad json: line 1 column 1 (char 0) (JSONDecodeError)",  # noqa: E501
             ],
         ),
     ]

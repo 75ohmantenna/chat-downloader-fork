@@ -33,7 +33,7 @@ def test_extract_browse_continuation_token_from_response_reload_endpoints() -> (
     )
 
 
-def test_extract_browse_continuation_token_from_response_playlist_continuation_contents() -> (
+def test_extract_browse_continuation_token_from_response_playlist_continuation_contents() -> (  # noqa: E501
     None
 ):
     yt_info = {
@@ -89,7 +89,7 @@ def test_extract_browse_continuation_token_from_response_reload_actions() -> (
     )
 
 
-def test_extract_chat_submenu_continuations_uses_fallback_for_unlabeled_items() -> (
+def test_extract_chat_submenu_continuations_uses_fallback_for_unlabeled_items() -> (  # noqa: E501
     None
 ):
     yt_info = {
@@ -122,7 +122,7 @@ def test_extract_chat_submenu_continuations_uses_fallback_for_unlabeled_items() 
                                         "continuation": {
                                             "continuationEndpoint": {
                                                 "getLiveChatEndpoint": {
-                                                    "continuation": "SKIP_TITLE_EMPTY",
+                                                    "continuation": "SKIP_TITLE_EMPTY",  # noqa: E501
                                                 },
                                             },
                                         },

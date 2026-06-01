@@ -42,7 +42,7 @@ def _ext_path(tmp_path: pathlib.Path, ext: str) -> str:
 
 
 class _DummyWriter(ContinuousFileWriter):
-    """Minimal concrete subclass for testing ContinuousFileWriter base behavior."""
+    """Minimal concrete ContinuousFileWriter subclass used for testing."""
 
     def write(self, item: object, flush: bool = False) -> None:
         pass

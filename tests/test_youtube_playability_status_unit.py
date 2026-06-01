@@ -139,7 +139,7 @@ def test_raise_for_error_screen_maps_playability_statuses() -> None:
                 "errorScreen": {
                     "playerErrorMessageRenderer": {
                         "reason": {
-                            "simpleText": "This content isn't available, try again later.",
+                            "simpleText": "This content isn't available, try again later.",  # noqa: E501
                         },
                     },
                 },
@@ -215,7 +215,7 @@ def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
                                         "text": {
                                             "runs": [
                                                 {
-                                                    "text": "Chat replay is disabled for this video",
+                                                    "text": "Chat replay is disabled for this video",  # noqa: E501
                                                 },
                                             ],
                                         },
@@ -247,7 +247,7 @@ def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
                                         "text": {
                                             "runs": [
                                                 {
-                                                    "text": "This chat is for members only.",
+                                                    "text": "This chat is for members only.",  # noqa: E501
                                                 },
                                             ],
                                         },
@@ -374,16 +374,16 @@ def test_video_status_helpers_resolve_types_statuses_and_continuations() -> (
                                                 {
                                                     "title": "Top chat",
                                                     "continuation": {
-                                                        "reloadContinuationData": {
-                                                            "continuation": "top-token",
+                                                        "reloadContinuationData": {  # noqa: E501
+                                                            "continuation": "top-token",  # noqa: E501
                                                         },
                                                     },
                                                 },
                                                 {
                                                     "title": "Live chat",
                                                     "continuation": {
-                                                        "reloadContinuationData": {
-                                                            "continuation": "live-token",
+                                                        "reloadContinuationData": {  # noqa: E501
+                                                            "continuation": "live-token",  # noqa: E501
                                                         },
                                                     },
                                                 },
@@ -414,7 +414,7 @@ def test_video_status_helpers_resolve_types_statuses_and_continuations() -> (
                                                     "title": "Live chat",
                                                     "continuationEndpoint": {
                                                         "continuationCommand": {
-                                                            "token": "live-endpoint-token",
+                                                            "token": "live-endpoint-token",  # noqa: E501
                                                         },
                                                     },
                                                 },
@@ -422,7 +422,7 @@ def test_video_status_helpers_resolve_types_statuses_and_continuations() -> (
                                                     "title": "Top chat",
                                                     "continuationEndpoint": {
                                                         "getLiveChatEndpoint": {
-                                                            "continuation": "top-endpoint-token",
+                                                            "continuation": "top-endpoint-token",  # noqa: E501
                                                         },
                                                     },
                                                 },
@@ -479,8 +479,8 @@ def test_parse_video_details_builds_expected_model_and_dict() -> None:
                                                 {
                                                     "title": "Live chat",
                                                     "continuation": {
-                                                        "reloadContinuationData": {
-                                                            "continuation": "live-token",
+                                                        "reloadContinuationData": {  # noqa: E501
+                                                            "continuation": "live-token",  # noqa: E501
                                                         },
                                                     },
                                                 },
@@ -512,7 +512,7 @@ def test_parse_video_details_builds_expected_model_and_dict() -> None:
     assert video_details_to_dict(details)["title"] == "Example title"
 
 
-def test_parse_video_details_raises_for_wrong_video_id_but_allows_clip_override() -> (
+def test_parse_video_details_raises_for_wrong_video_id_but_allows_clip_override() -> (  # noqa: E501
     None
 ):
     player_response = {

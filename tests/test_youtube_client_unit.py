@@ -8,7 +8,7 @@ import pytest
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
 import chat_downloader.sites.youtube.client_context as _yt_context
-import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation
+import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation  # noqa: E501
 import chat_downloader.sites.youtube.client_requests_initial as _yt_initial
 from chat_downloader.errors import (
     CaptchaChallengeRequired,
@@ -130,7 +130,7 @@ def test_get_continuation_info_accepts_chat_request(
     assert calls["count"] == 2
 
 
-def test_get_continuation_info_retries_on_incomplete_live_chat_continuation_body(
+def test_get_continuation_info_retries_on_incomplete_live_chat_continuation_body(  # noqa: E501
     make_fake_http_response,
 ) -> None:
     calls = {"count": 0}
@@ -337,9 +337,7 @@ def test_get_initial_info_raises_retries_exceeded_when_attempt_loop_exits(
 def test_get_continuation_info_raises_retries_exceeded_on_exhausted_429(
     make_fake_http_response,
 ) -> None:
-    """After all retries are exhausted for HTTP 429, RetriesExceeded is
-    raised.
-    """
+    """HTTP 429 raises RetriesExceeded after all retries are exhausted."""
 
     def session_post(_url, **_kwargs):
         return make_fake_http_response(429, {})
@@ -361,9 +359,7 @@ def test_get_continuation_info_raises_retries_exceeded_on_exhausted_429(
 def test_get_continuation_info_raises_retries_exceeded_on_exhausted_5xx(
     make_fake_http_response,
 ) -> None:
-    """After all retries are exhausted for HTTP 500, RetriesExceeded is
-    raised.
-    """
+    """HTTP 500 raises RetriesExceeded after all retries are exhausted."""
 
     def session_post(_url, **_kwargs):
         return make_fake_http_response(500, {})
@@ -384,9 +380,7 @@ def test_get_continuation_info_raises_retries_exceeded_on_exhausted_5xx(
 def test_get_continuation_info_raises_retries_exceeded_on_exhausted_json_429(
     make_fake_http_response,
 ) -> None:
-    """HTTP 200 with JSON error code 429 also raises RetriesExceeded after
-    retries.
-    """
+    """HTTP 200 with JSON error 429 raises RetriesExceeded after retries."""
 
     def session_post(_url, **_kwargs):
         return make_fake_http_response(
@@ -440,7 +434,7 @@ def test_get_continuation_info_returns_non_retryable_json_api_error(
     )
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_exhausted_incomplete_body(
+def test_get_continuation_info_raises_retries_exceeded_on_exhausted_incomplete_body(  # noqa: E501
     make_fake_http_response,
 ) -> None:
     def session_post(_url, **_kwargs):
@@ -484,7 +478,7 @@ def test_get_continuation_info_allows_browse_continuation_payload(
     )
 
 
-def test_get_continuation_info_raises_captcha_challenge_required_on_http_challenge(
+def test_get_continuation_info_raises_captcha_challenge_required_on_http_challenge(  # noqa: E501
     make_fake_http_response,
 ) -> None:
     def session_post(_url, **_kwargs):
@@ -505,7 +499,7 @@ def test_get_continuation_info_raises_captcha_challenge_required_on_http_challen
     assert "--request_profile" in str(exc_info.value)
 
 
-def test_get_continuation_info_raises_captcha_challenge_required_on_json_error_message(
+def test_get_continuation_info_raises_captcha_challenge_required_on_json_error_message(  # noqa: E501
     make_fake_http_response,
 ) -> None:
     def session_post(_url, **_kwargs):
@@ -586,9 +580,7 @@ def test_get_initial_info_raises_retries_exceeded_on_exhausted_429(
 def test_get_initial_info_raises_retries_exceeded_on_network_error(
     monkeypatch,
 ) -> None:
-    """_get_initial_info re-raises RequestException after all attempts
-    exhausted.
-    """
+    """_get_initial_info re-raises RequestException after all attempts."""
 
     def session_get(_url) -> NoReturn:
         msg = "connection refused"

@@ -289,7 +289,9 @@ def test_parse_item_returns_existing_info_for_empty_renderer() -> None:
 def test_parse_item_recurses_moves_author_and_normalizes_time(
     monkeypatch,
 ) -> None:
-    import chat_downloader.sites.youtube.parsing.message_items_content_parser as _mcp
+    from chat_downloader.sites.youtube.parsing import (
+        message_items_content_parser as _mcp,
+    )
 
     monkeypatch.setattr(_mcp, "_REMAPPING", None)
     monkeypatch.setattr(_mcp, "_COLOUR_KEYS", None)
@@ -334,7 +336,9 @@ def test_parse_item_recurses_moves_author_and_normalizes_time(
 def test_parse_item_generates_time_text_from_time_in_seconds(
     monkeypatch,
 ) -> None:
-    import chat_downloader.sites.youtube.parsing.message_items_content_parser as _mcp
+    from chat_downloader.sites.youtube.parsing import (
+        message_items_content_parser as _mcp,
+    )
 
     monkeypatch.setattr(_mcp, "_REMAPPING", None)
     monkeypatch.setattr(_mcp, "_COLOUR_KEYS", None)

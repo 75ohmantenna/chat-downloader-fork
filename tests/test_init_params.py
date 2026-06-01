@@ -112,7 +112,7 @@ def test_spoofed_loopback_proxy_with_cookies_raises(
 def test_real_loopback_subnet_proxy_with_cookies_warns(
     proxy: str, tmp_path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The whole 127.0.0.0/8 range and ::1 are genuine loopback (warn, allow)."""
+    """127.0.0.0/8 and ::1 are genuine loopback: warn but allow."""
     import logging
 
     cookie_file = tmp_path / "cookies.txt"
@@ -230,9 +230,7 @@ def test_clear_cookies() -> None:
 
 
 def test_clear_cookies_disables_future_cookie_file_reloads() -> None:
-    """Clearing cookies must prevent new site sessions from reloading the
-    cookie file.
-    """
+    """Clearing cookies stops new site sessions reloading the cookie file."""
 
     class DummySite(BaseChatDownloader):
         _NAME = "dummy"
@@ -346,9 +344,7 @@ def test_config_stores_init_kwargs() -> None:
 
 
 def test_init_params_property_returns_dict() -> None:
-    """init_params was removed in 0.3.0; accessing it must raise
-    AttributeError.
-    """
+    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader(proxy="socks5://127.0.0.1:1080")
     try:
         with pytest.raises(AttributeError):
@@ -358,9 +354,7 @@ def test_init_params_property_returns_dict() -> None:
 
 
 def test_init_params_property_matches_config_as_dict() -> None:
-    """init_params was removed in 0.3.0; accessing it must raise
-    AttributeError.
-    """
+    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader(headers={"X-Custom": "val"}, cookies=None)
     try:
         with pytest.raises(AttributeError):
@@ -370,9 +364,7 @@ def test_init_params_property_matches_config_as_dict() -> None:
 
 
 def test_init_params_property_mutation_does_not_affect_config() -> None:
-    """init_params was removed in 0.3.0; accessing it must raise
-    AttributeError.
-    """
+    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader(proxy="http://p:8080")
     try:
         with pytest.raises(AttributeError):
@@ -382,9 +374,7 @@ def test_init_params_property_mutation_does_not_affect_config() -> None:
 
 
 def test_init_params_emits_deprecation_warning() -> None:
-    """init_params was removed in 0.3.0; accessing it must raise
-    AttributeError.
-    """
+    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader()
     try:
         with pytest.raises(AttributeError):

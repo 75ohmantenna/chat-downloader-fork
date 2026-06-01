@@ -306,9 +306,7 @@ def test_messages_without_id_not_deduplicated() -> None:
 
 
 def test_superchat_dedup_cache_is_bounded() -> None:
-    """Test that dedup cache evicts oldest IDs when configured with small
-    max.
-    """
+    """Dedup cache evicts oldest IDs when configured with a small max."""
     messages = [
         {
             "message_id": "msg1",

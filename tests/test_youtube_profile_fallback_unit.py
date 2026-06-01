@@ -28,9 +28,7 @@ def _import():
 
 
 def test_fallback_disabled_returns_false() -> None:
-    """When _auto_profile_fallback is False the function returns False
-    immediately.
-    """
+    """Returns False immediately when _auto_profile_fallback is False."""
     fn = _import()
     dl = _FakeDownloader(auto_fallback=False)
     assert fn(dl) is False
@@ -38,9 +36,7 @@ def test_fallback_disabled_returns_false() -> None:
 
 
 def test_fallback_applies_next_profile_and_returns_true() -> None:
-    """When a next profile exists and applies successfully the function returns
-    True.
-    """
+    """Returns True when a next profile exists and applies successfully."""
     fn = _import()
     dl = _FakeDownloader(auto_fallback=True, profile="youtube_web")
     with patch(
@@ -53,9 +49,7 @@ def test_fallback_applies_next_profile_and_returns_true() -> None:
 
 
 def test_fallback_returns_false_when_no_next_profile() -> None:
-    """When get_next_request_profile returns None the function returns
-    False.
-    """
+    """When get_next_request_profile returns None the function returns False."""
     fn = _import()
     dl = _FakeDownloader(auto_fallback=True)
     with patch(

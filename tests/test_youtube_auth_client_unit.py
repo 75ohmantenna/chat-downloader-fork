@@ -8,7 +8,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 
 import chat_downloader.sites.youtube.client_auth as _yt_auth
 import chat_downloader.sites.youtube.client_context as _yt_context
-import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation
+import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation  # noqa: E501
 import chat_downloader.sites.youtube.client_requests_initial as _yt_initial
 from chat_downloader.errors import VideoNotFound
 
@@ -281,7 +281,7 @@ def test_get_innertube_context_handles_non_dict_and_missing_client() -> None:
     }
 
 
-def test_get_continuation_info_logs_non_retriable_http_errors_without_json_body() -> (
+def test_get_continuation_info_logs_non_retriable_http_errors_without_json_body() -> (  # noqa: E501
     None
 ):
     response = _Resp(
@@ -330,7 +330,7 @@ def test_get_continuation_info_retries_after_json_decode_error() -> None:
     assert calls["count"] == 2
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_json_parse_failure() -> (
+def test_get_continuation_info_raises_retries_exceeded_on_json_parse_failure() -> (  # noqa: E501
     None
 ):
     """Exhausted retries on JSONDecodeError now surface as RetriesExceeded."""

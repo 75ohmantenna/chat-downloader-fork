@@ -7,10 +7,10 @@ import os
 
 import pytest
 
-pytestmark = pytest.mark.network
-
 from chat_downloader import ChatDownloader
 from chat_downloader.debugging import set_log_level
+
+pytestmark = pytest.mark.network
 
 
 @pytest.mark.network

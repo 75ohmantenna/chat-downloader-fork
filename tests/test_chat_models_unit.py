@@ -241,9 +241,11 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
 
 
 def test_pre_initialised_writer_receives_emit_callback() -> None:
-    """A writer that is already initialised when attached must still receive
-    emitted items — its callback must be installed even though _initialise_writers
-    skips the writer.initialize() call."""
+    """An already-initialised writer must still receive emitted items.
+
+    Its callback must be installed even though _initialise_writers
+    skips the writer.initialize() call.
+    """
     received: list[Any] = []
 
     class PreInitWriter:

@@ -64,9 +64,7 @@ def test_twitch_persisted_query_not_found_fixture_shape() -> None:
 
 
 def test_continuation_retries_on_rate_limit_fixture() -> None:
-    """_get_continuation_info retries when it receives the rate_limit_429
-    fixture.
-    """
+    """_get_continuation_info retries on the rate_limit_429 fixture."""
     fixture = _load(_YT_ERRORS, "rate_limit_429")
     calls = {"count": 0}
 
@@ -102,9 +100,7 @@ def test_continuation_retries_on_rate_limit_fixture() -> None:
 
 
 def test_continuation_raises_retries_exceeded_on_rate_limit_fixture() -> None:
-    """RetriesExceeded is raised after all attempts with the rate_limit_429
-    fixture.
-    """
+    """RetriesExceeded is raised after all attempts on rate_limit_429."""
     fixture = _load(_YT_ERRORS, "rate_limit_429")
 
     class _Resp:
@@ -167,9 +163,7 @@ def test_continuation_retries_on_forbidden_fixture() -> None:
 
 
 def test_handle_gql_errors_service_error_does_not_raise(caplog) -> None:
-    """_handle_gql_errors with 'service error' logs a warning and does not
-    raise.
-    """
+    """_handle_gql_errors warns and does not raise on 'service error'."""
     import logging
 
     fixture = _load(_TW_ERRORS, "graphql_service_error")
@@ -262,9 +256,7 @@ def test_recv_loop_raises_connection_error_on_empty_recv() -> None:
 
 
 def test_recv_loop_multiple_timeouts_before_connection_error() -> None:
-    """Multiple socket.timeout events before a ConnectionError are all
-    handled.
-    """
+    """Multiple socket.timeout events before a ConnectionError are handled."""
     irc = _MockIRC(
         [
             TimeoutError("t1"),

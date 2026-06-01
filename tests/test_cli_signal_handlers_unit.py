@@ -2,6 +2,7 @@
 
 """Tests for CLI signal-handler installation."""
 
+import contextlib
 import os
 import signal
 import threading
@@ -21,10 +22,8 @@ def restore_signal_handlers():
     }
     yield
     for sig, handler in saved.items():
-        try:
+        with contextlib.suppress(ValueError, OSError):
             signal.signal(sig, handler)
-        except (ValueError, OSError):
-            pass
 
 
 def test_sigterm_handler_raises_keyboard_interrupt(

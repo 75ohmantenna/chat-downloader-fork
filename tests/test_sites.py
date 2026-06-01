@@ -5,11 +5,10 @@ import itertools
 # Network-dependent integration tests (YouTube API).
 import pytest
 
-pytestmark = pytest.mark.network
-
-
 from chat_downloader import ChatDownloader
 from chat_downloader.sites import YouTubeChatDownloader
+
+pytestmark = pytest.mark.network
 
 
 def test_youtube() -> None:

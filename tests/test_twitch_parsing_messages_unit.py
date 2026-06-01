@@ -39,7 +39,7 @@ def test_parse_irc_item_parses_announcement_usernotice() -> None:
         "subscriber=0;tmi-sent-ts=1771953482608;turbo=0;user-id=100135110;"
         "user-type=mod;msg-id=announcement;msg-param-color=PRIMARY;"
         "system-msg= :tmi.twitch.tv USERNOTICE #thebausffs "
-        ":DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR\r\n"
+        ":DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR\r\n"  # noqa: E501
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -63,7 +63,7 @@ def test_parse_irc_item_parses_shared_chat_privmsg_tags() -> None:
         "source-id=shared-message-1;source-room-id=456;source-badges=moderator/1;"
         "source-badge-info=subscriber/12;source-only=1;subscriber=0;"
         "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
+        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"  # noqa: E501
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -88,7 +88,7 @@ def test_parse_irc_item_applies_shared_chat_subscriber_badge_metadata() -> None:
         "source-id=shared-message-1;source-room-id=456;source-badges=subscriber/1;"
         "source-badge-info=subscriber/12;source-only=1;subscriber=0;"
         "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
+        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"  # noqa: E501
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -184,7 +184,7 @@ def test_parse_irc_item_sets_shared_chat_fields_for_same_channel_source() -> (
         "flags=;id=22fe4db9-1f83-4d8e-b4b9-d9f840d5f001;mod=0;room-id=123;"
         "source-id=shared-message-1;source-room-id=123;subscriber=0;"
         "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
+        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"  # noqa: E501
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -435,7 +435,7 @@ def test_parse_irc_item_parses_emotes_subscriber_months_and_reply_author() -> (
         "display-name=TestUser;emotes=25:0-4;flags=;id=abc123;mod=0;room-id=999;"
         "reply-parent-user-id=321;reply-parent-msg-id=parent-msg;"
         "reply-parent-display-name=OtherUser;reply-parent-user-login=otheruser;"
-        "subscriber=1;tmi-sent-ts=1700000000000;turbo=0;user-id=12345;user-type= "
+        "subscriber=1;tmi-sent-ts=1700000000000;turbo=0;user-id=12345;user-type= "  # noqa: E501
         ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG #channel :Kappa"
         "\r\n"
     )
@@ -552,12 +552,12 @@ def test_parse_irc_item_handles_unknown_action_roomstate_and_clearchat(
     )
 
     unknown_raw = (
-        "@badge-info=;badges=;display-name=TestUser;room-id=999;tmi-sent-ts=1;user-id=12345 "
+        "@badge-info=;badges=;display-name=TestUser;room-id=999;tmi-sent-ts=1;user-id=12345 "  # noqa: E501
         ":tmi.twitch.tv MYSTERY #channel :hello\r\n"
     )
     roomstate_raw = (
         "@badge-info=;badges=;display-name=TestUser;followers-only=10;room-id=999;"
-        "slow=5;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"
+        "slow=5;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"  # noqa: E501
     )
     clear_timeout_raw = (
         "@ban-duration=600;room-id=999;target-user-id=200;tmi-sent-ts=1 "
@@ -608,7 +608,7 @@ def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> (
 ):
     raw = (
         "@vip;badge-info=;badges=;display-name=TestUser;followers-only=-1;room-id=999;"
-        "slow=0;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"
+        "slow=0;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"  # noqa: E501
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -622,7 +622,7 @@ def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> (
     assert parsed["slow_mode"] is False
 
 
-def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -> (
+def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -> (  # noqa: E501
     None
 ):
     """A malformed emote id in a VOD fragment must not crash the parse."""
@@ -647,12 +647,10 @@ def test_decode_pseudo_bnf_converts_backslash_escape() -> None:
     assert tw_messages._decode_pseudo_BNF(r"a\\b") == r"a\b"
 
 
-def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() -> (
+def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() -> (  # noqa: E501
     None
 ):
-    """Any negative follower_only value other than -1 must not set
-    follower_only=True.
-    """
+    """A negative follower_only other than -1 must not set it True."""
     raw = (
         "@badge-info=;badges=;display-name=TestUser;followers-only=-2;room-id=999;"
         "tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"
@@ -669,12 +667,10 @@ def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() 
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_irc_badges_sets_author_badges_and_applies_subscriber_months() -> (
+def test_resolve_irc_badges_sets_author_badges_and_applies_subscriber_months() -> (  # noqa: E501
     None
 ):
-    """_resolve_irc_badges must parse main badges and apply badge-info
-    metadata.
-    """
+    """_resolve_irc_badges parses main badges and applies badge-info."""
     from chat_downloader.sites.twitch.parsing.messages import (
         _resolve_irc_badges,
     )
@@ -696,9 +692,7 @@ def test_resolve_irc_badges_sets_author_badges_and_applies_subscriber_months() -
 
 
 def test_resolve_irc_badges_shared_chat_badge_enrichment() -> None:
-    """Shared-chat source badges must be parsed and subscriber months
-    applied.
-    """
+    """Shared-chat source badges are parsed and subscriber months applied."""
     from chat_downloader.sites.twitch.parsing.messages import (
         _resolve_irc_badges,
     )
@@ -721,12 +715,10 @@ def test_resolve_irc_badges_shared_chat_badge_enrichment() -> None:
     assert "shared_chat_source_badge_info" not in info
 
 
-def test_resolve_irc_badges_absent_shared_chat_source_badges_leaves_key_absent() -> (
+def test_resolve_irc_badges_absent_shared_chat_source_badges_leaves_key_absent() -> (  # noqa: E501
     None
 ):
-    """When shared_chat_source_badges is empty, the key must not appear in
-    info.
-    """
+    """When shared_chat_source_badges is empty, the key is absent."""
     from chat_downloader.sites.twitch.parsing.messages import (
         _resolve_irc_badges,
     )
@@ -782,9 +774,7 @@ def test_resolve_irc_action_unknown_action_falls_back_to_raw_and_logs(
 
 
 def test_resolve_irc_action_clearchat_with_message_is_ban_timeout() -> None:
-    """CLEARCHAT with a message match must produce a ban_user/timeout
-    outcome.
-    """
+    """CLEARCHAT with a message match yields a ban_user/timeout outcome."""
     from chat_downloader.sites.twitch.parsing.messages import (
         _resolve_irc_action_and_message_type,
     )
@@ -799,9 +789,7 @@ def test_resolve_irc_action_clearchat_with_message_is_ban_timeout() -> None:
 
 
 def test_resolve_irc_action_clearchat_without_message_is_clear_chat() -> None:
-    """CLEARCHAT without a message match must map to clear_chat message
-    type.
-    """
+    """CLEARCHAT without a message match must map to clear_chat message type."""
     from chat_downloader.sites.twitch.parsing.messages import (
         _resolve_irc_action_and_message_type,
     )
@@ -813,9 +801,7 @@ def test_resolve_irc_action_clearchat_without_message_is_clear_chat() -> None:
 
 
 def test_resolve_irc_action_follower_only_and_slow_mode_normalization() -> None:
-    """follower_only and slow_mode must be normalized to bool + extra
-    fields.
-    """
+    """follower_only and slow_mode must be normalized to bool + extra fields."""
     from chat_downloader.sites.twitch.parsing.messages import (
         _resolve_irc_action_and_message_type,
     )

@@ -246,9 +246,7 @@ def test_format_with_list_format_object(formatter: ItemFormatter) -> None:
 
 
 def test_format_twitch_subscription_type(formatter: ItemFormatter) -> None:
-    """Test _match_format_from_list matches subscription type (lines
-    158-162).
-    """
+    """_match_format_from_list matches a subscription type."""
     item = {
         "message_type": "subscription",
         "system_message": "Test subscribed!",
@@ -260,9 +258,7 @@ def test_format_twitch_subscription_type(formatter: ItemFormatter) -> None:
 
 
 def test_format_twitch_fallback_to_all(formatter: ItemFormatter) -> None:
-    """Test _match_format_from_list falls through to 'all' matcher (lines
-    158-164).
-    """
+    """_match_format_from_list falls through to the 'all' matcher."""
     item = {
         "message_type": "unknown_type",
         "message": "test",
@@ -334,9 +330,7 @@ def test_no_valid_format_raises(formatter: ItemFormatter) -> None:
 
 
 def test_get_default_format_fallback() -> None:
-    """Test _get_default_format returns None when no default in format_file
-    (lines 140, 149).
-    """
+    """_get_default_format returns None when the format file has no default."""
     fmt = ItemFormatter()
     # Remove the 'default' key from format_file to simulate the fallback path
     original_default = fmt.format_file.pop("default", None)
@@ -353,9 +347,7 @@ def test_get_default_format_fallback() -> None:
 
 
 def test_extract_template_not_str_or_dict(formatter: ItemFormatter) -> None:
-    """Test _extract_template when field_config is neither str nor dict
-    (line 264).
-    """
+    """_extract_template handles field_config that is neither str nor dict."""
     result = formatter._extract_template(None)
     assert result == ""
 
@@ -420,9 +412,7 @@ def test_apply_separator_author_badges(formatter: ItemFormatter) -> None:
 
 
 def test_apply_separator_no_separator(formatter: ItemFormatter) -> None:
-    """Test _apply_separator returns value unchanged when no separator
-    (lines 321-322).
-    """
+    """_apply_separator returns the value unchanged when no separator is set."""
     field_config = {}
     result = formatter._apply_separator("some.field", [1, 2, 3], field_config)
     assert result == [1, 2, 3]
@@ -443,9 +433,7 @@ def test_replace_placeholder_fallback_keys() -> None:
 
 
 def test_replace_placeholder_all_missing() -> None:
-    """Test _replace_placeholder returns empty string when all fallbacks
-    missing (line 232).
-    """
+    """_replace_placeholder returns '' when all fallbacks are missing."""
     fmt = ItemFormatter()
     item = {}
 
@@ -485,9 +473,7 @@ def test_match_format_from_list_no_match_uses_default(
 
 
 def test_apply_format_by_type_unknown_field(formatter: ItemFormatter) -> None:
-    """Test _apply_format_by_type for non-timestamp/time_text field (line
-    309).
-    """
+    """_apply_format_by_type for a non-timestamp/time_text field."""
     # A custom field with a format string but not timestamp or time_text
     field_config = {"format": "%s", "template": "{}"}
     result = formatter._apply_format_by_type(

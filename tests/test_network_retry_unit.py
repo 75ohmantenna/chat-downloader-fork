@@ -207,14 +207,16 @@ def test_retry_log_includes_attempt_over_max_attempts(caplog) -> None:
     """Retry() warning message must contain 'attempt/max_attempts' format."""
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="chat_downloader"):
-        with contextlib.suppress(Exception):
-            BaseChatDownloader.retry(
-                attempt_number=2,
-                max_attempts=5,
-                retry_timeout=0,
-                interruptible_retry=False,
-            )
+    with (
+        caplog.at_level(logging.WARNING, logger="chat_downloader"),
+        contextlib.suppress(Exception),
+    ):
+        BaseChatDownloader.retry(
+            attempt_number=2,
+            max_attempts=5,
+            retry_timeout=0,
+            interruptible_retry=False,
+        )
 
     messages = " ".join(r.message for r in caplog.records)
     assert "2/5" in messages, f"Expected '2/5' in retry log; got: {messages!r}"
@@ -224,15 +226,17 @@ def test_retry_log_includes_exception_type(caplog) -> None:
     """Retry() must include the exception class name in its log message."""
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="chat_downloader"):
-        with contextlib.suppress(Exception):
-            BaseChatDownloader.retry(
-                attempt_number=1,
-                max_attempts=3,
-                error=ConnectionError("no route"),
-                retry_timeout=0,
-                interruptible_retry=False,
-            )
+    with (
+        caplog.at_level(logging.WARNING, logger="chat_downloader"),
+        contextlib.suppress(Exception),
+    ):
+        BaseChatDownloader.retry(
+            attempt_number=1,
+            max_attempts=3,
+            error=ConnectionError("no route"),
+            retry_timeout=0,
+            interruptible_retry=False,
+        )
 
     messages = " ".join(r.message for r in caplog.records)
     assert "ConnectionError" in messages
@@ -350,5 +354,6 @@ def test_twitch_irc_set_timeout_delegates_to_socket() -> None:
     irc.set_timeout(0.5)
 
     assert 0.5 in settimeout_calls, (
-        f"Expected set_timeout(0.5) to call socket.settimeout(0.5); calls={settimeout_calls}"
+        f"Expected set_timeout(0.5) to call socket.settimeout(0.5); "
+        f"calls={settimeout_calls}"
     )

@@ -17,9 +17,11 @@ from chat_downloader.output.continuous_write import (
 
 
 def _read_lines_during_write(writer_path: Path) -> int:
-    """Open the file independently and count how many complete lines are
-    visible to a second reader after a write. Verifies bytes are in the OS,
-    not just Python buffers."""
+    """Count complete lines visible to a second independent reader.
+
+    Opens the file independently after a write to verify bytes reached
+    the OS, not just Python buffers.
+    """
     with open(writer_path, encoding="utf-8") as f:
         return sum(1 for _ in f)
 
@@ -48,8 +50,7 @@ def test_txt_flushes_each_record(tmp_path: Path) -> None:
 
 
 def test_fsync_runs_at_most_once_per_interval(tmp_path: Path) -> None:
-    """fsync() is called on first write, then suppressed until the interval
-    elapses."""
+    """fsync() runs on first write, then is suppressed until the interval."""
     path = tmp_path / "out.jsonl"
     writer = JsonLinesContinuousWriter(str(path))
     try:

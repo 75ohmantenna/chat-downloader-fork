@@ -59,14 +59,14 @@ def test_log_with_list_of_items() -> None:
 
 
 def test_log_to_exit_raises_testing_exception_in_exit_on_debug_mode() -> None:
-    """Line 50: TestingException raised when to_exit=True and mode=EXIT_ON_DEBUG."""
+    """TestingException is raised when to_exit=True and mode=EXIT_ON_DEBUG."""
     dbg.set_testing_mode(dbg.TestingModes.EXIT_ON_DEBUG)
     with pytest.raises(dbg.TestingException):
         dbg.log("debug", "trigger exit", to_exit=True)
 
 
 def test_log_to_exit_raises_in_exit_on_error_mode() -> None:
-    """Line 50: TestingException raised when to_exit=True and mode=EXIT_ON_ERROR."""
+    """TestingException is raised when to_exit=True and mode=EXIT_ON_ERROR."""
     dbg.set_testing_mode(dbg.TestingModes.EXIT_ON_ERROR)
     with pytest.raises(dbg.TestingException):
         dbg.log("debug", "trigger exit", to_exit=True)
@@ -241,8 +241,7 @@ def test_capture_debug_sample_logs_fixture_hint() -> None:
 
 
 def test_capture_debug_sample_scrubs_inline_tokens_in_values() -> None:
-    """Tokens embedded inside string values must be redacted even when the
-    parent key isn't in _SENSITIVE_LOG_KEYS (defense-in-depth)."""
+    """Tokens inside string values are redacted even without a sensitive key."""
     synthetic_jwt = (
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
         ".eyJzdWIiOiIxMjM0NTY3ODkwIn0"
@@ -372,7 +371,7 @@ def test_returns_true_on_windows_with_ansicon() -> None:
 
 
 def test_returns_true_on_windows_terminal() -> None:
-    """supports_colour() returns True with WT_SESSION env var (Windows Terminal)."""
+    """supports_colour() returns True when WT_SESSION is set."""
     mock_stdout = type("MockStdout", (), {"isatty": lambda self: True})()
     env = {"WT_SESSION": "some-guid"}
     with (

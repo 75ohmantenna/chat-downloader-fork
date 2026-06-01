@@ -6,6 +6,7 @@ Tests the IRC buffer deduplication (#6) and typename validation (#8)
 improvements added in v0.2.33+mod and v0.2.34+mod.
 """
 
+import contextlib
 from unittest.mock import Mock, patch
 
 import pytest
@@ -24,7 +25,7 @@ class TestIRCBufferDeduplication:
     """
 
     def test_client_generator_function_exists(self) -> None:
-        """Test that get_chat_messages_by_stream_id is importable from irc_transport."""
+        """get_chat_messages_by_stream_id is importable from irc_transport."""
         from chat_downloader.sites.twitch.irc_transport import (
             get_chat_messages_by_stream_id,
         )
@@ -40,9 +41,7 @@ class TestIRCBufferDeduplication:
         assert hasattr(extractor, "get_chat_messages_by_stream_id")
 
     def test_extractor_method_exists(self) -> None:
-        """Test that extractor has the _get_chat_messages_by_stream_id
-        method.
-        """
+        """Extractor has the _get_chat_messages_by_stream_id method."""
         downloader = TwitchChatDownloader()
         assert hasattr(downloader, "_get_chat_messages_by_stream_id")
         assert callable(downloader._get_chat_messages_by_stream_id)
@@ -54,9 +53,7 @@ class TestIRCBufferDeduplication:
     def test_extractor_delegates_to_client(
         self, mock_irc_class, mock_client_generator
     ) -> None:
-        """Test that extractor calls client's
-        get_chat_messages_by_stream_id.
-        """
+        """Test that extractor calls client's get_chat_messages_by_stream_id."""
         # Setup mock IRC connection
         mock_irc_instance = Mock()
         mock_irc_instance.join_channel = Mock()
@@ -79,10 +76,8 @@ class TestIRCBufferDeduplication:
 
         # Try to get first item (will raise StopIteration since mock returns
         # empty)
-        try:
+        with contextlib.suppress(StopIteration):
             next(gen)
-        except StopIteration:
-            pass  # Expected
 
         # Verify client generator was called with IRC instance
         mock_client_generator.assert_called()
@@ -288,9 +283,7 @@ class TestTypenameValidation:
 
     @patch("chat_downloader.sites.twitch.extractor.get_chat_messages_by_vod_id")
     def test_channel_not_found_detection(self, mock_get_vod_messages) -> None:
-        """Test that empty creator.id raises UserNotFound error (improvement
-        #5).
-        """
+        """Empty creator.id raises UserNotFound."""
         # Mock VOD response with empty creator ID (channel deleted/not found)
         comments = {"edges": [], "pageInfo": {"hasNextPage": False}}
 

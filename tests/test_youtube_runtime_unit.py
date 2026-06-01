@@ -140,9 +140,7 @@ def test_handle_continuation_response_composes_state_log_and_error_checks(
 def test_log_request_context_includes_click_tracking_and_logged_in_info(
     monkeypatch,
 ) -> None:
-    """Logging includes continuation click tracking, continuation token, and
-    logged-in metadata.
-    """
+    """Logging includes click tracking, continuation token, and login info."""
     logs: list[tuple[str, object]] = []
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_runtime_iteration.log",
@@ -343,7 +341,7 @@ def test_chat_iteration_rejects_missing_initial_continuation() -> None:
         )
 
 
-def test_build_continuation_params_includes_live_player_offset_when_available() -> (
+def test_build_continuation_params_includes_live_player_offset_when_available() -> (  # noqa: E501
     None
 ):
     params = build_continuation_params(
@@ -776,7 +774,7 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     ]
 
 
-def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailable(
+def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailable(  # noqa: E501
     monkeypatch,
 ) -> None:
     downloader = _DummyDownloader()
@@ -873,7 +871,7 @@ def test_chat_iteration_raises_when_live_chat_continuation_is_missing(
         )
 
 
-def test_chat_iteration_returns_immediately_when_action_processing_requests_stop(
+def test_chat_iteration_returns_immediately_when_action_processing_requests_stop(  # noqa: E501
     monkeypatch,
 ) -> None:
     downloader = _DummyDownloader()

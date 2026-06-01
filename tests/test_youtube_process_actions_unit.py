@@ -52,12 +52,10 @@ def test_process_actions_yields_accepted_messages() -> None:
     assert result == [{"text": "hello"}, {"text": "world"}]
 
 
-def test_process_actions_stop_disposition_signals_stop_and_yields_nothing_after() -> (
+def test_process_actions_stop_disposition_signals_stop_and_yields_nothing_after() -> (  # noqa: E501
     None
 ):
-    """When 'stop' is encountered, _process_actions stops immediately and
-    returns True.
-    """
+    """A 'stop' action makes _process_actions stop and return True."""
     from chat_downloader.sites.filters import MessageFilter
 
     msg_filter = MessageFilter({})

@@ -87,9 +87,7 @@ def test_build_chat_context_returns_correct_continuation_url(
 
 
 def test_build_chat_context_replay_status_sets_is_replay(monkeypatch) -> None:
-    """_build_chat_context sets is_replay=True and uses live_chat_replay
-    endpoint.
-    """
+    """_build_chat_context sets is_replay=True and uses the replay endpoint."""
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
         lambda *_a, **_k: {},
@@ -193,9 +191,7 @@ def test_build_chat_context_applies_request_profile_to_innertube_context(
 def test_build_chat_context_raises_no_continuation_for_missing_index(
     monkeypatch,
 ) -> None:
-    """_build_chat_context raises NoContinuation when chat_type index is
-    absent.
-    """
+    """_build_chat_context raises NoContinuation when chat_type is absent."""
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
         lambda *_a, **_k: {},
@@ -225,9 +221,7 @@ def test_build_chat_context_raises_no_continuation_for_missing_index(
 def test_build_chat_context_raises_invalid_parameter_for_bad_group(
     monkeypatch,
 ) -> None:
-    """_build_chat_context raises InvalidParameter when an unknown group is
-    requested.
-    """
+    """_build_chat_context raises InvalidParameter for an unknown group."""
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
         lambda *_a, **_k: {},
@@ -257,9 +251,7 @@ def test_build_chat_context_raises_invalid_parameter_for_bad_group(
 def test_build_chat_context_message_types_override_default_groups(
     monkeypatch,
 ) -> None:
-    """Explicit message types should not include resolved site-default
-    groups.
-    """
+    """Explicit message types exclude resolved site-default groups."""
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
         lambda *_a, **_k: {},

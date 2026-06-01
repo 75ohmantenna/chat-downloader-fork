@@ -12,7 +12,7 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch import live_service
 
 
-def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (
+def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (  # noqa: E501
     None
 ):
     first_irc = Mock()
@@ -73,7 +73,7 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
     mock_debug_log.assert_called_once()
 
 
-def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> (
+def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> (  # noqa: E501
     None
 ):
     irc = Mock()
@@ -112,7 +112,7 @@ def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -
     mock_log.assert_any_call("debug", "Total number of messages: 250")
 
 
-def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message() -> (
+def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message() -> (  # noqa: E501
     None
 ):
     first_irc = Mock()
@@ -154,7 +154,7 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
     )
 
 
-def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> (
+def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> (  # noqa: E501
     None
 ):
     irc = Mock()
@@ -257,7 +257,7 @@ def test_live_service_get_chat_by_stream_id_rejects_zero_attempts() -> None:
         ChatRequest(url="https://www.twitch.tv/missing-channel", max_attempts=0)
 
 
-def test_live_service_get_chat_by_stream_id_retries_then_raises_user_not_found() -> (
+def test_live_service_get_chat_by_stream_id_retries_then_raises_user_not_found() -> (  # noqa: E501
     None
 ):
     downloader = SimpleNamespace(
@@ -320,12 +320,10 @@ def test_live_service_get_chat_by_stream_id_marks_offline_stream_upcoming(
     assert any("not currently live" in r.message for r in caplog.records)
 
 
-def test_live_service_get_chat_by_stream_id_retries_on_key_error_from_gql_schema_change() -> (
+def test_live_service_get_chat_by_stream_id_retries_on_key_error_from_gql_schema_change() -> (  # noqa: E501
     None
 ):
-    """KeyError from unexpected GQL schema must be retried, not surface as
-    traceback.
-    """
+    """KeyError from unexpected GQL schema is retried, not surfaced."""
     downloader = SimpleNamespace(
         _download_gql=Mock(
             side_effect=[
@@ -358,9 +356,7 @@ def test_live_service_get_chat_by_stream_id_retries_on_key_error_from_gql_schema
 
 
 def test_live_service_reconnect_refreshes_badge_set() -> None:
-    """Reconnect must call _update_badge_info and take a fresh badge
-    snapshot.
-    """
+    """Reconnect must call _update_badge_info and take a fresh snapshot."""
     first_irc = Mock()
     second_irc = Mock()
 
@@ -450,7 +446,7 @@ def test_is_duplicate_live_message_evicts_oldest_seen_message() -> None:
     assert "newest" in seen_message_cache.message_ids
 
 
-def test_live_service_iter_stream_chat_messages_raises_runtime_error_if_retry_returns() -> (
+def test_live_service_iter_stream_chat_messages_raises_runtime_error_if_retry_returns() -> (  # noqa: E501
     None
 ):
     downloader = SimpleNamespace(

@@ -30,7 +30,7 @@ def test_replay_service_get_chat_by_vod_id_raises_when_video_missing() -> None:
     downloader._update_badge_info.assert_not_called()
 
 
-def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page() -> (
+def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page() -> (  # noqa: E501
     None
 ):
     downloader = SimpleNamespace(
@@ -74,7 +74,7 @@ def test_replay_service_iter_vod_chat_messages_rejects_zero_attempts() -> None:
         )
 
 
-def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_stop() -> (
+def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_stop() -> (  # noqa: E501
     None
 ):
     downloader = SimpleNamespace(
@@ -169,7 +169,7 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
     mock_debug_log.assert_called_once()
 
 
-def test_replay_service_iter_vod_chat_messages_logs_count_on_completed_page() -> (
+def test_replay_service_iter_vod_chat_messages_logs_count_on_completed_page() -> (  # noqa: E501
     None
 ):
     downloader = SimpleNamespace(
@@ -336,8 +336,7 @@ def test_replay_service_get_chat_by_clip_id_rejects_zero_attempts() -> None:
 
 
 def test_iter_vod_stops_on_repeated_empty_pages_with_has_next_page() -> None:
-    """Pagination must terminate when Twitch keeps returning empty edges
-    with hasNextPage=true (no-progress guard)."""
+    """Pagination stops on empty edges even when hasNextPage=true."""
     downloader = SimpleNamespace(
         _session_post=Mock(),
         _download_gql=Mock(),

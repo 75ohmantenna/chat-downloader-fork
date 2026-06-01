@@ -50,7 +50,7 @@ def test_validate_pipeline_message_returns_finalized_message(
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.validate_and_finalize_message",
-        lambda data, original_item, original_message_type, original_action_type: {
+        lambda data, original_item, original_message_type, original_action_type: {  # noqa: E501
             "data": data,
             "item": original_item,
             "message_type": original_message_type,

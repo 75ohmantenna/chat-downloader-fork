@@ -78,9 +78,7 @@ def test_irc_remapping_decodes_selected_boolean_numeric_and_text_fields() -> (
 def test_irc_remapping_captures_badges_and_message_colors_and_notice_type() -> (
     None
 ):
-    """Notice messages should preserve raw badge/color fields while decoding
-    text fields.
-    """
+    """Notice messages keep raw badge/color fields while decoding text."""
     info = Remapper.remap_dict(
         {
             "msg-id": "sharedchatnotice",

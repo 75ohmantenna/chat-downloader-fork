@@ -55,7 +55,7 @@ def test_get_chat_messages_by_vod_id_uses_zero_offset_without_cursor() -> None:
     assert info == {"comments": {"edges": [1]}}
 
 
-def test_get_chat_messages_by_vod_id_returns_none_for_malformed_or_empty_payloads() -> (
+def test_get_chat_messages_by_vod_id_returns_none_for_malformed_or_empty_payloads() -> (  # noqa: E501
     None
 ):
     bad_payloads = [

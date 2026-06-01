@@ -2,6 +2,7 @@
 
 """Unit tests for pure IRC buffer-processing helpers in irc_transport.py."""
 
+import contextlib
 import re
 import time
 from unittest.mock import Mock
@@ -21,7 +22,7 @@ from chat_downloader.sites.twitch.irc_transport import (
 _LINE_PATTERN: re.Pattern[str] = re.compile(r"[^\r\n]+\r\n", re.MULTILINE)
 
 # Minimal Twitch PRIVMSG line that matches MESSAGE_REGEX.
-_TAG = "@badge-info=;badges=;color=;display-name=User;emotes=;id=1;mod=0;room-id=1;subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;user-type="
+_TAG = "@badge-info=;badges=;color=;display-name=User;emotes=;id=1;mod=0;room-id=1;subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;user-type="  # noqa: E501
 _PRIVMSG_TEMPLATE = (
     "{tag} :user!user@user.tmi.twitch.tv PRIVMSG #example :{text}"
 )
@@ -68,9 +69,7 @@ def test_process_irc_buffer_complete_buffer_single_line() -> None:
 
 
 def test_process_irc_buffer_partial_last_line_drops_incomplete_match() -> None:
-    """When the buffer ends mid-line the last match is dropped and its start is
-    preserved.
-    """
+    """A mid-line buffer end drops the last match but keeps its start."""
     from chat_downloader.sites.twitch.constants import MESSAGE_REGEX
 
     complete_line = _privmsg("first") + "\r\n"
@@ -91,9 +90,7 @@ def test_process_irc_buffer_partial_last_line_drops_incomplete_match() -> None:
 
 
 def test_process_irc_buffer_single_partial_line_yields_no_matches() -> None:
-    """A buffer that holds only a partial first match returns no matches and
-    the full buffer.
-    """
+    """A partial-only first match returns no matches and the full buffer."""
     from chat_downloader.sites.twitch.constants import MESSAGE_REGEX
 
     buf = _privmsg("only_partial")  # no \r\n — the line is still arriving
@@ -118,9 +115,7 @@ def test_process_irc_buffer_empty_buffer_returns_empty() -> None:
 
 
 def test_process_irc_buffer_no_matching_lines_complete_buffer() -> None:
-    """A complete buffer with no regex matches returns empty matches and empty
-    remainder.
-    """
+    """A complete buffer with no matches returns empty matches and remainder."""
     from chat_downloader.sites.twitch.constants import MESSAGE_REGEX
 
     # Housekeeping IRC traffic that MESSAGE_REGEX does not match.
@@ -148,9 +143,7 @@ def test_process_irc_buffer_no_matching_lines_incomplete_buffer() -> None:
 
 
 def test_process_irc_buffer_simple_pattern_complete() -> None:
-    r"""Verify remainder and match count using a simple \r\n-terminated
-    pattern.
-    """
+    """Verify remainder and match count with a simple CRLF pattern."""
     buf = "line1\r\nline2\r\n"
     remaining, matches = _process_irc_buffer(buf, _LINE_PATTERN)
 
@@ -159,9 +152,7 @@ def test_process_irc_buffer_simple_pattern_complete() -> None:
 
 
 def test_process_irc_buffer_simple_pattern_partial_last() -> None:
-    """The partial second line must be dropped from matches and kept as
-    remainder.
-    """
+    """The partial second line is dropped from matches and kept as remainder."""
     buf = "line1\r\npartial"
     remaining, matches = _process_irc_buffer(buf, _LINE_PATTERN)
 
@@ -207,9 +198,7 @@ def test_should_send_keepalive_boundary_just_over() -> None:
 def test_create_irc_socket_wraps_raw_socket_and_uses_tls_defaults(
     monkeypatch,
 ) -> None:
-    """Verify ``_create_irc_socket`` wraps the raw connection with SSL
-    context.
-    """
+    """Verify ``_create_irc_socket`` wraps the raw socket with SSL."""
     raw_socket = Mock()
     wrapped_socket = Mock()
 
@@ -251,9 +240,7 @@ def test_create_irc_socket_closes_raw_socket_if_ssl_wrap_fails(
         lambda: mock_ctx,
     )
 
-    try:
+    with contextlib.suppress(RuntimeError):
         _create_irc_socket()
-    except RuntimeError:
-        pass
 
     raw_socket.close.assert_called_once_with()

@@ -112,7 +112,7 @@ def test_discovery_get_user_clips_stops_for_zero_limit_and_empty_payload() -> (
     assert calls == ["called"]
 
 
-def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes() -> (
+def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes() -> (  # noqa: E501
     None
 ):
     calls: list[list[dict[str, Any]]] = []
@@ -137,7 +137,7 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
                                             "lengthSeconds": 70,
                                             "owner": {"login": "streamer"},
                                             "previewThumbnailURL": "thumb-7",
-                                            "publishedAt": "2024-01-07T00:00:00Z",
+                                            "publishedAt": "2024-01-07T00:00:00Z",  # noqa: E501
                                             "title": "Video 7",
                                             "viewCount": 700,
                                             "resourceRestriction": None,
@@ -196,7 +196,7 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
     assert result[1]["resource_restriction"] == "restricted"
 
 
-def test_discovery_get_user_videos_stops_for_zero_limit_empty_payload_and_missing_videos() -> (
+def test_discovery_get_user_videos_stops_for_zero_limit_empty_payload_and_missing_videos() -> (  # noqa: E501
     None
 ):
     calls = []
@@ -269,7 +269,7 @@ def test_discovery_get_top_livestreams_logs_warning_when_streams_missing(
     )
 
 
-def test_discovery_get_top_livestreams_stops_for_zero_limit_and_empty_edges() -> (
+def test_discovery_get_top_livestreams_stops_for_zero_limit_and_empty_edges() -> (  # noqa: E501
     None
 ):
     calls = []

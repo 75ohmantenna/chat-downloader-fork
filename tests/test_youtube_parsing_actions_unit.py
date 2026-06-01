@@ -40,9 +40,7 @@ def setup_module() -> None:
 
 
 def test_build_video_remapping_returns_mapping_with_expected_keys() -> None:
-    """Lines 531-533 in constants.py: build_video_remapping() lazy-imports and
-    returns mapping.
-    """
+    """build_video_remapping() lazy-imports and returns the mapping."""
     mapping = build_video_remapping()
     assert isinstance(mapping, Mapping)
     assert "videoId" in mapping
@@ -59,7 +57,7 @@ def test_process_action_replay_chat_item_action_rebases_time_and_action() -> (
                 {
                     "addChatItemAction": {
                         "item": {
-                            "liveChatTextMessageRenderer": _renderer_with_timestamp(),
+                            "liveChatTextMessageRenderer": _renderer_with_timestamp(),  # noqa: E501
                         },
                     },
                 },
@@ -343,7 +341,7 @@ def test_process_action_empty_dict_returns_none() -> None:
 
 
 def test_process_action_only_tracking_params_returns_none() -> None:
-    """Line 66: after popping clickTrackingParams, action is empty → return None."""
+    """After popping clickTrackingParams, an empty action returns None."""
     assert process_action({"clickTrackingParams": "abc"}) is None
 
 
@@ -591,7 +589,7 @@ def test_process_action_paid_sticker_with_pdg_logging_directives(
 
 
 def test_validate_and_finalize_message_empty_data_logs_and_continues() -> None:
-    """Lines 198-201: debug_log fires when data dict is empty, but result still returned."""
+    """debug_log fires on an empty data dict, but result is returned."""
     result = validate_and_finalize_message(
         {},
         {"liveChatTextMessageRenderer": {}},
@@ -638,7 +636,7 @@ def test_validate_and_finalize_message_unknown_keys_logs_and_continues() -> (
     assert result.get("message_type") == "text_message"
 
 
-def test_validate_and_finalize_message_known_ignore_message_type_returns_none() -> (
+def test_validate_and_finalize_message_known_ignore_message_type_returns_none() -> (  # noqa: E501
     None
 ):
     """Line 218: messages in _KNOWN_IGNORE_MESSAGE_TYPES are dropped."""
@@ -651,7 +649,7 @@ def test_validate_and_finalize_message_known_ignore_message_type_returns_none() 
     assert result is None
 
 
-def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> (
+def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> (  # noqa: E501
     None
 ):
     action = {
@@ -707,7 +705,7 @@ def test_validate_and_finalize_message_missing_keys_captures_debug_sample(
     )
 
 
-def test_validate_and_finalize_message_unknown_message_type_captures_debug_sample(
+def test_validate_and_finalize_message_unknown_message_type_captures_debug_sample(  # noqa: E501
     monkeypatch,
 ) -> None:
     captures = []

@@ -26,8 +26,7 @@ def test_seen_message_cache_warns_on_invalid_limit(
     bad_limit: object,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Negative or non-numeric limits fall back to the default and emit a
-    warning so the user notices the misconfiguration."""
+    """Invalid limits fall back to the default and emit a warning."""
     with caplog.at_level(logging.WARNING):
         cache = _SeenMessageCache(limit=bad_limit)  # type: ignore[arg-type]
 
@@ -40,8 +39,7 @@ def test_seen_message_cache_warns_on_invalid_limit(
 def test_seen_message_cache_zero_limit_silent_fallback_to_default(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """limit=0 is an expected 'use default' signal; it must not emit a warning
-    but should still give a functional bounded cache."""
+    """limit=0 means 'use default' and must not warn but stays bounded."""
     with caplog.at_level(logging.WARNING):
         cache = _SeenMessageCache(limit=0)
     assert cache.limit == DEFAULT_MAX_SEEN_MESSAGE_IDS

@@ -83,7 +83,8 @@ def make_fake_http_response():
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
-        "network: test requires outbound network access (YouTube/Twitch integration)",
+        "network: test requires outbound network access "
+        "(YouTube/Twitch integration)",
     )
 
 
@@ -92,7 +93,8 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         "--run-network",
         action="store_true",
         default=False,
-        help="Run tests marked 'network' (skipped by default; pass this flag to enable)",
+        help="Run tests marked 'network' (skipped by default; "
+        "pass this flag to enable)",
     )
 
 

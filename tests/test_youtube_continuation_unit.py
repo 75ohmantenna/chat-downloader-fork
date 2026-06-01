@@ -49,9 +49,7 @@ class TestHandleHttpError:
         return _handle_http_error
 
     def test_captcha_in_error_message_raises(self) -> None:
-        """HTTP 403 with captcha text in error message raises
-        CaptchaChallengeRequired.
-        """
+        """HTTP 403 with captcha text raises CaptchaChallengeRequired."""
         _handle_http_error = self._import()
         resp = _make_response(
             status_code=403,
@@ -62,9 +60,7 @@ class TestHandleHttpError:
             _handle_http_error(resp, "https://example.com/", 1, 3, policy)
 
     def test_captcha_in_response_body_text_raises(self) -> None:
-        """HTTP 200 body text containing challenge hint raises
-        CaptchaChallengeRequired.
-        """
+        """HTTP 200 with a challenge hint raises CaptchaChallengeRequired."""
         _handle_http_error = self._import()
         resp = _make_response(
             status_code=503,
@@ -75,9 +71,7 @@ class TestHandleHttpError:
             _handle_http_error(resp, "https://example.com/", 1, 3, policy)
 
     def test_429_retryable_returns_true(self) -> None:
-        """HTTP 429 within retry budget returns True (signal caller to
-        continue).
-        """
+        """HTTP 429 within the retry budget returns True to continue."""
         _handle_http_error = self._import()
         resp = _make_response(status_code=429)
         policy = MagicMock(spec=RetryPolicy)
@@ -96,7 +90,7 @@ class TestHandleHttpError:
             _handle_http_error(resp, "https://example.com/", 1, 1, policy)
 
     def test_400_terminal_logs_error_and_returns_false(self) -> None:
-        """HTTP 400 is a terminal error: logs and returns False (fall through to json parse)."""
+        """HTTP 400 is terminal: log and return False before JSON parse."""
         _handle_http_error = self._import()
         resp = _make_response(status_code=400)
         policy = _make_policy(max_attempts=3)
@@ -138,9 +132,7 @@ class TestHandleJsonApiError:
         policy.wait.assert_called_once()
 
     def test_unknown_error_string_returns_true(self) -> None:
-        """JSON error with 'unknown error' message triggers incomplete-retry
-        path.
-        """
+        """A JSON 'unknown error' triggers the incomplete-retry path."""
         _handle_json_api_error = self._import()
         error = {"code": 0, "message": "Unknown error occurred"}
         policy = MagicMock(spec=RetryPolicy)

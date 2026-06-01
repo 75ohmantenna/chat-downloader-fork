@@ -286,7 +286,7 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
                                                     "richItemRenderer": {
                                                         "content": {
                                                             "videoRenderer": {
-                                                                "videoId": "one",
+                                                                "videoId": "one",  # noqa: E501
                                                             },
                                                         },
                                                     },
@@ -295,16 +295,16 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
                                                     "richItemRenderer": {
                                                         "content": {
                                                             "lockupViewModel": {
-                                                                "contentId": "lockup-one",
+                                                                "contentId": "lockup-one",  # noqa: E501
                                                             },
                                                         },
                                                     },
                                                 },
                                                 {
-                                                    "continuationItemRenderer": {
-                                                        "continuationEndpoint": {
-                                                            "continuationCommand": {
-                                                                "token": "cont-1",
+                                                    "continuationItemRenderer": {  # noqa: E501
+                                                        "continuationEndpoint": {  # noqa: E501
+                                                            "continuationCommand": {  # noqa: E501
+                                                                "token": "cont-1",  # noqa: E501
                                                             },
                                                         },
                                                     },
@@ -376,7 +376,7 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
     assert continuation_calls == [(request, "cont-1")]
 
 
-def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_response(
+def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_response(  # noqa: E501
     monkeypatch,
 ) -> None:
     class DummyPlaylistDiscovery(YouTubePlaylistDiscoveryMixin):
@@ -506,11 +506,11 @@ def test_get_testing_items_uses_live_playlist_and_delegates_playlist_loading(
                                                     "itemSectionRenderer": {
                                                         "contents": [
                                                             {
-                                                                "shelfRenderer": {
-                                                                    "endpoint": {
-                                                                        "commandMetadata": {
-                                                                            "webCommandMetadata": {
-                                                                                "url": "/playlist?list=PL123",
+                                                                "shelfRenderer": {  # noqa: E501
+                                                                    "endpoint": {  # noqa: E501
+                                                                        "commandMetadata": {  # noqa: E501
+                                                                            "webCommandMetadata": {  # noqa: E501
+                                                                                "url": "/playlist?list=PL123",  # noqa: E501
                                                                             },
                                                                         },
                                                                     },
@@ -571,9 +571,9 @@ def test_get_testing_items_finds_playlist_url_without_section_list_renderer(
                                                         "content": {
                                                             "shelfRenderer": {
                                                                 "endpoint": {
-                                                                    "commandMetadata": {
-                                                                        "webCommandMetadata": {
-                                                                            "url": "/playlist?list=PL999",
+                                                                    "commandMetadata": {  # noqa: E501
+                                                                        "webCommandMetadata": {  # noqa: E501
+                                                                            "url": "/playlist?list=PL999",  # noqa: E501
                                                                         },
                                                                     },
                                                                 },
@@ -627,31 +627,31 @@ def test_get_testing_items_yields_direct_video_renderers_from_rich_shelf(
                                                 {
                                                     "richSectionRenderer": {
                                                         "content": {
-                                                            "richShelfRenderer": {
+                                                            "richShelfRenderer": {  # noqa: E501
                                                                 "contents": [
                                                                     {
-                                                                        "richItemRenderer": {
-                                                                            "content": {
-                                                                                "videoRenderer": {
-                                                                                    "videoId": "one",
+                                                                        "richItemRenderer": {  # noqa: E501
+                                                                            "content": {  # noqa: E501
+                                                                                "videoRenderer": {  # noqa: E501
+                                                                                    "videoId": "one",  # noqa: E501
                                                                                 },
                                                                             },
                                                                         },
                                                                     },
                                                                     {
-                                                                        "richItemRenderer": {
-                                                                            "content": {
-                                                                                "videoRenderer": {
-                                                                                    "videoId": "two",
+                                                                        "richItemRenderer": {  # noqa: E501
+                                                                            "content": {  # noqa: E501
+                                                                                "videoRenderer": {  # noqa: E501
+                                                                                    "videoId": "two",  # noqa: E501
                                                                                 },
                                                                             },
                                                                         },
                                                                     },
                                                                     {
-                                                                        "richItemRenderer": {
-                                                                            "content": {
-                                                                                "videoRenderer": {
-                                                                                    "videoId": "one",
+                                                                        "richItemRenderer": {  # noqa: E501
+                                                                            "content": {  # noqa: E501
+                                                                                "videoRenderer": {  # noqa: E501
+                                                                                    "videoId": "one",  # noqa: E501
                                                                                 },
                                                                             },
                                                                         },
@@ -1022,10 +1022,10 @@ def test_youtube_discovery_breaks_on_continuation_loop(monkeypatch) -> None:
                                         "richGridRenderer": {
                                             "contents": [
                                                 {
-                                                    "continuationItemRenderer": {
-                                                        "continuationEndpoint": {
-                                                            "continuationCommand": {
-                                                                "token": "loop-token",
+                                                    "continuationItemRenderer": {  # noqa: E501
+                                                        "continuationEndpoint": {  # noqa: E501
+                                                            "continuationCommand": {  # noqa: E501
+                                                                "token": "loop-token",  # noqa: E501
                                                             },
                                                         },
                                                     },
