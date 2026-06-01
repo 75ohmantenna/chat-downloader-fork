@@ -27,7 +27,7 @@ def _extract_browse_continuation_token(items: Any) -> str | None:
         return None
 
     for item in items:
-        token = multi_get(
+        token: str | None = multi_get(
             item,
             "continuationItemRenderer",
             "continuationEndpoint",
@@ -48,7 +48,7 @@ def _extract_menu_continuation_token(item: object) -> str | None:
     if not isinstance(item, dict):
         return None
 
-    token_candidates = (
+    token_candidates: tuple[str | None, ...] = (
         multi_get(
             item, "continuation", "reloadContinuationData", "continuation"
         ),

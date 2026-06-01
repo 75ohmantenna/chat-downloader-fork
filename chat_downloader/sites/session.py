@@ -42,9 +42,7 @@ def _validate_cookie_domain(domain: str) -> None:
 
 
 def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
-    """Initialize HTTP session, headers, proxies, cookies, and timeout
-    state.
-    """
+    """Initialize HTTP session, headers, proxies, cookies, and timeout state."""
     owner.session = requests.Session()
 
     connect_timeout = float(
@@ -127,9 +125,7 @@ def update_session_headers(
 
 
 def apply_request_profile(owner: SessionOwnerProto, profile_name: str) -> bool:
-    """Apply a request profile to session headers, returning ``True`` on
-    success.
-    """
+    """Apply a request profile to session headers; return True on success."""
     profile_headers = get_request_profile_headers(profile_name)
     if not profile_headers:
         return False

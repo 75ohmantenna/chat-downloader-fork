@@ -210,8 +210,7 @@ class BaseChatDownloader:
         return session_get_json(self, url, **kwargs)
 
     def get_site_value(self, value: Any) -> Any:
-        """Resolve a :class:`~chat_downloader.sites.models.SiteDefault` to its
-        concrete value.
+        """Resolve a ``SiteDefault`` marker to its concrete value.
 
         Args:
             value: A ``SiteDefault`` marker or a concrete value.
@@ -239,8 +238,7 @@ class BaseChatDownloader:
 
     @classmethod
     def matches(cls, url: str) -> tuple[str, Any] | None:
-        """Return ``(function_name, match)`` if ``url`` matches a known
-        pattern.
+        """Return ``(function_name, match)`` if ``url`` matches a pattern.
 
         Args:
             url: The URL to test.
@@ -301,8 +299,7 @@ class BaseChatDownloader:
         messages_types_to_add: list[str],
         allowed_message_types: list[str],
     ) -> None:
-        """Raise if any of ``messages_types_to_add`` are not in
-        ``allowed_message_types``.
+        """Raise if any requested message type is not allowed.
 
         Args:
             messages_types_to_add: Message type names requested by the caller.

@@ -68,6 +68,7 @@ class ContinuousFileWriter(ABC):
     def __init__(
         self, file_name: str, overwrite: bool = True, **kwargs: Any
     ) -> None:
+        """Initialise the writer for the given file path."""
         self.file_name = file_name
         self.overwrite = overwrite
         self.file: IO[Any] | None = None
@@ -140,7 +141,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
         """Initialize a CSV writer, loading existing columns when appending."""
         super().__init__(file_name, **kwargs)
         self.sort_keys = sort_keys
-        self.file = open(
+        self.file = open(  # noqa: SIM115
             self.file_name,
             MODE_APPEND_PLUS_TEXT,
             newline="",
@@ -222,7 +223,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
             columns=self.columns,
             item=item,
         )
-        self.file = open(
+        self.file = open(  # noqa: SIM115
             self.file_name,
             MODE_APPEND_PLUS_TEXT,
             newline="",
@@ -244,7 +245,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         super().__init__(file_name, **kwargs)
         self.sort_keys = sort_keys
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
-        self.file = open(self.file_name, file_mode, encoding="utf-8")
+        self.file = open(self.file_name, file_mode, encoding="utf-8")  # noqa: SIM115
 
     def write(self, item: Any, flush: bool = False) -> None:
         """Write *item* as a single JSON line."""
@@ -264,7 +265,7 @@ class TextContinuousWriter(ContinuousFileWriter):
         """Initialize a line-oriented text writer."""
         super().__init__(file_name, **kwargs)
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
-        self.file = open(self.file_name, file_mode, encoding="utf-8")
+        self.file = open(self.file_name, file_mode, encoding="utf-8")  # noqa: SIM115
 
     def write(self, item: Any, flush: bool = False) -> None:
         """Write *item* as a string line."""
@@ -294,6 +295,7 @@ class ContinuousWriter:
         lazy_initialise: bool = False,
         **kwargs: Any,
     ) -> None:
+        """Initialise the factory, optionally deferring writer creation."""
         self.file_name = file_name
         self.overwrite = overwrite
         self.format = format
@@ -395,6 +397,7 @@ class ContinuousWriter:
         writer.write(item, flush)
 
     def __enter__(self) -> Self:
+        """Enter the context manager, returning self."""
         return self
 
     def close(self) -> None:
@@ -404,9 +407,11 @@ class ContinuousWriter:
             writer.close()
 
     def __exit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
+        """Exit the context manager, closing the writer."""
         self.close()
 
     def __del__(self) -> None:
+        """Close the writer on garbage collection, ignoring teardown errors."""
         try:
             self.close()
         except _IGNORED_DEL_EXCEPTIONS as e:

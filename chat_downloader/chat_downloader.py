@@ -170,9 +170,7 @@ class ChatDownloader:
         self._cookie_jar = MozillaCookieJar()
 
     def clear_cookies(self) -> None:
-        """Clear cookies for this ChatDownloader and all existing site
-        sessions.
-        """
+        """Clear cookies for this downloader and all its site sessions."""
         clear_all_cookies(self)
 
     def set_cookie_value(
@@ -352,9 +350,7 @@ class ChatDownloader:
         return self.get_chat_request(request)
 
     def get_chat_request(self, request: ChatRequest) -> Chat:
-        """Preferred typed entry point for chat retrieval via
-        :class:`ChatRequest`.
-        """
+        """Typed entry point for chat retrieval via :class:`ChatRequest`."""
         validate_url(request.url)
 
         # URL dispatch flow:

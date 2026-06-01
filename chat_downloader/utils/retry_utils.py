@@ -24,9 +24,7 @@ class RetryPolicy:
         return attempt_number < self.max_attempts
 
     def sleep_seconds(self, attempt_number: int) -> float | None:
-        """Return sleep duration for this attempt, or None to request manual
-        pause.
-        """
+        """Return sleep seconds for this attempt, or None for manual pause."""
         timeout = self.retry_timeout
         if isinstance(timeout, (int, float)) and timeout < 0:
             return None

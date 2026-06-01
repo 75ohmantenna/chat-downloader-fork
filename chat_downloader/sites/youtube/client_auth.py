@@ -2,6 +2,7 @@
 
 """Authentication helpers for the YouTube client."""
 
+import contextlib
 import hashlib
 import time
 from typing import Any
@@ -19,10 +20,8 @@ def _initialize_pref(session: Any) -> None:
     pref_cookie = session.get_cookie_value("PREF")
     pref: dict[str, str] = {}
     if pref_cookie:
-        try:
+        with contextlib.suppress(ValueError):
             pref = dict(parse_qsl(pref_cookie))
-        except ValueError:
-            pass
     pref.update({"hl": "en", "tz": "UTC"})
     session.set_cookie_value(".youtube.com", "PREF", urlencode(pref))
 

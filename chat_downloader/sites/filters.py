@@ -16,9 +16,7 @@ class MessageFilter:
         groups_to_add: list[str] | None = None,
         types_to_add: list[str] | None = None,
     ) -> None:
-        """Build the allowed message-type set from groups and explicit
-        types.
-        """
+        """Build the allowed message-type set from groups and explicit types."""
         self._valid_types: set[str] | None = None
 
         if (groups_to_add and "all" in groups_to_add) or (

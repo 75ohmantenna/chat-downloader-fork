@@ -58,9 +58,7 @@ def normalize_fixture_name(
 
 
 def describe_debug_sample(sample_path: Path | str) -> DebugSampleHint:
-    """Return the stable fixture hint for a captured debug sample file or
-    stem.
-    """
+    """Return the stable fixture hint for a debug sample file or stem."""
     return DebugSampleHint(
         site=infer_site_from_sample_name(sample_path),
         group=infer_group_from_sample_name(sample_path),

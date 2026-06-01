@@ -26,9 +26,7 @@ class YouTubeChatStreamsMixin:
         ytcfg: dict[str, Any],
         params: ChatRequest,
     ) -> Any:
-        """Generator that yields chat messages from a YouTube continuation
-        endpoint.
-        """
+        """Yield chat messages from a YouTube continuation endpoint."""
         return _get_chat_messages(
             cast(YouTubeDownloaderProto, self), initial_info, ytcfg, params
         )

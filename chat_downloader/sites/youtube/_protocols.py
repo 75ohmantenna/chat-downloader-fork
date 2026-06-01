@@ -17,8 +17,7 @@ if TYPE_CHECKING:
 
 
 class YouTubeDownloaderProto(Protocol):
-    """Minimal interface of ``YouTubeChatDownloader`` seen by iteration
-    helpers.
+    """Minimal interface of ``YouTubeChatDownloader`` seen by iteration helpers.
 
     Only the attributes and methods actually accessed by functions in
     ``chat_streams_runtime_iteration`` are declared here.

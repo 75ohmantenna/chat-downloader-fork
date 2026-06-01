@@ -20,9 +20,7 @@ if TYPE_CHECKING:
 
 
 class YouTubeVideoInitializationMixin:
-    """Methods that enrich video details with continuation bootstrap
-    metadata.
-    """
+    """Enrich video details with continuation bootstrap metadata."""
 
     def _get_initial_video_info(
         self,

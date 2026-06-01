@@ -105,9 +105,7 @@ def _consume_irc_buffer(
     readbuffer: str,
     pattern: re.Pattern[str],
 ) -> tuple[str, list[re.Match[str]], str | None]:
-    """Return complete IRC matches and any unmatched full buffer worth
-    logging.
-    """
+    """Return complete IRC matches plus any unmatched buffer to log."""
     buffer_before = readbuffer
     readbuffer, matches = _process_irc_buffer(readbuffer, pattern)
 

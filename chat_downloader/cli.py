@@ -3,6 +3,7 @@
 """Console script for chat_downloader."""
 
 import argparse
+import contextlib
 import re
 import signal
 import sys
@@ -166,9 +167,11 @@ def _rename_default_argument_groups(parser: argparse.ArgumentParser) -> None:
 
 
 def _install_cli_signal_handlers() -> None:
-    """Translate SIGTERM into KeyboardInterrupt so the runner's finally
-    block flushes writers. A second signal restores the default handler
-    so a stuck shutdown can still be force-killed.
+    """Translate SIGTERM into KeyboardInterrupt so writers get flushed.
+
+    The runner's finally block flushes writers on KeyboardInterrupt. A
+    second signal restores the default handler so a stuck shutdown can
+    still be force-killed.
 
     SIGINT is already raised as KeyboardInterrupt by the Python runtime,
     so we only wrap it to support the second-signal escape hatch.
@@ -189,13 +192,11 @@ def _install_cli_signal_handlers() -> None:
         raise KeyboardInterrupt
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        # The signal may be unavailable (e.g. SIGTERM on some Windows
+        # configs) or we may not be on the main thread; soft fail so
+        # library callers using CLI helpers from a worker keep working.
+        with contextlib.suppress(AttributeError, ValueError, OSError):
             signal.signal(sig, handler)
-        except (AttributeError, ValueError, OSError):
-            # The signal may be unavailable (e.g. SIGTERM on some Windows
-            # configs) or we may not be on the main thread; soft fail so
-            # library callers using CLI helpers from a worker keep working.
-            pass
 
 
 def _build_request_headers(args_dict: dict[str, Any]) -> dict[str, str]:

@@ -90,8 +90,7 @@ def get_field_default(f: dataclasses.Field[Any]) -> Any:
 
 @dataclass(slots=True)
 class DownloaderConfig:
-    """Session-level configuration for
-    :class:`~chat_downloader.ChatDownloader`.
+    """Session-level configuration for :class:`~chat_downloader.ChatDownloader`.
 
     Maps 1:1 to :meth:`ChatDownloader.__init__` parameters.  This is
     **stable public surface**; add new session-scoped options here.

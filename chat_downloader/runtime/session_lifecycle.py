@@ -31,9 +31,7 @@ def build_cookie(
     discard: bool = False,
     rest: dict[str, Any] | None = None,
 ) -> Cookie:
-    """Build a ``Cookie`` instance using the downloader's compatibility
-    shape.
-    """
+    """Build a ``Cookie`` using the downloader's compatibility shape."""
     _validate_cookie_domain(domain)
     cookie_rest = {} if rest is None else rest
     return Cookie(
@@ -65,9 +63,7 @@ def clear_all_cookies(owner: ChatDownloaderProto) -> None:
 
 
 def _disable_configured_cookie_source(owner: ChatDownloaderProto) -> None:
-    """Prevent future sessions from reloading cookies from the original
-    file.
-    """
+    """Prevent future sessions from reloading cookies from the original file."""
     config = getattr(owner, "config", None)
     if config is None or not hasattr(config, "cookies"):
         return

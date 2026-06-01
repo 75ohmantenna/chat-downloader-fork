@@ -26,9 +26,7 @@ class TestingException(Exception):
 
 
 class TestingModes(Enum):
-    """Enumeration of testing modes controlling pause/exit behaviour on debug
-    events.
-    """
+    """Testing modes controlling pause/exit behaviour on debug events."""
 
     EXIT_ON_ERROR = 4
     PAUSE_ON_ERROR = 3
@@ -250,8 +248,7 @@ def supports_colour() -> bool:
     """
 
     def vt_codes_enabled_in_windows_registry() -> bool:
-        """Check the Windows Registry to see if VT code handling has been
-        enabled.
+        """Check the Windows Registry for enabled VT code handling.
 
         See https://superuser.com/a/1300251/447564 for background.
         """
@@ -272,7 +269,7 @@ def supports_colour() -> bool:
             except FileNotFoundError:
                 return False
             else:
-                return reg_key_value == 1
+                return bool(reg_key_value == 1)
 
     # isatty is not always implemented, #6223.
     is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()

@@ -79,9 +79,7 @@ def _is_youtube_chat(chat: Chat) -> bool:
 
 
 def _resolve_format_name(chat: Chat, format_name: Any) -> Any:
-    """Select a live-aware format override when YouTube provides both time
-    fields.
-    """
+    """Select a live-aware format override when both time fields exist."""
     if not isinstance(format_name, str):
         return format_name
 

@@ -2,6 +2,7 @@
 
 """CSV rewrite helpers for continuous writers."""
 
+import contextlib
 import csv
 import os
 import shutil
@@ -15,9 +16,10 @@ _CSV_FORMULA_LEAD = ("=", "+", "-", "@", "\t", "\r")
 
 
 def csv_safe_value(value: Any) -> Any:
-    """Prefix string values starting with formula-trigger characters with a
-    single quote so spreadsheet apps treat them as text, not formulas.
+    """Quote string values that start with spreadsheet formula triggers.
 
+    Values beginning with a formula-trigger character are prefixed with a
+    single quote so spreadsheet apps treat them as text, not formulas.
     Non-string values are returned unchanged.
     """
     if isinstance(value, str) and value and value[0] in _CSV_FORMULA_LEAD:
@@ -26,8 +28,7 @@ def csv_safe_value(value: Any) -> Any:
 
 
 def csv_safe_item(item: dict[str, Any]) -> dict[str, Any]:
-    """Return a copy of ``item`` with every cell value passed through
-    :func:`csv_safe_value`."""
+    """Return a copy of ``item`` with each cell value made CSV-safe."""
     return {key: csv_safe_value(value) for key, value in item.items()}
 
 
@@ -68,8 +69,6 @@ def rewrite_csv_with_new_columns(
         new_file_path = None
     except BaseException:
         if new_file_path is not None:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(new_file_path)
-            except OSError:
-                pass
         raise

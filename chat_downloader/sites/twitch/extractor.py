@@ -125,9 +125,7 @@ class TwitchChatDownloader(BaseChatDownloader):
     ]
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initialize TwitchChatDownloader with an instance-owned badge
-        cache.
-        """
+        """Initialize TwitchChatDownloader with an owned badge cache."""
         super().__init__(**kwargs)
         self.badge_cache = BadgeCache()
 

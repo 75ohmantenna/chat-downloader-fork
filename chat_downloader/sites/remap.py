@@ -15,9 +15,7 @@ class Remapper:
         remap_function: Callable[[Any], Any] | None = None,
         to_unpack: bool = False,
     ) -> None:
-        """Configure how one source key should be transformed during
-        remapping.
-        """
+        """Configure how one source key is transformed during remapping."""
         if new_key is not None and to_unpack:
             msg = "If to_unpack is True, new_key may not be specified."
             raise ValueError(msg)

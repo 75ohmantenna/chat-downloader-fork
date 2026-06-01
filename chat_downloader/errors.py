@@ -26,9 +26,7 @@ class RetriesExceeded(ChatDownloaderError):
 
 
 class IncompleteContinuationError(RetriesExceeded):
-    """Raised when continuation payload shape stays incomplete after
-    retries.
-    """
+    """Raised when continuation payload shape stays incomplete after retries."""
 
 
 class VideoNotFound(ChatDownloaderError):
