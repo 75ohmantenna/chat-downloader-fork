@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-YouTube and Twitch livestream chat CLI plus typed Python API. Python 3.12+.
+YouTube and Twitch livestream chat CLI plus typed Python API. Python 3.12+; CI validates 3.12, 3.13, and 3.14.
 Personal fork of `xenova/chat-downloader`; no upstream support. See README.
 For deeper context see [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md).
 
@@ -48,7 +48,7 @@ uv sync
 - Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (all).
 
 ## Style
-- Python 3.12+. Ruff formatter, 80-char lines, double quotes.
+- Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 80-char lines, double quotes.
 - Types: `DownloaderConfig`/`ChatRequest`/`RunConfig`; `models.py` is canonical
   and the source of truth for CLI and Python API shape. Add user-facing
   request, init, or runtime fields there first so CLI help and the typed API

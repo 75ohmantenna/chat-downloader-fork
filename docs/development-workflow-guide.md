@@ -9,7 +9,7 @@ disclosures that apply to all changes in this repository.
 
 ## Tooling Baseline
 
-- Python support: 3.12+
+- Python support: 3.12+; CI validates 3.12, 3.13, and 3.14
 - Packaging source of truth: `pyproject.toml`
 - Test framework: `pytest`
 - Formatter and primary linter: `ruff`

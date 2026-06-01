@@ -3,7 +3,7 @@
 An up to date, enhanced YouTube and Twitch livestream chat logging and
 retrieval tool. Personal fork of
 [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader),
-targeting Python 3.12+ with improved typing, test coverage, and documentation.
+targeting Python 3.12+ (CI validates 3.12, 3.13, and 3.14) with improved typing, test coverage, and documentation.
 
 ## Personal Fork — No Support
 
