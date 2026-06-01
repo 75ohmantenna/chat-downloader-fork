@@ -9,20 +9,19 @@ notes, follow [`AGENTS.md`](AGENTS.md).
 ## Python tooling
 
 This section overrides the global `~/.claude/CLAUDE.md` preferred commands.
-Always invoke tools through the project `.venv`; never use system- or
-pipx-installed `ruff`, `mypy`, or `pytest`.
+Use `uv` for all development tasks; do not use system- or pipx-installed
+`ruff`, `mypy`, or `pytest` directly.
 
 Bootstrap (once, if `.venv` is absent):
 ```
-python3 -m venv .venv
-.venv/bin/pip3 install -e ".[dev]"
+uv sync
 ```
 
 Preferred commands:
 ```
-.venv/bin/python3 -m pytest -q -p no:rerunfailures -m "not network"
-.venv/bin/python3 -m ruff check chat_downloader tests
-.venv/bin/python3 -m ruff format --check chat_downloader tests
-.venv/bin/python3 -m ruff format chat_downloader tests
-.venv/bin/python3 -m mypy .
+uv run pytest -q -p no:rerunfailures -m "not network"
+uv run ruff check chat_downloader tests
+uv run ruff format --check chat_downloader tests
+uv run ruff format chat_downloader tests
+uv run mypy .
 ```

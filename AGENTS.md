@@ -30,22 +30,19 @@ For deeper context see [`docs/development-workflow-guide.md`](docs/development-w
 
 ## Environment setup
 ```
-python3 -m venv .venv
-.venv/bin/pip3 install -e ".[dev]"
+uv sync
 ```
-All commands below assume the venv exists. Activate with
-`source .venv/bin/activate`, or call the binaries directly as shown.
 
 ## Commands
-- `.venv/bin/python3 -m pytest -q -p no:rerunfailures -m "not network"` — offline test suite (default loop)
-- `.venv/bin/python3 -m pytest tests/FILE.py -q` — single file
-- `.venv/bin/python3 -m pytest tests/FILE.py::test_name -q` — single test
-- `.venv/bin/python3 -m pytest -v -m network --run-network` — opt-in network tests
-- `.venv/bin/python3 -m ruff check chat_downloader tests` — lint
-- `.venv/bin/python3 -m ruff format --check chat_downloader tests` — format check
-- `.venv/bin/python3 -m ruff format chat_downloader tests` — apply formatting
-- `.venv/bin/python3 -m mypy .` — type check (config in `mypy.ini`)
-- Coverage: `.venv/bin/python3 -m coverage erase && PYTHONHASHSEED=0 .venv/bin/python3 -m coverage run --source chat_downloader -m pytest -q -m "not network" && .venv/bin/python3 -m coverage report -m --precision=2`
+- `uv run pytest -q -p no:rerunfailures -m "not network"` — offline test suite (default loop)
+- `uv run pytest tests/FILE.py -q` — single file
+- `uv run pytest tests/FILE.py::test_name -q` — single test
+- `uv run pytest -v -m network --run-network` — opt-in network tests
+- `uv run ruff check chat_downloader tests` — lint
+- `uv run ruff format --check chat_downloader tests` — format check
+- `uv run ruff format chat_downloader tests` — apply formatting
+- `uv run mypy .` — type check (config in `mypy.ini`)
+- Coverage: `uv run coverage erase && PYTHONHASHSEED=0 uv run coverage run --source chat_downloader -m pytest -q -m "not network" && uv run coverage report -m --precision=2`
 - Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (all).
 
 ## Style
@@ -69,10 +66,10 @@ or runtime change. Keep curated fixtures under `tests/fixtures/`.
 ## Done means
 A behavior, runtime, or tooling change is not done until:
 - regression test added or updated under `tests/` (curated fixture if parser)
-- `.venv/bin/python3 -m ruff check chat_downloader tests` clean
-- `.venv/bin/python3 -m ruff format --check chat_downloader tests` clean
-- `.venv/bin/python3 -m mypy .` clean
-- `.venv/bin/python3 -m pytest -q -p no:rerunfailures -m "not network"` green
+- `uv run ruff check chat_downloader tests` clean
+- `uv run ruff format --check chat_downloader tests` clean
+- `uv run mypy .` clean
+- `uv run pytest -q -p no:rerunfailures -m "not network"` green
 - docs touched in the same commit when user-facing behavior, tooling, or
   project structure changed
 

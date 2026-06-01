@@ -42,11 +42,10 @@ disclosures that apply to all changes in this repository.
 
 ## Local Setup
 
-Install the project in editable mode with development dependencies:
+Install the project and all development dependencies:
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+uv sync
 ```
 
 ## Daily Workflow
@@ -63,28 +62,28 @@ Local iteration loop:
 Run the default offline test suite:
 
 ```bash
-python3 -m pytest -q -p no:rerunfailures -m "not network"
+uv run pytest -q -p no:rerunfailures -m "not network"
 ```
 
 Run formatting and lint checks:
 
 ```bash
-python3 -m ruff check chat_downloader tests
-python3 -m ruff format --check chat_downloader tests
+uv run ruff check chat_downloader tests
+uv run ruff format --check chat_downloader tests
 ```
 
 Run type checking:
 
 ```bash
-python3 -m mypy .
+uv run mypy .
 ```
 
 Run coverage locally:
 
 ```bash
-python3 -m coverage erase
-PYTHONHASHSEED=0 python3 -m coverage run --source chat_downloader -m pytest -q -m "not network"
-python3 -m coverage report -m --precision=2
+uv run coverage erase
+PYTHONHASHSEED=0 uv run coverage run --source chat_downloader -m pytest -q -m "not network"
+uv run coverage report -m --precision=2
 ```
 
 ### Using Make
@@ -93,15 +92,16 @@ The project `Makefile` wraps the commands above into convenient targets:
 
 | Target | Equivalent to |
 | --- | --- |
-| `make setup` | Create `.venv` and install dev deps |
+| `make setup` | `uv sync` |
+| `make lock` | `uv lock` |
 | `make test` | pytest offline suite |
 | `make lint` | ruff check |
 | `make fmt` | ruff format (apply) |
 | `make fmt-check` | ruff format --check |
 | `make typecheck` | mypy |
+| `make coverage` | coverage erase + run + report |
+| `make build` | build wheel and sdist |
 | `make check` | lint + fmt-check + typecheck + test |
-
-Each target auto-bootstraps `.venv` if it is absent.
 
 ## Test Strategy
 
@@ -201,13 +201,13 @@ directly.
 Deep lint check:
 
 ```bash
-python3 -m ruff check . --select ALL && python3 -m ruff format --check .
+uv run ruff check . --select ALL && uv run ruff format --check .
 ```
 
 Deep format and fix:
 
 ```bash
-python3 -m ruff format . && python3 -m ruff check . --select ALL --fix --unsafe-fixes && python3 -m ruff format .
+uv run ruff format . && uv run ruff check . --select ALL --fix --unsafe-fixes && uv run ruff format .
 ```
 
 These are intentionally more aggressive and may surface far more noise than

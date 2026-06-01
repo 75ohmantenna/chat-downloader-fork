@@ -1,30 +1,39 @@
-PYTHON := .venv/bin/python3
+UV ?= uv
 
-.venv:
-	python3 -m venv .venv
-	.venv/bin/pip3 install -e ".[dev]"
+.PHONY: setup lock test lint fmt fmt-check typecheck coverage build check clean
 
-setup: .venv
+setup:
+	$(UV) sync
 
-test: .venv
-	$(PYTHON) -m pytest -q -p no:rerunfailures -m "not network"
+lock:
+	$(UV) lock
 
-lint: .venv
-	$(PYTHON) -m ruff check chat_downloader tests
+test:
+	$(UV) run pytest -q -p no:rerunfailures -m "not network"
 
-fmt: .venv
-	$(PYTHON) -m ruff format chat_downloader tests
+lint:
+	$(UV) run ruff check chat_downloader tests
 
-fmt-check: .venv
-	$(PYTHON) -m ruff format --check chat_downloader tests
+fmt:
+	$(UV) run ruff format chat_downloader tests
 
-typecheck: .venv
-	$(PYTHON) -m mypy .
+fmt-check:
+	$(UV) run ruff format --check chat_downloader tests
+
+typecheck:
+	$(UV) run mypy .
+
+coverage:
+	$(UV) run coverage erase
+	PYTHONHASHSEED=0 $(UV) run coverage run --source chat_downloader \
+		-m pytest -q -m "not network"
+	$(UV) run coverage report -m --precision=2
+
+build:
+	$(UV) build
 
 check: lint fmt-check typecheck test
 
 clean:
 	find . -type d -name '__pycache__' -exec rm -rf {} +
-	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage htmlcov *.egg-info
-
-.PHONY: setup test lint fmt fmt-check typecheck check clean
+	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage htmlcov dist *.egg-info

@@ -9,27 +9,39 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
         with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: "pyproject.toml"
+          version: "0.11.15"
+          enable-cache: true
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: uv sync --locked
+
+      - name: Check lockfile
+        run: uv lock --check
 
       - name: Lint
-        run: ruff check chat_downloader tests
+        run: uv run --locked ruff check chat_downloader tests
 
       - name: Format check
-        run: ruff format --check chat_downloader tests
+        run: uv run --locked ruff format --check chat_downloader tests
 
       - name: Type check
-        run: mypy .
+        run: uv run --locked mypy .
 
       - name: Test
-        run: pytest -q -p no:rerunfailures -m "not network" --tb=short
+        run: uv run --locked pytest -q -p no:rerunfailures -m "not network" --tb=short
+
+      - name: Build
+        run: uv build

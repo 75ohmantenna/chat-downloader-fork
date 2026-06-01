@@ -39,6 +39,12 @@ do not constitute a security audit and do not replace your own review.
 pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git
 ```
 
+Or with uv:
+
+```bash
+uv tool install git+https://github.com/75ohmantenna/chat-downloader-fork.git
+```
+
 ## First Run
 
 ```bash
