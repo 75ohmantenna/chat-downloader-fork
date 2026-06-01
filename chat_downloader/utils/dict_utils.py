@@ -6,7 +6,9 @@ from typing import Any
 
 
 def multi_get(
-    dictionary: dict | list | tuple, *keys: Any, default: Any = None
+    dictionary: dict[Any, Any] | list[Any] | tuple[Any, ...],
+    *keys: Any,
+    default: Any = None,
 ) -> Any:
     """Traverse a nested structure by a sequence of keys/indices.
 
@@ -34,20 +36,16 @@ def multi_get(
     return current
 
 
-def try_get_first_key(dictionary: dict, default: Any = None) -> Any:
-    """Return the first key of ``dictionary``, or ``default`` if empty or not a
-    dict.
-    """
+def try_get_first_key(dictionary: dict[Any, Any], default: Any = None) -> Any:
+    """Return the first key of ``dictionary``, or ``default`` if empty."""
     try:
         return next(iter(dictionary))
     except (StopIteration, TypeError):
         return default
 
 
-def try_get_first_value(dictionary: dict, default: Any = None) -> Any:
-    """Return the first value of ``dictionary``, or ``default`` if empty or not
-    a dict.
-    """
+def try_get_first_value(dictionary: dict[Any, Any], default: Any = None) -> Any:
+    """Return the first value of ``dictionary``, or ``default`` if empty."""
     try:
         return next(iter(dictionary.values()))
     except (StopIteration, TypeError, AttributeError):

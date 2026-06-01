@@ -51,8 +51,8 @@ def iter_stream_chat_messages(
     downloader: TwitchChatDownloader,
     stream_id: str,
     request: ChatRequest,
-    irc_factory: Callable | None = None,
-    message_generator: Callable | None = None,
+    irc_factory: Callable[..., Any] | None = None,
+    message_generator: Callable[..., Any] | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield live IRC chat messages for a stream."""
     irc_factory = irc_factory or TwitchChatIRC

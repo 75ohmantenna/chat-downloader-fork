@@ -2,13 +2,14 @@
 
 """Timed input, interruptible sleep, and timeout-aware generator wrapper."""
 
+import contextlib
 import io
 import queue as _queue
 import sys
 import threading
 import time
 from collections.abc import Callable, Generator, Iterator
-from typing import Any, Self
+from typing import Any, Self, TextIO, cast
 
 POLLING_TIME = 0.1
 
@@ -111,20 +112,18 @@ except ImportError:
 
         if events:
             key, _ = events[0]
-            return key.fileobj.readline().rstrip(LF)  # type: ignore[union-attr]
+            return cast("TextIO", key.fileobj).readline().rstrip(LF)
         if newline:
             echo(LF)
-        try:
-            termios.tcflush(sys.stdin, termios.TCIFLUSH)
-        except (
+        # Best-effort only (stdin may not support tcflush).
+        with contextlib.suppress(
             OSError,
             termios.error,
             ValueError,
             AttributeError,
             io.UnsupportedOperation,
         ):
-            # Best-effort only (stdin may not support tcflush).
-            pass
+            termios.tcflush(sys.stdin, termios.TCIFLUSH)
         raise TimeoutOccurred
 
     _timed_input = posix_timed_input
@@ -165,11 +164,11 @@ class TimedGenerator:
 
     def __init__(
         self,
-        generator: Generator | Iterator,
+        generator: Generator[Any, Any, Any] | Iterator[Any],
         timeout: float | None = None,
         inactivity_timeout: float | None = None,
-        on_timeout: Callable | None = None,
-        on_inactivity_timeout: Callable | None = None,
+        on_timeout: Callable[..., Any] | None = None,
+        on_inactivity_timeout: Callable[..., Any] | None = None,
     ) -> None:
         """Wrap a generator with overall and inactivity timeout handling."""
         self.generator = generator
@@ -267,9 +266,7 @@ class TimedGenerator:
 
     @staticmethod
     def _is_reentrant_generator_close_error(error: Exception) -> bool:
-        """Return True when close() raced with an active generator
-        iteration.
-        """
+        """Return True when close() raced with an active generator iteration."""
         return (
             isinstance(error, ValueError)
             and str(error) == "generator already executing"

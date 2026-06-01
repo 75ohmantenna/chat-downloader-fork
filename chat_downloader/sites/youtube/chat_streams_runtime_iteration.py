@@ -73,9 +73,7 @@ class _ChatContext:
 
 
 def _raise_if_api_error(yt_info: dict[str, Any]) -> None:
-    """Raise a typed exception when the YouTube API returns an error
-    payload.
-    """
+    """Raise a typed exception when the YouTube API returns an error payload."""
     if "error" not in yt_info:
         return
 
@@ -129,8 +127,7 @@ def _log_continuation_debug_info(cont_result: Any) -> None:
 
 
 def _attempt_profile_fallback(self: YouTubeDownloaderProto) -> bool:
-    """Try switching to the next YouTube request profile after an incomplete
-    response.
+    """Try switching to the next YouTube request profile on incomplete data.
 
     Returns True if a new profile was applied (caller should retry). Returns
     False if fallback is disabled or no next profile is available (caller
@@ -215,9 +212,7 @@ def _handle_continuation_response(
     ytcfg: dict[str, Any],
     continuation_params: dict[str, Any],
 ) -> None:
-    """Apply response-driven state, log request context, and raise API
-    errors.
-    """
+    """Apply response-driven state, log request context, and raise errors."""
     auth = _generate_sapisidhash_header(self, _YT_HOME, ytcfg)
     _apply_response_state_updates(self, yt_info, auth)
     _log_request_context(self, yt_info, continuation_params)
@@ -262,9 +257,7 @@ def _apply_live_timing(
     loop_state: Any,
     live_start_time_ms: int,
 ) -> None:
-    """Enrich a live message with player-offset timing and update loop
-    state.
-    """
+    """Enrich a live message with player-offset timing and update loop state."""
     live_offset = derive_live_offset_milliseconds(message, live_start_time_ms)
     if live_offset is not None:
         enrich_live_message_timing(message, live_offset)
@@ -454,9 +447,7 @@ def _advance_continuation_loop(
     ctx: _ChatContext,
     yt_info: dict[str, Any],
 ) -> bool:
-    """Advance continuation state and return True when iteration should
-    stop.
-    """
+    """Advance continuation state and return True when iteration should stop."""
     cont_result = parse_continuation_response(yt_info)
     _log_continuation_debug_info(cont_result)
     ctx.loop_state = update_state_from_result(ctx.loop_state, cont_result)
@@ -476,9 +467,7 @@ def _get_chat_messages(
     ytcfg: dict[str, Any],
     params: ChatRequest,
 ) -> Generator[dict[str, Any], None, None]:
-    """Generator that yields chat messages from a YouTube continuation
-    endpoint.
-    """
+    """Yield chat messages from a YouTube continuation endpoint."""
     ctx = _build_chat_context(self, initial_info, ytcfg, params)
     ended_cleanly = False
     # Defensive bounds: live chat normally produces actions or rotates the

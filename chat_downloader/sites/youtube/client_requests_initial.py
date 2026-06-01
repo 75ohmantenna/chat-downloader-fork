@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 def _get_initial_info(
     url: str,
-    session_get: Callable,
+    session_get: Callable[..., Any],
     params: ChatRequest | dict[str, Any] | None,
     yt_initial_data_re: str,
     yt_cfg_re: str,

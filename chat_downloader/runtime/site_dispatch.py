@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
 from chat_downloader.debugging import log, sanitize_for_log
@@ -65,7 +65,7 @@ def _chat_debug_snapshot(chat: Chat) -> dict[str, Any]:
             getattr(output_dispatcher, "callbacks", ())
         )
 
-    return sanitize_for_log(snapshot)
+    return cast("dict[str, Any]", sanitize_for_log(snapshot))
 
 
 def execute_chat_generator(
@@ -84,7 +84,7 @@ def execute_chat_generator(
         raise NotImplementedError(
             msg,
         )
-    chat = chat_generator(match, request)
+    chat: Chat | None = chat_generator(match, request)
 
     log(
         "debug",

@@ -18,9 +18,10 @@ def try_parse_json(text: str, default: Any = None) -> Any:
         return default
 
 
-def flatten_json(original_json: dict | list) -> dict:
-    """Flatten a nested dict/list into a single-level dict with dot-separated
-    keys.
+def flatten_json(
+    original_json: dict[str, Any] | list[Any],
+) -> dict[str, Any]:
+    """Flatten a nested dict/list into a dot-separated single-level dict.
 
     Args:
         original_json: Nested dictionary or list to flatten.

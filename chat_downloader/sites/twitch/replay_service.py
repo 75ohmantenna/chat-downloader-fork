@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from json.decoder import JSONDecodeError
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from requests.exceptions import RequestException
 
@@ -130,7 +130,7 @@ def _fetch_gql_one[T](
 
 def _fetch_vod_page(
     downloader: TwitchChatDownloader,
-    fetch_fn: Callable,
+    fetch_fn: Callable[..., Any],
     vod_id: str,
     cursor: str,
     content_offset: float,
@@ -142,12 +142,15 @@ def _fetch_vod_page(
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            return fetch_fn(
-                downloader._session_post,
-                downloader._download_gql,
-                vod_id,
-                cursor or None,
-                content_offset,
+            return cast(
+                "tuple[Any, Any]",
+                fetch_fn(
+                    downloader._session_post,
+                    downloader._download_gql,
+                    vod_id,
+                    cursor or None,
+                    content_offset,
+                ),
             )
         except (JSONDecodeError, RequestException) as error:
             downloader.retry(attempt_number, error=error, request=request)
@@ -160,7 +163,7 @@ def iter_vod_chat_messages(
     request: ChatRequest,
     max_duration: float | None,
     offset: float | None = None,
-    fetch_messages: Callable | None = None,
+    fetch_messages: Callable[..., Any] | None = None,
     logger_obj: Any = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield replay chat messages for a VOD or clip."""

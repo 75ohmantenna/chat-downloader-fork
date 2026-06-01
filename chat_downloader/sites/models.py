@@ -143,9 +143,7 @@ class _SeenMessageCache:
 
 
 class _ChatOutputDispatcher:
-    """Manage writer setup, callback dispatch, and writer shutdown for a
-    chat.
-    """
+    """Manage writer setup, callback dispatch, and shutdown for a chat."""
 
     def __init__(self, chat: Chat) -> None:
         self._chat = chat
@@ -163,9 +161,12 @@ class _ChatOutputDispatcher:
             message_type = item.get("message_type")
             message_id = item.get("message_id")
 
-            if message_type in SUPERCHAT_DEDUP_TYPES and message_id:
-                if not self._chat._register_seen_message_id(message_id):
-                    return
+            if (
+                message_type in SUPERCHAT_DEDUP_TYPES
+                and message_id
+                and not self._chat._register_seen_message_id(message_id)
+            ):
+                return
 
             writer.write(self._chat.format(item), flush=True)
 
@@ -245,7 +246,7 @@ class Chat:
 
     def __init__(
         self,
-        chat: Generator | Iterator | None = None,
+        chat: Generator[Any, Any, Any] | Iterator[Any] | None = None,
         title: str | None = None,
         duration: float | None = None,
         status: str | None = None,
@@ -255,9 +256,7 @@ class Chat:
         max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
         **kwargs: Any,
     ) -> None:
-        """Initialize chat metadata, output dispatch, and deduplication
-        state.
-        """
+        """Set up chat metadata, output dispatch, and deduplication state."""
         self.chat = chat
 
         self.title = title
@@ -332,7 +331,7 @@ class Chat:
             raise StopIteration(msg)
 
         try:
-            item = next(self.chat)
+            item: dict[str, Any] = next(self.chat)
             self._output_dispatcher.emit(item)
             return item
         except BaseException:

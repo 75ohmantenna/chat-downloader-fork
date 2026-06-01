@@ -20,13 +20,15 @@ from chat_downloader.sites.twitch.constants import (
     ACTION_TYPE_REMAPPING,
     EMOTE_REGEX,
     MESSAGE_TYPE_REMAPPING,
-    build_game_remapping,
-    build_user_remapping,
 )
 from chat_downloader.sites.twitch.parsing import tag_decoding
 from chat_downloader.sites.twitch.parsing.badges import (
     _parse_badge_info,
     _parse_irc_badges,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_game_remapping,
+    build_user_remapping,
 )
 from chat_downloader.utils.conversion_utils import int_or_none
 from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
@@ -369,8 +371,7 @@ def _resolve_irc_badges(
     channel_id: str,
     badge_set: Any,
 ) -> None:
-    """Parse main and shared-chat IRC badges, applying subscriber metadata in-
-    place.
+    """Parse main and shared-chat IRC badges with subscriber metadata.
 
     Pops the raw ``author_badges``, ``author_badge_metadata``,
     ``shared_chat_source_badges``, and ``shared_chat_source_badge_info`` string
@@ -601,8 +602,7 @@ def _resolve_irc_action_and_message_type(
     original_action_type: str,
     message_match: str | None,
 ) -> None:
-    """Resolve action type, message type, CLEARCHAT, follower-only, and slow-
-    mode.
+    """Resolve action/message type, CLEARCHAT, follower-only, slow-mode.
 
     Performs five sequential mutations on *info*:
 
@@ -672,7 +672,7 @@ def _parse_irc_item(
     Returns:
         Parsed IRC message dictionary
     """
-    from chat_downloader.sites.twitch.constants import build_irc_remapping
+    from chat_downloader.sites.twitch.remappings import build_irc_remapping
 
     irc_remapping = build_irc_remapping()
     info = _parse_irc_tags(match.group(1).split(";"), irc_remapping)

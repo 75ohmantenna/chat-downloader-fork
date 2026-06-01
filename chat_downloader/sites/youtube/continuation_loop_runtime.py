@@ -48,13 +48,14 @@ def build_continuation_params(
 
 def extract_visitor_data(yt_info: dict[str, Any]) -> str | None:
     """Extract the ``visitorData`` token from an API response."""
-    return multi_get(yt_info, "responseContext", "visitorData")
+    visitor_data: str | None = multi_get(
+        yt_info, "responseContext", "visitorData"
+    )
+    return visitor_data
 
 
 def get_live_start_time_ms() -> int:
-    """Return the wall-clock millisecond baseline for live offset
-    derivation.
-    """
+    """Return the wall-clock millisecond baseline for live offset derivation."""
     return int(time.time() * 1000)
 
 
@@ -81,9 +82,7 @@ def enrich_live_message_timing(
     message: dict[str, Any],
     live_offset_milliseconds: int | None,
 ) -> None:
-    """Populate ``time_in_seconds`` / ``time_text`` for live messages when
-    absent.
-    """
+    """Populate time_in_seconds/time_text for live messages when absent."""
     if live_offset_milliseconds is None:
         return
     if "time_in_seconds" in message or "time_text" in message:

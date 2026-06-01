@@ -22,7 +22,7 @@ _ROLE_ICON_MAP: dict[str, str] = {
 # a circular import at package initialisation time (constants_message imports
 # back through the top-level chat_downloader package).
 _REMAPPING: Mapping[str, Any] | None = None
-_COLOUR_KEYS: list | None = None
+_COLOUR_KEYS: list[str] | None = None
 
 
 def _apply_author_roles(author: dict[str, Any]) -> None:
@@ -36,7 +36,7 @@ def _apply_author_roles(author: dict[str, Any]) -> None:
             author["is_sponsor"] = True
 
 
-def _get_remapping() -> tuple[dict, list]:
+def _get_remapping() -> tuple[dict[str, Any], list[str]]:
     """Return the module-level remapping table and colour-key list.
 
     Initialised once on first call so that the deferred import of

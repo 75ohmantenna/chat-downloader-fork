@@ -33,7 +33,7 @@ def _contains_challenge_text(text: object) -> bool:
 
 
 def _download_base_gql(
-    session_post: Callable,
+    session_post: Callable[..., Any],
     ops: list[dict[str, Any]],
     auth_token: str | None = None,
     client_id: str | None = None,
@@ -141,7 +141,7 @@ def _handle_gql_errors(
 
 
 def _download_gql(
-    session_post: Callable,
+    session_post: Callable[..., Any],
     ops: list[dict[str, Any]],
     auth_token: str | None = None,
     client_id: str | None = None,
@@ -199,9 +199,9 @@ def _download_gql(
 
 
 def update_badge_info(
-    session_post: Callable,
+    session_post: Callable[..., Any],
     channel: str,
-    download_gql_func: Callable,
+    download_gql_func: Callable[..., Any],
     badge_info: dict[tuple[str, str], dict[str, Any]],
     subscriber_badge_info: dict[str, dict[tuple[str, str], dict[str, Any]]],
     client_id: str | None = None,

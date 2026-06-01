@@ -45,7 +45,7 @@ def is_age_gated(player_response_info: dict[str, Any]) -> bool:
 def is_unplayable(player_response_info: dict[str, Any]) -> bool:
     """Return ``True`` when the playability status is ``UNPLAYABLE``."""
     playability_status = player_response_info.get("playabilityStatus", {})
-    return playability_status.get("status") == "UNPLAYABLE"
+    return bool(playability_status.get("status") == "UNPLAYABLE")
 
 
 def _build_error_message(
@@ -78,8 +78,8 @@ def _build_error_message(
 
 
 def _raise_for_error_screen(
-    playability_status: dict,
-    player_response_info: dict,
+    playability_status: dict[str, Any],
+    player_response_info: dict[str, Any],
 ) -> None:
     """Raise for age-gated or status-based error-screen cases."""
     if is_age_gated(player_response_info):
@@ -140,7 +140,7 @@ def _raise_for_error_screen(
             raise VideoUnavailable(msg)
 
 
-def _raise_for_popup(yt_initial_data: dict) -> None:
+def _raise_for_popup(yt_initial_data: dict[str, Any]) -> None:
     popup_info = multi_get(
         yt_initial_data,
         "onResponseReceivedActions",
@@ -160,7 +160,7 @@ def _raise_for_popup(yt_initial_data: dict) -> None:
     raise VideoUnavailable(error_message)
 
 
-def _raise_for_replay_unavailable(yt_initial_data: dict) -> None:
+def _raise_for_replay_unavailable(yt_initial_data: dict[str, Any]) -> None:
     if not yt_initial_data.get("contents"):
         log("debug", f"Initial YouTube data: {yt_initial_data}")
         msg = "Unable to find initial video contents."

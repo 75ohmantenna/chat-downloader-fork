@@ -7,7 +7,7 @@ import os
 import re
 import string
 from copy import deepcopy
-from typing import Any
+from typing import Any, cast
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
 from chat_downloader.utils.dict_utils import multi_get
@@ -85,7 +85,7 @@ class ItemFormatter:
         )
 
         with open(default_path, encoding="utf-8") as default_formats:
-            format_file = json.load(default_formats)
+            format_file: dict[str, Any] = json.load(default_formats)
 
         if custom_path is not None:
             if not os.path.exists(custom_path):
@@ -167,7 +167,7 @@ class ItemFormatter:
 
         for format_candidate in format_list:
             if self._does_format_match(format_candidate, message_type):
-                return format_candidate
+                return cast("dict[str, Any]", format_candidate)
 
         return self._get_default_format()
 
@@ -258,7 +258,10 @@ class ItemFormatter:
             return field_config
 
         if isinstance(field_config, dict):
-            return field_config.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
+            return cast(
+                "str",
+                field_config.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE),
+            )
 
         return self.DEFAULT_TEMPLATE
 

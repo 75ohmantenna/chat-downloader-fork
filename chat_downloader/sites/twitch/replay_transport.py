@@ -7,8 +7,8 @@ from typing import Any
 
 
 def get_chat_messages_by_vod_id(
-    session_post: Callable,
-    download_gql_func: Callable,
+    session_post: Callable[..., Any],
+    download_gql_func: Callable[..., Any],
     vod_id: str,
     cursor: str | None,
     content_offset_seconds: float | None,

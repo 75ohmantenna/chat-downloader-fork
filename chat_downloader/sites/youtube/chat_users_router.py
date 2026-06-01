@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 
 
 class YouTubeChatUsersRouterMixin:
-    """Methods for resolving user/channel route parameters to chat lookup
-    calls.
-    """
+    """Resolve user/channel route parameters to chat lookup calls."""
 
     def _get_chat_by_user(
         self, match: re.Match[str], params: ChatRequest
@@ -42,8 +40,11 @@ class YouTubeChatUsersRouterMixin:
         self, channel_id: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat by channel ID."""
-        return self._get_chat_by_user_args(  # type: ignore[attr-defined]
-            {"channel_id": channel_id}, params
+        return cast(
+            "Chat",
+            self._get_chat_by_user_args(  # type: ignore[attr-defined]
+                {"channel_id": channel_id}, params
+            ),
         )
 
     def get_chat_by_user_id(
@@ -54,8 +55,11 @@ class YouTubeChatUsersRouterMixin:
         Such as NASAtelevision in
         https://www.youtube.com/user/NASAtelevision
         """
-        return self._get_chat_by_user_args(  # type: ignore[attr-defined]
-            {"user_id": user_id}, params
+        return cast(
+            "Chat",
+            self._get_chat_by_user_args(  # type: ignore[attr-defined]
+                {"user_id": user_id}, params
+            ),
         )
 
     def get_chat_by_custom_username(
@@ -64,14 +68,20 @@ class YouTubeChatUsersRouterMixin:
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
         """Get chat by custom username."""
-        return self._get_chat_by_user_args(  # type: ignore[attr-defined]
-            {"custom_username": custom_username}, params
+        return cast(
+            "Chat",
+            self._get_chat_by_user_args(  # type: ignore[attr-defined]
+                {"custom_username": custom_username}, params
+            ),
         )
 
     def get_chat_by_handle(
         self, handle: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat by handle."""
-        return self._get_chat_by_user_args(  # type: ignore[attr-defined]
-            {"handle": handle}, params
+        return cast(
+            "Chat",
+            self._get_chat_by_user_args(  # type: ignore[attr-defined]
+                {"handle": handle}, params
+            ),
         )

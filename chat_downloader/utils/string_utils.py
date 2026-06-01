@@ -32,7 +32,7 @@ def get_title_of_webpage(html: str) -> str | None:
     return regex_search(html, "<title(?:[^>]*)>(.*?)</title>")
 
 
-def wrap_as_list(item: Any) -> list | tuple:
+def wrap_as_list(item: Any) -> list[Any] | tuple[Any, ...]:
     """Wraps an item in a list, if it is not already iterable.
 
     :param item: The item to wrap
@@ -40,17 +40,15 @@ def wrap_as_list(item: Any) -> list | tuple:
     :return: The wrapped item
     :rtype: list | tuple
     """
-    if not isinstance(item, (list, tuple)):
-        item = [item]
-    return item
+    if isinstance(item, (list, tuple)):
+        return item
+    return [item]
 
 
 def remove_prefixes(
     text: str, prefixes: str | list[str] | tuple[str, ...]
 ) -> str:
-    """Remove each prefix in ``prefixes`` from the start of ``text`` in
-    order.
-    """
+    """Remove each ``prefixes`` entry from the start of ``text`` in order."""
     for prefix in wrap_as_list(prefixes):
         text = text.removeprefix(prefix)
     return text
@@ -66,9 +64,7 @@ def remove_suffixes(
 
 
 def camel_case_split(word: str) -> str:
-    """Convert a camelCase or PascalCase string to lowercase
-    underscore_separated form.
-    """
+    """Convert a camelCase or PascalCase string to snake_case."""
     return "_".join(re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?=[A-Z]|$)", word)).lower()
 
 

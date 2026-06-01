@@ -95,7 +95,7 @@ def time_to_seconds(time: str) -> int:
     reversed_parts = reversed(parts)
 
     # Calculate total seconds: seconds + (minutes * 60) + (hours * 3600)
-    total = sum(
+    total: int = sum(
         abs(int(part)) * (SECONDS_PER_MINUTE**i)
         for i, part in enumerate(reversed_parts)
     )
@@ -142,7 +142,7 @@ def microseconds_to_timestamp(
     :param format: The format string, defaults to '%Y-%m-%d %H:%M:%S'. For
         information on supported codes, see https://strftime.org/ and
         https://docs.python.org/3/library/datetime.html#strftime-and-strptime-
-        format-codes # noqa: E501
+        format-codes
     :type format: str, optional
     :return: Human readable timestamp corresponding to the format
     :rtype: str
@@ -256,7 +256,5 @@ def parse_date(
 
 
 def parse_iso8601(data_str: str) -> float:
-    """Parse an ISO 8601 string and return microseconds since the Unix
-    epoch.
-    """
+    """Parse an ISO 8601 string and return microseconds since the Unix epoch."""
     return parse_date(data_str).timestamp() * MICROSECONDS_PER_SECOND

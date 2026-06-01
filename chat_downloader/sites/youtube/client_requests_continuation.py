@@ -61,8 +61,7 @@ def _apply_retry_or_raise(
     message: str,
     exc_cls: type[Exception],
 ) -> None:
-    """Wait and return if another attempt is allowed; otherwise raise
-    *exc_cls(message)*.
+    """Wait and return if a retry is allowed; otherwise raise exc_cls.
 
     Consolidates the ``can_retry → wait → raise`` pattern shared across all
     error-handling paths in the continuation retry loop.
@@ -122,9 +121,7 @@ def _retry_or_raise_exhausted(
     error_message: str,
     log_label: str,
 ) -> bool:
-    """Log, sleep, and return True to retry; raise RetriesExceeded when budget
-    is gone.
-    """
+    """Log, sleep, and return True to retry; raise when budget is gone."""
     log(
         "warning",
         f"Retriable {log_label} "
@@ -257,7 +254,7 @@ def _handle_json_api_error(
 
 def _get_continuation_info(
     continuation_url: str,
-    session_post: Callable,
+    session_post: Callable[..., Any],
     program_params: ChatRequest | dict[str, Any],
     require_live_chat_continuation: bool = True,
     **post_kwargs: Any,
@@ -284,28 +281,26 @@ def _get_continuation_info(
             response = session_post(continuation_url, **post_kwargs)
             response_text = getattr(response, "text", "")
 
-            if response.status_code >= 400:
-                if _handle_http_error(
-                    response,
-                    continuation_url,
-                    attempt_number,
-                    max_attempts,
-                    retry_policy,
-                ):
-                    continue
+            if response.status_code >= 400 and _handle_http_error(
+                response,
+                continuation_url,
+                attempt_number,
+                max_attempts,
+                retry_policy,
+            ):
+                continue
 
-            json_response = response.json()
+            json_response: dict[str, Any] = response.json()
 
             error = json_response.get("error")
-            if error:
-                if _handle_json_api_error(
-                    error,
-                    continuation_url,
-                    attempt_number,
-                    max_attempts,
-                    retry_policy,
-                ):
-                    continue
+            if error and _handle_json_api_error(
+                error,
+                continuation_url,
+                attempt_number,
+                max_attempts,
+                retry_policy,
+            ):
+                continue
 
             if (
                 require_live_chat_continuation

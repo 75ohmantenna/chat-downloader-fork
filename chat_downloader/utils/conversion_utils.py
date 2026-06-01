@@ -9,9 +9,9 @@ from typing import Any, overload
 _SYSTEM_RANDOM = random.SystemRandom()
 
 
-def _convert_or_none(
-    value: Any, converter: Callable, default: Any = None
-) -> Any:
+def _convert_or_none[R, D](
+    value: Any, converter: Callable[[Any], R], default: D
+) -> R | D:
     """Generic conversion function with error handling.
 
     :param value: Value to convert
