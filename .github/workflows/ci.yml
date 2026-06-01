@@ -1,10 +1,14 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [master]
+    branches:
+      - master
+      - "chore/**"
   pull_request:
-    branches: [master]
+    branches:
+      - master
 
 jobs:
   test:
