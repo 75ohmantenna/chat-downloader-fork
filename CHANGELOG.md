@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.6 — 2026-06-03
+
+### Build and tooling
+
+- Remove non-standard paragraph from LICENSE so GitHub's licensee detector
+  matches the canonical MIT template
+
 ## 1.0.5 — 2026-06-01
 
 ### Build and tooling
