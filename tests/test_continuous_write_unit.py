@@ -76,6 +76,25 @@ def test_close_oserror_is_logged_and_reraised(tmp_path: pathlib.Path) -> None:
         writer.close()
 
 
+def test_persist_after_write_no_file_is_noop(tmp_path: pathlib.Path) -> None:
+    writer = _DummyWriter(str(tmp_path / "test.txt"))
+    writer._persist_after_write()  # file is None; must be a no-op
+
+
+def test_persist_after_write_flush_oserror_is_swallowed(
+    tmp_path: pathlib.Path,
+) -> None:
+    path = str(tmp_path / "test.txt")
+    writer = _DummyWriter(path)
+    mock_file = Mock()
+    mock_file.flush.side_effect = OSError("disk full")
+    writer.file = mock_file
+    writer.file_name = path
+    with patch.object(os, "fsync") as mock_fsync:
+        writer._persist_after_write()  # must not raise
+    mock_fsync.assert_not_called()  # returns before reaching fsync
+
+
 # --- CsvContinuousWriter ---
 
 

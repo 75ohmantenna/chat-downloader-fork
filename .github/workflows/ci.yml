@@ -3,17 +3,21 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches:
-      - master
-      - "chore/**"
-      - "fix/**"
   pull_request:
     branches:
       - master
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
@@ -34,20 +38,5 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
-      - name: Check lockfile
-        run: uv lock --check
-
-      - name: Lint
-        run: uv run --locked ruff check src/chat_downloader tests
-
-      - name: Format check
-        run: uv run --locked ruff format --check src/chat_downloader tests
-
-      - name: Type check
-        run: uv run --locked mypy .
-
-      - name: Test
-        run: uv run --locked pytest -q -p no:rerunfailures -m "not network" --tb=short
-
-      - name: Build
-        run: uv build
+      - name: Validate
+        run: make ci

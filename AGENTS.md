@@ -44,8 +44,10 @@ uv sync
 - `uv run ruff format --check src/chat_downloader tests` — format check
 - `uv run ruff format src/chat_downloader tests` — apply formatting
 - `uv run mypy .` — type check (config in `mypy.ini`)
-- Coverage: `uv run coverage erase && PYTHONHASHSEED=0 uv run coverage run --source chat_downloader -m pytest -q -m "not network" && uv run coverage report -m --precision=2`
-- Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (all).
+- Coverage: `make coverage` — deterministic offline suite with the 100% threshold enforced from `pyproject.toml`.
+- Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (fast local loop).
+- `make ci` — canonical validation (lock-check, lint, fmt-check, typecheck, coverage at 100%, build, smoke); the same target GitHub Actions runs.
+- `make lock-check` (`uv lock --check`) and `make smoke` (install built wheel in an isolated env, run `chat_downloader --version`).
 
 ## Style
 - Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 80-char lines, double quotes.
@@ -94,11 +96,13 @@ A behavior, runtime, or tooling change is not done until:
 GitHub Actions is the only supported hosted CI platform. Workflow file:
 `.github/workflows/ci.yml`. Preserve:
 
-- Push coverage for `master`, `chore/**`, and `fix/**`
+- Push coverage for all branches
 - Pull-request coverage targeting `master`
 - `workflow_dispatch` for manual runs
 - Python matrix: `["3.12", "3.13", "3.14"]`
-- uv-based install, cache, lint, format, type-check, test, and build steps
+- uv-based install (`uv sync --locked`), then the canonical `make ci` target
+- Read-only `contents` permission, `concurrency` cancellation, and a job
+  `timeout-minutes`
 - Network tests opt-in only (`-m "not network"` is the default)
 
 Do not add Gitea, Forgejo, Codeberg, or Woodpecker CI configuration.

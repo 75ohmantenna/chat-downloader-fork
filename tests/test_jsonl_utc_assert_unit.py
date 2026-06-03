@@ -3,6 +3,7 @@
 """JSONL writer rejects naive datetimes at the output boundary."""
 
 import datetime
+import json
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,18 @@ def test_jsonl_accepts_utc_aware_datetime(tmp_path: Path) -> None:
         writer.write({"ts_iso": aware.isoformat(), "ok": True})
     finally:
         writer.close()
+
+
+def test_jsonl_assert_passes_non_dict_items(tmp_path: Path) -> None:
+    """Non-dict items skip the dict-only datetime scan and serialize."""
+    path = tmp_path / "out.jsonl"
+    writer = JsonLinesContinuousWriter(str(path))
+    try:
+        writer.write([1, 2, 3])
+    finally:
+        writer.close()
+    with open(path, encoding="utf-8") as f:
+        assert [json.loads(line) for line in f] == [[1, 2, 3]]
 
 
 def test_jsonl_assert_only_inspects_top_level(tmp_path: Path) -> None:

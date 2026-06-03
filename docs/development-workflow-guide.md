@@ -93,15 +93,33 @@ The project `Makefile` wraps the commands above into convenient targets:
 | Target | Equivalent to |
 | --- | --- |
 | `make setup` | `uv sync` |
-| `make lock` | `uv lock` |
+| `make lock` | `uv lock` (update the lockfile) |
+| `make lock-check` | `uv lock --check` (verify the lockfile is current) |
 | `make test` | pytest offline suite |
 | `make lint` | ruff check |
 | `make fmt` | ruff format (apply) |
 | `make fmt-check` | ruff format --check |
 | `make typecheck` | mypy |
-| `make coverage` | coverage erase + run + report |
-| `make build` | build wheel and sdist |
-| `make check` | lint + fmt-check + typecheck + test |
+| `make coverage` | coverage erase + run + report, **enforced at 100%** |
+| `make build` | clean `dist/` then build wheel and sdist |
+| `make smoke` | build, then install the wheel in an isolated env and run `chat_downloader --version` |
+| `make check` | lint + fmt-check + typecheck + test (fast local loop) |
+| `make ci` | **canonical validation** — used locally and in GitHub Actions |
+
+`make ci` is the single source of truth for validation. It runs the full
+deterministic offline path: `lock-check` → `lint` → `fmt-check` → `typecheck`
+→ `coverage` (enforced at 100%) → `smoke` (which builds first). GitHub Actions
+runs this exact target after `uv sync --locked`, so local and hosted CI cannot
+drift.
+
+The canonical `make ci` path runs validation tools through `uv run --locked`
+(the `UV_RUN` Makefile variable), so the committed lockfile is always honored.
+The convenience targets `make test`, `make fmt`, and `make lock` intentionally
+remain unlocked for fast local iteration.
+
+Coverage is enforced at 100% via `fail_under = 100` in
+`[tool.coverage.report]` in `pyproject.toml`; `make coverage` (and therefore
+`make ci`) fails if total coverage drops below 100%.
 
 ## Test Strategy
 
@@ -224,14 +242,14 @@ Workflow file: `.github/workflows/ci.yml`
 
 CI validates Python: 3.12, 3.13, and 3.14.
 
-Automatic push triggers:
+CI runs on pushes to **all branches**. Pull requests targeting `master` are
+also validated. Manual runs are available via `workflow_dispatch` from the
+GitHub Actions interface.
 
-- `master`
-- `chore/**`
-- `fix/**`
-
-Pull requests targeting `master` are also validated. Manual runs are available
-via `workflow_dispatch` from the GitHub Actions interface.
+The workflow installs dependencies with `uv sync --locked`, then runs the
+canonical `make ci` target. It declares read-only `contents` permission,
+cancels superseded in-progress runs for the same ref via `concurrency`, and
+sets a per-job `timeout-minutes`.
 
 Network tests are opt-in and excluded from the default CI suite (`-m "not network"`).
 

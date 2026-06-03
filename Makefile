@@ -1,6 +1,7 @@
 UV ?= uv
+UV_RUN ?= $(UV) run --locked
 
-.PHONY: setup lock test lint fmt fmt-check typecheck coverage build check clean
+.PHONY: setup lock lock-check test lint fmt fmt-check typecheck coverage build smoke ci check clean
 
 setup:
 	$(UV) sync
@@ -8,29 +9,38 @@ setup:
 lock:
 	$(UV) lock
 
+lock-check:
+	$(UV) lock --check
+
 test:
 	$(UV) run pytest -q -p no:rerunfailures -m "not network"
 
 lint:
-	$(UV) run ruff check src/chat_downloader tests
+	$(UV_RUN) ruff check src/chat_downloader tests
 
 fmt:
 	$(UV) run ruff format src/chat_downloader tests
 
 fmt-check:
-	$(UV) run ruff format --check src/chat_downloader tests
+	$(UV_RUN) ruff format --check src/chat_downloader tests
 
 typecheck:
-	$(UV) run mypy .
+	$(UV_RUN) mypy .
 
 coverage:
-	$(UV) run coverage erase
-	PYTHONHASHSEED=0 $(UV) run coverage run --source chat_downloader \
-		-m pytest -q -m "not network"
-	$(UV) run coverage report -m --precision=2
+	$(UV_RUN) coverage erase
+	PYTHONHASHSEED=0 $(UV_RUN) coverage run -m pytest -q -p no:rerunfailures -m "not network"
+	$(UV_RUN) coverage report
 
 build:
+	rm -rf dist
 	$(UV) build
+
+smoke: build
+	@whl=$$(ls dist/*.whl); \
+	$(UV) run --isolated --no-project --with "$$whl" chat_downloader --version
+
+ci: lock-check lint fmt-check typecheck coverage smoke
 
 check: lint fmt-check typecheck test
 
