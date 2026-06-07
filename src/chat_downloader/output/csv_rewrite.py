@@ -67,8 +67,7 @@ def rewrite_csv_with_new_columns(
         current_file.close()
         shutil.move(new_file_path, file_name)
         new_file_path = None
-    except BaseException:
+    finally:
         if new_file_path is not None:
             with contextlib.suppress(OSError):
                 os.unlink(new_file_path)
-        raise

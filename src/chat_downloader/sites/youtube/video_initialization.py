@@ -4,13 +4,18 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.string_utils import regex_search
 
-from .constants_patterns import _YT_INITIAL_DATA_RE
+from ._protocols import YouTubeDownloaderProto
+from .constants_patterns import (
+    _YT_INITIAL_DATA_RE,
+    _YT_LIVE_CHAT_REPLAY_URL,
+    _YT_LIVE_CHAT_URL,
+)
 from .helpers import extract_chat_submenu_continuations
 from .playability import raise_if_playability_error
 from .video_status_models import REPLAY_STATUSES
@@ -29,13 +34,9 @@ class YouTubeVideoInitializationMixin:
         video_type: str = "video",
     ) -> tuple[dict[str, Any], Any]:
         """Get initial YouTube video information and continuation metadata."""
-        details, player_response_info, yt_initial_data, ytcfg = (
-            self._parse_video_data(  # type: ignore[attr-defined]
-                video_id,
-                params,
-                video_type,
-            )
-        )
+        details, player_response_info, yt_initial_data, ytcfg = cast(
+            YouTubeDownloaderProto, self
+        )._parse_video_data(video_id, params, video_type)
 
         # Indigo128 03.11.2025 >>
         # Continuation changes mid October 2025
@@ -45,15 +46,14 @@ class YouTubeVideoInitializationMixin:
             ]["conversationBar"]["liveChatRenderer"]["continuations"][0][
                 "reloadContinuationData"
             ]["continuation"]
+            proto = cast(YouTubeDownloaderProto, self)
             if details["status"] in REPLAY_STATUSES:
-                response = self._session_get(  # type: ignore[attr-defined]
-                    "https://www.youtube.com/live_chat_replay"
-                    f"?continuation={client_continuation}",
+                response = proto._session_get(
+                    f"{_YT_LIVE_CHAT_REPLAY_URL}?continuation={client_continuation}",
                 )
             else:
-                response = self._session_get(  # type: ignore[attr-defined]
-                    "https://www.youtube.com/live_chat"
-                    f"?continuation={client_continuation}",
+                response = proto._session_get(
+                    f"{_YT_LIVE_CHAT_URL}?continuation={client_continuation}",
                 )
             html = response.text
             yt = regex_search(html, _YT_INITIAL_DATA_RE)

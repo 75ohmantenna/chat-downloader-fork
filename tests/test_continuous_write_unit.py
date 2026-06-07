@@ -417,6 +417,20 @@ def test_factory_validate_file_name_raises() -> None:
     assert not writer.is_initialised()
 
 
+def test_initialize_if_needed_clears_writer_on_oserror(
+    tmp_path: pathlib.Path,
+) -> None:
+    writer = ContinuousWriter(
+        _ext_path(tmp_path, "jsonl"), lazy_initialise=True
+    )
+    writer._open_writer = lambda _: (_ for _ in ()).throw(  # type: ignore[method-assign]
+        OSError("disk full")
+    )
+    with pytest.raises(OSError, match="disk full"):
+        writer._initialize_if_needed()
+    assert writer._writer is None
+
+
 def test_factory_lazy_init_can_recover_after_validation_failure(
     tmp_path: pathlib.Path,
 ) -> None:

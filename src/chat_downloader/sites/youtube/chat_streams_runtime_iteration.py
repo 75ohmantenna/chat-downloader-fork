@@ -30,7 +30,11 @@ from .client_context import (
 )
 from .client_requests_continuation import _get_continuation_info
 from .constants_message import _MESSAGE_GROUPS, _MESSAGE_TYPES
-from .constants_patterns import _YT_HOME
+from .constants_patterns import (
+    _YT_HOME,
+    _YT_MAX_NO_PROGRESS_POLLS,
+    _YT_MAX_PROFILE_FALLBACKS,
+)
 from .continuation_loop import (
     ContinuationLoopState,
     build_continuation_params,
@@ -473,8 +477,8 @@ def _get_chat_messages(
     # Defensive bounds: live chat normally produces actions or rotates the
     # continuation token within seconds. If neither happens for several
     # polls in a row, YouTube has effectively stopped serving us.
-    max_no_progress_polls = 5
-    max_profile_fallbacks = 3
+    max_no_progress_polls = _YT_MAX_NO_PROGRESS_POLLS
+    max_profile_fallbacks = _YT_MAX_PROFILE_FALLBACKS
     no_progress_count = 0
     fallback_count = 0
 

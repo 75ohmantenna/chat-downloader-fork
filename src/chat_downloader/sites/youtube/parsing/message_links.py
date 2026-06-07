@@ -30,10 +30,13 @@ def _parse_youtube_link(text: str) -> str:
     :return: Normalized URL
     :rtype: str
     """
-    from chat_downloader.sites.youtube.constants_patterns import _YT_HOME
+    from chat_downloader.sites.youtube.constants_patterns import (
+        _YT_HOME,
+        _YT_REDIRECT_PATH,
+    )
 
     # is a redirect link
-    if text.startswith(("/redirect", "https://www.youtube.com/redirect")):
+    if text.startswith((_YT_REDIRECT_PATH, _YT_HOME + _YT_REDIRECT_PATH)):
         info = dict(parse.parse_qsl(parse.urlsplit(text).query))
         return info.get("q") or ""
     if text.startswith("//"):

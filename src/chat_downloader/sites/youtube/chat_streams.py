@@ -41,10 +41,9 @@ class YouTubeChatStreamsMixin:
         self, clip_id: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat messages for a YouTube clip."""
-        coerce = self._coerce_chat_request  # type: ignore[attr-defined]
-        get_info = self._get_initial_video_info  # type: ignore[attr-defined]
-        request = coerce(params)
-        initial_info, ytcfg = get_info(
+        proto = cast(YouTubeDownloaderProto, self)
+        request = proto._coerce_chat_request(params)
+        initial_info, ytcfg = proto._get_initial_video_info(
             clip_id,
             request,
             video_type="clip",
@@ -79,10 +78,9 @@ class YouTubeChatStreamsMixin:
         self, video_id: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat messages for a YouTube video, given its ID."""
-        coerce = self._coerce_chat_request  # type: ignore[attr-defined]
-        get_info = self._get_initial_video_info  # type: ignore[attr-defined]
-        request = coerce(params)
-        initial_info, ytcfg = get_info(video_id, request)
+        proto = cast(YouTubeDownloaderProto, self)
+        request = proto._coerce_chat_request(params)
+        initial_info, ytcfg = proto._get_initial_video_info(video_id, request)
 
         return Chat(
             self._get_chat_messages(initial_info, ytcfg, request),

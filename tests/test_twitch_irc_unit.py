@@ -227,9 +227,11 @@ def test_create_irc_socket_closes_raw_socket_if_ssl_wrap_fails(
     monkeypatch,
 ) -> None:
     """Raw socket must be closed when SSL wrapping raises."""
+    import ssl
+
     raw_socket = Mock()
     mock_ctx = Mock()
-    mock_ctx.wrap_socket = Mock(side_effect=RuntimeError("tls-fail"))
+    mock_ctx.wrap_socket = Mock(side_effect=ssl.SSLError("tls-fail"))
 
     monkeypatch.setattr(
         "chat_downloader.sites.twitch.irc_transport.socket.create_connection",
@@ -240,7 +242,7 @@ def test_create_irc_socket_closes_raw_socket_if_ssl_wrap_fails(
         lambda: mock_ctx,
     )
 
-    with contextlib.suppress(RuntimeError):
+    with contextlib.suppress(ssl.SSLError):
         _create_irc_socket()
 
     raw_socket.close.assert_called_once_with()

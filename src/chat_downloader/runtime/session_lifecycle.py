@@ -164,7 +164,7 @@ def create_session(
     if overwrite and existing_session is not None:
         try:
             existing_session.close()
-        except Exception as error:
+        except (OSError, ConnectionError, RuntimeError) as error:
             log(
                 "warning",
                 "Error closing existing "
@@ -186,6 +186,6 @@ def close_sessions(owner: ChatDownloaderProto) -> None:
     for session in owner.sessions.values():
         try:
             session.close()
-        except Exception as error:
+        except (OSError, ConnectionError, RuntimeError) as error:
             log("warning", f"Error closing session: {error}")
     owner.sessions = {}

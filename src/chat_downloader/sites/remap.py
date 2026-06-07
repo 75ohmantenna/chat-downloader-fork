@@ -33,7 +33,7 @@ class Remapper:
         info: dict[str, Any],
         remapping_dict: Mapping[str, Any],
         remap_key: str,
-        remap_input: Any,
+        remap_input: object,
         keep_unknown_keys: bool = False,
         replace_char_with_underscores: str | None = None,
     ) -> None:

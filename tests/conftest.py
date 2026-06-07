@@ -64,6 +64,11 @@ def tmp_dir(tmp_path: pathlib.Path) -> str:
 
 
 @pytest.fixture
+def jsonl_path(tmp_path: pathlib.Path) -> str:
+    return str(tmp_path / "test.jsonl")
+
+
+@pytest.fixture
 def make_fake_http_response():
     def factory(status_code: int, payload: Any, text: str = "") -> Any:
         class _Resp:

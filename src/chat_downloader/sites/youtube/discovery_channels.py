@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
+from ._protocols import YouTubeDownloaderProto
 from .discovery_channels_runtime_iteration import get_user_videos
 
 if TYPE_CHECKING:
@@ -30,8 +31,9 @@ class YouTubeChannelDiscoveryMixin:
         if params is None:
             request = None
         else:
-            coerce = self._coerce_chat_request  # type: ignore[attr-defined]
-            request = coerce(params)
+            request = cast(YouTubeDownloaderProto, self)._coerce_chat_request(
+                params
+            )
         yield from get_user_videos(
             self,
             channel_id=channel_id,

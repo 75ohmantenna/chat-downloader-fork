@@ -34,174 +34,71 @@ def _load(name: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Standard continuation with actions and continuation token
+# Parametrized fixture-based tests
+#
+# Columns: fixture_name, expected_token, expected_timeout_ms,
+#          expected_actions_len (None = don't assert), expected_is_end,
+#          expected_debug_key (None = don't assert)
 # ---------------------------------------------------------------------------
 
-
-class TestStandardWithToken:
-    """standard_with_token.json — timedContinuationData with two actions."""
-
-    def setup_method(self) -> None:
-        self.result = parse_continuation_response(_load("standard_with_token"))
-
-    def test_returns_parse_result(self) -> None:
-        assert isinstance(self.result, ContinuationParseResult)
-
-    def test_actions_non_empty(self) -> None:
-        assert len(self.result.actions) == 2
-
-    def test_actions_is_list(self) -> None:
-        assert isinstance(self.result.actions, list)
-
-    def test_next_continuation_exact_value(self) -> None:
-        assert self.result.next_continuation == "NEXT_TOKEN_ABC123"
-
-    def test_timeout_ms_exact_value(self) -> None:
-        assert self.result.timeout_ms == 5000
-
-    def test_is_end_false(self) -> None:
-        assert self.result.is_end is False
-
-    def test_debug_info_has_continuation_key(self) -> None:
-        assert (
-            self.result.debug_info.get("continuation_key")
-            == "timedContinuationData"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Invalidation continuation (live stream)
-# ---------------------------------------------------------------------------
+_CONTINUATION_CASES = [
+    (
+        "standard_with_token",
+        "NEXT_TOKEN_ABC123",
+        5000,
+        2,
+        False,
+        "timedContinuationData",
+    ),
+    (
+        "invalidation_continuation",
+        "LIVE_INVALIDATION_TOKEN_456",
+        3000,
+        1,
+        False,
+        "invalidationContinuationData",
+    ),
+    ("terminal_no_continuation", None, None, 1, True, None),
+    ("seek_continuation_only", None, None, 0, True, None),
+    ("no_actions_live_heartbeat", "HEARTBEAT_TOKEN_NEXT", 5000, 0, False, None),
+    (
+        "timeout_clamping_large",
+        "CLAMPED_TIMEOUT_TOKEN",
+        20000,
+        None,
+        False,
+        None,
+    ),
+]
 
 
-class TestInvalidationContinuation:
-    """invalidation_continuation.json — invalidationContinuationData shape."""
+@pytest.mark.parametrize(
+    "fixture_name,expected_token,expected_timeout_ms,"
+    "expected_actions_len,expected_is_end,expected_debug_key",
+    _CONTINUATION_CASES,
+    ids=[c[0] for c in _CONTINUATION_CASES],
+)
+def test_continuation_parsing(
+    fixture_name: str,
+    expected_token: str | None,
+    expected_timeout_ms: int | None,
+    expected_actions_len: int | None,
+    expected_is_end: bool,
+    expected_debug_key: str | None,
+) -> None:
+    result = parse_continuation_response(_load(fixture_name))
 
-    def setup_method(self) -> None:
-        self.result = parse_continuation_response(
-            _load("invalidation_continuation")
-        )
+    assert isinstance(result, ContinuationParseResult)
+    assert isinstance(result.actions, list)
+    assert result.next_continuation == expected_token
+    assert result.timeout_ms == expected_timeout_ms
+    assert result.is_end is expected_is_end
 
-    def test_next_continuation_exact_value(self) -> None:
-        assert self.result.next_continuation == "LIVE_INVALIDATION_TOKEN_456"
+    if expected_actions_len is not None:
+        assert len(result.actions) == expected_actions_len
 
-    def test_timeout_ms(self) -> None:
-        assert self.result.timeout_ms == 3000
-
-    def test_actions_non_empty(self) -> None:
-        assert len(self.result.actions) == 1
-
-    def test_is_end_false(self) -> None:
-        assert self.result.is_end is False
-
-    def test_debug_info_key(self) -> None:
-        assert (
-            self.result.debug_info.get("continuation_key")
-            == "invalidationContinuationData"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Terminal response — no continuation list entries
-# ---------------------------------------------------------------------------
-
-
-class TestTerminalNoContinuation:
-    """terminal_no_continuation.json — empty continuations list."""
-
-    def setup_method(self) -> None:
-        self.result = parse_continuation_response(
-            _load("terminal_no_continuation")
-        )
-
-    def test_next_continuation_is_none(self) -> None:
-        assert self.result.next_continuation is None
-
-    def test_is_end_true(self) -> None:
-        assert self.result.is_end is True
-
-    def test_actions_present(self) -> None:
-        # Actions can still be present in the last page.
-        assert len(self.result.actions) == 1
-
-    def test_timeout_ms_is_none(self) -> None:
-        assert self.result.timeout_ms is None
-
-
-# ---------------------------------------------------------------------------
-# Seek-continuation-only — no chat token
-# ---------------------------------------------------------------------------
-
-
-class TestSeekContinuationOnly:
-    """seek_continuation_only.json — playerSeekContinuationData only."""
-
-    def setup_method(self) -> None:
-        self.result = parse_continuation_response(
-            _load("seek_continuation_only")
-        )
-
-    def test_next_continuation_is_none(self) -> None:
-        # Seek continuations are not chat tokens; result is end-of-stream.
-        assert self.result.next_continuation is None
-
-    def test_is_end_true(self) -> None:
-        assert self.result.is_end is True
-
-    def test_actions_empty(self) -> None:
-        assert self.result.actions == []
-
-    def test_timeout_ms_is_none(self) -> None:
-        assert self.result.timeout_ms is None
-
-
-# ---------------------------------------------------------------------------
-# Live heartbeat — no actions, has continuation token
-# ---------------------------------------------------------------------------
-
-
-class TestNoActionsLiveHeartbeat:
-    """no_actions_live_heartbeat.json — continuation token but no actions."""
-
-    def setup_method(self) -> None:
-        self.result = parse_continuation_response(
-            _load("no_actions_live_heartbeat")
-        )
-
-    def test_actions_empty(self) -> None:
-        assert self.result.actions == []
-
-    def test_next_continuation_exact_value(self) -> None:
-        assert self.result.next_continuation == "HEARTBEAT_TOKEN_NEXT"
-
-    def test_is_end_false(self) -> None:
-        assert self.result.is_end is False
-
-    def test_timeout_ms(self) -> None:
-        assert self.result.timeout_ms == 5000
-
-
-# ---------------------------------------------------------------------------
-# Timeout extraction — raw timeout > 8000 ms is preserved for poll policy
-# ---------------------------------------------------------------------------
-
-
-class TestTimeoutClampingLarge:
-    """timeout_clamping_large.json — raw timeoutMs=20000 is extracted."""
-
-    def setup_method(self) -> None:
-        self.result = parse_continuation_response(
-            _load("timeout_clamping_large")
-        )
-
-    def test_timeout_ms_exact_value(self) -> None:
-        assert self.result.timeout_ms == 20000
-
-    def test_next_continuation_exact_value(self) -> None:
-        assert self.result.next_continuation == "CLAMPED_TIMEOUT_TOKEN"
-
-    def test_is_end_false(self) -> None:
-        assert self.result.is_end is False
+    if expected_debug_key is not None:
+        assert result.debug_info.get("continuation_key") == expected_debug_key
 
 
 # ---------------------------------------------------------------------------

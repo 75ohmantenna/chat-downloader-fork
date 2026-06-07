@@ -8,6 +8,13 @@ import time
 from typing import Any
 from urllib.parse import parse_qsl, urlencode
 
+from .constants_patterns import (
+    _YT_DOMAIN,
+    _YT_SAPISID_EXPIRE_SECONDS,
+    _YT_SOCS_CONSENTED_PREFIX,
+    _YT_SOCS_INIT_VALUE,
+)
+
 
 def _initialize_pref(session: Any) -> None:
     """Merge hl=en and tz=UTC into the YouTube PREF cookie.
@@ -23,7 +30,7 @@ def _initialize_pref(session: Any) -> None:
         with contextlib.suppress(ValueError):
             pref = dict(parse_qsl(pref_cookie))
     pref.update({"hl": "en", "tz": "UTC"})
-    session.set_cookie_value(".youtube.com", "PREF", urlencode(pref))
+    session.set_cookie_value(_YT_DOMAIN, "PREF", urlencode(pref))
 
 
 def _initialize_consent(session: Any) -> None:
@@ -31,9 +38,11 @@ def _initialize_consent(session: Any) -> None:
     if session.get_cookie_value("__Secure-3PSID"):
         return
     socs = session.get_cookie_value("SOCS")
-    if socs and not socs.startswith("CAA"):  # not consented
+    if socs and not socs.startswith(_YT_SOCS_CONSENTED_PREFIX):  # not consented
         return
-    session.set_cookie_value(".youtube.com", "SOCS", "CAI", secure=True)
+    session.set_cookie_value(
+        _YT_DOMAIN, "SOCS", _YT_SOCS_INIT_VALUE, secure=True
+    )
 
 
 def _get_sid_cookies(session: Any) -> tuple[str | None, str | None, str | None]:
@@ -98,11 +107,11 @@ def _generate_sapisidhash_header(
         sapisid_value = yt_3psapisid or yt_1psapisid
         if sapisid_value:
             session.set_cookie_value(
-                ".youtube.com",
+                _YT_DOMAIN,
                 "SAPISID",
                 sapisid_value,
                 secure=True,
-                expire_time=time_now + 3600,
+                expire_time=time_now + _YT_SAPISID_EXPIRE_SECONDS,
             )
             yt_sapisid = sapisid_value
 

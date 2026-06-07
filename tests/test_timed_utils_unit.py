@@ -250,6 +250,20 @@ def test_next_item_after_expiry_uses_timeout_callback() -> None:
     assert tg._closed is True
 
 
+def test_start_timer_raises_without_configured_timeout() -> None:
+    tg = TimedGenerator(iter(()))
+    with pytest.raises(RuntimeError, match="start_timer\\(\\) called without"):
+        tg.start_timer()
+
+
+def test_start_inactivity_timer_raises_without_configured_timeout() -> None:
+    tg = TimedGenerator(iter(()))
+    with pytest.raises(
+        RuntimeError, match="start_inactivity_timer\\(\\) called without"
+    ):
+        tg.start_inactivity_timer()
+
+
 def test_worker_loop_reraises_system_exit() -> None:
     class ExitIter:
         def __iter__(self):

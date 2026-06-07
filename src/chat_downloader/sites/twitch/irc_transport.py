@@ -12,7 +12,16 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
 
-from .constants import IRC_HOST, IRC_PORT, MESSAGE_REGEX, PING_TEXT, PONG_TEXT
+from .constants import (
+    IRC_ANONYMOUS_NICK,
+    IRC_ANONYMOUS_PASSWORD,
+    IRC_CAP_REQUEST,
+    IRC_HOST,
+    IRC_PORT,
+    MESSAGE_REGEX,
+    PING_TEXT,
+    PONG_TEXT,
+)
 from .parsing.messages import _parse_irc_item
 
 if TYPE_CHECKING:
@@ -34,7 +43,7 @@ def _create_irc_socket() -> ssl.SSLSocket:
     try:
         context = ssl.create_default_context()
         return context.wrap_socket(raw_socket, server_hostname=IRC_HOST)
-    except Exception:
+    except (ssl.SSLError, OSError):
         raw_socket.close()
         raise
 
@@ -192,15 +201,9 @@ class TwitchChatIRC:
         self.current_channel: str | None = None
 
         try:
-            self.send_raw(
-                "CAP REQ :twitch.tv/tags twitch.tv/commands "
-                "twitch.tv/membership"
-            )
-            # Standard Twitch anonymous read-only IRC credentials.
-            # Any PASS value and a justinfan* NICK grants read-only access
-            # without auth.
-            self.send_raw("PASS SCHMOOPIIE")
-            self.send_raw("NICK justinfan67420")
+            self.send_raw(IRC_CAP_REQUEST)
+            self.send_raw(f"PASS {IRC_ANONYMOUS_PASSWORD}")
+            self.send_raw(f"NICK {IRC_ANONYMOUS_NICK}")
         except OSError:
             self.socket.close()
             raise

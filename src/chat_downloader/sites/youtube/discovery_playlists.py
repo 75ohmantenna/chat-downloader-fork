@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.utils.dict_utils import multi_get
 
+from ._protocols import YouTubeDownloaderProto
 from .client_context import _get_innertube_context
 from .client_requests_continuation import _get_continuation_info
 from .client_requests_initial import _get_initial_info
@@ -45,18 +46,17 @@ class YouTubePlaylistDiscoveryMixin:
         else:
             request = ChatRequestModel.from_kwargs(**params)
 
+        proto = cast(YouTubeDownloaderProto, self)
         yt_initial_data, ytcfg, _ = _get_initial_info(
             playlist_url,
-            self._session_get,  # type: ignore[attr-defined]
+            proto._session_get,
             request,
             _YT_INITIAL_DATA_RE,
             _YT_CFG_RE,
             _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
 
-        page_contents = self._get_rendered_content(  # type: ignore[attr-defined]
-            yt_initial_data
-        )
+        page_contents = proto._get_rendered_content(yt_initial_data)
 
         api_key = ytcfg.get("INNERTUBE_API_KEY")
         continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
@@ -89,7 +89,7 @@ class YouTubePlaylistDiscoveryMixin:
                 continuation_params["continuation"] = continuation
                 yt_info = _get_continuation_info(
                     continuation_url,
-                    self._session_post,  # type: ignore[attr-defined]
+                    proto._session_post,
                     request,
                     require_live_chat_continuation=False,
                     json=continuation_params,

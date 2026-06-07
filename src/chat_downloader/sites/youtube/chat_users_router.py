@@ -7,6 +7,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, cast
 
+from ._protocols import YouTubeDownloaderProto
+
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
@@ -40,11 +42,8 @@ class YouTubeChatUsersRouterMixin:
         self, channel_id: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat by channel ID."""
-        return cast(
-            "Chat",
-            self._get_chat_by_user_args(  # type: ignore[attr-defined]
-                {"channel_id": channel_id}, params
-            ),
+        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+            {"channel_id": channel_id}, params
         )
 
     def get_chat_by_user_id(
@@ -55,11 +54,8 @@ class YouTubeChatUsersRouterMixin:
         Such as NASAtelevision in
         https://www.youtube.com/user/NASAtelevision
         """
-        return cast(
-            "Chat",
-            self._get_chat_by_user_args(  # type: ignore[attr-defined]
-                {"user_id": user_id}, params
-            ),
+        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+            {"user_id": user_id}, params
         )
 
     def get_chat_by_custom_username(
@@ -68,20 +64,14 @@ class YouTubeChatUsersRouterMixin:
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
         """Get chat by custom username."""
-        return cast(
-            "Chat",
-            self._get_chat_by_user_args(  # type: ignore[attr-defined]
-                {"custom_username": custom_username}, params
-            ),
+        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+            {"custom_username": custom_username}, params
         )
 
     def get_chat_by_handle(
         self, handle: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat by handle."""
-        return cast(
-            "Chat",
-            self._get_chat_by_user_args(  # type: ignore[attr-defined]
-                {"handle": handle}, params
-            ),
+        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+            {"handle": handle}, params
         )

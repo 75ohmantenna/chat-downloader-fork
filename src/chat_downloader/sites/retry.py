@@ -72,7 +72,7 @@ def retry(
         retry_text += f" {error} ({error.__class__.__name__})"
 
     if isinstance(error, JSONDecodeError):
-        log("debug", error.__dict__)
+        log("debug", f"JSONDecodeError at pos={error.pos!r}: {error.msg!r}")
         page_title = get_title_of_webpage(error.doc)
         if page_title:
             log("debug", f"Title: {page_title}")

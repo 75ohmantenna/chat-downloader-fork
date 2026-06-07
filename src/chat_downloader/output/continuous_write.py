@@ -154,7 +154,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
                 self._load_existing_columns()
 
             self._reset_csv_writer()
-        except BaseException:
+        except (OSError, csv.Error, RuntimeError):
             self.file.close()
             raise
 
@@ -348,7 +348,7 @@ class ContinuousWriter:
 
         try:
             self._open_writer(self.file_name)
-        except Exception:
+        except (OSError, csv.Error, ValueError):
             self._writer = None
             raise
 

@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from itertools import islice
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.dict_utils import try_get_first_value
+
+from ._protocols import YouTubeDownloaderProto
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
@@ -58,7 +60,7 @@ class YouTubeChatUsersRetrievalMixin:
         max_vids_to_try = 5
 
         while True:
-            vids = self.get_user_videos(  # type: ignore[attr-defined]
+            vids = cast(YouTubeDownloaderProto, self).get_user_videos(
                 **user_video_args,
                 video_type="live",
                 params=params,
@@ -80,9 +82,9 @@ class YouTubeChatUsersRetrievalMixin:
                     continue
 
                 try:
-                    chat = self.get_chat_by_video_id(  # type: ignore[attr-defined]
-                        video_id, params
-                    )
+                    chat = cast(
+                        YouTubeDownloaderProto, self
+                    ).get_chat_by_video_id(video_id, params)
 
                     log(
                         "info",

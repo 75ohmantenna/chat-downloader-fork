@@ -14,6 +14,7 @@ Logging Strategy:
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import logger
@@ -242,7 +243,7 @@ class TwitchChatDownloader(BaseChatDownloader):
 
     def _get_chat_by_vod_id(
         self,
-        match: Any,
+        match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
         """Internal routing method for VOD chat retrieval.
@@ -282,7 +283,7 @@ class TwitchChatDownloader(BaseChatDownloader):
 
     def _get_chat_by_clip_id(
         self,
-        match: Any,
+        match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
         """Internal routing method for clip chat retrieval.
@@ -355,7 +356,7 @@ class TwitchChatDownloader(BaseChatDownloader):
 
     def _get_chat_by_stream_id(
         self,
-        match: Any,
+        match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
         """Internal routing method for stream chat retrieval.

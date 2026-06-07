@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 
+from ._protocols import YouTubeDownloaderProto
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _YT_CFG_RE,
@@ -50,7 +51,7 @@ class YouTubeVideoMetadataCoreMixin:
 
         yt_initial_data, ytcfg, player_response_info = _get_initial_info(
             original_url,
-            self._session_get,  # type: ignore[attr-defined]
+            cast(YouTubeDownloaderProto, self)._session_get,
             params,
             _YT_INITIAL_DATA_RE,
             _YT_CFG_RE,

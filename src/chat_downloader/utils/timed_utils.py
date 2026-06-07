@@ -212,7 +212,10 @@ class TimedGenerator:
 
     def start_timer(self) -> None:
         """Start (or restart) the overall timeout timer."""
-        assert self.timeout is not None
+        if self.timeout is None:
+            raise RuntimeError(
+                "start_timer() called without a configured timeout"
+            )
         self._timeout_expired.clear()
         self._timeout_deadline = time.monotonic() + self.timeout
 
@@ -224,7 +227,11 @@ class TimedGenerator:
 
     def start_inactivity_timer(self) -> None:
         """Start (or restart) the inactivity timeout timer."""
-        assert self.inactivity_timeout is not None
+        if self.inactivity_timeout is None:
+            raise RuntimeError(
+                "start_inactivity_timer() called without a configured "
+                "inactivity_timeout"
+            )
         self._inactivity_expired.clear()
         self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
 
@@ -289,7 +296,7 @@ class TimedGenerator:
         if callable(close):
             try:
                 close()
-            except Exception as error:
+            except (RuntimeError, StopIteration, ValueError) as error:
                 if self._is_reentrant_generator_close_error(error):
                     return
                 from chat_downloader.debugging import log

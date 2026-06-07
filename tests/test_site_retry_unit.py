@@ -75,7 +75,10 @@ def test_retry_logs_json_decode_context_and_page_title(monkeypatch) -> None:
         interruptible_retry=False,
     )
 
-    assert logs[0] == ("debug", error.__dict__)
+    assert logs[0] == (
+        "debug",
+        f"JSONDecodeError at pos={error.pos!r}: {error.msg!r}",
+    )
     assert logs[1] == ("debug", "Title: Example page")
     assert logs[2] == (
         "warning",
@@ -107,16 +110,7 @@ def test_retry_skips_page_title_log_when_title_missing(monkeypatch) -> None:
     )
 
     assert logs == [
-        (
-            "debug",
-            {
-                "msg": "bad json",
-                "doc": "<html></html>",
-                "pos": 0,
-                "lineno": 1,
-                "colno": 1,
-            },
-        ),
+        ("debug", "JSONDecodeError at pos=0: 'bad json'"),
         (
             "warning",
             [

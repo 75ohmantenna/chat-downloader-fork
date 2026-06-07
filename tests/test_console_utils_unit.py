@@ -268,6 +268,32 @@ def test_write_to_windows_console_retries_when_skip_errors_enabled(
     ]
 
 
+def test_write_to_windows_console_raises_on_wrong_nonbmp_written_count(
+    monkeypatch,
+) -> None:
+    def write_console(handle, text, count, written, _reserved) -> int:
+        written.value = 1  # wrong: non-BMP needs 2 code units
+        return 1
+
+    _install_fake_ctypes(monkeypatch, {"WriteConsoleW": write_console})
+
+    with pytest.raises(RuntimeError, match="Expected 2 code units"):
+        console_utils._write_to_windows_console(7, "\U0001f600")
+
+
+def test_write_to_windows_console_raises_on_zero_bmp_written(
+    monkeypatch,
+) -> None:
+    def write_console(handle, text, count, written, _reserved) -> int:
+        written.value = 0  # wrong: BMP write reported nothing written
+        return 1
+
+    _install_fake_ctypes(monkeypatch, {"WriteConsoleW": write_console})
+
+    with pytest.raises(RuntimeError, match="zero characters written"):
+        console_utils._write_to_windows_console(7, "hello")
+
+
 def test_windows_write_string_delegates_only_for_valid_console(
     monkeypatch,
 ) -> None:

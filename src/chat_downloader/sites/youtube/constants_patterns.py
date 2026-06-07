@@ -15,6 +15,19 @@ _YT_CFG_RE = r"ytcfg\.set\s*\(\s*({.+?})\s*\)\s*;"
 
 # URL base
 _YT_HOME = "https://www.youtube.com"
+_YT_LIVE_CHAT_URL = _YT_HOME + "/live_chat"
+_YT_LIVE_CHAT_REPLAY_URL = _YT_HOME + "/live_chat_replay"
+_YT_REDIRECT_PATH = "/redirect"
+
+# Auth constants
+_YT_DOMAIN = ".youtube.com"
+_YT_SOCS_CONSENTED_PREFIX = "CAA"
+_YT_SOCS_INIT_VALUE = "CAI"
+_YT_SAPISID_EXPIRE_SECONDS = 3_600
+
+# Poll-loop bounds
+_YT_MAX_NO_PROGRESS_POLLS = 5
+_YT_MAX_PROFILE_FALLBACKS = 3
 
 # URL matching patterns
 _VALID_URLS = {

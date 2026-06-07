@@ -156,10 +156,17 @@ def _write_to_windows_console(
 
         # Update position in string
         if not count:  # We just wrote a non-BMP character
-            assert written.value == 2
+            if written.value != 2:
+                raise RuntimeError(
+                    "Expected 2 code units for non-BMP character, "
+                    f"got {written.value}"
+                )
             text = text[1:]
         else:
-            assert written.value > 0
+            if written.value <= 0:
+                raise RuntimeError(
+                    "WriteConsoleW reported zero characters written"
+                )
             text = text[written.value :]
 
     return True

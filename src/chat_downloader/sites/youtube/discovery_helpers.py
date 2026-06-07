@@ -3,8 +3,9 @@
 """Discovery helpers and test fixtures for YouTube discovery mixin."""
 
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, cast
 
+from ._protocols import YouTubeDownloaderProto
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _LIVE_PLAYLIST_URL,
@@ -31,7 +32,7 @@ class YouTubeDiscoveryHelpersMixin:
 
         yt_initial_data, _, _ = _get_initial_info(
             _LIVE_PLAYLIST_URL,
-            self._session_get,  # type: ignore[attr-defined]
+            cast(YouTubeDownloaderProto, self)._session_get,
             params,
             _YT_INITIAL_DATA_RE,
             _YT_CFG_RE,
@@ -51,7 +52,7 @@ class YouTubeDiscoveryHelpersMixin:
             yield {"video_id": video_id}
 
         for playlist_url in self._iter_playlist_urls(tab_content):
-            yield from self.get_playlist_items(  # type: ignore[attr-defined]
+            yield from cast(YouTubeDownloaderProto, self).get_playlist_items(
                 playlist_url
             )
 
