@@ -11,6 +11,7 @@ from chat_downloader.utils.dict_utils import multi_get
 
 from ._protocols import YouTubeDownloaderProto
 from .client_context import _get_innertube_context
+from .discovery_helpers import _get_rendered_content
 from .client_requests_continuation import _get_continuation_info
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
@@ -56,7 +57,7 @@ class YouTubePlaylistDiscoveryMixin:
             _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
 
-        page_contents = proto._get_rendered_content(yt_initial_data)
+        page_contents = _get_rendered_content(yt_initial_data)
 
         api_key = ytcfg.get("INNERTUBE_API_KEY")
         continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"

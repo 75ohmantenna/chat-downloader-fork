@@ -64,10 +64,6 @@ class YouTubeDownloaderProto(Protocol):
         video_type: str = ...,
     ) -> tuple[dict[str, Any], Any]: ...
 
-    def _get_rendered_content(
-        self, yt_info: dict[str, Any], tab_index: int = ...
-    ) -> Any: ...
-
     def _get_chat_by_user_args(
         self,
         user_video_args: dict[str, str],

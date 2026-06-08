@@ -383,27 +383,26 @@ def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_r
         _session_get = object()
         _session_post = object()
 
-        @staticmethod
-        def _get_rendered_content(_yt_info, tab_index: int = 0):
-            assert tab_index == 0
-            return {
-                "playlistVideoListRenderer": {
-                    "contents": [
-                        {"playlistVideoRenderer": {"videoId": "one"}},
-                        {
-                            "continuationItemRenderer": {
-                                "continuationEndpoint": {
-                                    "continuationCommand": {"token": "cont-1"},
-                                },
-                            },
-                        },
-                    ],
-                },
-            }
-
     request = ChatRequest(url="https://www.youtube.com/playlist?list=PL123")
     continuation_calls = []
 
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
+        lambda _yt_info, tab_index=0: {
+            "playlistVideoListRenderer": {
+                "contents": [
+                    {"playlistVideoRenderer": {"videoId": "one"}},
+                    {
+                        "continuationItemRenderer": {
+                            "continuationEndpoint": {
+                                "continuationCommand": {"token": "cont-1"},
+                            },
+                        },
+                    },
+                ],
+            },
+        },
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",
         lambda *_args, **_kwargs: ({}, {"INNERTUBE_API_KEY": "key"}, {}),
@@ -682,7 +681,11 @@ def test_get_testing_items_yields_direct_video_renderers_from_rich_shelf(
 
 
 def test_get_rendered_content_extracts_selected_tab_content() -> None:
-    rendered = YouTubeDiscoveryHelpersMixin._get_rendered_content(
+    from chat_downloader.sites.youtube.discovery_helpers import (
+        _get_rendered_content,
+    )
+
+    rendered = _get_rendered_content(
         {
             "contents": {
                 "twoColumnBrowseResultsRenderer": {
@@ -720,26 +723,25 @@ def test_playlist_discovery_accepts_dict_params_and_stops_on_empty_continuation(
         _session_get = object()
         _session_post = object()
 
-        @staticmethod
-        def _get_rendered_content(_yt_info, tab_index: int = 0):
-            assert tab_index == 0
-            return {
-                "playlistVideoListRenderer": {
-                    "contents": [
-                        {"playlistVideoRenderer": {"videoId": "one"}},
-                        {
-                            "continuationItemRenderer": {
-                                "continuationEndpoint": {
-                                    "continuationCommand": {"token": "cont-1"},
-                                },
-                            },
-                        },
-                    ],
-                },
-            }
-
     calls = []
 
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
+        lambda _yt_info, tab_index=0: {
+            "playlistVideoListRenderer": {
+                "contents": [
+                    {"playlistVideoRenderer": {"videoId": "one"}},
+                    {
+                        "continuationItemRenderer": {
+                            "continuationEndpoint": {
+                                "continuationCommand": {"token": "cont-1"},
+                            },
+                        },
+                    },
+                ],
+            },
+        },
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",
         lambda *_args, **_kwargs: ({}, {"INNERTUBE_API_KEY": "key"}, {}),
@@ -783,11 +785,10 @@ def test_playlist_discovery_accepts_none_params_without_continuation(
         _session_get = object()
         _session_post = object()
 
-        @staticmethod
-        def _get_rendered_content(_yt_info, tab_index: int = 0):
-            assert tab_index == 0
-            return {"playlistVideoListRenderer": {"contents": []}}
-
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
+        lambda _yt_info, tab_index=0: {"playlistVideoListRenderer": {"contents": []}},
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",
         lambda *_args, **_kwargs: ({}, {"INNERTUBE_API_KEY": "key"}, {}),
@@ -815,26 +816,25 @@ def test_playlist_discovery_accepts_none_params_with_continuation(
         _session_get = object()
         _session_post = object()
 
-        @staticmethod
-        def _get_rendered_content(_yt_info, tab_index: int = 0):
-            assert tab_index == 0
-            return {
-                "playlistVideoListRenderer": {
-                    "contents": [
-                        {"playlistVideoRenderer": {"videoId": "one"}},
-                        {
-                            "continuationItemRenderer": {
-                                "continuationEndpoint": {
-                                    "continuationCommand": {"token": "cont-1"},
-                                },
-                            },
-                        },
-                    ],
-                },
-            }
-
     calls = []
 
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
+        lambda _yt_info, tab_index=0: {
+            "playlistVideoListRenderer": {
+                "contents": [
+                    {"playlistVideoRenderer": {"videoId": "one"}},
+                    {
+                        "continuationItemRenderer": {
+                            "continuationEndpoint": {
+                                "continuationCommand": {"token": "cont-1"},
+                            },
+                        },
+                    },
+                ],
+            },
+        },
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",
         lambda *_args, **_kwargs: ({}, {"INNERTUBE_API_KEY": "key"}, {}),
@@ -878,23 +878,22 @@ def test_playlist_discovery_breaks_on_repeated_continuation(
         _session_get = object()
         _session_post = object()
 
-        @staticmethod
-        def _get_rendered_content(_yt_info, tab_index: int = 0):
-            assert tab_index == 0
-            return {
-                "playlistVideoListRenderer": {
-                    "contents": [
-                        {
-                            "continuationItemRenderer": {
-                                "continuationEndpoint": {
-                                    "continuationCommand": {"token": "loop"},
-                                },
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
+        lambda _yt_info, tab_index=0: {
+            "playlistVideoListRenderer": {
+                "contents": [
+                    {
+                        "continuationItemRenderer": {
+                            "continuationEndpoint": {
+                                "continuationCommand": {"token": "loop"},
                             },
                         },
-                    ],
-                },
-            }
-
+                    },
+                ],
+            },
+        },
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",
         lambda *_args, **_kwargs: ({}, {"INNERTUBE_API_KEY": "key"}, {}),

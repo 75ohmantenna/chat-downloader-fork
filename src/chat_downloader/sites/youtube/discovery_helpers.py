@@ -16,6 +16,56 @@ from .constants_patterns import (
 )
 
 
+def _iter_playlist_urls(content: Any) -> Iterator[str]:
+    """Yield playlist URLs from a rendered discovery tab content tree."""
+    if isinstance(content, dict):
+        shelf = content.get("shelfRenderer")
+        if isinstance(shelf, dict):
+            url = (
+                shelf.get("endpoint", {})
+                .get("commandMetadata", {})
+                .get("webCommandMetadata", {})
+                .get("url")
+            )
+            if isinstance(url, str) and url.startswith("/playlist?"):
+                yield _YT_HOME + url
+
+        for value in content.values():
+            yield from _iter_playlist_urls(value)
+        return
+
+    if isinstance(content, list):
+        for item in content:
+            yield from _iter_playlist_urls(item)
+
+
+def _iter_video_ids(content: Any) -> Iterator[str]:
+    """Yield video IDs from a rendered discovery tab content tree."""
+    if isinstance(content, dict):
+        video = content.get("videoRenderer")
+        if isinstance(video, dict):
+            video_id = video.get("videoId")
+            if isinstance(video_id, str) and video_id:
+                yield video_id
+
+        for value in content.values():
+            yield from _iter_video_ids(value)
+        return
+
+    if isinstance(content, list):
+        for item in content:
+            yield from _iter_video_ids(item)
+
+
+def _get_rendered_content(yt_info: dict[str, Any], tab_index: int = 0) -> Any:
+    """Extract rendered content from YouTube info."""
+    return yt_info["contents"]["twoColumnBrowseResultsRenderer"]["tabs"][
+        tab_index
+    ]["tabRenderer"]["content"]["sectionListRenderer"]["contents"][0][
+        "itemSectionRenderer"
+    ]["contents"][0]
+
+
 class YouTubeDiscoveryHelpersMixin:
     """Shared discovery helpers for rendered content and test items."""
 
@@ -45,69 +95,13 @@ class YouTubeDiscoveryHelpersMixin:
         tab_content = tabs[0]["tabRenderer"]["content"]
 
         yielded_video_ids: set[str] = set()
-        for video_id in self._iter_video_ids(tab_content):
+        for video_id in _iter_video_ids(tab_content):
             if video_id in yielded_video_ids:
                 continue
             yielded_video_ids.add(video_id)
             yield {"video_id": video_id}
 
-        for playlist_url in self._iter_playlist_urls(tab_content):
+        for playlist_url in _iter_playlist_urls(tab_content):
             yield from cast(YouTubeDownloaderProto, self).get_playlist_items(
                 playlist_url
             )
-
-    @staticmethod
-    def _iter_playlist_urls(content: Any) -> Iterator[str]:
-        """Yield playlist URLs from a rendered discovery tab content tree."""
-        if isinstance(content, dict):
-            shelf = content.get("shelfRenderer")
-            if isinstance(shelf, dict):
-                url = (
-                    shelf.get("endpoint", {})
-                    .get("commandMetadata", {})
-                    .get("webCommandMetadata", {})
-                    .get("url")
-                )
-                if isinstance(url, str) and url.startswith("/playlist?"):
-                    yield _YT_HOME + url
-
-            for value in content.values():
-                yield from YouTubeDiscoveryHelpersMixin._iter_playlist_urls(
-                    value
-                )
-            return
-
-        if isinstance(content, list):
-            for item in content:
-                yield from YouTubeDiscoveryHelpersMixin._iter_playlist_urls(
-                    item
-                )
-
-    @staticmethod
-    def _iter_video_ids(content: Any) -> Iterator[str]:
-        """Yield video IDs from a rendered discovery tab content tree."""
-        if isinstance(content, dict):
-            video = content.get("videoRenderer")
-            if isinstance(video, dict):
-                video_id = video.get("videoId")
-                if isinstance(video_id, str) and video_id:
-                    yield video_id
-
-            for value in content.values():
-                yield from YouTubeDiscoveryHelpersMixin._iter_video_ids(value)
-            return
-
-        if isinstance(content, list):
-            for item in content:
-                yield from YouTubeDiscoveryHelpersMixin._iter_video_ids(item)
-
-    @staticmethod
-    def _get_rendered_content(
-        yt_info: dict[str, Any], tab_index: int = 0
-    ) -> Any:
-        """Extract rendered content from YouTube info."""
-        return yt_info["contents"]["twoColumnBrowseResultsRenderer"]["tabs"][
-            tab_index
-        ]["tabRenderer"]["content"]["sectionListRenderer"]["contents"][0][
-            "itemSectionRenderer"
-        ]["contents"][0]
