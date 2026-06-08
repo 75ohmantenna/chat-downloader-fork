@@ -229,7 +229,8 @@ def parse_date(
     try:
         m = ISO8601_REGEX.match(datestring)
     except TypeError as e:
-        raise ValueError(e) from e
+        msg = f"Expected a string date, got {type(datestring).__name__!r}"
+        raise ValueError(msg) from e
 
     if not m:
         msg = f"Unable to parse date string {datestring!r}"
@@ -252,7 +253,8 @@ def parse_date(
             tzinfo=parse_timezone(groups, default_timezone=default_timezone),
         )
     except (ValueError, OverflowError) as e:
-        raise ValueError(e) from e
+        msg = f"Date components out of range in {datestring!r}: {e}"
+        raise ValueError(msg) from e
 
 
 def parse_iso8601(data_str: str) -> float:

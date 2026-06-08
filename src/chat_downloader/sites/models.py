@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import csv
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
@@ -233,7 +234,7 @@ class _ChatOutputDispatcher:
         for writer in self.writers:
             try:
                 writer.close()
-            except Exception as error:
+            except (OSError, RuntimeError, csv.Error) as error:
                 log(
                     "warning",
                     "Suppressed close() error while finalizing output writer "

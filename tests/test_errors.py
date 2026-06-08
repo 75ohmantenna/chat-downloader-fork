@@ -22,7 +22,6 @@ from chat_downloader.errors import (
     RetriesExceeded,
     SiteError,
     SiteNotSupported,
-    UnexpectedError,
     URLNotProvided,
     UserNotFound,
     VideoNotFound,
@@ -34,7 +33,6 @@ from chat_downloader.errors import (
 def test_base_error_inheritance() -> None:
     """Test that all errors inherit from ChatDownloaderError."""
     error_classes = [
-        UnexpectedError,
         InvalidParameter,
         RetriesExceeded,
         VideoNotFound,
@@ -67,15 +65,6 @@ def test_chat_downloader_error() -> None:
     error = ChatDownloaderError("Test error")
     assert isinstance(error, Exception)
     assert str(error) == "Test error"
-
-
-def test_unexpected_error() -> None:
-    """Test UnexpectedError with various inputs."""
-    error = UnexpectedError("Unexpected issue")
-    assert str(error) == "Unexpected issue"
-
-    error = UnexpectedError({"key": "value"})
-    assert "key" in str(error)
 
 
 def test_invalid_parameter() -> None:

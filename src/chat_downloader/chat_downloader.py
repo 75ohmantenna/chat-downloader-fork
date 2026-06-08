@@ -214,22 +214,22 @@ class ChatDownloader:
     def get_chat(
         self,
         url: str | None = None,
-        start_time: Any = None,
-        end_time: Any = None,
+        start_time: float | str | None = None,
+        end_time: float | str | None = None,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
         retry_timeout: float | None = None,
         interruptible_retry: bool = True,
         timeout: float | None = None,
         inactivity_timeout: float | None = None,
         max_messages: int | None = None,
-        message_groups: Any = _DEFAULT_MESSAGE_GROUPS,
+        message_groups: SiteDefault | list[str] = _DEFAULT_MESSAGE_GROUPS,
         message_types: list[str] | None = None,
         # Output
         output: str | list[str] | None = None,
         overwrite: bool = True,
         sort_keys: bool = True,
         # Formatting
-        format: Any = _DEFAULT_FORMAT,
+        format: SiteDefault | str = _DEFAULT_FORMAT,
         format_file: str | None = None,
         # YouTube
         chat_type: Literal["live", "top"] = "live",

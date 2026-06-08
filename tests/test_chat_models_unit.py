@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 
+import csv
 import dataclasses
 from dataclasses import dataclass, field
 from typing import Any
@@ -96,7 +97,7 @@ def test_chat_output_dispatcher_close_reports_all_writer_failures(
             raise self.error
 
     dispatcher.attach_writer(WriterB(RuntimeError("a"), "a"))
-    dispatcher.attach_writer(WriterB(ValueError("b"), "b"))
+    dispatcher.attach_writer(WriterB(OSError("b"), "b"))
     monkeypatch.setattr(
         "chat_downloader.sites.models.log",
         lambda _level, message: logs.append(message),
@@ -306,6 +307,44 @@ def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
     dispatcher.emit({"message": "second"})
 
     assert len(received) == 2
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [OSError("io failure"), RuntimeError("runtime failure"), csv.Error("csv failure")],
+    ids=["OSError", "RuntimeError", "csv.Error"],
+)
+def test_chat_output_dispatcher_close_suppresses_known_writer_errors(
+    monkeypatch, exc: Exception
+) -> None:
+    class Writer:
+        file_name = "x"
+        output_mode = "raw"
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            return None
+
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+            del item, flush
+
+        def close(self) -> None:
+            raise exc
+
+    chat = Chat(iter(()), title="Example")
+    dispatcher = _ChatOutputDispatcher(chat)
+    dispatcher.attach_writer(Writer())
+    logs: list[str] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.models.log",
+        lambda _level, message: logs.append(message),
+    )
+
+    dispatcher.close()
+
+    assert any("Suppressed close() error" in m for m in logs)
 
 
 def test_get_field_default_with_default_factory() -> None:

@@ -7,7 +7,7 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 from http.cookiejar import Cookie
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.sites.base import BaseChatDownloader
@@ -16,6 +16,7 @@ from chat_downloader.sites.session import (
 )
 
 if TYPE_CHECKING:
+    from chat_downloader.models import DownloaderConfig
     from chat_downloader.runtime._protocols import ChatDownloaderProto
 
 
@@ -69,7 +70,7 @@ def _disable_configured_cookie_source(owner: ChatDownloaderProto) -> None:
         return
 
     if dataclasses.is_dataclass(config) and not isinstance(config, type):
-        owner.config = dataclasses.replace(config, cookies=None)  # type: ignore[assignment]
+        owner.config = cast("DownloaderConfig", dataclasses.replace(config, cookies=None))
         return
 
     with contextlib.suppress(AttributeError):

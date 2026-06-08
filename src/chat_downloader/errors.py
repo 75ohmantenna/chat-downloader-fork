@@ -2,19 +2,8 @@
 
 """File for defining errors."""
 
-from typing import Any
-
-
 class ChatDownloaderError(Exception):
     """Base class for Chat Downloader errors."""
-
-
-class UnexpectedError(ChatDownloaderError):
-    """Raised if something unexpected happens."""
-
-    def __init__(self, items: Any) -> None:
-        """Create an error from any unexpected diagnostic payload."""
-        super().__init__(str(items))
 
 
 class InvalidParameter(ChatDownloaderError):
@@ -129,7 +118,6 @@ __all__ = [
     "RetriesExceeded",
     "SiteError",
     "SiteNotSupported",
-    "UnexpectedError",
     "URLNotProvided",
     "UserNotFound",
     "VideoNotFound",
