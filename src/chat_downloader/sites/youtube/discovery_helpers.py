@@ -2,8 +2,10 @@
 
 """Discovery helpers and test fixtures for YouTube discovery mixin."""
 
+from __future__ import annotations
+
 from collections.abc import Iterator
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from ._protocols import YouTubeDownloaderProto
 from .client_requests_initial import _get_initial_info
@@ -14,6 +16,10 @@ from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
+from .discovery_channels_runtime_iteration import get_user_videos
+
+if TYPE_CHECKING:
+    from chat_downloader.models import ChatRequest
 
 
 def _iter_playlist_urls(content: Any) -> Iterator[str]:
@@ -105,3 +111,29 @@ class YouTubeDiscoveryHelpersMixin:
             yield from cast(YouTubeDownloaderProto, self).get_playlist_items(
                 playlist_url
             )
+
+    def get_user_videos(
+        self,
+        channel_id: str | None = None,
+        user_id: str | None = None,
+        custom_username: str | None = None,
+        handle: str | None = None,
+        video_type: str = "videos",
+        params: ChatRequest | dict[str, Any] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """Retrieve all videos listed on the user's channel."""
+        if params is None:
+            request = None
+        else:
+            request = cast(YouTubeDownloaderProto, self)._coerce_chat_request(
+                params
+            )
+        yield from get_user_videos(
+            self,
+            channel_id=channel_id,
+            user_id=user_id,
+            custom_username=custom_username,
+            handle=handle,
+            video_type=video_type,
+            params=request,
+        )

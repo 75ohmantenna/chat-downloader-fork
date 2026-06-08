@@ -7,8 +7,8 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.chat_users_router import (
     YouTubeChatUsersRouterMixin,
 )
-from chat_downloader.sites.youtube.discovery_channels import (
-    YouTubeChannelDiscoveryMixin,
+from chat_downloader.sites.youtube.discovery_helpers import (
+    YouTubeDiscoveryHelpersMixin,
 )
 from chat_downloader.sites.youtube.discovery_channels_runtime_iteration import (
     get_user_videos,
@@ -94,7 +94,7 @@ def test_get_user_videos_requires_user_selector() -> None:
 def test_channel_discovery_mixin_coerces_dict_params(monkeypatch) -> None:
     captured = []
 
-    class DummyDiscovery(YouTubeChannelDiscoveryMixin):
+    class DummyDiscovery(YouTubeDiscoveryHelpersMixin):
         def _coerce_chat_request(self, params):
             return ChatRequest(**params)
 
@@ -103,7 +103,7 @@ def test_channel_discovery_mixin_coerces_dict_params(monkeypatch) -> None:
         yield {"video_id": "one"}
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_channels.get_user_videos",
+        "chat_downloader.sites.youtube.discovery_helpers.get_user_videos",
         fake_get_user_videos,
     )
 
@@ -124,7 +124,7 @@ def test_channel_discovery_mixin_passes_none_params_without_coercion(
 ) -> None:
     captured = []
 
-    class DummyDiscovery(YouTubeChannelDiscoveryMixin):
+    class DummyDiscovery(YouTubeDiscoveryHelpersMixin):
         def _coerce_chat_request(self, params):
             raise AssertionError("should not coerce None")
 
@@ -133,7 +133,7 @@ def test_channel_discovery_mixin_passes_none_params_without_coercion(
         return iter(())
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_channels.get_user_videos",
+        "chat_downloader.sites.youtube.discovery_helpers.get_user_videos",
         fake_get_user_videos,
     )
 

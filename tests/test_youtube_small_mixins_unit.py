@@ -6,8 +6,8 @@ from chat_downloader.errors import ParsingError
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.chat_streams import YouTubeChatStreamsMixin
-from chat_downloader.sites.youtube.discovery_channels import (
-    YouTubeChannelDiscoveryMixin,
+from chat_downloader.sites.youtube.discovery_helpers import (
+    YouTubeDiscoveryHelpersMixin,
 )
 from chat_downloader.sites.youtube.video_status import (
     video_details_to_dict,
@@ -52,7 +52,7 @@ def test_channel_discovery_mixin_coerces_typed_request_before_delegating() -> (
 ):
     captured = []
 
-    class DummyDiscovery(YouTubeChannelDiscoveryMixin):
+    class DummyDiscovery(YouTubeDiscoveryHelpersMixin):
         def _coerce_chat_request(self, params):
             return {"coerced_from": params.url}
 
@@ -60,7 +60,7 @@ def test_channel_discovery_mixin_coerces_typed_request_before_delegating() -> (
         captured.append((owner, kwargs))
         yield {"video_id": "one"}
 
-    import chat_downloader.sites.youtube.discovery_channels as mod
+    import chat_downloader.sites.youtube.discovery_helpers as mod
 
     original = mod.get_user_videos
     mod.get_user_videos = fake_get_user_videos

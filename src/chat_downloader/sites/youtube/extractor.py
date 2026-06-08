@@ -22,7 +22,6 @@ from .client_auth import (
     _initialize_pref,
 )
 from .constants_patterns import _VALID_URLS
-from .discovery_channels import YouTubeChannelDiscoveryMixin
 from .discovery_helpers import YouTubeDiscoveryHelpersMixin
 from .discovery_playlists import YouTubePlaylistDiscoveryMixin
 from .helpers import (
@@ -34,7 +33,6 @@ from .video_metadata import YouTubeVideoMetadataCoreMixin
 
 class YouTubeChatDownloader(
     YouTubeDiscoveryHelpersMixin,
-    YouTubeChannelDiscoveryMixin,
     YouTubePlaylistDiscoveryMixin,
     YouTubeVideoMetadataCoreMixin,
     YouTubeVideoInitializationMixin,
