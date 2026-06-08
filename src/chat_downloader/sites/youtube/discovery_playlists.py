@@ -11,7 +11,6 @@ from chat_downloader.utils.dict_utils import multi_get
 
 from ._protocols import YouTubeDownloaderProto
 from .client_context import _get_innertube_context
-from .discovery_helpers import _get_rendered_content
 from .client_requests_continuation import _get_continuation_info
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
@@ -20,6 +19,7 @@ from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
+from .discovery_helpers import _get_rendered_content
 from .helpers import _extract_browse_continuation_token_from_response
 from .parsing.messages import _parse_video
 

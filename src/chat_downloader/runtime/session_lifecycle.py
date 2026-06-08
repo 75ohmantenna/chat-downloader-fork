@@ -70,7 +70,9 @@ def _disable_configured_cookie_source(owner: ChatDownloaderProto) -> None:
         return
 
     if dataclasses.is_dataclass(config) and not isinstance(config, type):
-        owner.config = cast("DownloaderConfig", dataclasses.replace(config, cookies=None))
+        owner.config = cast(
+            "DownloaderConfig", dataclasses.replace(config, cookies=None)
+        )
         return
 
     with contextlib.suppress(AttributeError):

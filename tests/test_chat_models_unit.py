@@ -311,7 +311,11 @@ def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
 
 @pytest.mark.parametrize(
     "exc",
-    [OSError("io failure"), RuntimeError("runtime failure"), csv.Error("csv failure")],
+    [
+        OSError("io failure"),
+        RuntimeError("runtime failure"),
+        csv.Error("csv failure"),
+    ],
     ids=["OSError", "RuntimeError", "csv.Error"],
 )
 def test_chat_output_dispatcher_close_suppresses_known_writer_errors(
@@ -327,7 +331,9 @@ def test_chat_output_dispatcher_close_suppresses_known_writer_errors(
         def initialize(self) -> None:
             return None
 
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+        def write(
+            self, item: dict[str, Any] | str, flush: bool = False
+        ) -> None:
             del item, flush
 
         def close(self) -> None:

@@ -7,9 +7,6 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.chat_users_router import (
     YouTubeChatUsersRouterMixin,
 )
-from chat_downloader.sites.youtube.discovery_helpers import (
-    YouTubeDiscoveryHelpersMixin,
-)
 from chat_downloader.sites.youtube.discovery_channels_runtime_iteration import (
     get_user_videos,
 )
@@ -787,7 +784,9 @@ def test_playlist_discovery_accepts_none_params_without_continuation(
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
-        lambda _yt_info, tab_index=0: {"playlistVideoListRenderer": {"contents": []}},
+        lambda _yt_info, tab_index=0: {
+            "playlistVideoListRenderer": {"contents": []}
+        },
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",

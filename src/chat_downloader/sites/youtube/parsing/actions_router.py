@@ -66,7 +66,7 @@ def process_action(
     :type action: dict
     :param offset: Time offset in milliseconds for replay chat
     :type offset: int
-    :return: ProcessedAction with named fields, or None if action should be ignored
+    :return: ProcessedAction with named fields, or None if action is ignored
     :rtype: ProcessedAction or None
     """
     data: dict[str, Any] = {}
@@ -98,19 +98,27 @@ def process_action(
             )
         case _ if original_action_type in _KNOWN_REMOVE_ACTION_TYPES:
             return _make_processed_action(
-                _handle_remove_action(action, original_action_type, data, offset)
+                _handle_remove_action(
+                    action, original_action_type, data, offset
+                )
             )
         case _ if original_action_type in _KNOWN_REPLACE_ACTION_TYPES:
             return _make_processed_action(
-                _handle_replace_action(action, original_action_type, data, offset)
+                _handle_replace_action(
+                    action, original_action_type, data, offset
+                )
             )
         case _ if original_action_type in _KNOWN_TOOLTIP_ACTION_TYPES:
             return _make_processed_action(
-                _handle_tooltip_action(action, original_action_type, data, offset)
+                _handle_tooltip_action(
+                    action, original_action_type, data, offset
+                )
             )
         case _ if original_action_type in _KNOWN_ADD_BANNER_TYPES:
             return _make_processed_action(
-                _handle_add_banner_action(action, original_action_type, data, offset)
+                _handle_add_banner_action(
+                    action, original_action_type, data, offset
+                )
             )
         case _ if original_action_type in _KNOWN_REMOVE_BANNER_TYPES:
             return _make_processed_action(
