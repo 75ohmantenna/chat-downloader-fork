@@ -25,12 +25,11 @@ def _renderer_with_timestamp(usec: str = "1234567890") -> dict:
 
 def _finalize(result):
     assert result is not None
-    data, original_item, original_message_type, original_action_type = result
     return validate_and_finalize_message(
-        data,
-        original_item,
-        original_message_type,
-        original_action_type,
+        result.parsed_data,
+        result.original_item,
+        result.message_type,
+        result.action_type,
     )
 
 
@@ -278,19 +277,18 @@ def test_process_action_add_and_remove_banner_actions() -> None:
     assert finalized["message_type"] == "banner"
     assert finalized["timestamp"] == 6
 
-    # Missing bannerRenderer should still return a tuple, but won't have a
-    # message type.
+    # Missing bannerRenderer should still return a ProcessedAction, but won't
+    # have a message type.
     action_add_missing = {"addBannerToLiveChatCommand": {}}
     result = process_action(action_add_missing)
     assert result is not None
-    data, original_item, original_message_type, original_action_type = result
-    assert original_message_type is None
+    assert result.message_type is None
     assert (
         validate_and_finalize_message(
-            data,
-            original_item,
-            original_message_type,
-            original_action_type,
+            result.parsed_data,
+            result.original_item,
+            result.message_type,
+            result.action_type,
         )
         is None
     )

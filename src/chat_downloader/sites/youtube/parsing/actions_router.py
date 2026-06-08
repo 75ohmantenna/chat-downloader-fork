@@ -2,6 +2,7 @@
 
 """Dispatcher for YouTube chat action processing."""
 
+from dataclasses import dataclass
 from typing import Any
 
 from chat_downloader.debugging import capture_debug_sample, debug_log
@@ -33,19 +34,40 @@ from .actions_handlers import (
 _KNOWN_ITEM_ACTION_TYPES = _KNOWN_ADD_ACTION_TYPES | _KNOWN_ADD_TICKER_TYPES
 
 
+@dataclass(frozen=True)
+class ProcessedAction:
+    """Typed result of processing a single YouTube chat action."""
+
+    parsed_data: dict[str, Any]
+    original_item: dict[str, Any]
+    message_type: str | None
+    action_type: str
+
+
+def _make_processed_action(
+    t: tuple[dict[str, Any], dict[str, Any], str | None, str],
+) -> ProcessedAction:
+    parsed_data, original_item, message_type, action_type = t
+    return ProcessedAction(
+        parsed_data=parsed_data,
+        original_item=original_item,
+        message_type=message_type,
+        action_type=action_type,
+    )
+
+
 def process_action(
     action: dict[str, Any],
     offset: float = 0,
-) -> tuple[dict[str, Any], dict[str, Any], str | None, str] | None:
+) -> ProcessedAction | None:
     """Process a YouTube chat action and return parsed message data.
 
     :param action: The action object to process
     :type action: dict
     :param offset: Time offset in milliseconds for replay chat
     :type offset: int
-    :return: Tuple of (parsed_data, original_item, original_message_type,
-        original_action_type) or None if action should be ignored
-    :rtype: tuple or None
+    :return: ProcessedAction with named fields, or None if action should be ignored
+    :rtype: ProcessedAction or None
     """
     data: dict[str, Any] = {}
 
@@ -71,38 +93,42 @@ def process_action(
     # Route to appropriate handler
     match original_action_type:
         case _ if original_action_type in _KNOWN_ITEM_ACTION_TYPES:
-            return _handle_item_action(
-                action, original_action_type, data, offset
+            return _make_processed_action(
+                _handle_item_action(action, original_action_type, data, offset)
             )
         case _ if original_action_type in _KNOWN_REMOVE_ACTION_TYPES:
-            return _handle_remove_action(
-                action, original_action_type, data, offset
+            return _make_processed_action(
+                _handle_remove_action(action, original_action_type, data, offset)
             )
         case _ if original_action_type in _KNOWN_REPLACE_ACTION_TYPES:
-            return _handle_replace_action(
-                action, original_action_type, data, offset
+            return _make_processed_action(
+                _handle_replace_action(action, original_action_type, data, offset)
             )
         case _ if original_action_type in _KNOWN_TOOLTIP_ACTION_TYPES:
-            return _handle_tooltip_action(
-                action, original_action_type, data, offset
+            return _make_processed_action(
+                _handle_tooltip_action(action, original_action_type, data, offset)
             )
         case _ if original_action_type in _KNOWN_ADD_BANNER_TYPES:
-            return _handle_add_banner_action(
-                action, original_action_type, data, offset
+            return _make_processed_action(
+                _handle_add_banner_action(action, original_action_type, data, offset)
             )
         case _ if original_action_type in _KNOWN_REMOVE_BANNER_TYPES:
-            return _handle_remove_banner_action(
-                action,
-                original_action_type,
-                data,
-                offset,
+            return _make_processed_action(
+                _handle_remove_banner_action(
+                    action,
+                    original_action_type,
+                    data,
+                    offset,
+                )
             )
         case _ if original_action_type in _KNOWN_POLL_ACTION_TYPES:
-            return _handle_poll_action(
-                action,
-                original_action_type,
-                data,
-                offset,
+            return _make_processed_action(
+                _handle_poll_action(
+                    action,
+                    original_action_type,
+                    data,
+                    offset,
+                )
             )
         case _ if original_action_type in _KNOWN_IGNORE_ACTION_TYPES:
             return None  # Ignore these actions

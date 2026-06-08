@@ -7,6 +7,7 @@ from chat_downloader.sites.youtube.message_pipeline import (
     _validate_pipeline_message,
     process_pipeline_action,
 )
+from chat_downloader.sites.youtube.parsing.actions_router import ProcessedAction
 
 if TYPE_CHECKING:
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
@@ -41,11 +42,11 @@ def test_validate_pipeline_message_returns_none_for_missing_parse_result() -> (
 def test_validate_pipeline_message_returns_finalized_message(
     monkeypatch,
 ) -> None:
-    parse_result = (
-        {"message": "hello"},
-        {"raw": True},
-        "text_message",
-        "addChatItem",
+    parse_result = ProcessedAction(
+        parsed_data={"message": "hello"},
+        original_item={"raw": True},
+        message_type="text_message",
+        action_type="addChatItem",
     )
 
     monkeypatch.setattr(
@@ -111,11 +112,11 @@ def test_process_pipeline_action_skips_when_validation_fails(
 ) -> None:
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda _action, _offset: (
-            {},
-            {"raw": True},
-            "text_message",
-            "addChatItem",
+        lambda _action, _offset: ProcessedAction(
+            parsed_data={},
+            original_item={"raw": True},
+            message_type="text_message",
+            action_type="addChatItem",
         ),
     )
     monkeypatch.setattr(
@@ -139,11 +140,11 @@ def test_process_pipeline_action_skips_when_message_filter_rejects(
 ) -> None:
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda _action, _offset: (
-            {},
-            {"raw": True},
-            "text_message",
-            "addChatItem",
+        lambda _action, _offset: ProcessedAction(
+            parsed_data={},
+            original_item={"raw": True},
+            message_type="text_message",
+            action_type="addChatItem",
         ),
     )
     monkeypatch.setattr(
@@ -169,11 +170,11 @@ def test_process_pipeline_action_skips_when_time_filter_skips(
 ) -> None:
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda _action, _offset: (
-            {},
-            {"raw": True},
-            "text_message",
-            "addChatItem",
+        lambda _action, _offset: ProcessedAction(
+            parsed_data={},
+            original_item={"raw": True},
+            message_type="text_message",
+            action_type="addChatItem",
         ),
     )
     monkeypatch.setattr(
@@ -199,11 +200,11 @@ def test_process_pipeline_action_stops_when_time_filter_stops(
 ) -> None:
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda _action, _offset: (
-            {},
-            {"raw": True},
-            "text_message",
-            "addChatItem",
+        lambda _action, _offset: ProcessedAction(
+            parsed_data={},
+            original_item={"raw": True},
+            message_type="text_message",
+            action_type="addChatItem",
         ),
     )
     monkeypatch.setattr(
@@ -225,11 +226,11 @@ def test_process_pipeline_action_stops_when_time_filter_stops(
 def test_process_pipeline_action_yields_valid_message(monkeypatch) -> None:
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda action, offset: (
-            {"message": f"{action['raw']}:{offset}"},
-            {"raw": True},
-            "text_message",
-            "addChatItem",
+        lambda action, offset: ProcessedAction(
+            parsed_data={"message": f"{action['raw']}:{offset}"},
+            original_item={"raw": True},
+            message_type="text_message",
+            action_type="addChatItem",
         ),
     )
     monkeypatch.setattr(

@@ -6,7 +6,7 @@ Exports message parsing and action handling functions.
 """
 
 from .actions_handlers import validate_and_finalize_message
-from .actions_router import process_action
+from .actions_router import ProcessedAction, process_action
 from .messages import (
     _get_simple_text,
     _get_source_image_url,
@@ -23,6 +23,8 @@ from .messages import (
 )
 
 __all__ = [
+    # Action handling
+    "ProcessedAction",
     "_get_simple_text",
     "_get_source_image_url",
     "_parse_action_button",
@@ -36,7 +38,6 @@ __all__ = [
     "_parse_video",
     # Message parsing
     "_parse_youtube_link",
-    # Action handling
     "process_action",
     "validate_and_finalize_message",
 ]

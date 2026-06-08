@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 from .parsing.actions_handlers import validate_and_finalize_message
-from .parsing.actions_router import process_action
+from .parsing.actions_router import ProcessedAction, process_action
 
 if TYPE_CHECKING:
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
@@ -48,18 +48,17 @@ class PipelineResult:
 
 
 def _validate_pipeline_message(
-    result: tuple[dict[str, Any], Any, str | None, str] | None,
+    result: ProcessedAction | None,
 ) -> dict[str, Any] | None:
     """Validate a parsed action result and return the finalized message."""
     if result is None:
         return None
 
-    data, original_item, original_message_type, original_action_type = result
     return validate_and_finalize_message(
-        data,
-        original_item,
-        original_message_type,
-        original_action_type,
+        result.parsed_data,
+        result.original_item,
+        result.message_type,
+        result.action_type,
     )
 
 
