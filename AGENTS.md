@@ -35,6 +35,10 @@ For deeper context see [`docs/development-workflow-guide.md`](docs/development-w
 uv sync
 ```
 
+Run `make setup` after cloning to also install Git hooks (`pre-commit` runs
+ruff on commit, `mypy` on push). See `docs/development-workflow-guide.md` for
+details.
+
 ## Commands
 - `uv run pytest -q -p no:rerunfailures -m "not network"` — offline test suite (default loop)
 - `uv run pytest tests/FILE.py -q` — single file

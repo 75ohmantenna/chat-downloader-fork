@@ -1,10 +1,13 @@
 UV ?= uv
 UV_RUN ?= $(UV) run --locked
 
-.PHONY: setup lock lock-check test lint fmt fmt-check typecheck complexity coverage build smoke ci check clean
+.PHONY: setup setup-hooks lock lock-check test lint fmt fmt-check typecheck complexity coverage build smoke ci check clean
 
-setup:
+setup: setup-hooks
 	$(UV) sync
+
+setup-hooks:
+	$(UV) run pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
 
 lock:
 	$(UV) lock

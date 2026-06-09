@@ -42,11 +42,26 @@ disclosures that apply to all changes in this repository.
 
 ## Local Setup
 
-Install the project and all development dependencies:
+Install the project and all development dependencies, then wire up the Git hooks:
 
 ```bash
 uv sync
+uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
 ```
+
+Or equivalently: `make setup` runs both steps.
+
+## Git Hooks
+
+The repository ships a `.pre-commit-config.yaml` with two stages:
+
+- **pre-commit** — `ruff check` and `ruff format --check` run on every commit.
+- **pre-push** — `mypy .` runs before each push (slower; skipped on the
+  commit itself).
+
+Hooks use `uv run --locked` so they always match the pinned `uv.lock` versions.
+To run all hooks manually against the full tree: `uv run pre-commit run
+--all-files`.
 
 ## Daily Workflow
 
