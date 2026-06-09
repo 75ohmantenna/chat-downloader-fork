@@ -6,17 +6,19 @@ Exports message parsing, emote handling, and badge parsing functions.
 """
 
 from .badges import _parse_badge_info, _parse_irc_badges
-from .messages import (
+from .message_emotes import (
     _add_text_for_emotes,
     _generate_emote_image_list,
     _parse_author_images,
     _parse_emotes,
+)
+from .message_irc_resolve import _set_message_type
+from .messages import (
     _parse_game,
     _parse_irc_item,
     _parse_item,
     _parse_message_info,
     _parse_user,
-    _set_message_type,
 )
 from .tag_decoding import _decode_pseudo_BNF, _parse_bool, _parse_bool_text
 

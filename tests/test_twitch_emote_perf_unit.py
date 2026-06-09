@@ -15,7 +15,7 @@ import re
 import pytest
 
 from chat_downloader.sites.twitch.constants import EMOTE_REGEX
-from chat_downloader.sites.twitch.parsing.messages import (
+from chat_downloader.sites.twitch.parsing.message_emotes import (
     _EMOTE_RE,
     _generate_emote_image_list,
     _parse_emotes,

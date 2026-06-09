@@ -588,7 +588,7 @@ def test_irc_buffer_overflow_truncation() -> None:
 
 
 def test_parse_irc_int_flag_returns_default_for_other_types() -> None:
-    from chat_downloader.sites.twitch.parsing.messages import (
+    from chat_downloader.sites.twitch.parsing.message_irc_resolve import (
         _parse_irc_int_flag,
     )
 

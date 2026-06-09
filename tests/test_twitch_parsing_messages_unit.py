@@ -5,7 +5,15 @@ from chat_downloader.sites.twitch.constants import (
     MESSAGE_REGEX,
     MESSAGE_TYPE_REMAPPING,
 )
-from chat_downloader.sites.twitch.parsing import messages as tw_messages
+from chat_downloader.sites.twitch.parsing import (
+    message_emotes as tw_emotes,
+)
+from chat_downloader.sites.twitch.parsing import (
+    message_irc_resolve as tw_irc_resolve,
+)
+from chat_downloader.sites.twitch.parsing import (
+    messages as tw_messages,
+)
 from chat_downloader.sites.twitch.parsing.messages import _parse_irc_item
 from chat_downloader.sites.twitch.parsing.tag_decoding import (
     _decode_pseudo_BNF,
@@ -214,7 +222,7 @@ def test_parse_bool_and_bool_text() -> None:
 
 
 def test_generate_emote_image_list_shapes() -> None:
-    images = tw_messages._generate_emote_image_list("25")
+    images = tw_emotes._generate_emote_image_list("25")
     # 2 themes * 3 sizes
     assert len(images) == 6
     ids = {img["id"] for img in images}
@@ -223,7 +231,7 @@ def test_generate_emote_image_list_shapes() -> None:
 
 
 def test_parse_emotes_from_tag_text() -> None:
-    parsed = tw_messages._parse_emotes("25:0-4,6-10/1902:12-15")
+    parsed = tw_emotes._parse_emotes("25:0-4,6-10/1902:12-15")
     assert len(parsed) == 2
     assert parsed[0]["id"] == "25"
     assert parsed[0]["locations"] == ["0-4", "6-10"]
@@ -299,7 +307,7 @@ def test_parse_badge_info_prefers_subscriber_over_global() -> None:
 
 
 def test_parse_author_images_user_and_game_helpers() -> None:
-    images = tw_messages._parse_author_images(
+    images = tw_emotes._parse_author_images(
         "https://static-cdn.jtvnw.net/jtv_user_pictures/example-profile_image-300x300.png",
     )
     assert images[0]["width"] == 300
@@ -342,7 +350,9 @@ def test_parse_author_images_user_and_game_helpers() -> None:
 def test_parse_irc_badges_accepts_entries_without_version() -> None:
     badge_set = BadgeSet(global_badges={}, channel_badges={})
 
-    parsed = tw_messages._parse_irc_badges("vip", "123", badge_set=badge_set)
+    from chat_downloader.sites.twitch.parsing.badges import _parse_irc_badges
+
+    parsed = _parse_irc_badges("vip", "123", badge_set=badge_set)
 
     assert parsed == [{"name": "vip", "version": ""}]
 
@@ -354,19 +364,24 @@ def test_set_message_type_and_add_text_for_emotes_handle_unknown_and_invalid(
     info: dict[str, object] = {}
 
     monkeypatch.setattr(
-        tw_messages,
+        tw_irc_resolve,
+        "debug_log",
+        lambda *items: debug_calls.append(items),
+    )
+    monkeypatch.setattr(
+        tw_emotes,
         "debug_log",
         lambda *items: debug_calls.append(items),
     )
 
-    tw_messages._set_message_type(info, "mystery_type")
+    tw_irc_resolve._set_message_type(info, "mystery_type")
     assert "message_type" not in info
     assert debug_calls == [
         ("Unknown message type: mystery_type", "Parsed data: {}")
     ]
 
     emotes = [{"locations": ["bad-location"]}]
-    tw_messages._add_text_for_emotes("hello", emotes)
+    tw_emotes._add_text_for_emotes("hello", emotes)
     assert "name" not in emotes[0]
     assert debug_calls[-1] == (
         "Invalid emote: {'locations': ['bad-location']}",
@@ -460,7 +475,7 @@ def test_parse_irc_item_parses_animated_message_without_unknown_warning(
 ) -> None:
     debug_calls = []
     monkeypatch.setattr(
-        tw_messages,
+        tw_irc_resolve,
         "debug_log",
         lambda *items: debug_calls.append(items),
     )
@@ -493,7 +508,7 @@ def test_parse_irc_item_parses_gigantified_emote_without_unknown_warning(
 ) -> None:
     debug_calls = []
     monkeypatch.setattr(
-        tw_messages,
+        tw_irc_resolve,
         "debug_log",
         lambda *items: debug_calls.append(items),
     )
@@ -549,7 +564,7 @@ def test_parse_irc_item_handles_unknown_action_roomstate_and_clearchat(
 ) -> None:
     debug_calls = []
     monkeypatch.setattr(
-        tw_messages,
+        tw_irc_resolve,
         "debug_log",
         lambda *items: debug_calls.append(items),
     )
@@ -760,8 +775,8 @@ def test_resolve_irc_action_unknown_action_falls_back_to_raw_and_logs(
     monkeypatch,
 ) -> None:
     """An unknown action type must be stored verbatim and trigger debug_log."""
-    import chat_downloader.sites.twitch.parsing.messages as _mod
-    from chat_downloader.sites.twitch.parsing.messages import (
+    import chat_downloader.sites.twitch.parsing.message_irc_resolve as _mod
+    from chat_downloader.sites.twitch.parsing.message_irc_resolve import (
         _resolve_irc_action_and_message_type,
     )
 

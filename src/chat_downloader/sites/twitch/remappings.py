@@ -24,7 +24,7 @@ def build_author_remapping() -> dict[str, Any]:
     from chat_downloader.utils.conversion_utils import str_or_none
     from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
-    from .parsing.messages import _parse_author_images
+    from .parsing.message_emotes import _parse_author_images
 
     return {
         "_id": r("id", str_or_none),
@@ -183,7 +183,7 @@ def build_irc_remapping() -> dict[str, Any]:
     from chat_downloader.sites.remap import Remapper as r
     from chat_downloader.utils.conversion_utils import int_or_none, str_or_none
 
-    from .parsing.messages import _parse_emotes
+    from .parsing.message_emotes import _parse_emotes
     from .parsing.tag_decoding import _decode_pseudo_BNF, _parse_bool
 
     message_param_remapping = build_message_param_remapping()

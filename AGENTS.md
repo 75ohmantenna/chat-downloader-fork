@@ -7,7 +7,7 @@ For deeper context see [`docs/development-workflow-guide.md`](docs/development-w
 ## Structure
 - `src/chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI in `cli.py`; typed shapes in `models.py`.
 - `src/chat_downloader/runtime/`: `cli_bridge`, `site_dispatch`, `chat_pipeline`, `runner`, `session_lifecycle`, `testing`.
-- `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).
+- `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).  Twitch `parsing/` contains `messages` (entry points), `message_emotes` (emote/image helpers), `message_irc_resolve` (IRC type/action/room-state resolution), `badges`, and `tag_decoding`.
 - `src/chat_downloader/output/`: `ContinuousWriter` plus JSON-lines, CSV, and text writer subclasses.
 - `src/chat_downloader/formatting/`: `ItemFormatter` and bundled `custom_formats.json`.
 - `src/chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `string_utils`, `retry_utils`, `timed_utils`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`).

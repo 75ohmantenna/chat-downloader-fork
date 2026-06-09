@@ -12,9 +12,11 @@ These tests verify:
 from typing import Any
 from unittest.mock import patch
 
-from chat_downloader.sites.twitch.parsing.messages import (
+from chat_downloader.sites.twitch.parsing.badges import (
     _parse_badge_info,
     _parse_irc_badges,
+)
+from chat_downloader.sites.twitch.parsing.messages import (
     _parse_irc_item,
     _parse_item,
 )
