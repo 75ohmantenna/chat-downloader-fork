@@ -80,6 +80,8 @@ def validate_and_finalize_message(
             data["message_type"] = _MODE_ICON_TO_TYPE[icon]
     elif original_message_type == "liveChatBannerChatSummaryRenderer":
         data["message_type"] = "banner_chat_summary"
+    elif original_message_type == "liveChatProductItemRenderer":
+        data["message_type"] = "purchased_product_message"
 
     if original_message_type in _KNOWN_IGNORE_MESSAGE_TYPES:
         return None

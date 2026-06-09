@@ -22,6 +22,9 @@ _KNOWN_ADD_ACTION_TYPES = {
         "liveChatDonationAnnouncementRenderer",
         "liveChatPaidStickerRenderer",
         "liveChatModeChangeMessageRenderer",  # e.g. slow mode enabled
+        "liveChatAutoModMessageRenderer",
+        "liveChatProductItemRenderer",
+        "liveChatRestrictedParticipationRenderer",
         # Gifting
         "giftMessageViewModel",
         "liveChatSponsorshipsGiftPurchaseAnnouncementRenderer",  # purchase

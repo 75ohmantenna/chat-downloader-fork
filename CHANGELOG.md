@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Recognize additional YouTube live-chat product, automod, and restricted
+  participation renderers observed in YouTube.js coverage.
+
 ## 1.0.6 — 2026-06-03
 
 ### Build and tooling

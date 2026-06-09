@@ -35,7 +35,8 @@ _MESSAGE_GROUPS = {
         # synthetic end-of-stream marker
         "chat_ended",
     ],
-    "purchases": ["purchased_product_message"],  # product purchased
+    "purchases": ["purchased_product_message"],  # product purchased/promoted
+    "moderation": ["auto_mod_message", "restricted_participation"],
     "mode_changes": [
         "mode_change_message",  # generic fallback for unknown icon types
         "slow_mode_message",
@@ -156,6 +157,22 @@ _REMAPPING = {
     "creatorHeartButton": "creator_heart_button",
     # paid message metadata (2026+)
     "leaderboardBadge": None,  # mapped in build_remapping
+    # product item
+    "title": "product_title",
+    "accessibilityTitle": "product_accessibility_title",
+    "thumbnail": None,  # mapped in build_remapping
+    "price": "price",
+    "vendorName": "vendor_name",
+    "fromVendorText": "from_vendor_text",
+    "onClickCommand": None,  # mapped in build_remapping
+    "creatorMessage": "creator_message",
+    "creatorName": "creator_name",
+    "creatorCustomMessage": None,  # mapped in build_remapping
+    "isVerified": "is_verified",
+    # restricted participation
+    "autoModeratedItem": None,  # mapped in build_remapping
+    "headerText": None,  # mapped in build_remapping
+    "moderationButtons": "moderation_buttons",
     # other
     "lowerBumper": "lower_bumper",
 }
@@ -237,6 +254,9 @@ _KEYS_TO_IGNORE = [
     "overflowMenuButton",
     "loggingDirectives",
     "collapsedStateEntityKey",
+    # product item UI surfaces
+    "informationButton",
+    "informationDialog",
 ]
 
 _KNOWN_KEYS = set(
@@ -262,6 +282,7 @@ def build_remapping() -> Mapping[str, Any]:
         _parse_badges,
         _parse_currency,
         _parse_item,
+        _parse_navigation_endpoint,
         _parse_runs,
         _parse_text,
         _parse_thumbnails,
@@ -324,6 +345,22 @@ def build_remapping() -> Mapping[str, Any]:
             "creatorHeartButton": "creator_heart_button",
             # paid message metadata (2026+)
             "leaderboardBadge": r("leaderboard_badge", _parse_item),
+            # product item
+            "title": "product_title",
+            "accessibilityTitle": "product_accessibility_title",
+            "thumbnail": r("product_images", _parse_thumbnails),
+            "price": "price",
+            "vendorName": "vendor_name",
+            "fromVendorText": "from_vendor_text",
+            "onClickCommand": r("url", _parse_navigation_endpoint),
+            "creatorMessage": "creator_message",
+            "creatorName": "creator_name",
+            "creatorCustomMessage": r("message", _parse_text),
+            "isVerified": "is_verified",
+            # restricted participation / automod
+            "autoModeratedItem": r("auto_moderated_item", _parse_item),
+            "headerText": r("header_text", _parse_text),
+            "moderationButtons": "moderation_buttons",
             # other
             "lowerBumper": "lower_bumper",
         }

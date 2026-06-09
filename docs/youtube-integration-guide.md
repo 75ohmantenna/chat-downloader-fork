@@ -228,6 +228,15 @@ from the Shu/Pokopia and Shapy/Crimson Desert live streams
 `deleted_message` (from `markChatItemAsDeletedAction`) is implemented but has
 not yet appeared in any observed live stream capture.
 
+The parser also recognizes these live-chat renderer shapes from YouTube.js
+coverage, with synthetic regression tests in
+`tests/test_youtube_parsing_actions_unit.py`:
+
+- `purchased_product_message` from `liveChatProductItemRenderer`
+- `auto_mod_message` from `liveChatAutoModMessageRenderer`
+- `restricted_participation` from
+  `liveChatRestrictedParticipationRenderer`
+
 ## Moderation Actions
 
 YouTube exposes four wire-level actions related to moderation. Three of them

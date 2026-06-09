@@ -129,6 +129,159 @@ def test_process_action_gift_message_view_model(monkeypatch) -> None:
     assert samples == []
 
 
+def test_process_action_product_item_renderer(monkeypatch) -> None:
+    logs = []
+    samples = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
+        lambda *parts: logs.append(parts),
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
+        lambda *parts: samples.append(parts),
+    )
+
+    action = {
+        "addChatItemAction": {
+            "item": {
+                "liveChatProductItemRenderer": {
+                    "title": "Channel hoodie",
+                    "accessibilityTitle": "Channel hoodie product",
+                    "thumbnail": {
+                        "thumbnails": [
+                            {
+                                "url": "https://example.invalid/hoodie=s88",
+                                "width": 88,
+                                "height": 88,
+                            },
+                        ],
+                    },
+                    "price": "$25.00",
+                    "vendorName": "Creator shop",
+                    "fromVendorText": "from Creator shop",
+                    "onClickCommand": {
+                        "commandMetadata": {
+                            "webCommandMetadata": {
+                                "url": "https://example.invalid/product",
+                            },
+                        },
+                    },
+                    "creatorMessage": "Pinned product",
+                    "creatorName": "Creator",
+                    "creatorCustomMessage": {"content": "New merch"},
+                    "authorPhoto": {"thumbnails": []},
+                    "informationButton": {},
+                    "informationDialog": {},
+                    "isVerified": True,
+                    "timestampUsec": "11",
+                },
+            },
+        },
+    }
+
+    finalized = _finalize(process_action(action))
+    assert finalized is not None
+    assert finalized["message_type"] == "purchased_product_message"
+    assert finalized["product_title"] == "Channel hoodie"
+    assert finalized["product_accessibility_title"] == (
+        "Channel hoodie product"
+    )
+    assert finalized["price"] == "$25.00"
+    assert finalized["vendor_name"] == "Creator shop"
+    assert finalized["url"] == "https://example.invalid/product"
+    assert finalized["message"] == "New merch"
+    assert finalized["product_images"][0]["url"] == (
+        "https://example.invalid/hoodie"
+    )
+    assert logs == []
+    assert samples == []
+
+
+def test_process_action_restricted_participation_renderer(
+    monkeypatch,
+) -> None:
+    logs = []
+    samples = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
+        lambda *parts: logs.append(parts),
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
+        lambda *parts: samples.append(parts),
+    )
+
+    action = {
+        "addChatItemAction": {
+            "item": {
+                "liveChatRestrictedParticipationRenderer": {
+                    "message": {
+                        "runs": [
+                            {"text": "Only subscribers can send messages"},
+                        ],
+                    },
+                    "icon": {"iconType": "SUBSCRIBERS_ONLY"},
+                    "timestampUsec": "12",
+                },
+            },
+        },
+    }
+
+    finalized = _finalize(process_action(action))
+    assert finalized is not None
+    assert finalized["message_type"] == "restricted_participation"
+    assert finalized["message"] == "Only subscribers can send messages"
+    assert finalized["icon"] == "SUBSCRIBERS_ONLY"
+    assert logs == []
+    assert samples == []
+
+
+def test_process_action_auto_mod_message_renderer(monkeypatch) -> None:
+    logs = []
+    samples = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
+        lambda *parts: logs.append(parts),
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
+        lambda *parts: samples.append(parts),
+    )
+
+    action = {
+        "addChatItemAction": {
+            "item": {
+                "liveChatAutoModMessageRenderer": {
+                    "id": "auto-1",
+                    "headerText": {"content": "Held for review"},
+                    "timestampUsec": "13",
+                    "contextMenuEndpoint": {},
+                    "moderationButtons": [{"buttonRenderer": {}}],
+                    "autoModeratedItem": {
+                        "liveChatTextMessageRenderer": {
+                            "id": "held-1",
+                            "authorName": {"simpleText": "@HeldUser"},
+                            "message": {"runs": [{"text": "blocked text"}]},
+                            "timestampUsec": "13",
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+    finalized = _finalize(process_action(action))
+    assert finalized is not None
+    assert finalized["message_type"] == "auto_mod_message"
+    assert finalized["message_id"] == "auto-1"
+    assert finalized["header_text"] == "Held for review"
+    assert finalized["auto_moderated_item"]["message_id"] == "held-1"
+    assert finalized["auto_moderated_item"]["message"] == "blocked text"
+    assert finalized["auto_moderated_item"]["author"]["name"] == "@HeldUser"
+    assert logs == []
+    assert samples == []
+
+
 def test_process_action_ignores_interactivity_widget_action(
     monkeypatch,
 ) -> None:
