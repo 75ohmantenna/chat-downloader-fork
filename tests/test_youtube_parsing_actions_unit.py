@@ -14,7 +14,19 @@ from chat_downloader.sites.youtube.constants_message import (
 from chat_downloader.sites.youtube.parsing.actions_handlers import (
     validate_and_finalize_message,
 )
-from chat_downloader.sites.youtube.parsing.actions_router import process_action
+from chat_downloader.sites.youtube.parsing.actions_handlers_parser import (
+    _handle_add_banner_action,
+    _handle_item_action,
+    _handle_poll_action,
+    _handle_remove_action,
+    _handle_remove_banner_action,
+    _handle_replace_action,
+    _handle_tooltip_action,
+)
+from chat_downloader.sites.youtube.parsing.actions_router import (
+    _ACTION_HANDLERS,
+    process_action,
+)
 
 
 def _renderer_with_timestamp(usec: str = "1234567890") -> dict:
@@ -36,6 +48,20 @@ def _finalize(result):
 def setup_module() -> None:
     # Ensure debug_log never escalates to TestingException during unit tests.
     dbg.set_testing_mode(dbg.TestingModes.NONE)
+
+
+def test_action_handlers_table_maps_families_in_order() -> None:
+    """Verify the dispatch table binds the right handler to each family."""
+    expected = [
+        _handle_item_action,
+        _handle_remove_action,
+        _handle_replace_action,
+        _handle_tooltip_action,
+        _handle_add_banner_action,
+        _handle_remove_banner_action,
+        _handle_poll_action,
+    ]
+    assert [h for _, h in _ACTION_HANDLERS] == expected
 
 
 def test_build_video_remapping_returns_mapping_with_expected_keys() -> None:

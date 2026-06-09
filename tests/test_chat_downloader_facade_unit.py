@@ -5,6 +5,7 @@ from typing import Any, cast
 
 from chat_downloader.chat_downloader import ChatDownloader, run
 from chat_downloader.models import (
+    CHAT_PARAM_NAMES,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_READ_TIMEOUT,
     ChatRequest,
@@ -186,6 +187,12 @@ def test_run_time_program_parameters_log_is_sanitized(monkeypatch) -> None:
     assert "Bearer secret" not in program_log
     assert "user:pass@example.invalid" not in program_log
     assert "<redacted>" in program_log
+
+
+def test_get_chat_signature_matches_chat_request_fields() -> None:
+    sig = inspect.signature(ChatDownloader.get_chat)
+    params = set(sig.parameters) - {"self"}
+    assert params == set(CHAT_PARAM_NAMES)
 
 
 def test_get_chat_builds_chat_request_and_delegates(monkeypatch) -> None:

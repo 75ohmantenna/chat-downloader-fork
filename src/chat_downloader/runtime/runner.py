@@ -36,6 +36,54 @@ if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
 
 
+def _classify_run_error(e: Exception) -> str:
+    """Return the user-facing error string for a run-loop exception.
+
+    ChatGeneratorError/ParsingError are ChatDownloaderError subclasses, so
+    they must be tested before the parent class.
+    """
+    if isinstance(e, (ChatGeneratorError, ParsingError, TestingException)):
+        return f"{e}. {SITE_CHANGE_ERROR_HINT}"
+    if isinstance(e, RequestsConnectionError):
+        return (
+            "Unable to establish a connection. Please check your "
+            f"internet connection. {e}"
+        )
+    return str(e)
+
+
+def _finalize_run(
+    chat: Any,
+    downloader: Any,
+    *,
+    primary_error: bool,
+) -> None:
+    """Close chat and downloader.
+
+    Suppress errors only when a primary error already occurred so the
+    original exception is not obscured.
+    """
+    if chat is not None and hasattr(chat, "close"):
+        try:
+            chat.close()
+        except (OSError, ValueError) as e:
+            log("warning", f"Error finalizing chat output: {e}")
+        except Exception as e:
+            if primary_error:
+                log("warning", f"Error finalizing chat output: {e}")
+            else:
+                raise
+
+    if downloader is not None:
+        try:
+            downloader.close()
+        except Exception as e:
+            if primary_error:
+                log("warning", f"Error closing downloader session(s): {e}")
+            else:
+                raise
+
+
 @dataclass(slots=True)
 class RunResult:
     """Structured result from :func:`execute_run`."""
@@ -72,7 +120,7 @@ def create_message_callback(
     return deduplicating_callback
 
 
-def execute_run(  # noqa: C901 — exception-handler spread is intrinsic to the run loop
+def execute_run(
     downloader_cls: type,
     propagate_interrupt: bool = False,
     **kwargs: Any,
@@ -112,25 +160,10 @@ def execute_run(  # noqa: C901 — exception-handler spread is intrinsic to the 
         result.success = True
         log("info", "Finished retrieving chat messages.")
 
-    except (ChatGeneratorError, ParsingError, TestingException) as e:
+    except (ChatDownloaderError, RequestException, TestingException) as e:
         primary_error = True
-        result.error_message = f"{e}. {SITE_CHANGE_ERROR_HINT}"
+        result.error_message = _classify_run_error(e)
         log("error", result.error_message)
-    except ChatDownloaderError as e:
-        primary_error = True
-        result.error_message = str(e)
-        log("error", e)
-    except RequestsConnectionError as e:
-        primary_error = True
-        result.error_message = (
-            f"Unable to establish a connection. Please check your "
-            f"internet connection. {e}"
-        )
-        log("error", result.error_message)
-    except RequestException as e:
-        primary_error = True
-        result.error_message = str(e)
-        log("error", e)
     except KeyboardInterrupt:
         primary_error = True
         result.interrupted = True
@@ -140,24 +173,6 @@ def execute_run(  # noqa: C901 — exception-handler spread is intrinsic to the 
         log("error", result.error_message)
 
     finally:
-        if chat is not None and hasattr(chat, "close"):
-            try:
-                chat.close()
-            except (OSError, ValueError) as e:
-                log("warning", f"Error finalizing chat output: {e}")
-            except Exception as e:
-                if primary_error:
-                    log("warning", f"Error finalizing chat output: {e}")
-                else:
-                    raise
-
-        if downloader is not None:
-            try:
-                downloader.close()
-            except Exception as e:
-                if primary_error:
-                    log("warning", f"Error closing downloader session(s): {e}")
-                else:
-                    raise
+        _finalize_run(chat, downloader, primary_error=primary_error)
 
     return result

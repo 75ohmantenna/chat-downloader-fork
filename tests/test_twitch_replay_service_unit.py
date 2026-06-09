@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 
+import logging
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock, patch
@@ -10,6 +11,7 @@ from requests.exceptions import RequestException
 from chat_downloader.errors import NoChatReplay, VideoUnavailable
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch import replay_service
+from chat_downloader.sites.twitch.replay_service import _process_vod_edge
 
 
 def test_replay_service_get_chat_by_vod_id_raises_when_video_missing() -> None:
@@ -412,3 +414,106 @@ def test_iter_vod_stops_when_cursor_does_not_advance() -> None:
 
     # Loop runs once, then stops because cursor didn't advance.
     assert fetch_messages.call_count == 1
+
+
+# ── _process_vod_edge direct unit tests ──────────────────────────────────────
+
+
+def _tf(result: str) -> Any:
+    """Return a minimal time-filter mock that always returns *result*."""
+    return type("_TF", (), {"check": lambda self, d: result})()
+
+
+def _mf(result: bool) -> Any:
+    """Return a minimal message-filter mock that always returns *result*."""
+    return type("_MF", (), {"should_add": lambda self, d: result})()
+
+
+_LOG = logging.getLogger(__name__)
+
+
+@pytest.mark.parametrize("edge_typename", ["Unexpected", "SomeEdge"])
+def test_process_vod_edge_skips_unrecognised_edge_typename(
+    edge_typename: str,
+) -> None:
+    edge = {"__typename": edge_typename, "node": {"__typename": "Comment"}}
+    data, disposition = _process_vod_edge(
+        edge, 0.0, None, None, _tf("yield"), _mf(True), _LOG
+    )
+    assert data is None
+    assert disposition == "skip"
+
+
+def test_process_vod_edge_skips_when_node_absent() -> None:
+    edge: dict[str, Any] = {"__typename": "VideoCommentEdge"}
+    data, disposition = _process_vod_edge(
+        edge, 0.0, None, None, _tf("yield"), _mf(True), _LOG
+    )
+    assert data is None
+    assert disposition == "skip"
+
+
+@pytest.mark.parametrize("node_typename", ["SomeNode", "OtherNode"])
+def test_process_vod_edge_skips_unrecognised_node_typename(
+    node_typename: str,
+) -> None:
+    edge = {
+        "__typename": "VideoCommentEdge",
+        "node": {"__typename": node_typename},
+    }
+    data, disposition = _process_vod_edge(
+        edge, 0.0, None, None, _tf("yield"), _mf(True), _LOG
+    )
+    assert data is None
+    assert disposition == "skip"
+
+
+@pytest.mark.parametrize("filter_result", ["skip", "stop"])
+def test_process_vod_edge_honours_time_filter_disposition(
+    filter_result: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.replay_service._parse_item",
+        lambda node, offset, creator_id, badge_set: {},
+    )
+    edge = {"__typename": "VideoCommentEdge", "node": {"__typename": "Comment"}}
+    data, disposition = _process_vod_edge(
+        edge, 0.0, None, None, _tf(filter_result), _mf(True), _LOG
+    )
+    assert data is None
+    assert disposition == filter_result
+
+
+def test_process_vod_edge_skips_when_msg_filter_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.replay_service._parse_item",
+        lambda node, offset, creator_id, badge_set: {},
+    )
+    edge = {"__typename": "VideoCommentEdge", "node": {"__typename": "Comment"}}
+    data, disposition = _process_vod_edge(
+        edge, 0.0, None, None, _tf("yield"), _mf(False), _LOG
+    )
+    assert data is None
+    assert disposition == "skip"
+
+
+def test_process_vod_edge_yields_data_when_all_filters_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parsed: dict[str, Any] = {"id": "abc", "author": "user1"}
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.replay_service._parse_item",
+        lambda node, offset, creator_id, badge_set: dict(parsed),
+    )
+    edge = {
+        "__typename": "VideoCommentEdge",
+        "node": {"__typename": "VideoComment"},
+    }
+    data, disposition = _process_vod_edge(
+        edge, 5.0, "ch123", None, _tf("yield"), _mf(True), _LOG
+    )
+    assert data == parsed
+    assert disposition == "yield"

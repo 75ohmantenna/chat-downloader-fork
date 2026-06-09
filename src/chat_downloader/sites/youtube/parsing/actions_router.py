@@ -2,6 +2,7 @@
 
 """Dispatcher for YouTube chat action processing."""
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -31,7 +32,25 @@ from .actions_handlers import (
 )
 
 # Known item action types (combination of add and ticker types)
-_KNOWN_ITEM_ACTION_TYPES = _KNOWN_ADD_ACTION_TYPES | _KNOWN_ADD_TICKER_TYPES
+_KNOWN_ITEM_ACTION_TYPES = {
+    **_KNOWN_ADD_ACTION_TYPES,
+    **_KNOWN_ADD_TICKER_TYPES,
+}
+
+_ActionHandler = Callable[
+    [dict[str, Any], str, dict[str, Any], float],
+    tuple[dict[str, Any], dict[str, Any], str | None, str],
+]
+
+_ACTION_HANDLERS: tuple[tuple[dict[str, list[str]], _ActionHandler], ...] = (
+    (_KNOWN_ITEM_ACTION_TYPES, _handle_item_action),
+    (_KNOWN_REMOVE_ACTION_TYPES, _handle_remove_action),
+    (_KNOWN_REPLACE_ACTION_TYPES, _handle_replace_action),
+    (_KNOWN_TOOLTIP_ACTION_TYPES, _handle_tooltip_action),
+    (_KNOWN_ADD_BANNER_TYPES, _handle_add_banner_action),
+    (_KNOWN_REMOVE_BANNER_TYPES, _handle_remove_banner_action),
+    (_KNOWN_POLL_ACTION_TYPES, _handle_poll_action),
+)
 
 
 @dataclass(frozen=True)
@@ -56,7 +75,7 @@ def _make_processed_action(
     )
 
 
-def process_action(  # noqa: C901 — match dispatch over 10 action-type families is intrinsic
+def process_action(
     action: dict[str, Any],
     offset: float = 0,
 ) -> ProcessedAction | None:
@@ -90,61 +109,16 @@ def process_action(  # noqa: C901 — match dispatch over 10 action-type familie
         remove_suffixes(original_action_type, ("Action", "Command")),
     )
 
-    # Route to appropriate handler
-    match original_action_type:
-        case _ if original_action_type in _KNOWN_ITEM_ACTION_TYPES:
+    for type_set, handler in _ACTION_HANDLERS:
+        if original_action_type in type_set:
             return _make_processed_action(
-                _handle_item_action(action, original_action_type, data, offset)
+                handler(action, original_action_type, data, offset)
             )
-        case _ if original_action_type in _KNOWN_REMOVE_ACTION_TYPES:
-            return _make_processed_action(
-                _handle_remove_action(
-                    action, original_action_type, data, offset
-                )
-            )
-        case _ if original_action_type in _KNOWN_REPLACE_ACTION_TYPES:
-            return _make_processed_action(
-                _handle_replace_action(
-                    action, original_action_type, data, offset
-                )
-            )
-        case _ if original_action_type in _KNOWN_TOOLTIP_ACTION_TYPES:
-            return _make_processed_action(
-                _handle_tooltip_action(
-                    action, original_action_type, data, offset
-                )
-            )
-        case _ if original_action_type in _KNOWN_ADD_BANNER_TYPES:
-            return _make_processed_action(
-                _handle_add_banner_action(
-                    action, original_action_type, data, offset
-                )
-            )
-        case _ if original_action_type in _KNOWN_REMOVE_BANNER_TYPES:
-            return _make_processed_action(
-                _handle_remove_banner_action(
-                    action,
-                    original_action_type,
-                    data,
-                    offset,
-                )
-            )
-        case _ if original_action_type in _KNOWN_POLL_ACTION_TYPES:
-            return _make_processed_action(
-                _handle_poll_action(
-                    action,
-                    original_action_type,
-                    data,
-                    offset,
-                )
-            )
-        case _ if original_action_type in _KNOWN_IGNORE_ACTION_TYPES:
-            return None  # Ignore these actions
-        case _:
-            # Unknown action type
-            capture_debug_sample(
-                f"youtube-unknown-action-{original_action_type}",
-                {"action": action, "parsed_data": data},
-            )
-            debug_log(f"Unknown action: {original_action_type}", action, data)
-            return None
+    if original_action_type in _KNOWN_IGNORE_ACTION_TYPES:
+        return None
+    capture_debug_sample(
+        f"youtube-unknown-action-{original_action_type}",
+        {"action": action, "parsed_data": data},
+    )
+    debug_log(f"Unknown action: {original_action_type}", action, data)
+    return None

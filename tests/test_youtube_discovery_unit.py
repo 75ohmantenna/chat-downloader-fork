@@ -341,7 +341,7 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
         }
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_channels_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.helpers._get_continuation_info",
         fake_get_continuation_info,
     )
     monkeypatch.setattr(
@@ -458,7 +458,7 @@ def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_r
         return next(responses)
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._get_continuation_info",
+        "chat_downloader.sites.youtube.helpers._get_continuation_info",
         fake_get_continuation_info,
     )
 
@@ -752,7 +752,7 @@ def test_playlist_discovery_accepts_dict_params_and_stops_on_empty_continuation(
         lambda video: {"video_id": video["videoId"]},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._get_continuation_info",
+        "chat_downloader.sites.youtube.helpers._get_continuation_info",
         lambda _url, _session_post, request, **kwargs: (
             calls.append((request, kwargs["json"]["continuation"]))
             or {
@@ -847,7 +847,7 @@ def test_playlist_discovery_accepts_none_params_with_continuation(
         lambda video: {"video_id": video["videoId"]},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._get_continuation_info",
+        "chat_downloader.sites.youtube.helpers._get_continuation_info",
         lambda _url, _session_post, request, **kwargs: (
             calls.append((request, kwargs["json"]["continuation"]))
             or {
@@ -902,7 +902,7 @@ def test_playlist_discovery_breaks_on_repeated_continuation(
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._get_continuation_info",
+        "chat_downloader.sites.youtube.helpers._get_continuation_info",
         lambda *_args, **_kwargs: {
             "onResponseReceivedActions": [
                 {"appendContinuationItemsAction": {"continuationItems": []}},
@@ -1046,7 +1046,7 @@ def test_youtube_discovery_breaks_on_continuation_loop(monkeypatch) -> None:
         lambda _ytcfg: {"client": {}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_channels_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.helpers._get_continuation_info",
         lambda *_args, **_kwargs: next(continuation_payloads),
     )
     monkeypatch.setattr(
@@ -1054,7 +1054,7 @@ def test_youtube_discovery_breaks_on_continuation_loop(monkeypatch) -> None:
         lambda _yt_info: "loop-token",
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_channels_runtime_iteration.log",
+        "chat_downloader.sites.youtube.helpers.log",
         lambda _level, message: logs.append(message),
     )
 

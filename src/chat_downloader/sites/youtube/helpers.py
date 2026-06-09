@@ -6,10 +6,18 @@ This module centralizes helper functions that are currently reused across
 multiple YouTube modules after the large extractor refactor.
 """
 
-from typing import Any
+from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
+from chat_downloader.debugging import log
 from chat_downloader.errors import ParsingError
 from chat_downloader.utils.dict_utils import multi_get
+
+from .client_requests_continuation import _get_continuation_info
+
+if TYPE_CHECKING:
+    from chat_downloader.models import ChatRequest
 
 
 def require_innertube_api_key(ytcfg: dict[str, Any]) -> str:
@@ -150,6 +158,52 @@ def extract_chat_submenu_continuations(
             labeled.setdefault(label, token)
 
     return labeled
+
+
+def _fetch_browse_continuation(
+    self: Any,
+    continuation: str | None,
+    continuation_url: str,
+    continuation_params: dict[str, Any],
+    request: ChatRequest,
+    seen_continuations: set[str],
+) -> tuple[list[Any] | None, dict[str, Any] | None]:
+    """Fetch the next page via browse continuation.
+
+    Returns ``(items, yt_info)``.  Returns ``(None, None)`` when the caller
+    should stop (loop detected or no continuation token).
+    """
+    if continuation in seen_continuations:
+        log(
+            "debug",
+            "Detected YouTube browse continuation loop; "
+            "assuming end of results.",
+        )
+        return None, None
+    if continuation:
+        seen_continuations.add(continuation)
+    continuation_params["continuation"] = continuation
+    yt_info = _get_continuation_info(
+        continuation_url,
+        self._session_post,
+        request,
+        require_live_chat_continuation=False,
+        json=continuation_params,
+    )
+    items = multi_get(
+        yt_info,
+        "onResponseReceivedActions",
+        0,
+        "appendContinuationItemsAction",
+        "continuationItems",
+    ) or multi_get(
+        yt_info,
+        "onResponseReceivedEndpoints",
+        0,
+        "appendContinuationItemsAction",
+        "continuationItems",
+    )
+    return items, yt_info
 
 
 def _extract_browse_continuation_token_from_response(

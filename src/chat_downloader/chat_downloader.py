@@ -325,29 +325,12 @@ class ChatDownloader:
         :return: Chat object with message generator
         :rtype: Chat
         """
-        request = ChatRequest(
-            url="" if url is None else url,
-            start_time=start_time,
-            end_time=end_time,
-            max_attempts=max_attempts,
-            retry_timeout=retry_timeout,
-            interruptible_retry=interruptible_retry,
-            timeout=timeout,
-            inactivity_timeout=inactivity_timeout,
-            max_messages=max_messages,
-            message_groups=message_groups,
-            message_types=message_types,
-            output=output,
-            overwrite=overwrite,
-            sort_keys=sort_keys,
-            format=format,
-            format_file=format_file,
-            chat_type=chat_type,
-            ignore=ignore,
-            message_receive_timeout=message_receive_timeout,
-            buffer_size=buffer_size,
+        params = locals()
+        params = {k: v for k, v in params.items() if k != "self"}
+        params["url"] = "" if url is None else url
+        return self.get_chat_request(
+            ChatRequest.from_kwargs(strict=True, **params)
         )
-        return self.get_chat_request(request)
 
     def get_chat_request(self, request: ChatRequest) -> Chat:
         """Typed entry point for chat retrieval via :class:`ChatRequest`."""

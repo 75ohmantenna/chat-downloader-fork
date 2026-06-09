@@ -14,7 +14,13 @@ from chat_downloader.errors import (
     ParsingError,
     SiteNotSupported,
 )
-from chat_downloader.runtime.runner import create_message_callback, execute_run
+from chat_downloader.runtime.runner import (
+    SITE_CHANGE_ERROR_HINT,
+    _classify_run_error,
+    _finalize_run,
+    create_message_callback,
+    execute_run,
+)
 
 
 class _FakeChat:
@@ -62,6 +68,82 @@ def _make_error_downloader(error_to_raise: BaseException) -> type:
             self.closed = True
 
     return _ErrorDownloader
+
+
+@pytest.mark.parametrize(
+    ("exc", "expected_fragment"),
+    [
+        (ChatGeneratorError("gen"), SITE_CHANGE_ERROR_HINT),
+        (ParsingError("parse"), SITE_CHANGE_ERROR_HINT),
+        (RuntimeTestingException("test"), SITE_CHANGE_ERROR_HINT),
+        (ConnectionError("offline"), "internet connection"),
+        (SiteNotSupported("no site"), "no site"),
+        (RequestException("timeout"), "timeout"),
+    ],
+)
+def test_classify_run_error_returns_correct_message(
+    exc: Exception, expected_fragment: str
+) -> None:
+    msg = _classify_run_error(exc)
+    assert expected_fragment in msg
+
+
+@pytest.mark.parametrize(
+    ("error_to_raise", "expected_result_fragment", "expected_interrupted"),
+    [
+        (ChatGeneratorError("gen"), SITE_CHANGE_ERROR_HINT, False),
+        (ParsingError("parse"), SITE_CHANGE_ERROR_HINT, False),
+        (RuntimeTestingException("test"), SITE_CHANGE_ERROR_HINT, False),
+        (ConnectionError("offline"), "internet connection", False),
+        (SiteNotSupported("no site"), "no site", False),
+        (RequestException("timeout"), "timeout", False),
+        (KeyboardInterrupt(), "Keyboard Interrupt", True),
+    ],
+)
+def test_execute_run_result_fields_per_exception_type(
+    error_to_raise: BaseException,
+    expected_result_fragment: str,
+    expected_interrupted: bool,
+) -> None:
+    result = execute_run(_make_error_downloader(error_to_raise))
+    assert result.success is False
+    assert result.error_message is not None
+    assert expected_result_fragment in result.error_message
+    assert result.interrupted is expected_interrupted
+
+
+def test_finalize_run_suppresses_cleanup_errors_on_primary_error(
+    monkeypatch,
+) -> None:
+    logged = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda level, message: logged.append((level, str(message))),
+    )
+
+    class _BadChat:
+        def close(self) -> None:
+            raise RuntimeError("chat broken")
+
+    class _BadDownloader:
+        def close(self) -> None:
+            raise RuntimeError("downloader broken")
+
+    _finalize_run(_BadChat(), _BadDownloader(), primary_error=True)
+    assert ("warning", "Error finalizing chat output: chat broken") in logged
+    assert (
+        "warning",
+        "Error closing downloader session(s): downloader broken",
+    ) in logged
+
+
+def test_finalize_run_reraises_cleanup_errors_without_primary_error() -> None:
+    class _BadChat:
+        def close(self) -> None:
+            raise RuntimeError("chat broken")
+
+    with pytest.raises(RuntimeError, match="chat broken"):
+        _finalize_run(_BadChat(), None, primary_error=False)
 
 
 def test_create_message_callback_quiet_returns_noop() -> None:

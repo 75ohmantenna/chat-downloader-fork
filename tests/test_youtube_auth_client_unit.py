@@ -153,6 +153,60 @@ def test_generate_sapisidhash_header_promotes_cookie_and_uses_datasync_id(
     )
 
 
+def test_generate_sapisidhash_header_uses_sapisid_when_already_present(
+    monkeypatch,
+) -> None:
+    """SAPISID cookie present: _ensure_primary_sapisid returns it directly."""
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.client_auth.time.time",
+        lambda: 1234,
+    )
+    session = _FakeSession({"SAPISID": "direct-sapisid"})
+
+    header = _generate_sapisidhash_header(
+        session, "https://www.youtube.com", ytcfg=None
+    )
+
+    # No promotion call should have been made — cookie already exists.
+    assert session.set_calls == []
+    assert header is not None
+    assert "SAPISIDHASH" in header
+
+
+def test_generate_sapisidhash_header_no_session_id_when_ytcfg_none(
+    monkeypatch,
+) -> None:
+    """ytcfg=None: _session_id_parts returns None (early return, line 117)."""
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.client_auth.time.time",
+        lambda: 1234,
+    )
+    session = _FakeSession({"__Secure-3PAPISID": "threep"})
+
+    header = _generate_sapisidhash_header(
+        session, "https://www.youtube.com", ytcfg=None
+    )
+
+    assert header is not None
+
+
+def test_generate_sapisidhash_header_no_session_id_when_datasync_id_absent(
+    monkeypatch,
+) -> None:
+    """Ytcfg present but no DATASYNC_ID: _session_id_parts returns None."""
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.client_auth.time.time",
+        lambda: 1234,
+    )
+    session = _FakeSession({"__Secure-3PAPISID": "threep"})
+
+    header = _generate_sapisidhash_header(
+        session, "https://www.youtube.com", ytcfg={"OTHER_KEY": "value"}
+    )
+
+    assert header is not None
+
+
 def test_initialize_consent_returns_early_for_existing_secure_cookie() -> None:
     session = _FakeSession({"__Secure-3PSID": "present"})
 
