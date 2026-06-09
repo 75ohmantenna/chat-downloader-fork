@@ -15,7 +15,7 @@ Logging Strategy:
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.debugging import logger
 from chat_downloader.errors import NoChatReplay, SiteError, VideoUnavailable
@@ -59,13 +59,13 @@ class TwitchChatDownloader(BaseChatDownloader):
 
     _NAME = "twitch.tv"
 
-    _SITE_DEFAULT_PARAMS = {
+    _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "format": "twitch",
     }
 
-    _VALID_URLS = VALID_URLS
+    _VALID_URLS: ClassVar[dict[str, str]] = VALID_URLS
 
-    _TESTS = [
+    _TESTS: ClassVar[list[dict[str, Any]]] = [
         # Live
         {
             "name": "Livestream",

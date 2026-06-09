@@ -9,7 +9,7 @@ constants modules.
 This module contains the orchestrating class with tests.
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 from chat_downloader.sites.base import BaseChatDownloader
 
@@ -64,8 +64,8 @@ class YouTubeChatDownloader(
 
     _NAME = "youtube.com"
 
-    _SITE_DEFAULT_PARAMS = {
+    _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "format": "youtube",
     }
 
-    _VALID_URLS = _VALID_URLS
+    _VALID_URLS: ClassVar[dict[str, str]] = _VALID_URLS

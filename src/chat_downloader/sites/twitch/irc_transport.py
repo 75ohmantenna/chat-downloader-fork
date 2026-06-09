@@ -321,8 +321,7 @@ def get_chat_messages_by_stream_id(
                     badge_set,
                     message_count,
                 )
-                for data in items:
-                    yield data
+                yield from items
             elif unmatched_full_buffer is not None:
                 # Buffer was fully consumed with no matches — log unrecognised
                 # traffic.

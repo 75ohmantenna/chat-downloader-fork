@@ -2,7 +2,7 @@
 
 from http.cookiejar import MozillaCookieJar
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 import pytest
 
@@ -411,8 +411,11 @@ def test_base_downloader_misc_helpers() -> None:
     from chat_downloader.errors import InvalidParameter
 
     class DemoDownloader(BaseChatDownloader):
-        _SITE_DEFAULT_PARAMS = {"format": "demo"}
-        _VALID_URLS = {"vod": r"/videos/(?P<id>\d+)", "skip": 123}
+        _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {"format": "demo"}
+        _VALID_URLS: ClassVar[dict[str, Any]] = {
+            "vod": r"/videos/(?P<id>\d+)",
+            "skip": 123,
+        }
 
     downloader = DemoDownloader()
 

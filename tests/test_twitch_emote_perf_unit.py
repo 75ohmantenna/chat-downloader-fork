@@ -62,7 +62,7 @@ def _clear_emote_cache() -> None:
 
 
 def test_returns_six_images() -> None:
-    """3 sizes × 2 themes = 6 images per emote."""
+    """3 sizes x 2 themes = 6 images per emote."""
     result = _generate_emote_image_list("25")
     assert len(result) == 6
 

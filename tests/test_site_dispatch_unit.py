@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 from types import SimpleNamespace
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 import pytest
@@ -174,8 +175,8 @@ def test_create_chat_for_site_logs_sanitized_chat_snapshot(monkeypatch) -> None:
     monkeypatch.setattr("chat_downloader.runtime.site_dispatch.log", fake_log)
 
     class FakeSession:
-        headers = {"Authorization": "secret"}
-        cookies = {"SID": "cookie"}
+        headers: ClassVar[dict[str, str]] = {"Authorization": "secret"}
+        cookies: ClassVar[dict[str, str]] = {"SID": "cookie"}
 
     class FakeSite:
         _NAME = "example.invalid"

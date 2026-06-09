@@ -33,6 +33,7 @@ from .testing import setup_testing_mode
 
 __all__ = [
     "LIVE_STATUSES",
+    "RunResult",
     "apply_message_limit",
     "build_cookie",
     "categorize_parameters",
@@ -44,7 +45,6 @@ __all__ = [
     "configure_timeouts",
     "create_chat_for_site",
     "create_message_callback",
-    "RunResult",
     "create_session",
     "execute_chat_generator",
     "execute_run",

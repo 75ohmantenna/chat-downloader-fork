@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import requests
 
@@ -15,8 +15,8 @@ from chat_downloader.errors import (
     SiteNotSupported,
     URLNotProvided,
 )
+from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
 
-from ..utils.dict_utils import move_to_dict as _move_to_dict
 from .models import SiteDefault
 from .remap import Remapper
 from .retry import retry as perform_retry
@@ -69,12 +69,12 @@ class BaseChatDownloader:
     # continue to work after the implementation moved to dict_utils.
     _move_to_dict = staticmethod(_move_to_dict)
 
-    _SITE_DEFAULT_PARAMS = {
+    _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "message_groups": ["messages"],
         "format": "default",
     }
 
-    _TESTS = [
+    _TESTS: ClassVar[list[dict[str, Any]]] = [
         {
             "name": "Inactivity timeout",
             "params": {
@@ -234,7 +234,7 @@ class BaseChatDownloader:
 
         return coerce_chat_request(params_or_request)
 
-    _VALID_URLS: dict[str, str] = {}
+    _VALID_URLS: ClassVar[dict[str, str]] = {}
 
     @classmethod
     def matches(cls, url: str) -> tuple[str, Any] | None:

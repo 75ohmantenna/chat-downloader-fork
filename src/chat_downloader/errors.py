@@ -100,10 +100,10 @@ class FormatFileNotFound(FormatError):
 
 
 __all__ = [
+    "CaptchaChallengeRequired",
     "ChatDisabled",
     "ChatDownloaderError",
     "ChatGeneratorError",
-    "CaptchaChallengeRequired",
     "CookieError",
     "FormatError",
     "FormatFileNotFound",

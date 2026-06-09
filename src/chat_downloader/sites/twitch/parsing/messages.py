@@ -84,7 +84,7 @@ def _generate_emote_image_list(emote_id: str) -> tuple[dict[str, Any], ...]:
         emote_id: Twitch emote ID (e.g. ``"25"`` for Kappa)
 
     Returns:
-        Tuple of emote image dicts (6 entries: 3 sizes × 2 themes)
+        Tuple of emote image dicts (6 entries: 3 sizes x 2 themes)
     """
     images = []
     for theme in _EMOTE_IMAGE_THEMES:
