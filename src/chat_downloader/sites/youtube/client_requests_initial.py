@@ -9,10 +9,11 @@ from typing import TYPE_CHECKING, Any
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
-from chat_downloader.errors import RetriesExceeded
+from chat_downloader.errors import CaptchaChallengeRequired, RetriesExceeded
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.retry_utils import RetryPolicy
 from chat_downloader.utils.string_utils import (
+    contains_any_hint,
     get_title_of_webpage,
     regex_search,
 )
@@ -21,6 +22,47 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from chat_downloader.models import ChatRequest
+
+
+_CHALLENGE_HINTS: tuple[str, ...] = (
+    "/sorry/index",
+    "captcha",
+    "verify you are human",
+    "unusual traffic",
+    "recaptcha",
+    "challenge",
+)
+
+
+def _contains_challenge_text(text: object) -> bool:
+    if not isinstance(text, str):
+        return False
+    return contains_any_hint(text, _CHALLENGE_HINTS)
+
+
+def _raise_if_challenge_response(
+    response: Any,
+    *,
+    url: str,
+    error_message: str,
+) -> None:
+    response_url = getattr(response, "url", "")
+    response_text = getattr(response, "text", "")
+    if not (
+        _contains_challenge_text(response_url)
+        or _contains_challenge_text(response_text)
+        or _contains_challenge_text(error_message)
+    ):
+        return
+
+    msg = (
+        "YouTube is requiring a captcha/challenge before the initial page "
+        "request can continue. "
+        f"{error_message}. URL: {url}. "
+        "Try fresh cookies, reduce request rate, or change request fingerprint "
+        "with --request_profile (youtube_android/youtube_ios)."
+    )
+    raise CaptchaChallengeRequired(msg)
 
 
 def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop are intrinsic
@@ -63,6 +105,11 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
 
                     raise VideoNotFound(error_message)
                 if response.status_code in (403, 429):
+                    _raise_if_challenge_response(
+                        response,
+                        url=url,
+                        error_message=error_message,
+                    )
                     log(
                         "warning",
                         f"Retriable HTTP error (attempt {attempt_number}/"

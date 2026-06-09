@@ -264,6 +264,39 @@ def test_get_initial_info_retries_on_429(monkeypatch) -> None:
     assert player_response_info == {}
 
 
+def test_get_initial_info_raises_challenge_on_sorry_page(
+    monkeypatch,
+) -> None:
+    def session_get(_url):
+        response = _PageResp(
+            429,
+            "<html><body>Our systems have detected unusual traffic from your "
+            "computer network. <div class='g-recaptcha'></div></body></html>",
+        )
+        response.url = "https://www.google.com/sorry/index?continue=..."
+        return response
+
+    monkeypatch.setattr(
+        _yt_initial,
+        "get_title_of_webpage",
+        lambda _html: "https://www.youtube.com/watch?v=test",
+    )
+
+    with pytest.raises(CaptchaChallengeRequired) as exc_info:
+        _get_initial_info(
+            "https://www.youtube.com/watch?v=test",
+            session_get,
+            {"max_attempts": 2, "retry_timeout": 0},
+            r"ytInitialData",
+            r"ytcfg",
+            r"ytInitialPlayerResponse",
+        )
+
+    msg = str(exc_info.value)
+    assert "captcha/challenge" in msg
+    assert "--request_profile" in msg
+
+
 def test_get_initial_info_accepts_chat_request(monkeypatch) -> None:
     calls = {"count": 0}
 
