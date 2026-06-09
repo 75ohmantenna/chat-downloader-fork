@@ -59,9 +59,9 @@ The normal YouTube flow is:
   delegates to `video_status_helpers.py` (`_determine_status`,
   `_determine_video_type`, `_extract_continuation_info`) and
   `video_status_models.py` (`VideoDetails`)
-- `discovery_channels.py`, `discovery_playlists.py`,
-  `discovery_channels_runtime_iteration.py`, and `discovery_helpers.py`: URL
-  discovery and extraction support, including live-page discovery
+- `discovery_playlists.py`, `discovery_channels_runtime_iteration.py`, and
+  `discovery_helpers.py`: URL discovery and extraction support, including
+  live-page discovery
 
 ### Request construction
 
