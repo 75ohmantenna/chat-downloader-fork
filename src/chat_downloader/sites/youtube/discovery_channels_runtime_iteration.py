@@ -29,6 +29,85 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
 
 
+def _build_channel_url(
+    channel_id: str | None,
+    user_id: str | None,
+    custom_username: str | None,
+    handle: str | None,
+    vid_type: str,
+) -> tuple[str, str]:
+    """Return (user_url, browse_url) for the given channel identifier."""
+    if channel_id:
+        _type, _id = "channel/", channel_id
+    elif user_id:
+        _type, _id = "user/", user_id
+    elif custom_username:
+        _type, _id = "c/", custom_username
+    elif handle:
+        _type, _id = "@", handle
+    else:
+        msg = "No user type specified."
+        raise InvalidParameter(msg)
+    user_url = f"{_YT_HOME}/{_type}{_id}"
+    return user_url, f"{user_url}/{vid_type}"
+
+
+def _select_videos_tab(
+    yt_info: dict[str, Any], user_url: str, video_type: str
+) -> Any:
+    """Return the page_contents for the requested tab, or raise."""
+    tabs = multi_get(
+        yt_info, "contents", "twoColumnBrowseResultsRenderer", "tabs"
+    )
+    if not tabs:
+        msg = f'Unable to find user: "{user_url}"'
+        raise UserNotFound(msg)
+
+    for tab in tabs:
+        tab_data = tab.get("tabRenderer", {})
+        if not tab_data or not tab_data.get("selected"):
+            continue
+        tab_title = tab_data.get("title", "").lower()
+        if tab_title != video_type.lower():
+            log(
+                "debug",
+                f'"{tab_title}" tab is not visible for this channel '
+                "(i.e. there are no such videos).",
+            )
+            msg = (
+                "This channel has no videos of the requested type "
+                f"({video_type})."
+            )
+            raise NoVideos(msg)
+        return tab_data.get("content")
+    return None
+
+
+def _process_page_items(
+    items: list[Any],
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Return video dicts and next continuation token from a browse page."""
+    videos: list[dict[str, Any]] = []
+    token: str | None = None
+    for item in items:
+        rich = multi_get(item, "richItemRenderer", "content") or {}
+        vid = rich.get("videoRenderer")
+        lockup = rich.get("lockupViewModel")
+        cont_item = item.get("continuationItemRenderer")
+        if vid:
+            videos.append(_parse_video(vid))
+        elif lockup:
+            videos.append(_parse_video({"lockupViewModel": lockup}))
+        elif cont_item:
+            token = multi_get(
+                cont_item,
+                "continuationEndpoint",
+                "continuationCommand",
+                "token",
+            )
+    return videos, token
+
+
 def get_user_videos(
     self: Any,
     channel_id: str | None = None,
@@ -43,37 +122,19 @@ def get_user_videos(
 
     request = ChatRequest() if params is None else params
 
-    _id = ""
-    _type = ""
-    if channel_id:
-        _id = channel_id
-        _type = "channel/"
-    elif user_id:
-        _id = user_id
-        _type = "user/"
-    elif custom_username:
-        _id = custom_username
-        _type = "c/"
-    elif handle:
-        _id = handle
-        _type = "@"
-    else:
-        msg = "No user type specified."
-        raise InvalidParameter(msg)
-
     vid_type = _VIDEO_TYPE_REMAPPING.get(video_type.lower())
     if not vid_type:
         msg = (
             "Invalid argument passed for video_type. "
             f"Must be one of {set(_VIDEO_TYPE_REMAPPING.keys())}"
         )
-        raise InvalidParameter(
-            msg,
-        )
+        raise InvalidParameter(msg)
 
-    user_url = f"{_YT_HOME}/{_type}{_id}"
+    user_url, browse_url = _build_channel_url(
+        channel_id, user_id, custom_username, handle, vid_type
+    )
     yt_info, ytcfg, _ = _get_initial_info(
-        f"{user_url}/{vid_type}",
+        browse_url,
         self._session_get,
         request,
         _YT_INITIAL_DATA_RE,
@@ -81,34 +142,7 @@ def get_user_videos(
         _YT_INITIAL_PLAYER_RESPONSE_RE,
     )
 
-    tabs = multi_get(
-        yt_info, "contents", "twoColumnBrowseResultsRenderer", "tabs"
-    )
-    if not tabs:
-        msg = f'Unable to find user: "{user_url}"'
-        raise UserNotFound(msg)
-
-    page_contents = None
-    for tab in tabs:
-        tab_data = tab.get("tabRenderer", {})
-        if not tab_data or not tab_data.get("selected"):
-            continue
-
-        tab_title = tab_data.get("title", "").lower()
-        if tab_title != video_type.lower():
-            log(
-                "debug",
-                f'"{tab_title}" tab is not visible for this channel '
-                "(i.e. there are no such videos).",
-            )
-            msg = (
-                "This channel has no videos of the requested type "
-                f"({video_type})."
-            )
-            raise NoVideos(
-                msg,
-            )
-        page_contents = tab_data.get("content")
+    page_contents = _select_videos_tab(yt_info, user_url, video_type)
 
     api_key = ytcfg.get("INNERTUBE_API_KEY")
     continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
@@ -167,25 +201,8 @@ def get_user_videos(
                     continue
             break
 
-        continuation = None
-        for item in items:
-            rich_item_content = (
-                multi_get(item, "richItemRenderer", "content") or {}
-            )
-            vid = rich_item_content.get("videoRenderer")
-            lockup = rich_item_content.get("lockupViewModel")
-            continuation_item = item.get("continuationItemRenderer")
-            if vid:
-                yield _parse_video(vid)
-            elif lockup:
-                yield _parse_video({"lockupViewModel": lockup})
-            elif continuation_item:
-                continuation = multi_get(
-                    continuation_item,
-                    "continuationEndpoint",
-                    "continuationCommand",
-                    "token",
-                )
+        videos, continuation = _process_page_items(items)
+        yield from videos
 
         if not continuation:
             break
