@@ -68,4 +68,11 @@ def _extract_continuation_info(
     yt_initial_data: dict[str, Any],
 ) -> dict[str, str]:
     """Extract mapping of chat menu label to continuation token."""
+    fallback_info = yt_initial_data.get("_chat_downloader_continuation_info")
+    if isinstance(fallback_info, dict):
+        return {
+            key: value
+            for key, value in fallback_info.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
     return extract_chat_submenu_continuations(yt_initial_data)

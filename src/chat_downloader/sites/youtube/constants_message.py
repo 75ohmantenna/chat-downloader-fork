@@ -27,7 +27,7 @@ _MESSAGE_GROUPS = {
         "ticker_paid_message_item",
         "ticker_sponsor_item",
     ],
-    "banners": ["banner", "banner_header"],
+    "banners": ["banner", "banner_header", "banner_chat_summary"],
     "donations": ["donation_announcement"],
     "engagement": [
         # message saying live chat replay is on
@@ -134,6 +134,8 @@ _REMAPPING = {
     # action buttons
     "actionButton": None,  # mapped in build_remapping
     # addBannerToLiveChatCommand
+    "liveChatSummaryId": "summary_id",
+    "chatSummary": None,  # mapped in build_remapping
     "text": None,  # mapped in build_remapping
     "viewerIsCreator": "viewer_is_creator",
     "targetId": "target_message_id",
@@ -229,6 +231,12 @@ _KEYS_TO_IGNORE = [
     "dynamicStateData",
     # paid sticker purchase/logging metadata
     "pdgPurchasedNoveltyLoggingDirectives",
+    # chat-summary banner feedback/UI metadata
+    "likeFeedbackButton",
+    "dislikeFeedbackButton",
+    "overflowMenuButton",
+    "loggingDirectives",
+    "collapsedStateEntityKey",
 ]
 
 _KNOWN_KEYS = set(
@@ -294,6 +302,8 @@ def build_remapping() -> Mapping[str, Any]:
             # action buttons
             "actionButton": r("action", _parse_action_button),
             # addBannerToLiveChatCommand
+            "liveChatSummaryId": "summary_id",
+            "chatSummary": r(None, _parse_runs, True),
             "text": r(None, _parse_runs, True),
             "viewerIsCreator": "viewer_is_creator",
             "targetId": "target_message_id",

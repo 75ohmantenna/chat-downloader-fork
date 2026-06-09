@@ -7,7 +7,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
+from chat_downloader.errors import CaptchaChallengeRequired, ParsingError
 
+from .client_requests_bootstrap import get_innertube_video_bootstrap
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _YT_CFG_RE,
@@ -50,14 +52,31 @@ class YouTubeVideoMetadataCoreMixin:
         else:
             original_url = f"{_YT_HOME}/watch?v={video_id}"
 
-        yt_initial_data, ytcfg, player_response_info = _get_initial_info(
-            original_url,
-            cast("YouTubeDownloaderProto", self)._session_get,
-            params,
-            _YT_INITIAL_DATA_RE,
-            _YT_CFG_RE,
-            _YT_INITIAL_PLAYER_RESPONSE_RE,
-        )
+        proto = cast("YouTubeDownloaderProto", self)
+        try:
+            yt_initial_data, ytcfg, player_response_info = _get_initial_info(
+                original_url,
+                proto._session_get,
+                params,
+                _YT_INITIAL_DATA_RE,
+                _YT_CFG_RE,
+                _YT_INITIAL_PLAYER_RESPONSE_RE,
+            )
+        except (CaptchaChallengeRequired, ParsingError):
+            if video_type == "clip":
+                raise
+            log(
+                "warning",
+                "Falling back to YouTube InnerTube bootstrap after the "
+                "watch-page bootstrap failed.",
+            )
+            yt_initial_data, ytcfg, player_response_info = (
+                get_innertube_video_bootstrap(
+                    video_id,
+                    proto._session_post,
+                    getattr(self, "_request_profile", None),
+                )
+            )
 
         if not player_response_info:
             log("debug", yt_initial_data)

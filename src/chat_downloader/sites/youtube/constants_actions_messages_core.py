@@ -59,6 +59,7 @@ _KNOWN_ADD_BANNER_TYPES = {
     "addBannerToLiveChatCommand": [
         "liveChatBannerRenderer",
         "liveChatBannerHeaderRenderer",
+        "liveChatBannerChatSummaryRenderer",
         "liveChatTextMessageRenderer",
     ],
 }

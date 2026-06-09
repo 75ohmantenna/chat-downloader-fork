@@ -1,0 +1,647 @@
+{
+  "responseContext": {
+    "visitorData": "CgtOMlpCUHNWRERPMCjDop7RBjIKCgJDQRIEGgAgLg%3D%3D",
+    "serviceTrackingParams": [
+      {
+        "service": "GFEEDBACK",
+        "params": [
+          {
+            "key": "is_alc_surface",
+            "value": "false"
+          },
+          {
+            "key": "ipcc",
+            "value": "0"
+          },
+          {
+            "key": "is_viewed_live",
+            "value": "True"
+          },
+          {
+            "key": "logged_in",
+            "value": "0"
+          },
+          {
+            "key": "visitor_data",
+            "value": "CgtOMlpCUHNWRERPMCjDop7RBjIKCgJDQRIEGgAgLg%3D%3D"
+          }
+        ]
+      },
+      {
+        "service": "CSI",
+        "params": [
+          {
+            "key": "c",
+            "value": "WEB"
+          },
+          {
+            "key": "cver",
+            "value": "2.20260206.01.00"
+          },
+          {
+            "key": "yt_li",
+            "value": "0"
+          },
+          {
+            "key": "GetPlayer_rid",
+            "value": "0x5a665c1933cd8bc5"
+          }
+        ]
+      },
+      {
+        "service": "GUIDED_HELP",
+        "params": [
+          {
+            "key": "logged_in",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "service": "ECATCHER",
+        "params": [
+          {
+            "key": "client.version",
+            "value": "2.20260206"
+          },
+          {
+            "key": "client.name",
+            "value": "WEB"
+          }
+        ]
+      }
+    ],
+    "maxAgeSeconds": 0,
+    "mainAppWebResponseContext": {
+      "loggedOut": true,
+      "trackingParam": "k5_fmPxhoXZRWqyQE_HM2V7MuAEQ-CuUvcggGyccvzZkh4og9k8QTL6IZzRMkuMYNLBwOcCw59TLtslLKPQGSS"
+    },
+    "responseId": "IhMIhJHGgqT5lAMVQ5jlBx0VSSjY",
+    "webResponseContextExtensionData": {
+      "webResponseContextPreloadData": {
+        "preloadMessageNames": [
+          "playerErrorMessageRenderer",
+          "buttonRenderer",
+          "playerMicroformatRenderer",
+          "mealbarPromoRenderer"
+        ]
+      },
+      "hasDecorated": true
+    }
+  },
+  "playabilityStatus": {
+    "status": "UNPLAYABLE",
+    "reason": "Video unavailable",
+    "errorScreen": {
+      "playerErrorMessageRenderer": {
+        "subreason": {
+          "simpleText": "The page needs to be reloaded."
+        },
+        "reason": {
+          "runs": [
+            {
+              "text": "The page needs to be reloaded."
+            }
+          ]
+        },
+        "proceedButton": {
+          "buttonRenderer": {
+            "style": "STYLE_PRIMARY",
+            "size": "SIZE_DEFAULT",
+            "isDisabled": false,
+            "text": {
+              "runs": [
+                {
+                  "text": "Reload"
+                }
+              ]
+            },
+            "trackingParams": "CAQQ8FsiEwiEkcaCpPmUAxVDmOUHHRVJKNg=",
+            "command": {
+              "clickTrackingParams": "CAQQ8FsiEwiEkcaCpPmUAxVDmOUHHRVJKNjKAQRnQvwj",
+              "signalAction": {
+                "signal": "RELOAD_PAGE"
+              }
+            }
+          }
+        },
+        "thumbnail": {
+          "thumbnails": [
+            {
+              "url": "//s.ytimg.com/yts/img/meh7-vflGevej7.png",
+              "width": 140,
+              "height": 100
+            }
+          ]
+        },
+        "icon": {
+          "iconType": "ERROR_OUTLINE"
+        }
+      }
+    },
+    "skip": {
+      "playabilityErrorSkipConfig": {
+        "skipOnPlayabilityError": false
+      }
+    },
+    "contextParams": "Q0FFU0FnZ0M="
+  },
+  "heartbeatParams": {
+    "intervalMilliseconds": "15000",
+    "softFailOnError": true,
+    "heartbeatServerData": "GAIgAQ=="
+  },
+  "videoDetails": {
+    "videoId": "IzopCEgh2G8",
+    "title": "Destiny 2",
+    "lengthSeconds": "0",
+    "isLive": true,
+    "channelId": "UCxfr3b8IuHSzu22UHnAvHWg",
+    "isOwnerViewing": false,
+    "shortDescription": "",
+    "isCrawlable": true,
+    "isLiveDvrEnabled": true,
+    "thumbnail": {
+      "thumbnails": [
+        {
+          "url": "https://i.ytimg.com/vi/IzopCEgh2G8/hqdefault.jpg?v=6a276317&sqp=COyhntEG-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLD-Lqe8kcZ-tripVD9xHvIsJrS5lw",
+          "width": 168,
+          "height": 94
+        },
+        {
+          "url": "https://i.ytimg.com/vi/IzopCEgh2G8/hqdefault.jpg?v=6a276317&sqp=COyhntEG-oaymwEbCMQBEG5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBzXfZDupVWlYu4b4HNoOCm0hzbmg",
+          "width": 196,
+          "height": 110
+        },
+        {
+          "url": "https://i.ytimg.com/vi/IzopCEgh2G8/hqdefault.jpg?v=6a276317&sqp=COyhntEG-oaymwEcCPYBEIoBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBb3FRh4oZvcEkKKn4IzvFWplkA1g",
+          "width": 246,
+          "height": 138
+        },
+        {
+          "url": "https://i.ytimg.com/vi/IzopCEgh2G8/hqdefault.jpg?v=6a276317&sqp=COyhntEG-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBuemqjd001sVO2-3RdJfK7Hni2BQ",
+          "width": 336,
+          "height": 188
+        }
+      ]
+    },
+    "liveChunkReadahead": 3,
+    "allowRatings": true,
+    "viewCount": "22217",
+    "author": "MoistCr1TiKaL Gaming",
+    "isLowLatencyLiveStream": true,
+    "isPrivate": false,
+    "isUnpluggedCorpus": false,
+    "latencyClass": "MDE_STREAM_OPTIMIZATIONS_RENDERER_LATENCY_LOW",
+    "isLiveContent": true,
+    "isTvfilmVideo": false
+  },
+  "microformat": {
+    "playerMicroformatRenderer": {
+      "thumbnail": {
+        "thumbnails": [
+          {
+            "url": "https://i.ytimg.com/vi/IzopCEgh2G8/hqdefault.jpg?v=6a276317",
+            "width": 480,
+            "height": 360
+          }
+        ]
+      },
+      "embed": {
+        "iframeUrl": "https://www.youtube.com/embed/IzopCEgh2G8",
+        "width": 480,
+        "height": 360
+      },
+      "title": {
+        "simpleText": "Destiny 2"
+      },
+      "ownerProfileUrl": "http://www.youtube.com/@MoistCr1TiKaLGamingOfficial",
+      "externalChannelId": "UCxfr3b8IuHSzu22UHnAvHWg",
+      "isFamilySafe": true,
+      "availableCountries": [
+        "AD",
+        "AE",
+        "AF",
+        "AG",
+        "AI",
+        "AL",
+        "AM",
+        "AO",
+        "AQ",
+        "AR",
+        "AS",
+        "AT",
+        "AU",
+        "AW",
+        "AX",
+        "AZ",
+        "BA",
+        "BB",
+        "BD",
+        "BE",
+        "BF",
+        "BG",
+        "BH",
+        "BI",
+        "BJ",
+        "BL",
+        "BM",
+        "BN",
+        "BO",
+        "BQ",
+        "BR",
+        "BS",
+        "BT",
+        "BV",
+        "BW",
+        "BY",
+        "BZ",
+        "CA",
+        "CC",
+        "CD",
+        "CF",
+        "CG",
+        "CH",
+        "CI",
+        "CK",
+        "CL",
+        "CM",
+        "CN",
+        "CO",
+        "CR",
+        "CU",
+        "CV",
+        "CW",
+        "CX",
+        "CY",
+        "CZ",
+        "DE",
+        "DJ",
+        "DK",
+        "DM",
+        "DO",
+        "DZ",
+        "EC",
+        "EE",
+        "EG",
+        "EH",
+        "ER",
+        "ES",
+        "ET",
+        "FI",
+        "FJ",
+        "FK",
+        "FM",
+        "FO",
+        "FR",
+        "GA",
+        "GB",
+        "GD",
+        "GE",
+        "GF",
+        "GG",
+        "GH",
+        "GI",
+        "GL",
+        "GM",
+        "GN",
+        "GP",
+        "GQ",
+        "GR",
+        "GS",
+        "GT",
+        "GU",
+        "GW",
+        "GY",
+        "HK",
+        "HM",
+        "HN",
+        "HR",
+        "HT",
+        "HU",
+        "ID",
+        "IE",
+        "IL",
+        "IM",
+        "IN",
+        "IO",
+        "IQ",
+        "IR",
+        "IS",
+        "IT",
+        "JE",
+        "JM",
+        "JO",
+        "JP",
+        "KE",
+        "KG",
+        "KH",
+        "KI",
+        "KM",
+        "KN",
+        "KP",
+        "KR",
+        "KW",
+        "KY",
+        "KZ",
+        "LA",
+        "LB",
+        "LC",
+        "LI",
+        "LK",
+        "LR",
+        "LS",
+        "LT",
+        "LU",
+        "LV",
+        "LY",
+        "MA",
+        "MC",
+        "MD",
+        "ME",
+        "MF",
+        "MG",
+        "MH",
+        "MK",
+        "ML",
+        "MM",
+        "MN",
+        "MO",
+        "MP",
+        "MQ",
+        "MR",
+        "MS",
+        "MT",
+        "MU",
+        "MV",
+        "MW",
+        "MX",
+        "MY",
+        "MZ",
+        "NA",
+        "NC",
+        "NE",
+        "NF",
+        "NG",
+        "NI",
+        "NL",
+        "NO",
+        "NP",
+        "NR",
+        "NU",
+        "NZ",
+        "OM",
+        "PA",
+        "PE",
+        "PF",
+        "PG",
+        "PH",
+        "PK",
+        "PL",
+        "PM",
+        "PN",
+        "PR",
+        "PS",
+        "PT",
+        "PW",
+        "PY",
+        "QA",
+        "RE",
+        "RO",
+        "RS",
+        "RU",
+        "RW",
+        "SA",
+        "SB",
+        "SC",
+        "SD",
+        "SE",
+        "SG",
+        "SH",
+        "SI",
+        "SJ",
+        "SK",
+        "SL",
+        "SM",
+        "SN",
+        "SO",
+        "SR",
+        "SS",
+        "ST",
+        "SV",
+        "SX",
+        "SY",
+        "SZ",
+        "TC",
+        "TD",
+        "TF",
+        "TG",
+        "TH",
+        "TJ",
+        "TK",
+        "TL",
+        "TM",
+        "TN",
+        "TO",
+        "TR",
+        "TT",
+        "TV",
+        "TW",
+        "TZ",
+        "UA",
+        "UG",
+        "UM",
+        "US",
+        "UY",
+        "UZ",
+        "VA",
+        "VC",
+        "VE",
+        "VG",
+        "VI",
+        "VN",
+        "VU",
+        "WF",
+        "WS",
+        "YE",
+        "YT",
+        "ZA",
+        "ZM",
+        "ZW"
+      ],
+      "isUnlisted": false,
+      "hasYpcMetadata": false,
+      "viewCount": "22217",
+      "category": "Gaming",
+      "publishDate": "2026-06-07T22:53:42-07:00",
+      "ownerChannelName": "MoistCr1TiKaL Gaming",
+      "liveBroadcastDetails": {
+        "isLiveNow": true,
+        "startTimestamp": "2026-06-09T00:50:04+00:00"
+      },
+      "uploadDate": "2026-06-07T22:53:42-07:00",
+      "isShortsEligible": false,
+      "externalVideoId": "IzopCEgh2G8",
+      "likeCount": "1367",
+      "canonicalUrl": "https://www.youtube.com/watch?v=IzopCEgh2G8"
+    }
+  },
+  "trackingParams": "CAAQu2kiEwiEkcaCpPmUAxVDmOUHHRVJKNjKAQRnQvwj",
+  "messages": [
+    {
+      "mealbarPromoRenderer": {
+        "messageTexts": [
+          {
+            "runs": [
+              {
+                "text": "Get YouTube without the ads"
+              }
+            ]
+          }
+        ],
+        "actionButton": {
+          "buttonRenderer": {
+            "style": "STYLE_MONO_FILLED",
+            "size": "SIZE_DEFAULT",
+            "text": {
+              "runs": [
+                {
+                  "text": "Get it now"
+                }
+              ]
+            },
+            "trackingParams": "CAMQ7G8iEwiEkcaCpPmUAxVDmOUHHRVJKNg=",
+            "command": {
+              "clickTrackingParams": "CAMQ7G8iEwiEkcaCpPmUAxVDmOUHHRVJKNjKAQRnQvwj",
+              "commandExecutorCommand": {
+                "commands": [
+                  {
+                    "clickTrackingParams": "CAMQ7G8iEwiEkcaCpPmUAxVDmOUHHRVJKNjKAQRnQvwj",
+                    "commandMetadata": {
+                      "webCommandMetadata": {
+                        "url": "/premium?ybp=Eg9GRXdoYXRfdG9fd2F0Y2gqEmRtZWEtYWNxLWMtZWdzb1FCYToaCAYYASoUChJkbWVhLWFjcS1jLWVnc29RQmE%253D",
+                        "webPageType": "WEB_PAGE_TYPE_BROWSE",
+                        "rootVe": 93498,
+                        "apiUrl": "/youtubei/v1/browse"
+                      }
+                    },
+                    "browseEndpoint": {
+                      "browseId": "SPunlimited",
+                      "params": "kgNBEg9GRXdoYXRfdG9fd2F0Y2gqEmRtZWEtYWNxLWMtZWdzb1FCYToaCAYYASoUChJkbWVhLWFjcS1jLWVnc29RQmE%3D"
+                    }
+                  },
+                  {
+                    "commandMetadata": {
+                      "webCommandMetadata": {
+                        "sendPost": true,
+                        "apiUrl": "/youtubei/v1/feedback"
+                      }
+                    },
+                    "feedbackEndpoint": {
+                      "feedbackToken": "AB9zfpJRtH3aYTmnl4Imda-MluoU6MMPIghq9gSfLs7b4-mjdFq2ZYaSWPIlyq2xk5dIhUA-L-H6q30r5xBL7t0N5clZRNMC93fOHYbA2LIUcCI_D5grga7K_4NN_Y5TCkZYr0xSuYjrnhr8AvhCxm7BBRoU-WSCKiXHWcKV-dXl4W-Y9R62yhs",
+                      "uiActions": {
+                        "hideEnclosingContainer": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "dismissButton": {
+          "buttonRenderer": {
+            "style": "STYLE_MONO_TONAL",
+            "size": "SIZE_DEFAULT",
+            "text": {
+              "runs": [
+                {
+                  "text": "No thanks"
+                }
+              ]
+            },
+            "trackingParams": "CAIQ7W8iEwiEkcaCpPmUAxVDmOUHHRVJKNg=",
+            "command": {
+              "clickTrackingParams": "CAIQ7W8iEwiEkcaCpPmUAxVDmOUHHRVJKNjKAQRnQvwj",
+              "commandExecutorCommand": {
+                "commands": [
+                  {
+                    "clickTrackingParams": "CAIQ7W8iEwiEkcaCpPmUAxVDmOUHHRVJKNjKAQRnQvwj",
+                    "commandMetadata": {
+                      "webCommandMetadata": {
+                        "sendPost": true,
+                        "apiUrl": "/youtubei/v1/feedback"
+                      }
+                    },
+                    "feedbackEndpoint": {
+                      "feedbackToken": "AB9zfpLuv5wS7MHZeT7oVlOkg-WgCi2OP286x7TgaPIQjuNBLUA4DeGJIUJLs_adIFVysAeSuCJHQARWl9pi4806u1CTaDU_6Q56OOYAzPtOy0mnx9ax81xmZD7Roqt7eok7P0M-5NnSpWG_vZJGa3galXcZo3P4LmKyc2cPdmoAvT4bkc7YGpQ",
+                      "uiActions": {
+                        "hideEnclosingContainer": true
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "triggerCondition": "TRIGGER_CONDITION_POST_AD",
+        "style": "STYLE_MODERN",
+        "trackingParams": "CAEQ42kYACITCISRxoKk-ZQDFUOY5QcdFUko2A==",
+        "impressionEndpoints": [
+          {
+            "clickTrackingParams": "CAEQ42kYACITCISRxoKk-ZQDFUOY5QcdFUko2MoBBGdC_CM=",
+            "commandMetadata": {
+              "webCommandMetadata": {
+                "sendPost": true,
+                "apiUrl": "/youtubei/v1/feedback"
+              }
+            },
+            "feedbackEndpoint": {
+              "feedbackToken": "AB9zfpJTb32snH_8PqVwxm6yMI18ozZP5wLuE_9D7oc2xrjcDJOSkfJ6Bp0te56YtonUI0nm62Cs5Ar7hTs1PEpqEY5rYK9BJMGesCYSdXow-Z3uDDhEhpiO-pl0oTxRVHVW7BT-sSaVR8vz_-t0MfkGibktSpXkpwVfXuNzD7ikfXVSREYOPak",
+              "uiActions": {
+                "hideEnclosingContainer": false
+              }
+            }
+          }
+        ],
+        "isVisible": true,
+        "messageTitle": {
+          "runs": [
+            {
+              "text": "YouTube Premium"
+            }
+          ]
+        },
+        "supplementalText": {
+          "runs": [
+            {
+              "text": "Terms apply. Cancel anytime"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "adBreakHeartbeatParams": "Q0FBJTNE",
+  "frameworkUpdates": {
+    "entityBatchUpdate": {
+      "mutations": [
+        {
+          "entityKey": "Eg0KC0l6b3BDRWdoMkc4IPYBKAE%3D",
+          "type": "ENTITY_MUTATION_TYPE_REPLACE",
+          "payload": {
+            "offlineabilityEntity": {
+              "key": "Eg0KC0l6b3BDRWdoMkc4IPYBKAE%3D",
+              "addToOfflineButtonState": "ADD_TO_OFFLINE_BUTTON_STATE_UNKNOWN"
+            }
+          }
+        }
+      ],
+      "timestamp": {
+        "seconds": "1780977987",
+        "nanos": 882727036
+      }
+    }
+  }
+}

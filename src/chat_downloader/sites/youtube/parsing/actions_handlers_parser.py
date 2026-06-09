@@ -77,8 +77,12 @@ def _handle_add_banner_action(
     if original_item:
         original_message_type = try_get_first_key(original_item)
         contents = original_item[original_message_type].get("contents")
+        content_message_type = try_get_first_key(contents)
         parsed_contents = _parse_item(contents, offset=offset)
         data.update(parsed_contents)
+        if content_message_type == "liveChatBannerChatSummaryRenderer":
+            original_item = contents
+            original_message_type = content_message_type
     else:
         debug_log(
             "No bannerRenderer item", f"Action type: {original_action_type}"

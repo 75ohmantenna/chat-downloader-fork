@@ -39,53 +39,54 @@ class YouTubeVideoInitializationMixin:
             "YouTubeDownloaderProto", self
         )._parse_video_data(video_id, params, video_type)
 
-        # Indigo128 03.11.2025 >>
-        # Continuation changes mid October 2025
-        try:
-            client_continuation = yt_initial_data["contents"][
-                "twoColumnWatchNextResults"
-            ]["conversationBar"]["liveChatRenderer"]["continuations"][0][
-                "reloadContinuationData"
-            ]["continuation"]
-            proto = cast("YouTubeDownloaderProto", self)
-            if details["status"] in REPLAY_STATUSES:
-                response = proto._session_get(
-                    f"{_YT_LIVE_CHAT_REPLAY_URL}?continuation={client_continuation}",
-                )
-            else:
-                response = proto._session_get(
-                    f"{_YT_LIVE_CHAT_URL}?continuation={client_continuation}",
-                )
-            html = response.text
-            yt = regex_search(html, _YT_INITIAL_DATA_RE)
-            dict_live_chats = try_parse_json(yt)
-            if details["status"] in REPLAY_STATUSES:
-                fallback_labels = ["Top chat replay", "Live chat replay"]
-                canonical_labels = {
-                    "Top chat": "Top chat replay",
-                    "Live chat": "Live chat replay",
-                }
-            else:
-                fallback_labels = ["Top chat", "Live chat"]
-                canonical_labels = {}
+        if not yt_initial_data.get("_chat_downloader_continuation_info"):
+            # Indigo128 03.11.2025 >>
+            # Continuation changes mid October 2025
+            try:
+                client_continuation = yt_initial_data["contents"][
+                    "twoColumnWatchNextResults"
+                ]["conversationBar"]["liveChatRenderer"]["continuations"][0][
+                    "reloadContinuationData"
+                ]["continuation"]
+                proto = cast("YouTubeDownloaderProto", self)
+                if details["status"] in REPLAY_STATUSES:
+                    response = proto._session_get(
+                        f"{_YT_LIVE_CHAT_REPLAY_URL}?continuation={client_continuation}",
+                    )
+                else:
+                    response = proto._session_get(
+                        f"{_YT_LIVE_CHAT_URL}?continuation={client_continuation}",
+                    )
+                html = response.text
+                yt = regex_search(html, _YT_INITIAL_DATA_RE)
+                dict_live_chats = try_parse_json(yt)
+                if details["status"] in REPLAY_STATUSES:
+                    fallback_labels = ["Top chat replay", "Live chat replay"]
+                    canonical_labels = {
+                        "Top chat": "Top chat replay",
+                        "Live chat": "Live chat replay",
+                    }
+                else:
+                    fallback_labels = ["Top chat", "Live chat"]
+                    canonical_labels = {}
 
-            continuation_info = extract_chat_submenu_continuations(
-                dict_live_chats,
-                fallback_labels=fallback_labels,
-            )
-            for source_label, token in continuation_info.items():
-                details["continuation_info"][
-                    canonical_labels.get(source_label, source_label)
-                ] = token
-        except (KeyError, TypeError, IndexError) as exc:
-            log(
-                "warning",
-                "Unable to enrich chat submenu continuation tokens from "
-                "chat-page bootstrap "
-                f"({type(exc).__name__}). Falling back to playability "
-                "checks when required.",
-            )
-        # Indigo128 03.11.2025 <<
+                continuation_info = extract_chat_submenu_continuations(
+                    dict_live_chats,
+                    fallback_labels=fallback_labels,
+                )
+                for source_label, token in continuation_info.items():
+                    details["continuation_info"][
+                        canonical_labels.get(source_label, source_label)
+                    ] = token
+            except (KeyError, TypeError, IndexError) as exc:
+                log(
+                    "warning",
+                    "Unable to enrich chat submenu continuation tokens from "
+                    "chat-page bootstrap "
+                    f"({type(exc).__name__}). Falling back to playability "
+                    "checks when required.",
+                )
+            # Indigo128 03.11.2025 <<
 
         # Error checking — only when there is no continuation info.
         # Some streams can expose chat without video metadata.

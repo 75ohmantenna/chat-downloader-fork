@@ -78,6 +78,8 @@ def validate_and_finalize_message(
         icon = data.get("icon")
         if icon in _MODE_ICON_TO_TYPE:
             data["message_type"] = _MODE_ICON_TO_TYPE[icon]
+    elif original_message_type == "liveChatBannerChatSummaryRenderer":
+        data["message_type"] = "banner_chat_summary"
 
     if original_message_type in _KNOWN_IGNORE_MESSAGE_TYPES:
         return None

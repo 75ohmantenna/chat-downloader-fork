@@ -34,15 +34,17 @@ The normal YouTube flow is:
 
 1. Match the incoming URL to a supported YouTube target.
 2. Load the watch page and parse initial JSON state.
-3. Extract video details, playability information, client config, and initial
+3. If the watch page is challenged or cannot be parsed, fall back to the
+   InnerTube `player` and `next` endpoints for live-video bootstrap metadata.
+4. Extract video details, playability information, client config, and initial
    chat continuation hints.
-4. Load the chat page once to recover the active `Top chat` and `Live chat`
+5. Load the chat page once to recover the active `Top chat` and `Live chat`
    continuation tokens.
-5. Build browser-like request headers, optionally adding auth headers when
+6. Build browser-like request headers, optionally adding auth headers when
    cookies are available.
-6. Poll the private InnerTube chat continuation endpoint.
-7. Parse actions into normalized chat messages.
-8. Continue until replay data ends, live continuations stop, or the caller
+7. Poll the private InnerTube chat continuation endpoint.
+8. Parse actions into normalized chat messages.
+9. Continue until replay data ends, live continuations stop, or the caller
    reaches a configured limit.
 
 ## Module Guide
@@ -109,6 +111,14 @@ The downloader starts with the YouTube watch page. That page provides:
 
 This is enough to determine whether the target is live, replay, post-live, or
 unavailable.
+
+When the watch page is blocked by a YouTube/Google challenge or the page no
+longer exposes parseable initial JSON, regular video targets can fall back to
+InnerTube `player` and `next` requests. That fallback preserves the active
+request profile, builds a minimal `ytcfg`, and seeds live chat with the primary
+`liveChatRenderer` continuation from the `next` response. The fallback is
+intended for live-video bootstrap; clips remain on the normal page bootstrap
+because clip time ranges are page-specific.
 
 ### Chat-page continuation recovery
 
@@ -180,6 +190,11 @@ logic lives in `chat_streams_runtime_iteration.py`; profile headers and
 InnerTube context adjustments live in `client_context.py` and
 `request_profiles.py`.
 
+The initial InnerTube fallback uses the same request-profile context fields
+when constructing its `player` and `next` payloads. Continuation-loop profile
+fallback remains separate and still handles incomplete chat-poll responses
+after bootstrap has succeeded.
+
 `client_auth.py` handles SAPISIDHASH-style authorization when suitable cookies
 are available. Header values are sanitized before they appear in debug logs.
 
@@ -200,6 +215,7 @@ message types:
 - `sponsorships_gift_purchase_announcement`
 - `sponsorships_gift_redemption_announcement`
 - `gift_message_view_model`
+- `banner_chat_summary`
 - `ban_user` (confirmed via `remove_chat_item` action; see Moderation Actions
   below for the full mapping)
 
