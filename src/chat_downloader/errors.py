@@ -2,6 +2,7 @@
 
 """File for defining errors."""
 
+
 class ChatDownloaderError(Exception):
     """Base class for Chat Downloader errors."""
 
