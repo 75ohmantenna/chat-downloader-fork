@@ -15,7 +15,7 @@ For deeper context see [`docs/development-workflow-guide.md`](docs/development-w
 - `docs/`: `cli-usage.md`, `development-workflow-guide.md`, `python-api-reference.md`, and the YouTube/Twitch integration guides.
 
 ## Architecture
-- `models.py`: `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata
+- `models/`: `DownloaderConfig` (`_config.py`), `ChatRequest` (`_request.py`), `RunConfig` + `coerce_chat_request` (`_runconfig.py`); shared helpers in `_base.py`; `__init__.py` is the single public import surface — `from chat_downloader.models import ...` is unchanged
 - `runtime/`: `cli_bridge.py` (strict `run()` param categorization), `site_dispatch.py` (URL→site + site defaults), `chat_pipeline.py` (limits/timeouts/format/output), `runner.py` (run loop + cleanup), `session_lifecycle.py` (cookies/sessions/cookie-domain validation), `testing.py`
 - `sites/`: `base.py`, `session.py` (proxy URL validation), `retry.py`, `filters.py` (message group validation), `models.py`, `remap.py`
 - `output/`: `ContinuousWriter`, JSON-lines/CSV/text writer subclasses
