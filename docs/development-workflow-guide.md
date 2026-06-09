@@ -120,8 +120,6 @@ The project `Makefile` wraps the commands above into convenient targets:
 | `make smoke` | build, then install the wheel in an isolated env and run `chat_downloader --version` |
 | `make check` | lint + fmt-check + typecheck + test (fast local loop) |
 | `make ci` | **canonical validation** — used locally and in GitHub Actions |
-| `make complexity` | advisory scan for functions above mccabe threshold 8 (non-blocking) |
-
 `make ci` is the single source of truth for validation. It runs the full
 deterministic offline path: `lock-check` → `lint` → `fmt-check` → `typecheck`
 → `coverage` (enforced at 100%) → `smoke` (which builds first). GitHub Actions
@@ -325,3 +323,9 @@ uv run ruff format . && uv run ruff check . --select ALL --fix --unsafe-fixes &&
 
 These are intentionally more aggressive and may surface far more noise than
 the normal project lint path.
+
+## Maintenance Notes
+
+Design decisions, deferred refactors, and non-obvious architectural choices
+that affect day-to-day development are documented in
+[`docs/maintenance-notes.md`](maintenance-notes.md).

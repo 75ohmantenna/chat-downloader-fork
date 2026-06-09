@@ -28,20 +28,14 @@ _MODE_ICON_TO_TYPE: dict[str, str] = {
 }
 
 
-def validate_and_finalize_message(
+def _emit_parse_diagnostics(
     data: dict[str, Any],
     original_item: dict[str, Any],
-    original_message_type: str | None,
     original_action_type: str,
-) -> dict[str, Any] | None:
-    """Validate parsed message and add message_type field."""
-    if not original_message_type:
-        debug_log("No message type", f"Action type: {original_action_type}")
-        return None
-
-    test_for_missing_keys = original_item.get(original_message_type, {}).keys()
-    missing_keys = test_for_missing_keys - known_keys()
-
+    original_message_type: str,
+    missing_keys: set[str],
+) -> None:
+    """Capture debug samples and log for empty/missing-key parse results."""
     if not data:
         capture_debug_sample(
             f"youtube-empty-action-parse-{original_action_type}",
@@ -70,6 +64,12 @@ def validate_and_finalize_message(
             f"Message type: {original_message_type}",
         )
 
+
+def _derive_message_type(
+    data: dict[str, Any],
+    original_message_type: str,
+) -> None:
+    """Set data['message_type'] from the renderer name and known overrides."""
     new_index = remove_prefixes(original_message_type, "liveChat")
     new_index = remove_suffixes(new_index, "Renderer")
     data["message_type"] = camel_case_split(new_index)
@@ -82,6 +82,30 @@ def validate_and_finalize_message(
         data["message_type"] = "banner_chat_summary"
     elif original_message_type == "liveChatProductItemRenderer":
         data["message_type"] = "purchased_product_message"
+
+
+def validate_and_finalize_message(
+    data: dict[str, Any],
+    original_item: dict[str, Any],
+    original_message_type: str | None,
+    original_action_type: str,
+) -> dict[str, Any] | None:
+    """Validate parsed message and add message_type field."""
+    if not original_message_type:
+        debug_log("No message type", f"Action type: {original_action_type}")
+        return None
+
+    missing_keys = (
+        original_item.get(original_message_type, {}).keys() - known_keys()
+    )
+    _emit_parse_diagnostics(
+        data,
+        original_item,
+        original_action_type,
+        original_message_type,
+        missing_keys,
+    )
+    _derive_message_type(data, original_message_type)
 
     if original_message_type in _KNOWN_IGNORE_MESSAGE_TYPES:
         return None

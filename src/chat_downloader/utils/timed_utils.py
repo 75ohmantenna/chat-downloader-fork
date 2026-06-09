@@ -349,6 +349,31 @@ class TimedGenerator:
             self._run_function(self.on_inactivity_timeout)
         raise StopIteration
 
+    def _handle_error_result(
+        self, captured_error: BaseException, completed_at: float
+    ) -> NoReturn:
+        """Raise or finish based on the error kind and deadline state."""
+        reason = self._timeout_reason(completed_at)
+        if isinstance(captured_error, StopIteration):
+            self._cancel_timers()
+            self._closed = True
+            raise captured_error
+        if isinstance(captured_error, KeyboardInterrupt):
+            if reason is None:
+                self._cancel_timers()
+                self._closed = True
+                raise captured_error
+            self._finish(reason)
+        raise captured_error
+
+    def _handle_item_result(self, value: Any, completed_at: float) -> Any:
+        """Apply post-item deadline check, reset inactivity, return item."""
+        reason = self._timeout_reason(completed_at)
+        if reason is not None:
+            self._finish(reason)
+        self.reset_inactivity_timer()
+        return value
+
     def __next__(self) -> Any:
         """Return the next item or stop when configured timers expire."""
         if self._closed:
@@ -365,31 +390,12 @@ class TimedGenerator:
             self._finish(reason)
 
         if kind == "error":
-            captured_error = value
-            reason = self._timeout_reason(completed_at)
-            if isinstance(captured_error, StopIteration):
-                self._cancel_timers()
-                self._closed = True
-                raise captured_error
-            if isinstance(captured_error, KeyboardInterrupt):
-                if reason is None:
-                    self._cancel_timers()
-                    self._closed = True
-                    raise captured_error
-                self._finish(reason)
-            raise captured_error
+            self._handle_error_result(value, completed_at)
 
         if kind == "stop":
             self._finish(None)
 
-        # Handle a completed item result.
-        next_item = value
-        reason = self._timeout_reason(completed_at)
-        if reason is not None:
-            self._finish(reason)
-
-        self.reset_inactivity_timer()
-        return next_item
+        return self._handle_item_result(value, completed_at)
 
     def _run_function(self, function: Callable[[], Any] | None) -> None:
         if callable(function):

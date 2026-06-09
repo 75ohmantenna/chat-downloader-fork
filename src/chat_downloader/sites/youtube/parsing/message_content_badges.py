@@ -10,14 +10,35 @@ from chat_downloader.sites.models import Image
 from .message_links import _get_source_image_url
 
 
+def _parse_badge_icons(
+    badge_icons: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Build the icons list from raw badge icon entries."""
+    icons: list[dict[str, Any]] = []
+    last_url: str | None = None
+    for icon in badge_icons:
+        url = icon.get("url")
+        if url:
+            matches = re.search(r"=s(\d+)", url)
+            if matches:
+                size = int(matches.group(1))
+                icons.append(Image(url, size, size).json())
+            last_url = url
+    if last_url:
+        icons.insert(
+            0,
+            Image(_get_source_image_url(last_url), image_id="source").json(),
+        )
+    return icons
+
+
 def _parse_badges(badge_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Parse badge information for chat authors."""
     from .message_items_content_parser import _parse_item
 
     badges = []
-
     for badge in badge_items:
-        to_add = {}
+        to_add: dict[str, Any] = {}
         parsed_badge = _parse_item(badge)
 
         title = parsed_badge.pop("tooltip", None)
@@ -30,26 +51,9 @@ def _parse_badges(badge_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         badge_icons = parsed_badge.pop("badge_icons", None)
         if badge_icons:
-            to_add["icons"] = []
-
-            url = None
-            for icon in badge_icons:
-                url = icon.get("url")
-                if url:
-                    matches = re.search(r"=s(\d+)", url)
-                    if matches:
-                        size = int(matches.group(1))
-                        to_add["icons"].append(Image(url, size, size).json())
-            if url:
-                to_add["icons"].insert(
-                    0,
-                    Image(_get_source_image_url(url), image_id="source").json(),
-                )
+            to_add["icons"] = _parse_badge_icons(badge_icons)
 
         badges.append(to_add)
-
-        # if 'member'
-        # remove the tooltip afterwards
     return badges
 
 

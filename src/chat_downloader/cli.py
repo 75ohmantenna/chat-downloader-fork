@@ -217,37 +217,31 @@ def _build_request_headers(args_dict: dict[str, Any]) -> dict[str, str]:
     return headers
 
 
-def _build_arg_parser() -> argparse.ArgumentParser:
-    """Build the fully-configured argparse parser for the CLI."""
-    parser = argparse.ArgumentParser(
-        description=__summary__,
-    )
-    parser.prog = __program__
+class _ParamRegistrar:
+    """Thin wrapper routing add_argument calls to the right field-info dict."""
 
-    parser.add_argument("--version", action="version", version=__version__)
+    def __init__(self) -> None:
+        """Initialise field-info caches for all three parameter groups."""
+        self._chat = _build_field_info(ChatRequest)
+        self._init = _build_field_info(DownloaderConfig)
+        self._run = _build_field_info(RunConfig)
 
-    _chat_info = _build_field_info(ChatRequest)
-    _init_info = _build_field_info(DownloaderConfig)
-    _run_info = _build_field_info(RunConfig)
-
-    def add_param(
+    def add(
+        self,
         param_type: Literal["chat", "init", "run"],
         group: _ArgumentTarget,
         *keys: str,
         **kwargs: object,
     ) -> None:
+        """Register one argument, merging dataclass metadata with overrides."""
         if param_type == "chat":
-            info = _chat_info
+            info = self._chat
         elif param_type == "init":
-            info = _init_info
+            info = self._init
         else:
-            info = _run_info
+            info = self._run
         key = keys[0].lstrip("-")
-        field_info = _lookup_field_info(
-            info,
-            param_type=param_type,
-            key=key,
-        )
+        field_info = _lookup_field_info(info, param_type=param_type, key=key)
         arg_names = list(keys)
         for flag in field_info.get("flags", ()):
             if flag not in arg_names:
@@ -257,47 +251,47 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         arg_kwargs.update(kwargs)
         group.add_argument(*arg_names, **arg_kwargs)
 
-    def add_chat_param(
-        group: _ArgumentTarget,
-        *keys: str,
-        **kwargs: object,
+    def chat(
+        self, group: _ArgumentTarget, *keys: str, **kwargs: object
     ) -> None:
-        add_param("chat", group, *keys, **kwargs)
+        """Register a ChatRequest parameter."""
+        self.add("chat", group, *keys, **kwargs)
 
-    def add_init_param(
-        group: _ArgumentTarget,
-        *keys: str,
-        **kwargs: object,
+    def init(
+        self, group: _ArgumentTarget, *keys: str, **kwargs: object
     ) -> None:
-        add_param("init", group, *keys, **kwargs)
+        """Register a DownloaderConfig parameter."""
+        self.add("init", group, *keys, **kwargs)
 
-    def add_run_param(
-        group: _ArgumentTarget,
-        *keys: str,
-        **kwargs: object,
-    ) -> None:
-        add_param("run", group, *keys, **kwargs)
+    def run(self, group: _ArgumentTarget, *keys: str, **kwargs: object) -> None:
+        """Register a RunConfig parameter."""
+        self.add("run", group, *keys, **kwargs)
 
-    add_chat_param(parser, "url")
+
+def _add_chat_args(
+    reg: _ParamRegistrar, parser: argparse.ArgumentParser
+) -> None:
+    """Register top-level chat and timing argument groups."""
+    reg.chat(parser, "url")
 
     time_group = parser.add_argument_group("Timing Arguments")
+    reg.chat(time_group, "--start_time", "-s")
+    reg.chat(time_group, "--end_time", "-e")
 
-    add_chat_param(time_group, "--start_time", "-s")
-    add_chat_param(time_group, "--end_time", "-e")
-
-    # Specify message types/groups
     type_group = parser.add_argument_group("Message Type Arguments")
     type_options = type_group.add_mutually_exclusive_group()
+    reg.chat(type_options, "--message_types", type=splitter)
+    reg.chat(type_options, "--message_groups", type=splitter)
 
-    add_chat_param(type_options, "--message_types", type=splitter)
-    add_chat_param(type_options, "--message_groups", type=splitter)
 
-    retry_group = parser.add_argument_group(
-        "Retry Arguments",
-    )  # what to do when an error occurs
-    add_chat_param(retry_group, "--max_attempts", type=int)
-    add_chat_param(retry_group, "--retry_timeout", type=float)
-    add_chat_param(
+def _add_retry_args(
+    reg: _ParamRegistrar, parser: argparse.ArgumentParser
+) -> None:
+    """Register retry and termination argument groups."""
+    retry_group = parser.add_argument_group("Retry Arguments")
+    reg.chat(retry_group, "--max_attempts", type=int)
+    reg.chat(retry_group, "--retry_timeout", type=float)
+    reg.chat(
         retry_group,
         "--interruptible_retry",
         type=str2bool,
@@ -306,48 +300,44 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     )
 
     termination_group = parser.add_argument_group("Termination Arguments")
-    add_chat_param(termination_group, "--max_messages", type=int)
-    add_chat_param(termination_group, "--inactivity_timeout", type=float)
-    add_chat_param(termination_group, "--timeout", type=float)
+    reg.chat(termination_group, "--max_messages", type=int)
+    reg.chat(termination_group, "--inactivity_timeout", type=float)
+    reg.chat(termination_group, "--timeout", type=float)
 
-    # Formatting
+
+def _add_format_site_output_args(
+    reg: _ParamRegistrar, parser: argparse.ArgumentParser
+) -> None:
+    """Register format, site-specific, and output argument groups."""
     format_group = parser.add_argument_group("Format Arguments")
-    add_chat_param(format_group, "--format")
-    add_chat_param(format_group, "--format_file")
+    reg.chat(format_group, "--format")
+    reg.chat(format_group, "--format_file")
 
     youtube_group = parser.add_argument_group(
         "[Site Specific] YouTube Arguments"
     )
-    add_chat_param(youtube_group, "--chat_type", choices=["live", "top"])
-    add_chat_param(youtube_group, "--ignore", type=splitter)
+    reg.chat(youtube_group, "--chat_type", choices=["live", "top"])
+    reg.chat(youtube_group, "--ignore", type=splitter)
 
     twitch_group = parser.add_argument_group("[Site Specific] Twitch Arguments")
-    add_chat_param(twitch_group, "--message_receive_timeout", type=float)
-    add_chat_param(twitch_group, "--buffer_size", type=int)
+    reg.chat(twitch_group, "--message_receive_timeout", type=float)
+    reg.chat(twitch_group, "--buffer_size", type=int)
 
     output_group = parser.add_argument_group("Output Arguments")
-    add_chat_param(output_group, "--output", "-o", action="append")
-    add_chat_param(
-        output_group, "--overwrite", type=str2bool, nargs="?", const=True
-    )
-    add_chat_param(
-        output_group, "--sort_keys", type=str2bool, nargs="?", const=True
-    )
+    reg.chat(output_group, "--output", "-o", action="append")
+    reg.chat(output_group, "--overwrite", type=str2bool, nargs="?", const=True)
+    reg.chat(output_group, "--sort_keys", type=str2bool, nargs="?", const=True)
 
-    # Debugging only available from the CLI
+
+def _add_debug_args(
+    reg: _ParamRegistrar, parser: argparse.ArgumentParser
+) -> None:
+    """Register debugging/testing argument group."""
     debug_group = parser.add_argument_group("Debugging/Testing Arguments")
 
     on_debug_options = debug_group.add_mutually_exclusive_group()
-    add_run_param(
-        on_debug_options,
-        "--pause_on_debug",
-        action="store_true",
-    )
-    add_run_param(
-        on_debug_options,
-        "--exit_on_debug",
-        action="store_true",
-    )
+    reg.run(on_debug_options, "--pause_on_debug", action="store_true")
+    reg.run(on_debug_options, "--exit_on_debug", action="store_true")
 
     debug_options = debug_group.add_mutually_exclusive_group()
     debug_options.add_argument(
@@ -356,7 +346,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Level of logging to display, defaults to info",
         default="info",
     )
-
     debug_options.add_argument(
         "--testing",
         action="store_true",
@@ -370,30 +359,27 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Print various debugging information. This is equivalent to "
         "setting logging to debug. Defaults to False",
     )
-    add_run_param(
-        debug_group,
-        "--quiet",
-        "-q",
-        action="store_true",
-    )
+    reg.run(debug_group, "--quiet", "-q", action="store_true")
 
-    # INIT PARAMS
+
+def _add_init_args(
+    reg: _ParamRegistrar, parser: argparse.ArgumentParser
+) -> None:
+    """Register initialisation argument group."""
     init_group = parser.add_argument_group("Initialisation Arguments")
-    add_init_param(init_group, "--cookies", "-c")
-    add_init_param(init_group, "--proxy", "-p")
-    add_init_param(init_group, "--connect_timeout", type=float)
-    add_init_param(init_group, "--read_timeout", type=float)
-    add_init_param(
-        init_group, "--request_profile", choices=sorted(REQUEST_PROFILES)
-    )
-    add_init_param(
+    reg.init(init_group, "--cookies", "-c")
+    reg.init(init_group, "--proxy", "-p")
+    reg.init(init_group, "--connect_timeout", type=float)
+    reg.init(init_group, "--read_timeout", type=float)
+    reg.init(init_group, "--request_profile", choices=sorted(REQUEST_PROFILES))
+    reg.init(
         init_group,
         "--auto_profile_fallback",
         type=str2bool,
         nargs="?",
         const=True,
     )
-    add_init_param(init_group, "--twitch_client_id")
+    reg.init(init_group, "--twitch_client_id")
     init_group.add_argument(
         "--user-agent",
         dest="user_agent",
@@ -414,6 +400,19 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
 
+
+def _build_arg_parser() -> argparse.ArgumentParser:
+    """Build the fully-configured argparse parser for the CLI."""
+    parser = argparse.ArgumentParser(description=__summary__)
+    parser.prog = __program__
+    parser.add_argument("--version", action="version", version=__version__)
+
+    reg = _ParamRegistrar()
+    _add_chat_args(reg, parser)
+    _add_retry_args(reg, parser)
+    _add_format_site_output_args(reg, parser)
+    _add_debug_args(reg, parser)
+    _add_init_args(reg, parser)
     _rename_default_argument_groups(parser)
 
     return parser

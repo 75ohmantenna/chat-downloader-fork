@@ -77,29 +77,24 @@ def _build_error_message(
     return message.strip()
 
 
-def _raise_for_error_screen(
+def _raise_for_early_playability(
     playability_status: dict[str, Any],
     player_response_info: dict[str, Any],
+    error_screen: dict[str, Any],
 ) -> None:
-    """Raise for age-gated or status-based error-screen cases."""
+    """Raise for age-gate, unplayable, and CAPTCHA before error-screen parse."""
     if is_age_gated(player_response_info):
         debug_log("Video detected as age-gated")
         msg = (
             "This video is age-restricted. "
             "Age-restricted videos may not have accessible chat."
         )
-        raise VideoUnavailable(
-            msg,
-        )
+        raise VideoUnavailable(msg)
 
     if is_unplayable(player_response_info):
         debug_log("Video detected as unplayable")
         reason = playability_status.get("reason", "Video is unplayable")
         raise VideoUnplayable(reason)
-
-    error_screen = playability_status.get("errorScreen")
-    if not error_screen:
-        return
 
     if "playerCaptchaViewModel" in error_screen:
         msg = (
@@ -107,21 +102,15 @@ def _raise_for_error_screen(
             "Please verify the CAPTCHA in your browser and try again with "
             "fresh cookies."
         )
-        raise VideoUnavailable(
-            msg,
-        )
+        raise VideoUnavailable(msg)
 
-    error_info = try_get_first_value(error_screen)
-    error_message = _build_error_message(error_info, playability_status)
-    if "This content isn't available, try again later" in error_message:
-        error_message = (
-            f"{error_message} "
-            "This video has been rate-limited by YouTube for up to an hour. "
-            "It is recommended to add delays between requests or try again "
-            "later."
-        )
 
-    status = playability_status.get("status")
+def _raise_for_status(
+    status: str | None,
+    error_message: str,
+    playability_status: dict[str, Any],
+) -> None:
+    """Dispatch to the correct exception based on playability *status*."""
     match status:
         case "ERROR":
             raise VideoUnavailable(error_message)
@@ -138,6 +127,35 @@ def _raise_for_error_screen(
             )
             msg = f"{status}: {error_message}"
             raise VideoUnavailable(msg)
+
+
+def _raise_for_error_screen(
+    playability_status: dict[str, Any],
+    player_response_info: dict[str, Any],
+) -> None:
+    """Raise for age-gated or status-based error-screen cases."""
+    error_screen = playability_status.get("errorScreen") or {}
+
+    _raise_for_early_playability(
+        playability_status, player_response_info, error_screen
+    )
+
+    if not error_screen:
+        return
+
+    error_info = try_get_first_value(error_screen)
+    error_message = _build_error_message(error_info, playability_status)
+    if "This content isn't available, try again later" in error_message:
+        error_message = (
+            f"{error_message} "
+            "This video has been rate-limited by YouTube for up to an hour. "
+            "It is recommended to add delays between requests or try again "
+            "later."
+        )
+
+    _raise_for_status(
+        playability_status.get("status"), error_message, playability_status
+    )
 
 
 def _raise_for_popup(yt_initial_data: dict[str, Any]) -> None:

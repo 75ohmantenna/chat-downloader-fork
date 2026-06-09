@@ -29,6 +29,27 @@ class Remapper:
         self.to_unpack = to_unpack
 
     @staticmethod
+    def _apply_remapper(
+        info: dict[str, Any],
+        remap: "Remapper",
+        remap_input: object,
+    ) -> None:
+        """Apply a Remapper rule, writing into *info*."""
+        new_value = (
+            remap.remap_function(remap_input)
+            if remap.remap_function is not None
+            else remap_input
+        )
+        if not remap.to_unpack:
+            if remap.new_key is not None:
+                info[remap.new_key] = new_value
+        elif isinstance(new_value, dict):
+            info.update(new_value)
+        else:
+            msg = "Unable to unpack item which is not a dictionary."
+            raise ValueError(msg)
+
+    @staticmethod
     def remap(
         info: dict[str, Any],
         remapping_dict: Mapping[str, Any],
@@ -42,27 +63,12 @@ class Remapper:
 
         if remap:
             if isinstance(remap, Remapper):
-                new_key = remap.new_key
-                if remap.remap_function is not None:
-                    new_value = remap.remap_function(remap_input)
-                else:
-                    new_value = remap_input
-
-                if not remap.to_unpack:
-                    if new_key is not None:
-                        info[new_key] = new_value
-                elif isinstance(new_value, dict):
-                    info.update(new_value)
-                else:
-                    msg = "Unable to unpack item which is not a dictionary."
-                    raise ValueError(msg)
-
+                Remapper._apply_remapper(info, remap, remap_input)
             elif isinstance(remap, str):
                 info[remap] = remap_input
             else:
                 msg = "Unknown remapping specified."
                 raise ValueError(msg)
-
         elif keep_unknown_keys:
             if replace_char_with_underscores:
                 remap_key = remap_key.replace(

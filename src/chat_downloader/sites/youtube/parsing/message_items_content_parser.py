@@ -86,6 +86,39 @@ def _reconcile_time_fields(info: dict[str, Any], offset: float) -> None:
         info["time_text"] = seconds_to_time(info["time_in_seconds"])
 
 
+def _apply_colour_keys(
+    info: dict[str, Any],
+    item_info: dict[str, Any],
+    colour_keys: list[str],
+) -> None:
+    """Convert ARGB colour fields to hex and store under normalised keys."""
+    for colour_key in colour_keys:
+        if colour_key in item_info:
+            rgba_colour = argb_int_to_rgba(item_info[colour_key])
+            hex_colour = rgba_to_hex(rgba_colour)
+            new_key = camel_case_split(colour_key.replace("Color", "Colour"))
+            info[new_key] = hex_colour
+
+
+def _merge_nested_renderers(
+    info: dict[str, Any],
+    item_info: dict[str, Any],
+    offset: float,
+) -> None:
+    """Recursively merge showItemEndpoint and header renderers into *info*."""
+    item_endpoint = item_info.get("showItemEndpoint")
+    if item_endpoint:
+        renderer = multi_get(
+            item_endpoint, "showLiveChatItemEndpoint", "renderer"
+        )
+        if renderer:
+            info.update(_parse_item(renderer, offset=offset))
+
+    header = item_info.get("header")
+    if header:
+        info.update(_parse_item(header, offset=offset))
+
+
 def _parse_item(
     item: dict[str, Any],
     info: dict[str, Any] | None = None,
@@ -105,27 +138,9 @@ def _parse_item(
     for key, value in item_info.items():
         r.remap(info, remapping, key, value)
 
-    for colour_key in colour_keys:
-        if colour_key in item_info:
-            rgba_colour = argb_int_to_rgba(item_info[colour_key])
-            hex_colour = rgba_to_hex(rgba_colour)
-            new_key = camel_case_split(colour_key.replace("Color", "Colour"))
-            info[new_key] = hex_colour
-
-    item_endpoint = item_info.get("showItemEndpoint")
-    if item_endpoint:
-        renderer = multi_get(
-            item_endpoint, "showLiveChatItemEndpoint", "renderer"
-        )
-        if renderer:
-            info.update(_parse_item(renderer, offset=offset))
-
-    header = item_info.get("header")
-    if header:
-        info.update(_parse_item(header, offset=offset))
-
+    _apply_colour_keys(info, item_info, colour_keys)
+    _merge_nested_renderers(info, item_info, offset)
     _normalize_author(info)
-
     _reconcile_time_fields(info, offset)
 
     if "message" not in info:

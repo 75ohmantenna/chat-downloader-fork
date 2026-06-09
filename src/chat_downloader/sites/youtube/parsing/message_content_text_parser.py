@@ -20,6 +20,39 @@ def _parse_text(info: dict[str, Any]) -> str | None:
     return _parse_runs(info)["message"] or _get_simple_text(info)
 
 
+def _append_run(
+    message_info: dict[str, Any],
+    run: dict[str, Any],
+    message_emotes: dict[str, dict[str, Any]],
+    parse_links: bool,
+) -> None:
+    """Append one run's contribution to *message_info* and *message_emotes*."""
+    if "text" in run:
+        if parse_links and "navigationEndpoint" in run:
+            message_info["message"] += _parse_navigation_endpoint(
+                run["navigationEndpoint"],
+                run["text"],
+            )
+        else:
+            message_info["message"] += run["text"]
+    elif "emoji" in run:
+        emoji = run["emoji"]
+        emoji_id = emoji.get("emojiId")
+        name = multi_get(emoji, "shortcuts", 0) or emoji_id
+        if emoji_id and emoji_id not in message_emotes:
+            message_emotes[emoji_id] = {
+                "id": emoji_id,
+                "name": name,
+                "shortcuts": emoji.get("shortcuts"),
+                "search_terms": emoji.get("searchTerms"),
+                "images": _parse_thumbnails(emoji.get("image", {})),
+                "is_custom_emoji": emoji.get("isCustomEmoji", False),
+            }
+        message_info["message"] += name
+    else:
+        message_info["message"] += str(run)
+
+
 def _parse_runs(run_info: Any, parse_links: bool = True) -> dict[str, Any]:
     """Parse YouTube formatted messages (runs) with text, links, and emojis."""
     message_info: dict[str, Any] = {"message": ""}
@@ -32,41 +65,8 @@ def _parse_runs(run_info: Any, parse_links: bool = True) -> dict[str, Any]:
         return message_info
 
     message_emotes: dict[str, dict[str, Any]] = {}
-
-    runs = run_info.get("runs") or []
-    for run in runs:
-        if "text" in run:
-            # is a link and must parse
-            if parse_links and "navigationEndpoint" in run:
-                # if something fails, use default text
-                message_info["message"] += _parse_navigation_endpoint(
-                    run["navigationEndpoint"],
-                    run["text"],
-                )
-            else:
-                # is a normal message
-                message_info["message"] += run["text"]
-
-        elif "emoji" in run:
-            emoji = run["emoji"]
-            emoji_id = emoji.get("emojiId")
-
-            name = multi_get(emoji, "shortcuts", 0) or emoji_id
-
-            if emoji_id and emoji_id not in message_emotes:
-                message_emotes[emoji_id] = {
-                    "id": emoji_id,
-                    "name": name,
-                    "shortcuts": emoji.get("shortcuts"),
-                    "search_terms": emoji.get("searchTerms"),
-                    "images": _parse_thumbnails(emoji.get("image", {})),
-                    "is_custom_emoji": emoji.get("isCustomEmoji", False),
-                }
-
-            message_info["message"] += name
-        else:
-            # unknown run
-            message_info["message"] += str(run)
+    for run in run_info.get("runs") or []:
+        _append_run(message_info, run, message_emotes, parse_links)
 
     if message_emotes:
         message_info["emotes"] = list(message_emotes.values())

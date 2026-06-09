@@ -2,8 +2,48 @@
 
 ## Unreleased
 
+### Tooling
+
+- Add `.pre-commit-config.yaml`: `ruff check` and `ruff format --check` run on
+  pre-commit; `mypy .` runs on pre-push; all hooks use `uv run --locked` so
+  they always track the pinned `uv.lock` versions
+- `make setup` now installs Git hooks in one step via `setup-hooks`
+- Lower mccabe `max-complexity` from 10 to 8 in `pyproject.toml`; the CI `lint`
+  step now enforces this directly; remove the redundant advisory `make
+  complexity` target
+- `mypy.ini`: narrow the `exclude` pattern to check `tests/fixtures/` and the
+  two drift-regression harness modules in addition to all of `src/`
+
 ### Architecture
 
+- Reduce cyclomatic complexity of 12 functions that measured 9–10 (above the
+  new gate of 8) by extracting small named helpers:
+  - `cli.py`: `_ParamRegistrar` class + per-group helper functions replace
+    nested closures in `_build_arg_parser`
+  - `sites/remap.py`: `Remapper._apply_remapper` extracted from `Remapper.remap`
+  - `sites/twitch/discovery.py`: `_build_user_videos_query` and
+    `_extract_user_videos` extracted from `get_user_videos`
+  - `sites/twitch/irc_transport.py`: `_drain_readbuffer` and `_handle_ping`
+    extracted from `get_chat_messages_by_stream_id`
+  - `sites/youtube/client_auth.py`: `_ensure_primary_sapisid` and
+    `_session_id_parts` extracted from `_generate_sapisidhash_header`
+  - `sites/youtube/discovery_channels_runtime_iteration.py`:
+    `_fetch_browse_continuation` extracted; first-page special case unrolled
+    before the continuation loop in `get_user_videos`
+  - `sites/youtube/parsing/actions_handlers_validation.py`:
+    `_emit_parse_diagnostics` and `_derive_message_type` extracted from
+    `validate_and_finalize_message`
+  - `sites/youtube/parsing/message_content_badges.py`: `_parse_badge_icons`
+    extracted from `_parse_badges`
+  - `sites/youtube/parsing/message_content_text_parser.py`: `_append_run`
+    extracted from `_parse_runs`
+  - `sites/youtube/parsing/message_items_content_parser.py`:
+    `_apply_colour_keys` and `_merge_nested_renderers` extracted from
+    `_parse_item`
+  - `sites/youtube/playability.py`: `_raise_for_early_playability` and
+    `_raise_for_status` extracted from `_raise_for_error_screen`
+  - `utils/timed_utils.py`: `_handle_error_result` and `_handle_item_result`
+    extracted from `TimedGenerator.__next__`
 - Convert `models.py` (592 lines) into a `models/` package; three dataclasses
   split into `_config.py`, `_request.py`, and `_runconfig.py` with a thin
   `__init__.py` facade; all `from chat_downloader.models import ...` call
@@ -12,9 +52,13 @@
   modules: `message_emotes.py` (emote and image helpers), `message_irc_resolve.py`
   (IRC type/action/room-state resolution), and `messages.py` (orchestration
   entry points); public re-exports from `parsing/__init__.py` unchanged
-- Pin mccabe `max-complexity = 10` explicitly in `pyproject.toml`; add
-  `make complexity` advisory target (threshold 8, non-blocking) for tracking
-  refactor candidates before they hit the CI gate
+
+### Documentation
+
+- Add `docs/maintenance-notes.md`: records three intentionally deferred
+  cross-site deduplication opportunities (remapping tables, badge parsing,
+  continuation error-recovery) with rationale for deferral and future
+  abstraction sketches; linked from `docs/development-workflow-guide.md`
 
 ### Testing
 

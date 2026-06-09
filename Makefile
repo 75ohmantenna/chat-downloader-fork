@@ -1,7 +1,7 @@
 UV ?= uv
 UV_RUN ?= $(UV) run --locked
 
-.PHONY: setup setup-hooks lock lock-check test lint fmt fmt-check typecheck complexity coverage build smoke ci check clean
+.PHONY: setup setup-hooks lock lock-check test lint fmt fmt-check typecheck coverage build smoke ci check clean
 
 setup: setup-hooks
 	$(UV) sync
@@ -29,9 +29,6 @@ fmt-check:
 
 typecheck:
 	$(UV_RUN) mypy .
-
-complexity:
-	$(UV_RUN) ruff check src/chat_downloader --select C901 --config "lint.mccabe.max-complexity=8"
 
 coverage:
 	$(UV_RUN) coverage erase

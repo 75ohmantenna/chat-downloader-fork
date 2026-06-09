@@ -52,7 +52,7 @@ details.
 - Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (fast local loop).
 - `make ci` — canonical validation (lock-check, lint, fmt-check, typecheck, coverage at 100%, build, smoke); the same target GitHub Actions runs.
 - `make lock-check` (`uv lock --check`) and `make smoke` (install built wheel in an isolated env, run `chat_downloader --version`).
-- `make complexity` — scan for functions above the aspirational mccabe threshold of 8 (CI gate is 10; this target is advisory, not blocking).
+- Mccabe complexity gate is 8 (enforced by `make lint` / CI). Functions that are intrinsically branchy carry a `# noqa: C901` with a short rationale comment.
 
 ## Style
 - Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 80-char lines, double quotes.

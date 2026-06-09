@@ -258,6 +258,27 @@ class TwitchChatIRC:
             self.socket.close()
 
 
+def _drain_readbuffer(readbuffer: str) -> str:
+    """Trim an oversized buffer to the last complete line."""
+    log(
+        "warning",
+        f"IRC read buffer exceeded {_READBUFFER_MAX_BYTES} "
+        "bytes; discarding to prevent unbounded growth.",
+    )
+    last_crlf = readbuffer.rfind("\r\n")
+    return readbuffer[last_crlf + _CRLF_LENGTH :] if last_crlf >= 0 else ""
+
+
+def _handle_ping(irc: TwitchChatIRC, readbuffer: str) -> None:
+    """Reply to a server PING, raising ConnectionError on send failure."""
+    if PING_TEXT not in readbuffer:
+        return
+    try:
+        irc.send_raw(PONG_TEXT)
+    except OSError as e:
+        raise ConnectionError("Lost connection while sending PONG.") from e
+
+
 def get_chat_messages_by_stream_id(
     irc: TwitchChatIRC,
     channel: str,
@@ -290,25 +311,9 @@ def get_chat_messages_by_stream_id(
             readbuffer += new_info
 
             if len(readbuffer) > _READBUFFER_MAX_BYTES:
-                log(
-                    "warning",
-                    f"IRC read buffer exceeded {_READBUFFER_MAX_BYTES} "
-                    "bytes; discarding to prevent unbounded growth.",
-                )
-                last_crlf = readbuffer.rfind("\r\n")
-                readbuffer = (
-                    readbuffer[last_crlf + _CRLF_LENGTH :]
-                    if last_crlf >= 0
-                    else ""
-                )
+                readbuffer = _drain_readbuffer(readbuffer)
 
-            if PING_TEXT in readbuffer:
-                try:
-                    irc.send_raw(PONG_TEXT)
-                except OSError as e:
-                    raise ConnectionError(
-                        "Lost connection while sending PONG."
-                    ) from e
+            _handle_ping(irc, readbuffer)
 
             readbuffer, matches, unmatched_full_buffer = _consume_irc_buffer(
                 readbuffer,

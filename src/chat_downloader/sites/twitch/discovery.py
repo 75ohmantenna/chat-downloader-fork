@@ -62,6 +62,44 @@ def get_user_clips(
             break
 
 
+def _build_user_videos_query(
+    username: str,
+    num_to_get: int,
+    video_type: str | None,
+    sort: str,
+    cursor: str | None,
+) -> list[dict[str, Any]]:
+    """Build the FilterableVideoTower_Videos GQL query payload."""
+    query: list[dict[str, Any]] = [
+        {
+            "operationName": "FilterableVideoTower_Videos",
+            "variables": {
+                "limit": num_to_get,
+                "channelOwnerLogin": username,
+                "broadcastType": video_type,
+                "videoSort": sort,
+            },
+        },
+    ]
+    if cursor is not None:
+        query[0]["variables"]["cursor"] = cursor
+    return query
+
+
+def _extract_user_videos(
+    info: list[dict[str, Any]],
+    username: str,
+) -> dict[str, Any] | None:
+    """Validate user existence and return the videos dict, or None to break."""
+    if multi_get(info, 0, "data", "user", "id") == "":
+        from chat_downloader.errors import UserNotFound
+
+        msg = f'Channel "{username}" not found'
+        raise UserNotFound(msg)
+    videos: dict[str, Any] | None = multi_get(info, 0, "data", "user", "videos")
+    return videos
+
+
 def get_user_videos(
     session_post: Callable[..., Any],
     download_gql_func: Callable[..., Any],
@@ -81,31 +119,14 @@ def get_user_videos(
         if num_to_get <= 0:
             break
 
-        query: list[dict[str, Any]] = [
-            {
-                "operationName": "FilterableVideoTower_Videos",
-                "variables": {
-                    "limit": num_to_get,
-                    "channelOwnerLogin": username,
-                    "broadcastType": video_type,
-                    "videoSort": sort,
-                },
-            },
-        ]
-        if cursor is not None:
-            query[0]["variables"]["cursor"] = cursor
-
+        query = _build_user_videos_query(
+            username, num_to_get, video_type, sort, cursor
+        )
         info = download_gql_func(session_post, query)
         if not info:
             break
 
-        if multi_get(info, 0, "data", "user", "id") == "":
-            from chat_downloader.errors import UserNotFound
-
-            msg = f'Channel "{username}" not found'
-            raise UserNotFound(msg)
-
-        videos = multi_get(info, 0, "data", "user", "videos")
+        videos = _extract_user_videos(info, username)
         if not videos:
             break
 

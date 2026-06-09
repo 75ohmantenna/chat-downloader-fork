@@ -111,6 +111,51 @@ def _process_page_items(
     return videos, token
 
 
+def _fetch_browse_continuation(
+    self: Any,
+    continuation: str | None,
+    continuation_url: str,
+    continuation_params: dict[str, Any],
+    request: ChatRequest,
+    seen_continuations: set[str],
+) -> tuple[list[Any] | None, dict[str, Any] | None]:
+    """Fetch the next page via browse continuation.
+
+    Returns ``(items, yt_info)``.  Returns ``(None, None)`` when the caller
+    should stop (loop detected or no continuation token).
+    """
+    if continuation in seen_continuations:
+        log(
+            "debug",
+            "Detected YouTube browse continuation loop; assuming end of feed.",
+        )
+        return None, None
+    if continuation:
+        seen_continuations.add(continuation)
+    continuation_params["continuation"] = continuation
+    yt_info = _get_continuation_info(
+        continuation_url,
+        self._session_post,
+        request,
+        require_live_chat_continuation=False,
+        json=continuation_params,
+    )
+    items = multi_get(
+        yt_info,
+        "onResponseReceivedActions",
+        0,
+        "appendContinuationItemsAction",
+        "continuationItems",
+    ) or multi_get(
+        yt_info,
+        "onResponseReceivedEndpoints",
+        0,
+        "appendContinuationItemsAction",
+        "continuationItems",
+    )
+    return items, yt_info
+
+
 def get_user_videos(
     self: Any,
     channel_id: str | None = None,
@@ -153,59 +198,31 @@ def get_user_videos(
         "context": _get_innertube_context(ytcfg)
     }
 
-    continuation: str | None = None
-    first_time = True
+    # Process the first page directly; subsequent pages come from continuations.
+    first_items: list[Any] = (
+        multi_get(page_contents or {}, "richGridRenderer", "contents") or []
+    )
+    videos, continuation = _process_page_items(first_items)
+    yield from videos
+
     seen_continuations: set[str] = set()
-    while True:
-        yt_info = None
-        if first_time:
-            items = multi_get(
-                page_contents or {}, "richGridRenderer", "contents"
-            )
-            first_time = False
-        else:
-            if continuation in seen_continuations:
-                log(
-                    "debug",
-                    "Detected YouTube browse continuation loop; assuming "
-                    "end of feed.",
-                )
-                break
-            if continuation:
-                seen_continuations.add(continuation)
-            continuation_params["continuation"] = continuation
-            yt_info = _get_continuation_info(
-                continuation_url,
-                self._session_post,
-                request,
-                require_live_chat_continuation=False,
-                json=continuation_params,
-            )
-            items = multi_get(
-                yt_info,
-                "onResponseReceivedActions",
-                0,
-                "appendContinuationItemsAction",
-                "continuationItems",
-            ) or multi_get(
-                yt_info,
-                "onResponseReceivedEndpoints",
-                0,
-                "appendContinuationItemsAction",
-                "continuationItems",
-            )
-
-        if not items:
-            if yt_info:
-                continuation = _extract_browse_continuation_token_from_response(
-                    yt_info
-                )
-                if continuation:
-                    continue
+    while continuation:
+        items, yt_info = _fetch_browse_continuation(
+            self,
+            continuation,
+            continuation_url,
+            continuation_params,
+            request,
+            seen_continuations,
+        )
+        if items is None and yt_info is None:
             break
-
+        if not items:
+            continuation = (
+                _extract_browse_continuation_token_from_response(yt_info)
+                if yt_info
+                else None
+            )
+            continue
         videos, continuation = _process_page_items(items)
         yield from videos
-
-        if not continuation:
-            break

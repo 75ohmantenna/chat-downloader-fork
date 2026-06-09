@@ -90,38 +90,52 @@ def _make_sid_authorization(
     return f"{scheme} {'_'.join(auth_parts)}"
 
 
+def _ensure_primary_sapisid(
+    session: Any,
+    sids: tuple[str | None, str | None, str | None],
+    time_now: int,
+) -> str | None:
+    """Promote a 1P/3P SID to SAPISID when the primary cookie is absent."""
+    yt_sapisid, yt_1psapisid, yt_3psapisid = sids
+    if yt_sapisid:
+        return yt_sapisid
+    sapisid_value = yt_3psapisid or yt_1psapisid
+    if sapisid_value:
+        session.set_cookie_value(
+            _YT_DOMAIN,
+            "SAPISID",
+            sapisid_value,
+            secure=True,
+            expire_time=time_now + _YT_SAPISID_EXPIRE_SECONDS,
+        )
+    return sapisid_value
+
+
+def _session_id_parts(ytcfg: dict[str, Any] | None) -> dict[str, str] | None:
+    """Return session-id additional_parts from ytcfg, or None."""
+    if not ytcfg:
+        return None
+    datasync_id = ytcfg.get("DATASYNC_ID")
+    if not datasync_id:
+        return None
+    _, user_session_id = _parse_data_sync_id(datasync_id)
+    return {"session_id": user_session_id} if user_session_id else None
+
+
 def _generate_sapisidhash_header(
     session: Any,
     yt_home: str,
     ytcfg: dict[str, Any] | None = None,
 ) -> str | None:
     """Generate SAPISIDHASH authorization header for API requests."""
-    yt_sapisid, yt_1psapisid, yt_3psapisid = _get_sid_cookies(session)
-
-    if not any([yt_sapisid, yt_1psapisid, yt_3psapisid]):
+    sids = _get_sid_cookies(session)
+    if not any(sids):
         return None
 
     time_now = round(time.time())
-
-    if not yt_sapisid:
-        sapisid_value = yt_3psapisid or yt_1psapisid
-        if sapisid_value:
-            session.set_cookie_value(
-                _YT_DOMAIN,
-                "SAPISID",
-                sapisid_value,
-                secure=True,
-                expire_time=time_now + _YT_SAPISID_EXPIRE_SECONDS,
-            )
-            yt_sapisid = sapisid_value
-
-    additional_parts = None
-    if ytcfg:
-        datasync_id = ytcfg.get("DATASYNC_ID")
-        if datasync_id:
-            _, user_session_id = _parse_data_sync_id(datasync_id)
-            if user_session_id:
-                additional_parts = {"session_id": user_session_id}
+    yt_sapisid = _ensure_primary_sapisid(session, sids, time_now)
+    _, yt_1psapisid, yt_3psapisid = sids
+    additional_parts = _session_id_parts(ytcfg)
 
     authorizations = []
     for scheme, sid in (
@@ -132,11 +146,7 @@ def _generate_sapisidhash_header(
         if sid:
             authorizations.append(
                 _make_sid_authorization(
-                    scheme,
-                    sid,
-                    yt_home,
-                    time_now,
-                    additional_parts,
+                    scheme, sid, yt_home, time_now, additional_parts
                 ),
             )
 
