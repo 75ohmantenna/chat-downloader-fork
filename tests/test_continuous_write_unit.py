@@ -136,18 +136,14 @@ def test_csv_init_failure_closes_file(
 ) -> None:
     path = _csv_path(tmp_path)
     opened_files: list[Any] = []
-    real_open = open
+    real_path_open = pathlib.Path.open
 
-    def tracking_open(*args: Any, **kwargs: Any) -> Any:
-        handle = real_open(*args, **kwargs)
+    def tracking_open(self: pathlib.Path, *args: Any, **kwargs: Any) -> Any:
+        handle = real_path_open(self, *args, **kwargs)
         opened_files.append(handle)
         return handle
 
-    monkeypatch.setattr(
-        "chat_downloader.output.continuous_write.open",
-        tracking_open,
-        raising=False,
-    )
+    monkeypatch.setattr(pathlib.Path, "open", tracking_open)
 
     def boom(self: CsvContinuousWriter) -> None:
         raise RuntimeError("boom")

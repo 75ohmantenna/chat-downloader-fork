@@ -2,9 +2,9 @@
 
 """Shared HTTP session and cookie helpers for site downloaders."""
 
-import os
 from dataclasses import dataclass, field
 from http.cookiejar import Cookie, MozillaCookieJar
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
 
@@ -76,7 +76,7 @@ def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
     cookie_jar = MozillaCookieJar(cookies) if cookies else MozillaCookieJar()
 
     if cookies:
-        if os.path.exists(cookies):
+        if Path(cookies).exists():
             cookie_jar.load(ignore_discard=True, ignore_expires=True)
         else:
             msg = f'The file "{cookies}" could not be found.'

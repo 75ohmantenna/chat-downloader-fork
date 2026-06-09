@@ -8,6 +8,7 @@ import json
 import os
 import time
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import IO, Any, Self
 
 from chat_downloader.debugging import log
@@ -141,8 +142,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
         """Initialize a CSV writer, loading existing columns when appending."""
         super().__init__(file_name, **kwargs)
         self.sort_keys = sort_keys
-        self.file = open(  # noqa: SIM115
-            self.file_name,
+        self.file = Path(self.file_name).open(  # noqa: SIM115
             MODE_APPEND_PLUS_TEXT,
             newline="",
             encoding="utf-8",
@@ -223,8 +223,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
             columns=self.columns,
             item=item,
         )
-        self.file = open(  # noqa: SIM115
-            self.file_name,
+        self.file = Path(self.file_name).open(  # noqa: SIM115
             MODE_APPEND_PLUS_TEXT,
             newline="",
             encoding="utf-8",
@@ -245,7 +244,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         super().__init__(file_name, **kwargs)
         self.sort_keys = sort_keys
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
-        self.file = open(self.file_name, file_mode, encoding="utf-8")  # noqa: SIM115
+        self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
 
     def write(self, item: Any, flush: bool = False) -> None:
         """Write *item* as a single JSON line."""
@@ -265,7 +264,7 @@ class TextContinuousWriter(ContinuousFileWriter):
         """Initialize a line-oriented text writer."""
         super().__init__(file_name, **kwargs)
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
-        self.file = open(self.file_name, file_mode, encoding="utf-8")  # noqa: SIM115
+        self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
 
     def write(self, item: Any, flush: bool = False) -> None:
         """Write *item* as a string line."""
@@ -356,9 +355,7 @@ class ContinuousWriter:
         """Return the file extension derived from format or file name."""
         ext = self.format
         if ext is None and file_name is not None:
-            ext = os.path.splitext(file_name)[EXTENSION_INDEX][
-                DOT_PREFIX_LENGTH:
-            ].lower()
+            ext = Path(file_name).suffix[DOT_PREFIX_LENGTH:].lower()
         return ext or ""
 
     def _validate_extension(self, file_name: str | None) -> None:
@@ -371,11 +368,12 @@ class ContinuousWriter:
         file_name = os.path.normpath(file_name)
         self._validate_extension(file_name)
         extension = self._get_extension(file_name)
-        if not os.path.exists(file_name) or self.overwrite:
-            directory = os.path.dirname(file_name)
-            if directory:
-                os.makedirs(directory, exist_ok=True)
-            with open(file_name, MODE_WRITE_TEXT, encoding="utf-8"):
+        path = Path(file_name)
+        if not path.exists() or self.overwrite:
+            directory = path.parent
+            if directory.name:
+                directory.mkdir(parents=True, exist_ok=True)
+            with path.open(MODE_WRITE_TEXT, encoding="utf-8"):
                 pass
 
         writer_class = _WRITER_CLASSES.get(extension, TextContinuousWriter)

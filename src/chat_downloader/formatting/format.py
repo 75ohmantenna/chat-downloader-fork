@@ -3,10 +3,10 @@
 """ItemFormatter: template-driven rendering of chat message dicts."""
 
 import json
-import os
 import re
 import string
 from copy import deepcopy
+from pathlib import Path
 from typing import Any, cast
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
@@ -80,19 +80,17 @@ class ItemFormatter:
 
     def _load_format_files(self, custom_path: str | None) -> dict[str, Any]:
         """Load default and optional custom format files, merged."""
-        default_path = os.path.join(
-            os.path.dirname(__file__), "custom_formats.json"
-        )
+        default_path = Path(__file__).parent / "custom_formats.json"
 
-        with open(default_path, encoding="utf-8") as default_formats:
+        with default_path.open(encoding="utf-8") as default_formats:
             format_file: dict[str, Any] = json.load(default_formats)
 
         if custom_path is not None:
-            if not os.path.exists(custom_path):
+            if not Path(custom_path).exists():
                 msg = f'Format file not found: "{custom_path}"'
                 raise FormatFileNotFound(msg)
 
-            with open(custom_path, encoding="utf-8") as custom_formats:
+            with Path(custom_path).open(encoding="utf-8") as custom_formats:
                 format_file.update(json.load(custom_formats))
 
         return format_file

@@ -4,9 +4,9 @@
 
 import contextlib
 import csv
-import os
 import shutil
 import tempfile
+from pathlib import Path
 from typing import IO, Any
 
 # Leading characters that spreadsheet apps (Excel, Sheets, LibreOffice)
@@ -52,7 +52,7 @@ def rewrite_csv_with_new_columns(
             mode="w",
             encoding="utf-8",
             newline="",
-            dir=os.path.dirname(file_name) or None,
+            dir=Path(file_name).parent,
             delete=False,
         ) as new_file:
             new_file_path = new_file.name
@@ -70,4 +70,4 @@ def rewrite_csv_with_new_columns(
     finally:
         if new_file_path is not None:
             with contextlib.suppress(OSError):
-                os.unlink(new_file_path)
+                Path(new_file_path).unlink()
