@@ -102,6 +102,7 @@ source = ["chat_downloader"]
 omit = [
     "*/__main__.py",
     "src/chat_downloader/runtime/_protocols.py",
+    "src/chat_downloader/sites/youtube/_protocols.py",
 ]
 
 [tool.coverage.report]
