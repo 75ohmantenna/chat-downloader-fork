@@ -2,6 +2,8 @@
 
 """Tests for CLI signal-handler installation."""
 
+from __future__ import annotations
+
 import contextlib
 import os
 import signal

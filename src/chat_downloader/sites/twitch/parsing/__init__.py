@@ -5,6 +5,8 @@
 Exports message parsing, emote handling, and badge parsing functions.
 """
 
+from __future__ import annotations
+
 from .badges import _parse_badge_info, _parse_irc_badges
 from .message_emotes import (
     _add_text_for_emotes,

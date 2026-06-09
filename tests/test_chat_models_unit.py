@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 import csv
 import dataclasses
 from dataclasses import dataclass, field

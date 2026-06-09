@@ -2,6 +2,8 @@
 
 """Comprehensive unit tests for dict_utils module to improve coverage."""
 
+from __future__ import annotations
+
 from chat_downloader.utils.dict_utils import (
     move_to_dict,
     multi_get,

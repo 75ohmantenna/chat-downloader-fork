@@ -5,6 +5,8 @@
 Exports message parsing and action handling functions.
 """
 
+from __future__ import annotations
+
 from .actions_handlers import validate_and_finalize_message
 from .actions_router import ProcessedAction, process_action
 from .messages import (

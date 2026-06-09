@@ -2,6 +2,8 @@
 
 """Isolated unit tests for message_emotes pure helper functions."""
 
+from __future__ import annotations
+
 import pytest
 
 from chat_downloader.sites.twitch.parsing.message_emotes import (

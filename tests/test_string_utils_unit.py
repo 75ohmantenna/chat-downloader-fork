@@ -2,6 +2,8 @@
 
 """Comprehensive unit tests for string_utils module to improve coverage."""
 
+from __future__ import annotations
+
 import pytest
 
 from chat_downloader.utils.string_utils import (

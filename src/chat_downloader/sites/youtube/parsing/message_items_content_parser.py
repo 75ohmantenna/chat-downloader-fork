@@ -2,8 +2,9 @@
 
 """YouTube message-item parser implementation."""
 
-from collections.abc import Mapping
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.sites.remap import Remapper as r
 from chat_downloader.utils.color_utils import argb_int_to_rgba, rgba_to_hex
@@ -11,6 +12,9 @@ from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
 from chat_downloader.utils.string_utils import camel_case_split
 from chat_downloader.utils.time_utils import seconds_to_time, time_to_seconds
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _ROLE_ICON_MAP: dict[str, str] = {
     "OWNER": "is_owner",

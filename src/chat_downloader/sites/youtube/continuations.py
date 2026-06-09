@@ -2,6 +2,8 @@
 
 """YouTube live-chat continuation models and response parser."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 

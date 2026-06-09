@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from chat_downloader.debug_sample_utils import (

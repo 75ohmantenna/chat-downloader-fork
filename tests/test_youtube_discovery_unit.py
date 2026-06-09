@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 import pytest
 
 from chat_downloader.errors import InvalidParameter, NoVideos, UserNotFound

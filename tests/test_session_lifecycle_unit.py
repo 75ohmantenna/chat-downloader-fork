@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from types import SimpleNamespace
 from typing import Any, NoReturn, cast
 from unittest.mock import MagicMock

@@ -2,12 +2,17 @@
 
 """Unit test for multiple output formats feature (no network required)."""
 
+from __future__ import annotations
+
 import json
-import pathlib
+from typing import TYPE_CHECKING
 
 from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.models import Chat
+
+if TYPE_CHECKING:
+    import pathlib
 
 # ---------------------------------------------------------------------------
 # Multiple output writers

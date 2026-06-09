@@ -2,14 +2,18 @@
 
 """Timed input, interruptible sleep, and timeout-aware generator wrapper."""
 
+from __future__ import annotations
+
 import contextlib
 import io
 import queue as _queue
 import sys
 import threading
 import time
-from collections.abc import Callable, Generator, Iterator
-from typing import Any, NoReturn, Self, TextIO, cast
+from typing import TYPE_CHECKING, Any, NoReturn, Self, TextIO, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator, Iterator
 
 POLLING_TIME = 0.1
 

@@ -2,13 +2,18 @@
 
 """CSV injection escape: leading formula chars are prefixed with apostrophe."""
 
+from __future__ import annotations
+
 import csv
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from chat_downloader.output.continuous_write import CsvContinuousWriter
 from chat_downloader.output.csv_rewrite import csv_safe_item, csv_safe_value
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.mark.parametrize("ch", ["=", "+", "-", "@", "\t", "\r"])

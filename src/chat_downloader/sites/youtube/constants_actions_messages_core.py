@@ -5,6 +5,8 @@
 # Payload wrapper-path keys used when extracting items from action dicts.
 # Centralised so a YouTube API rename is a one-line change, and a typo becomes
 # a NameError at import rather than a silently-empty parse result.
+from __future__ import annotations
+
 _PATH_ITEM = "item"
 _PATH_REPLACEMENT_ITEM = "replacementItem"
 _PATH_TOOLTIP = "tooltip"

@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from http.cookiejar import MozillaCookieJar
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast

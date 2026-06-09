@@ -130,6 +130,15 @@ class TwitchChatDownloader(BaseChatDownloader):
         super().__init__(**kwargs)
         self.badge_cache = BadgeCache()
 
+    def _client_id_kwargs(self) -> dict[str, str]:
+        """Return ``{'client_id': ...}`` when a custom client ID is configured.
+
+        Returns an empty dict otherwise so callers can unconditionally spread
+        ``**self._client_id_kwargs()`` into GQL and badge API calls.
+        """
+        client_id: str | None = getattr(self, "_twitch_client_id", None)
+        return {"client_id": client_id} if client_id is not None else {}
+
     def _update_badge_info(self, channel: str) -> None:
         """Fetch badge data from the Twitch API and update the instance cache.
 
@@ -140,24 +149,14 @@ class TwitchChatDownloader(BaseChatDownloader):
         Args:
             channel: Channel name to retrieve badges for
         """
-        client_id = getattr(self, "_twitch_client_id", None)
-        if client_id is None:
-            update_badge_info(
-                self._session_post,
-                channel,
-                _download_gql,
-                self.badge_cache.global_badges,
-                self.badge_cache.channel_badges,
-            )
-        else:
-            update_badge_info(
-                self._session_post,
-                channel,
-                _download_gql,
-                self.badge_cache.global_badges,
-                self.badge_cache.channel_badges,
-                client_id=client_id,
-            )
+        update_badge_info(
+            self._session_post,
+            channel,
+            _download_gql,
+            self.badge_cache.global_badges,
+            self.badge_cache.channel_badges,
+            **self._client_id_kwargs(),
+        )
 
     def _download_base_gql(self, ops: Any) -> Any:
         """Download GraphQL data using base query.
@@ -169,11 +168,8 @@ class TwitchChatDownloader(BaseChatDownloader):
             JSON response from GraphQL API
         """
         auth_token: str | None = self.get_cookie_value(GQL_AUTH_COOKIE_NAME)
-        client_id = getattr(self, "_twitch_client_id", None)
-        if client_id is None:
-            return _download_base_gql(self._session_post, ops, auth_token)
         return _download_base_gql(
-            self._session_post, ops, auth_token, client_id
+            self._session_post, ops, auth_token, **self._client_id_kwargs()
         )
 
     def _download_gql(self, ops: list[dict[str, Any]]) -> Any:
@@ -186,10 +182,9 @@ class TwitchChatDownloader(BaseChatDownloader):
             JSON response from GraphQL API
         """
         auth_token: str | None = self.get_cookie_value(GQL_AUTH_COOKIE_NAME)
-        client_id = getattr(self, "_twitch_client_id", None)
-        if client_id is None:
-            return _download_gql(self._session_post, ops, auth_token)
-        return _download_gql(self._session_post, ops, auth_token, client_id)
+        return _download_gql(
+            self._session_post, ops, auth_token, **self._client_id_kwargs()
+        )
 
     def generate_urls(  # type: ignore[override]  # test helper: signature intentionally diverges from base
         self,

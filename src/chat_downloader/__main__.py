@@ -2,6 +2,8 @@
 
 """Entry point for ``python -m chat_downloader``."""
 
+from __future__ import annotations
+
 from .cli import main
 
 if __name__ == "__main__":

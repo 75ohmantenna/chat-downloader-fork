@@ -14,6 +14,8 @@ Public surface
 - :func:`update_state_from_result` — advance state after parsing a response.
 """
 
+from __future__ import annotations
+
 from .continuation_loop_runtime import (
     build_continuation_params,
     derive_live_offset_milliseconds,

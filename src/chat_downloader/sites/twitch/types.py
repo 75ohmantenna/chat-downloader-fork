@@ -28,6 +28,8 @@ without providing a badge_set (e.g. third-party integrations).  They will be
 removed in a future version.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -73,7 +75,7 @@ class BadgeCache:
         default_factory=dict,
     )
 
-    def snapshot(self) -> "BadgeSet":
+    def snapshot(self) -> BadgeSet:
         """Return a :class:`BadgeSet` snapshot suitable for parsing.
 
         Copies the top-level dicts so that any subsequent update to the cache

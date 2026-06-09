@@ -2,6 +2,8 @@
 
 """Unit tests for _attempt_profile_fallback helper."""
 
+from __future__ import annotations
+
 from unittest.mock import patch
 
 

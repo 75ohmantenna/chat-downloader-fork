@@ -2,6 +2,8 @@
 
 """Request-header profiles and fallback sequencing."""
 
+from __future__ import annotations
+
 import copy
 from typing import Any, Final
 

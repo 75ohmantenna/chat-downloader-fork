@@ -2,6 +2,8 @@
 
 """Badge and currency parsing helpers for YouTube messages."""
 
+from __future__ import annotations
+
 import re
 from typing import Any
 

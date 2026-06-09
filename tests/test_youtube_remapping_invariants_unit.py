@@ -6,6 +6,8 @@ These tests assert structural properties that a careless drift edit breaks, so
 failures appear in CI instead of emitting a runtime debug_log that nobody sees.
 """
 
+from __future__ import annotations
+
 from chat_downloader.sites.youtube import constants_message as cm
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_ACTION_TYPES,

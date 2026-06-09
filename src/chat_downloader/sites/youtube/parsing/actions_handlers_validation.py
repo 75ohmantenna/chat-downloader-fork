@@ -2,6 +2,8 @@
 
 """Validation and normalization for parsed YouTube chat actions."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from chat_downloader.debugging import capture_debug_sample, debug_log

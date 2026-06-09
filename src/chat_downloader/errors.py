@@ -2,6 +2,8 @@
 
 """File for defining errors."""
 
+from __future__ import annotations
+
 
 class ChatDownloaderError(Exception):
     """Base class for Chat Downloader errors."""

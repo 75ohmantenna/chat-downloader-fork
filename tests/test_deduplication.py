@@ -6,6 +6,8 @@ Tests that YouTube superchat messages that appear in both chat and ticker are
 properly deduplicated when writing to formatted output.
 """
 
+from __future__ import annotations
+
 import os
 import tempfile
 

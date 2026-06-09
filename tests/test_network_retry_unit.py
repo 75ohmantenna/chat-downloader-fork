@@ -8,6 +8,8 @@ Covers:
 - Twitch IRC create_connection retries on OSError
 """
 
+from __future__ import annotations
+
 import contextlib
 from typing import NoReturn
 from unittest.mock import MagicMock, patch

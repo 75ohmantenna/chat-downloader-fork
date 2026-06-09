@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 import threading
 
 from chat_downloader.utils.timed_utils import TimedGenerator

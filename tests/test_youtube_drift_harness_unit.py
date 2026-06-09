@@ -19,6 +19,8 @@ Workflow for new drift
 5. Run this harness — it must pass before merging.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any

@@ -2,6 +2,8 @@
 
 """Playability classification and error handling for YouTube internals."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from chat_downloader.debugging import debug_log, log

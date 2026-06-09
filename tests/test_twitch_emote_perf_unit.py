@@ -9,6 +9,8 @@ Covers:
 - _EMOTE_RE: pre-compiled pattern produces same results as re.findall
 """
 
+from __future__ import annotations
+
 import json
 import re
 

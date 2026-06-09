@@ -13,11 +13,15 @@ from chat_downloader.errors import (
     NoChatReplay,
     NoContinuation,
 )
+from chat_downloader.sites.youtube.chat_streams_context import (
+    _select_initial_continuation,
+)
+from chat_downloader.sites.youtube.chat_streams_response import (
+    _raise_if_api_error,
+)
 from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
     _attempt_profile_fallback,
-    _raise_if_api_error,
     _resolve_poll_delay_ms,
-    _select_initial_continuation,
 )
 
 # ── _raise_if_api_error ──────────────────────────────────────────────────────

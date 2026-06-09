@@ -3,6 +3,8 @@
 """ARGB/RGBA colour conversion helpers for chat badge and message colours."""
 
 # Color conversion constants
+from __future__ import annotations
+
 RED_SHIFT = 16
 GREEN_SHIFT = 8
 BLUE_SHIFT = 0

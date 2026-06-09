@@ -2,6 +2,8 @@
 
 """Guards on the YouTube continuation loop: no-progress + bounded fallbacks."""
 
+from __future__ import annotations
+
 from types import SimpleNamespace
 
 import pytest

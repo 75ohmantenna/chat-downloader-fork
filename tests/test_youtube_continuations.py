@@ -9,6 +9,8 @@ parse_continuation_response(), and assert the fields of ContinuationParseResult
 match expectations.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 

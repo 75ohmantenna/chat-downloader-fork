@@ -9,6 +9,8 @@ These tests exercise:
 - ChatRequest.as_dict()/to_legacy_kwargs() key completeness and value fidelity
 """
 
+from __future__ import annotations
+
 import dataclasses
 from types import SimpleNamespace
 

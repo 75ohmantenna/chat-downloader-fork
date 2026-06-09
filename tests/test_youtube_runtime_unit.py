@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from types import SimpleNamespace
 from typing import NoReturn
 
@@ -15,12 +17,14 @@ from chat_downloader.errors import (
 from chat_downloader.models import ChatRequest
 from chat_downloader.request_profiles import REQUEST_PROFILE_INNERTUBE_CONTEXTS
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
-    _advance_continuation_loop,
+from chat_downloader.sites.youtube.chat_streams_response import (
     _apply_response_state_updates,
-    _get_chat_messages,
     _handle_continuation_response,
     _log_request_context,
+)
+from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
+    _advance_continuation_loop,
+    _get_chat_messages,
     _resolve_poll_delay_ms,
 )
 from chat_downloader.sites.youtube.chat_users_retrieval import (
@@ -47,7 +51,7 @@ def _disable_youtube_poll_sleep(monkeypatch) -> None:
 
 def _patch_visitor_data(monkeypatch, return_value) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.extract_visitor_data",
+        "chat_downloader.sites.youtube.chat_streams_response.extract_visitor_data",
         lambda _yt_info: return_value,
     )
 
@@ -111,19 +115,19 @@ def test_handle_continuation_response_composes_state_log_and_error_checks(
     calls: list[str] = []
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: "AUTH",
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._apply_response_state_updates",
+        "chat_downloader.sites.youtube.chat_streams_response._apply_response_state_updates",
         lambda *_args, **_kwargs: calls.append("state"),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._log_request_context",
+        "chat_downloader.sites.youtube.chat_streams_response._log_request_context",
         lambda *_args, **_kwargs: calls.append("log"),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._raise_if_api_error",
+        "chat_downloader.sites.youtube.chat_streams_response._raise_if_api_error",
         lambda *_args, **_kwargs: calls.append("error"),
     )
 
@@ -143,7 +147,7 @@ def test_log_request_context_includes_click_tracking_and_logged_in_info(
     """Logging includes click tracking, continuation token, and login info."""
     logs: list[tuple[str, object]] = []
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.log",
+        "chat_downloader.sites.youtube.chat_streams_response.log",
         lambda level, message: logs.append((level, message)),
     )
 
@@ -514,15 +518,15 @@ def test_chat_iteration_raises_no_chat_replay_on_replay_api_400(
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
@@ -563,15 +567,15 @@ def test_chat_iteration_raises_api_error_for_non_replay_failure(
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
@@ -612,15 +616,15 @@ def test_chat_iteration_raises_api_error_for_non_dict_error_payload(
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
@@ -662,15 +666,15 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     sleep_calls = []
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {"x-bootstrap": "1"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: "AUTH_TOKEN",
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
@@ -705,11 +709,11 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.debug_log",
+        "chat_downloader.sites.youtube.chat_streams_response.debug_log",
         lambda *items: debug_messages.append(items),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.capture_debug_sample",
+        "chat_downloader.sites.youtube.chat_streams_response.capture_debug_sample",
         lambda label, payload: captured_samples.append((label, payload)),
     )
     monkeypatch.setattr(
@@ -1004,15 +1008,15 @@ def test_chat_iteration_switches_profile_after_incomplete_continuation(
     call_state = {"count": 0}
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
 
@@ -1082,19 +1086,19 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
     )
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.get_live_start_time_ms",
+        "chat_downloader.sites.youtube.chat_streams_context.get_live_start_time_ms",
         lambda: 1000,
     )
 
@@ -1204,19 +1208,19 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
     )
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.TimeRangeFilter",
+        "chat_downloader.sites.youtube.chat_streams_context.TimeRangeFilter",
         lambda *args, **kwargs: FakeTimeFilter(),
     )
 

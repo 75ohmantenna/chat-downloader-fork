@@ -2,6 +2,8 @@
 
 """Public utility exports for YouTube message parsing."""
 
+from __future__ import annotations
+
 from .message_content_badges import _parse_badges, _parse_currency
 from .message_content_text_parser import (
     _get_simple_text,

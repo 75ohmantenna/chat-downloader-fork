@@ -3,6 +3,8 @@
 """YouTube URLs and regex patterns used by the extractor."""
 
 # URL regex patterns for initial data extraction
+from __future__ import annotations
+
 _YT_INITIAL_BOUNDARY_RE = r"\s*(?:var\s+(?:meta|head)|</script|\n)"
 _YT_INITIAL_DATA_RE = (
     r'(?:window\s*\[\s*["\']ytInitialData["\']\s*\]|ytInitialData)\s*=\s*'

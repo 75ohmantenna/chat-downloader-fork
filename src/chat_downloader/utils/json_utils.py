@@ -2,6 +2,8 @@
 
 """JSON parsing, flattening, and deep-merge helpers."""
 
+from __future__ import annotations
+
 import collections.abc
 import json
 from typing import Any

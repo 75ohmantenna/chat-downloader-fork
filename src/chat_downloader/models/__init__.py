@@ -28,6 +28,8 @@ CLI metadata keys:
 - ``flags``  (list[str], optional) — additional short flags, e.g. ``["-s"]``.
 """
 
+from __future__ import annotations
+
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader._timeout_defaults import (
     DEFAULT_CONNECT_TIMEOUT,

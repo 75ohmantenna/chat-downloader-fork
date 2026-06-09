@@ -2,10 +2,11 @@
 
 """Twitch GraphQL request helpers."""
 
+from __future__ import annotations
+
 import base64
-from collections.abc import Callable
 from json import JSONDecodeError
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from requests.exceptions import RequestException
 
@@ -15,6 +16,9 @@ from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.string_utils import contains_any_hint
 
 from .constants import CLIENT_ID, GQL_API_URL, OPERATION_HASHES
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 GQL_AUTH_COOKIE_NAME: str = "auth-token"
 

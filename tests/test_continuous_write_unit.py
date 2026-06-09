@@ -2,6 +2,8 @@
 
 """Unit tests for continuous_write.py to improve coverage."""
 
+from __future__ import annotations
+
 import csv
 import gc
 import json

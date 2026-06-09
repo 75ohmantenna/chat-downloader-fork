@@ -2,6 +2,8 @@
 
 """Public parsing module for YouTube chat messages."""
 
+from __future__ import annotations
+
 from .message_items_content_parser import _parse_item
 from .message_items_video import _parse_video
 from .message_utils import (

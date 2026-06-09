@@ -2,6 +2,8 @@
 
 """Shared naming helpers for captured debug samples and promoted fixtures."""
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
 from pathlib import Path

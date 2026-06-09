@@ -2,6 +2,8 @@
 
 """Console output, encoding detection, and filename sanitization helpers."""
 
+from __future__ import annotations
+
 import io
 import locale
 import re

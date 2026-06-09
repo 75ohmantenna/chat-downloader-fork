@@ -2,6 +2,8 @@
 
 """Shared message and time-range filtering helpers."""
 
+from __future__ import annotations
+
 from typing import Any, Literal
 
 from chat_downloader.errors import InvalidParameter

@@ -2,6 +2,8 @@
 
 """YouTube link helpers for message parsing."""
 
+from __future__ import annotations
+
 from typing import Any
 from urllib import parse
 

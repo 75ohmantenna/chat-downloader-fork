@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from chat_downloader.sites.youtube.chat_users_router import (
     YouTubeChatUsersRouterMixin,
 )

@@ -12,6 +12,8 @@ metadata, live IRC, replay, and parsing modules:
 - parsing/: message, tag, badge, emote, and system-event parsing.
 """
 
+from __future__ import annotations
+
 from .extractor import TwitchChatDownloader, TwitchError
 
 __all__ = ["TwitchChatDownloader", "TwitchError"]

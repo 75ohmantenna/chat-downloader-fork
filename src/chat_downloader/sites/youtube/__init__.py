@@ -15,6 +15,8 @@ bootstrap, request, continuation, parsing, and discovery modules:
 - parsing/: action routing and message normalization.
 """
 
+from __future__ import annotations
+
 from .extractor import YouTubeChatDownloader
 
 __all__ = ["YouTubeChatDownloader"]

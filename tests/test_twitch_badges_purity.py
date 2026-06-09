@@ -9,6 +9,8 @@ These tests verify:
 3. ``BadgeCache`` / ``BadgeSet`` behave correctly (snapshot isolation, etc.).
 """
 
+from __future__ import annotations
+
 from typing import Any
 from unittest.mock import patch
 

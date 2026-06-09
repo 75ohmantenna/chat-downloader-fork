@@ -2,6 +2,8 @@
 
 """Unit tests for typed request flow through YouTube site entry methods."""
 
+from __future__ import annotations
+
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.site_dispatch import execute_chat_generator
 from chat_downloader.sites.base import BaseChatDownloader
@@ -260,15 +262,19 @@ def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
             self.session.headers.update(new_headers)
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
 

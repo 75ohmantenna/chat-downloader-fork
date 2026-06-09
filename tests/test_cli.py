@@ -1,16 +1,18 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 import argparse
 import dataclasses
 from unittest.mock import patch
 
 import pytest
 
-import chat_downloader.cli as cli_module
-from chat_downloader.cli import (
+import chat_downloader.cli_args as cli_args_module
+from chat_downloader.cli import main
+from chat_downloader.cli_args import (
     REQUEST_PROFILES,
     _build_request_headers,
-    main,
     parse_header,
     splitter,
     str2bool,
@@ -352,9 +354,7 @@ def test_init_session_short_flags_are_forwarded() -> None:
 
 
 def test_metadata_flags_are_added_when_not_explicitly_declared() -> None:
-    from chat_downloader import cli as cli_module
-
-    original = cli_module._build_field_info
+    original = cli_args_module._build_field_info
 
     def fake_build_field_info(dc_class):
         info = original(dc_class)
@@ -364,7 +364,7 @@ def test_metadata_flags_are_added_when_not_explicitly_declared() -> None:
 
     with (
         patch(
-            "chat_downloader.cli._build_field_info",
+            "chat_downloader.cli_args._build_field_info",
             side_effect=fake_build_field_info,
         ),
         patch(
@@ -463,7 +463,7 @@ def test_cli_chat_params_match_expected_legacy_keys() -> None:
 def test_cli_registration_fails_fast_without_dataclass_metadata(
     monkeypatch,
 ) -> None:
-    original_build_field_info = cli_module._build_field_info
+    original_build_field_info = cli_args_module._build_field_info
 
     def fake_build_field_info(dc_class):
         info = original_build_field_info(dc_class)
@@ -472,7 +472,7 @@ def test_cli_registration_fails_fast_without_dataclass_metadata(
         return info
 
     monkeypatch.setattr(
-        "chat_downloader.cli._build_field_info",
+        "chat_downloader.cli_args._build_field_info",
         fake_build_field_info,
     )
 

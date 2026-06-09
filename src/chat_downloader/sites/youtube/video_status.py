@@ -2,6 +2,8 @@
 
 """YouTube video status parsing and serialization."""
 
+from __future__ import annotations
+
 import dataclasses
 from typing import Any
 

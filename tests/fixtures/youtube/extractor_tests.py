@@ -2,6 +2,8 @@
 
 """Network test scenarios for the YouTube extractor."""
 
+from __future__ import annotations
+
 from chat_downloader.errors import (
     ChatDisabled,
     LoginRequired,

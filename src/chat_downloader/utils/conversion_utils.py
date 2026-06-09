@@ -2,9 +2,13 @@
 
 """Type conversion utilities."""
 
+from __future__ import annotations
+
 import random
-from collections.abc import Callable
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _SYSTEM_RANDOM = random.SystemRandom()
 

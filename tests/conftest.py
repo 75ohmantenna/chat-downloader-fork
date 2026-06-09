@@ -1,13 +1,17 @@
 # SPDX-License-Identifier: MIT
 
-import pathlib
+from __future__ import annotations
+
 import select
 import socket
 import socketserver
 import threading
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    import pathlib
 
 
 class _ConnectProxy(socketserver.StreamRequestHandler):

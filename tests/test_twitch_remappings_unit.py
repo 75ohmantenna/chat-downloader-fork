@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from chat_downloader.sites.remap import Remapper
 from chat_downloader.sites.twitch.remappings import (
     build_author_remapping,

@@ -2,6 +2,8 @@
 
 """Unit tests for typed request flow through Twitch site entry methods."""
 
+from __future__ import annotations
+
 import contextlib
 from unittest.mock import Mock, patch
 

@@ -2,6 +2,8 @@
 
 """Model objects for YouTube video metadata parsing."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 # Statuses that indicate a finished broadcast with a chat replay available.

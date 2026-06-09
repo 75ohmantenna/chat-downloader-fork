@@ -2,6 +2,8 @@
 
 """Handler helpers for specific YouTube chat action types."""
 
+from __future__ import annotations
+
 from .actions_handlers_parser import (
     _handle_add_banner_action,
     _handle_item_action,

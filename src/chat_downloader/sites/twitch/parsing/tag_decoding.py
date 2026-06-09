@@ -2,6 +2,8 @@
 
 """IRC tag decoding and boolean parsing helpers."""
 
+from __future__ import annotations
+
 
 def _parse_bool(text: str) -> bool:
     """Parse IRC boolean (1 = true, 0 = false)."""

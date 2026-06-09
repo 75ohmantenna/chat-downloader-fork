@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 import itertools
 
 # Network-dependent integration tests (YouTube API).

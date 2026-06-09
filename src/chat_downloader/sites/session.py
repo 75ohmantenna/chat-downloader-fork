@@ -2,10 +2,12 @@
 
 """Shared HTTP session and cookie helpers for site downloaders."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
 import requests
@@ -22,7 +24,8 @@ from chat_downloader.request_profiles import (
     normalize_request_profile,
 )
 
-from ._protocols import SessionOwnerProto
+if TYPE_CHECKING:
+    from ._protocols import SessionOwnerProto
 
 _ALLOWED_PROXY_SCHEMES = frozenset(
     {"http", "https", "socks4", "socks5", "socks5h"}

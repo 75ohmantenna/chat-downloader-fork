@@ -2,6 +2,8 @@
 
 # This module exercises live site integrations via each site's `_TESTS`.
 # It is intentionally excluded from the default offline CI run.
+from __future__ import annotations
+
 import pytest
 
 from chat_downloader import ChatDownloader

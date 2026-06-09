@@ -2,6 +2,8 @@
 
 """YouTube continuation constants for chat parsing."""
 
+from __future__ import annotations
+
 _KNOWN_SEEK_CONTINUATIONS = ["playerSeekContinuationData"]
 
 _KNOWN_CHAT_CONTINUATIONS = [

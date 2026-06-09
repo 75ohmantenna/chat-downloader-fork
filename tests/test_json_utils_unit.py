@@ -2,6 +2,8 @@
 
 """Comprehensive unit tests for json_utils module to improve coverage."""
 
+from __future__ import annotations
+
 from chat_downloader.utils.json_utils import (
     flatten_json,
     nested_update,

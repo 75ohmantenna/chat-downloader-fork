@@ -2,6 +2,8 @@
 
 """Text-related message content parsing implementation."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from chat_downloader.sites.models import Image

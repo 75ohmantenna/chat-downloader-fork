@@ -2,13 +2,18 @@
 
 """JSONL writer rejects naive datetimes at the output boundary."""
 
+from __future__ import annotations
+
 import datetime
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from chat_downloader.output.continuous_write import JsonLinesContinuousWriter
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_jsonl_rejects_naive_datetime(tmp_path: Path) -> None:

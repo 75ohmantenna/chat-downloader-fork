@@ -6,6 +6,8 @@ This module contains all configuration constants, URL patterns, remapping
 dictionaries, and message type definitions for Twitch chat downloading.
 """
 
+from __future__ import annotations
+
 import re
 from functools import cache
 

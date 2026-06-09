@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 import json
-import pathlib
+from typing import TYPE_CHECKING
 
 import pytest
 
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.models import Chat, Image
+
+if TYPE_CHECKING:
+    import pathlib
 
 # ---------------------------------------------------------------------------
 # Image

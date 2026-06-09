@@ -2,18 +2,22 @@
 
 """Per-record flush + interval fsync behavior in ContinuousFileWriter."""
 
+from __future__ import annotations
+
 import json
 import os
 import time
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
-from chat_downloader.output import continuous_write
 from chat_downloader.output.continuous_write import (
     JsonLinesContinuousWriter,
     TextContinuousWriter,
 )
+from chat_downloader.output.writers import _FSYNC_INTERVAL_SECONDS
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _read_lines_during_write(writer_path: Path) -> int:
@@ -57,7 +61,7 @@ def test_fsync_runs_at_most_once_per_interval(tmp_path: Path) -> None:
         with patch.object(os, "fsync") as mock_fsync:
             # Force the timer back so the first write triggers fsync.
             writer._last_fsync_monotonic = (
-                time.monotonic() - continuous_write._FSYNC_INTERVAL_SECONDS - 1
+                time.monotonic() - _FSYNC_INTERVAL_SECONDS - 1
             )
             writer.write({"first": True})
             assert mock_fsync.call_count == 1
@@ -69,7 +73,7 @@ def test_fsync_runs_at_most_once_per_interval(tmp_path: Path) -> None:
 
             # Force the timer back again; next write fsyncs once.
             writer._last_fsync_monotonic = (
-                time.monotonic() - continuous_write._FSYNC_INTERVAL_SECONDS - 1
+                time.monotonic() - _FSYNC_INTERVAL_SECONDS - 1
             )
             writer.write({"again": True})
             assert mock_fsync.call_count == 2
@@ -83,7 +87,7 @@ def test_fsync_failure_is_swallowed(tmp_path: Path) -> None:
     writer = JsonLinesContinuousWriter(str(path))
     try:
         writer._last_fsync_monotonic = (
-            time.monotonic() - continuous_write._FSYNC_INTERVAL_SECONDS - 1
+            time.monotonic() - _FSYNC_INTERVAL_SECONDS - 1
         )
         with patch.object(os, "fsync", side_effect=OSError("nope")):
             writer.write({"x": 1})  # must not raise

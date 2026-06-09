@@ -9,6 +9,8 @@ constants modules.
 This module contains the orchestrating class with tests.
 """
 
+from __future__ import annotations
+
 from typing import Any, ClassVar
 
 from chat_downloader.sites.base import BaseChatDownloader

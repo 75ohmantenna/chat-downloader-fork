@@ -2,6 +2,8 @@
 
 """Known-key set builders for Twitch payload validation."""
 
+from __future__ import annotations
+
 from functools import cache
 
 OPTIONAL_TWITCH_PASSTHROUGH_KEYS = {

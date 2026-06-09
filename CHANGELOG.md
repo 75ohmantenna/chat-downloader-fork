@@ -4,6 +4,11 @@
 
 ### Tooling
 
+- Enforce `from __future__ import annotations` in every source file via ruff
+  rule `I002` (`required-imports`); auto-applied repo-wide; moves type-only
+  stdlib/application imports into `if TYPE_CHECKING:` blocks; adds
+  `src/chat_downloader/sites/_protocols.py` to the coverage omit list (no
+  longer imported at runtime)
 - Add `.pre-commit-config.yaml`: `ruff check` and `ruff format --check` run on
   pre-commit; `mypy .` runs on pre-push; all hooks use `uv run --locked` so
   they always track the pinned `uv.lock` versions
@@ -67,6 +72,45 @@
   curated IRC fixtures in `tests/fixtures/twitch/live_events/`
 - Add offline GraphQL hash-rotation guard: asserts every `operationName` used
   in the Twitch client has an entry in `OPERATION_HASHES` (and vice versa)
+
+### Architecture (round 2)
+
+- Split `sites/youtube/chat_streams_runtime_iteration.py` (578 LOC) into
+  three focused modules: `chat_streams_context.py` (continuation-loop context
+  construction), `chat_streams_response.py` (response handling and error
+  surfacing), and the continuation loop remainder in
+  `chat_streams_runtime_iteration.py`
+- Split `cli.py` (460 LOC): extract argument-building machinery
+  (`_ParamRegistrar`, `_add_*_args`, `splitter`, `parse_header`, `str2bool`,
+  `_build_request_headers`, `_build_field_info`) into new `cli_args.py`; `cli.py`
+  retains only `_install_cli_signal_handlers`, `_build_arg_parser`, and `main`
+- Split `output/continuous_write.py` (422 LOC): move `ContinuousFileWriter` ABC
+  and the three concrete writer subclasses (`CsvContinuousWriter`,
+  `JsonLinesContinuousWriter`, `TextContinuousWriter`) plus `_WRITER_CLASSES`
+  into new `output/writers.py`; `continuous_write.py` retains the `ContinuousWriter`
+  factory and re-exports the moved types via `__all__`
+
+### Tooling (round 2)
+
+- Add `import-linter` as a dev dependency; wire `uv run lint-imports` into
+  `make lint` (and therefore `make ci`); three contracts enforced:
+  `youtube ⊥ twitch` independence, `utils` is a leaf, `models` isolation from
+  runtime/output/cli/site-packages
+- Add `tests/test_public_api_unit.py`: frozen-set snapshot of
+  `chat_downloader.__all__` and `chat_downloader.models.__all__`; intentional
+  surface changes require updating the snapshot in the same commit
+- Add `tests/test_module_size_unit.py`: 450-line ceiling on all source modules
+  (with allowlist for intentional data tables); locks in round-2 split gains
+
+### Documentation (round 2)
+
+- Add `docs/architecture.md`: layer diagram, import-contract table, full module
+  inventory for all packages including YouTube `constants_*`/`client_*` modules
+  previously undocumented; linked from `AGENTS.md`
+- Update `AGENTS.md` Structure and Architecture sections to reflect the new
+  module paths and the import-linter guardrails
+- Update `docs/maintenance-notes.md`: record the round-2 splits, guardrails,
+  and intentionally over-budget modules with deferral rationale
 
 ### Fixed
 

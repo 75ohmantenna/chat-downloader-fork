@@ -2,12 +2,16 @@
 
 """Message-level constants for YouTube parsing and remapping."""
 
-from collections.abc import Mapping
+from __future__ import annotations
+
 from functools import cache
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.sites.remap import Remapper as r
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 # Message groups and flat type list
 _MESSAGE_GROUPS = {

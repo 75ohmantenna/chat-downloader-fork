@@ -2,6 +2,8 @@
 
 """YouTube video item parsing primitives."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from chat_downloader.sites.remap import Remapper as r

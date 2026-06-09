@@ -2,8 +2,12 @@
 
 """Low-level Twitch replay transport helpers."""
 
-from collections.abc import Callable
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def get_chat_messages_by_vod_id(

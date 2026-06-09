@@ -2,6 +2,8 @@
 
 """Validation and bookkeeping behavior of _SeenMessageCache."""
 
+from __future__ import annotations
+
 import logging
 
 import pytest

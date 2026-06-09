@@ -2,13 +2,18 @@
 
 """Retry policy dataclass with backoff, sleep, and user-prompt support."""
 
+from __future__ import annotations
+
 import time
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .console_utils import pause
 from .conversion_utils import backoff_seconds
 from .timed_utils import timed_input
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @dataclass(frozen=True)

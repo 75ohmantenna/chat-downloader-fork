@@ -2,6 +2,8 @@
 
 """Unit tests for pure IRC buffer-processing helpers in irc_transport.py."""
 
+from __future__ import annotations
+
 import contextlib
 import re
 import time

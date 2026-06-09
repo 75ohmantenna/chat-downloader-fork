@@ -41,6 +41,7 @@ dev = [
     "pytest>=9.0,<10.0",
     "coverage>=7.0,<8.0",
     "pre-commit>=4.0,<5.0",
+    "import-linter>=2.11",
 ]
 
 [project.scripts]
@@ -98,6 +99,9 @@ max-complexity = 8
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["C9", "D1", "PTH"]
 
+[tool.ruff.lint.isort]
+required-imports = ["from __future__ import annotations"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
@@ -106,6 +110,7 @@ source = ["chat_downloader"]
 omit = [
     "*/__main__.py",
     "src/chat_downloader/runtime/_protocols.py",
+    "src/chat_downloader/sites/_protocols.py",
     "src/chat_downloader/sites/youtube/_protocols.py",
 ]
 
@@ -117,6 +122,44 @@ exclude_also = [
     "if TYPE_CHECKING:",
     "\\.\\.\\.",
 ]
+
+[tool.importlinter]
+root_package = "chat_downloader"
+
+[[tool.importlinter.contracts]]
+name = "youtube and twitch are independent"
+type = "independence"
+modules = [
+    "chat_downloader.sites.youtube",
+    "chat_downloader.sites.twitch",
+]
+
+[[tool.importlinter.contracts]]
+name = "utils is a leaf"
+type = "forbidden"
+source_modules = ["chat_downloader.utils"]
+forbidden_modules = [
+    "chat_downloader.sites",
+    "chat_downloader.runtime",
+    "chat_downloader.output",
+    "chat_downloader.formatting",
+    "chat_downloader.models",
+]
+
+[[tool.importlinter.contracts]]
+name = "models does not depend on runtime/output/cli/site-packages"
+type = "forbidden"
+source_modules = ["chat_downloader.models"]
+forbidden_modules = [
+    "chat_downloader.runtime",
+    "chat_downloader.output",
+    "chat_downloader.cli",
+    "chat_downloader.cli_args",
+    "chat_downloader.sites.youtube",
+    "chat_downloader.sites.twitch",
+]
+# NOTE: chat_downloader.sites.models is deliberately NOT forbidden —
+# models/_request.py imports SiteDefault from it (shared leaf type).
 
 [tool.pytest.ini_options]
 markers = [

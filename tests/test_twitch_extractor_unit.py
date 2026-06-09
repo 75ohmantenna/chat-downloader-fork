@@ -6,6 +6,8 @@ Tests the IRC buffer deduplication (#6) and typename validation (#8)
 improvements added in v0.2.33+mod and v0.2.34+mod.
 """
 
+from __future__ import annotations
+
 import contextlib
 from unittest.mock import Mock, patch
 

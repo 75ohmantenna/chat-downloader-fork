@@ -2,6 +2,8 @@
 
 """Remapping builder helpers for Twitch payloads."""
 
+from __future__ import annotations
+
 from functools import cache
 from typing import Any
 

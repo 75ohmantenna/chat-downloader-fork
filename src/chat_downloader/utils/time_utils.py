@@ -2,6 +2,8 @@
 
 """Time parsing, formatting, and conversion utilities."""
 
+from __future__ import annotations
+
 import datetime
 import re
 from typing import Any

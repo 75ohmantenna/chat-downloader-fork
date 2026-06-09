@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from chat_downloader.sites.youtube import extractor as yt_extractor
 from chat_downloader.sites.youtube import helpers as yt_helpers
 from chat_downloader.sites.youtube.helpers import (

@@ -2,6 +2,8 @@
 
 """Dictionary access and merge helpers used across the downloader."""
 
+from __future__ import annotations
+
 from typing import Any
 
 

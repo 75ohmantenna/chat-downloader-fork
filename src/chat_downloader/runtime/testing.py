@@ -2,6 +2,8 @@
 
 """Testing-mode runtime helpers."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from chat_downloader.debugging import TestingModes, set_testing_mode

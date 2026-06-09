@@ -2,6 +2,8 @@
 
 """Comprehensive unit tests for time_utils module to improve coverage."""
 
+from __future__ import annotations
+
 import datetime
 
 import pytest

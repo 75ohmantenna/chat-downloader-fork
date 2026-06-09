@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from json import JSONDecodeError
 from types import SimpleNamespace
 from typing import NoReturn

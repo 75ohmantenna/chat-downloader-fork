@@ -2,6 +2,8 @@
 
 """CSV rewrite helpers for continuous writers."""
 
+from __future__ import annotations
+
 import contextlib
 import csv
 import shutil

@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 import pytest
 
 from chat_downloader.errors import InvalidParameter, NoContinuation
 from chat_downloader.models import ChatRequest
 from chat_downloader.request_profiles import REQUEST_PROFILE_INNERTUBE_CONTEXTS
-from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
+from chat_downloader.sites.youtube.chat_streams_context import (
     _build_chat_context,
 )
 
@@ -58,15 +60,15 @@ def test_build_chat_context_returns_correct_continuation_url(
 ) -> None:
     """_build_chat_context derives the API URL from ytcfg and replay status."""
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_a, **_k: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {}},
     )
 
@@ -89,15 +91,15 @@ def test_build_chat_context_returns_correct_continuation_url(
 def test_build_chat_context_replay_status_sets_is_replay(monkeypatch) -> None:
     """_build_chat_context sets is_replay=True and uses the replay endpoint."""
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_a, **_k: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {}},
     )
 
@@ -120,15 +122,15 @@ def test_build_chat_context_selects_chat_type_by_label_not_insertion_order(
 ) -> None:
     """_build_chat_context should not assume submenu insertion order."""
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_a, **_k: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {}},
     )
 
@@ -152,11 +154,11 @@ def test_build_chat_context_applies_request_profile_to_innertube_context(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_a, **_k: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_a, **_k: None,
     )
 
@@ -193,15 +195,15 @@ def test_build_chat_context_raises_no_continuation_for_missing_index(
 ) -> None:
     """_build_chat_context raises NoContinuation when chat_type is absent."""
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_a, **_k: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {}},
     )
 
@@ -223,15 +225,15 @@ def test_build_chat_context_raises_invalid_parameter_for_bad_group(
 ) -> None:
     """_build_chat_context raises InvalidParameter for an unknown group."""
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_a, **_k: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {}},
     )
 
@@ -253,15 +255,15 @@ def test_build_chat_context_message_types_override_default_groups(
 ) -> None:
     """Explicit message types exclude resolved site-default groups."""
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_headers",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
         lambda *_a, **_k: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
         lambda *_a, **_k: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_innertube_context",
+        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {}},
     )
 

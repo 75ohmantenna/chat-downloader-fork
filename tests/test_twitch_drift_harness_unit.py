@@ -26,6 +26,8 @@ Twitch rotates hashes, updating ``OPERATION_HASHES`` in
 the guard flags immediately if a caller references an unlisted operation.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any

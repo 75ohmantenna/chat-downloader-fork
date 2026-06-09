@@ -2,6 +2,8 @@
 
 """ItemFormatter: template-driven rendering of chat message dicts."""
 
+from __future__ import annotations
+
 import json
 import re
 import string

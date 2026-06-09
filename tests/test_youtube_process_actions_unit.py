@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from types import SimpleNamespace
 
 from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (

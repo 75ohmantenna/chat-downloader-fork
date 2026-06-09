@@ -2,6 +2,8 @@
 
 """Test multiple output formats feature."""
 
+from __future__ import annotations
+
 import json
 import os
 

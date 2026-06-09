@@ -2,9 +2,10 @@
 
 """Twitch GraphQL-backed discovery helpers."""
 
+from __future__ import annotations
+
 import base64
-from collections.abc import Callable, Generator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
 from chat_downloader.sites.remap import Remapper as r
@@ -14,6 +15,9 @@ from chat_downloader.sites.twitch.remappings import (
     build_video_remapping,
 )
 from chat_downloader.utils.dict_utils import multi_get
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator
 
 
 def get_user_clips(

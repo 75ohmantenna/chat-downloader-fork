@@ -2,6 +2,8 @@
 
 """Runtime helpers for ChatDownloader orchestration."""
 
+from __future__ import annotations
+
 from .chat_pipeline import (
     LIVE_STATUSES,
     apply_message_limit,

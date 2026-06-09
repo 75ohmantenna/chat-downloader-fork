@@ -2,6 +2,8 @@
 
 """Helpers for parsing YouTube video status metadata."""
 
+from __future__ import annotations
+
 from typing import Any, Literal
 
 from chat_downloader.debugging import logger

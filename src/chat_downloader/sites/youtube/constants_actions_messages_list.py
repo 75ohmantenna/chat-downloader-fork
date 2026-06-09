@@ -2,6 +2,8 @@
 
 """Derived action lists for YouTube chat messages."""
 
+from __future__ import annotations
+
 from .constants_actions_messages_core import _KNOWN_ACTION_TYPES
 
 _KNOWN_IGNORE_MESSAGE_TYPES = ["liveChatPlaceholderItemRenderer"]

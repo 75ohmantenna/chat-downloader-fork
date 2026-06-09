@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from chat_downloader.request_profiles import (
     REQUEST_PROFILES,
     build_request_profile_headers,

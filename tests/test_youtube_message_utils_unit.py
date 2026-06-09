@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from typing import Any, cast
 
 from chat_downloader.sites.youtube.parsing.message_content_badges import (

@@ -20,6 +20,7 @@ test:
 
 lint:
 	$(UV_RUN) ruff check src/chat_downloader tests
+	$(UV_RUN) lint-imports
 
 fmt:
 	$(UV) run ruff format src/chat_downloader tests

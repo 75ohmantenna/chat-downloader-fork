@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.sites.youtube.message_pipeline import (

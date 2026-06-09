@@ -5,6 +5,8 @@
 Note: Portions of this codebase have been developed with AI assistance.
 """
 
+from __future__ import annotations
+
 __title__ = "chat-downloader"
 __program__ = "chat_downloader"
 __summary__ = (

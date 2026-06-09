@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from chat_downloader.sites.youtube import constants_message as yt_constants
 from chat_downloader.sites.youtube.parsing import messages as yt_messages
 

@@ -2,8 +2,12 @@
 
 """Shared remapping utilities."""
 
-from collections.abc import Callable, Mapping
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
 
 class Remapper:
@@ -31,7 +35,7 @@ class Remapper:
     @staticmethod
     def _apply_remapper(
         info: dict[str, Any],
-        remap: "Remapper",
+        remap: Remapper,
         remap_input: object,
     ) -> None:
         """Apply a Remapper rule, writing into *info*."""

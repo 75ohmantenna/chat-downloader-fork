@@ -6,6 +6,8 @@ This is 75ohmantenna's fork of xenova's MIT-licensed chat-downloader with 2026
 enhancements. Portions of this codebase have been developed with AI assistance.
 """
 
+from __future__ import annotations
+
 from .chat_downloader import ChatDownloader, run
 from .errors import (
     CaptchaChallengeRequired,

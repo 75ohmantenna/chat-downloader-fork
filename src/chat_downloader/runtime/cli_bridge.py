@@ -2,6 +2,8 @@
 
 """Helpers for bridging CLI/runtime kwargs into ChatDownloader calls."""
 
+from __future__ import annotations
+
 from typing import Any
 
 from chat_downloader.models import (

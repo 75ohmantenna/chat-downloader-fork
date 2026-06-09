@@ -2,6 +2,8 @@
 
 """Lists the sites that are supported."""
 
+from __future__ import annotations
+
 from .base import BaseChatDownloader
 from .models import Chat, Image
 from .remap import Remapper

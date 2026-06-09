@@ -2,6 +2,8 @@
 
 """Unit tests for the extracted _process_vod_edge helper in replay_service."""
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 

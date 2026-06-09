@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MIT
 
+from __future__ import annotations
+
 from typing import Any, NoReturn
 from unittest.mock import MagicMock
 
@@ -35,7 +37,7 @@ class _FakeChat:
 class _FakeDownloader:
     """Minimal downloader stub; get_chat returns _FakeChat by default."""
 
-    _last: "_FakeDownloader | None" = None
+    _last: _FakeDownloader | None = None
 
     def __init__(self, **kwargs) -> None:
         self.init_kwargs = kwargs
@@ -55,7 +57,7 @@ def _make_error_downloader(error_to_raise: BaseException) -> type:
     """Return a fresh class whose get_chat() raises error_to_raise."""
 
     class _ErrorDownloader:
-        _last: "_ErrorDownloader | None" = None
+        _last: _ErrorDownloader | None = None
 
         def __init__(self, **_kwargs) -> None:
             self.closed = False

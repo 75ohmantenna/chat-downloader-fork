@@ -8,6 +8,8 @@ the Twitch IRC recv-loop error branches (socket.timeout, empty recv) without
 any network access.
 """
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
 from unittest.mock import MagicMock
