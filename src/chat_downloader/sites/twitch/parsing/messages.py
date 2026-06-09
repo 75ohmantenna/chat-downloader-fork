@@ -21,7 +21,6 @@ from chat_downloader.sites.twitch.constants import (
     EMOTE_REGEX,
     MESSAGE_TYPE_REMAPPING,
 )
-from chat_downloader.sites.twitch.parsing import tag_decoding
 from chat_downloader.sites.twitch.parsing.badges import (
     _parse_badge_info,
     _parse_irc_badges,
@@ -47,21 +46,6 @@ _EMOTE_IMAGE_SIZES = (
     (56, "2.0"),
     (112, "3.0"),
 )
-
-
-def _parse_bool(text: str) -> bool:
-    """Compatibility wrapper for IRC boolean parsing."""
-    return tag_decoding._parse_bool(text)
-
-
-def _parse_bool_text(text: str) -> bool:
-    """Compatibility wrapper for text boolean parsing."""
-    return tag_decoding._parse_bool_text(text)
-
-
-def _decode_pseudo_BNF(text: str) -> str:
-    """Compatibility wrapper for IRC v3 pseudo-BNF decoding."""
-    return tag_decoding._decode_pseudo_BNF(text)
 
 
 def _parse_author_images(original_url: str) -> list[dict[str, Any]]:

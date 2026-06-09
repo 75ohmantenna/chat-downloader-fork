@@ -8,11 +8,8 @@ Exports message parsing, emote handling, and badge parsing functions.
 from .badges import _parse_badge_info, _parse_irc_badges
 from .messages import (
     _add_text_for_emotes,
-    _decode_pseudo_BNF,
     _generate_emote_image_list,
     _parse_author_images,
-    _parse_bool,
-    _parse_bool_text,
     _parse_emotes,
     _parse_game,
     _parse_irc_item,
@@ -21,6 +18,7 @@ from .messages import (
     _parse_user,
     _set_message_type,
 )
+from .tag_decoding import _decode_pseudo_BNF, _parse_bool, _parse_bool_text
 
 __all__ = [
     "_add_text_for_emotes",
