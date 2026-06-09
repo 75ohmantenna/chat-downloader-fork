@@ -94,7 +94,7 @@ def _is_valid_console(handle: Any) -> bool:
     if file_type != FILE_TYPE_CHAR:
         return False
 
-    return GetConsoleMode(handle, ctypes.byref(ctypes.wintypes.DWORD())) != 0
+    return bool(GetConsoleMode(handle, ctypes.byref(ctypes.wintypes.DWORD())))
 
 
 def _find_next_nonbmp_position(s: str) -> int:
