@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable, Generator, Iterator
-from typing import Any, Self, TextIO, cast
+from typing import Any, NoReturn, Self, TextIO, cast
 
 POLLING_TIME = 0.1
 
@@ -328,36 +328,41 @@ class TimedGenerator:
                 self._result_queue.put(("error", error, time.monotonic()))
                 return
 
+    def _deadline_wait(self) -> float | None:
+        """Return the minimum remaining deadline; None when no timers active."""
+        times = []
+        if self._timeout_deadline is not None:
+            times.append(self._timeout_deadline - time.monotonic())
+        if self._inactivity_deadline is not None:
+            times.append(self._inactivity_deadline - time.monotonic())
+        if not times:
+            return None
+        return max(0.0, min(times))
+
+    def _finish(self, reason: str | None) -> NoReturn:
+        """Cancel timers, close, run callback for reason, then stop."""
+        self._cancel_timers()
+        self._closed = True
+        if reason == "timeout":
+            self._run_function(self.on_timeout)
+        elif reason is not None:
+            self._run_function(self.on_inactivity_timeout)
+        raise StopIteration
+
     def __next__(self) -> Any:
         """Return the next item or stop when configured timers expire."""
         if self._closed:
             raise StopIteration
 
-        def deadline_wait() -> float | None:
-            times = []
-            if self._timeout_deadline is not None:
-                times.append(self._timeout_deadline - time.monotonic())
-            if self._inactivity_deadline is not None:
-                times.append(self._inactivity_deadline - time.monotonic())
-            if not times:
-                return None
-            return max(0.0, min(times))
-
-        wait = deadline_wait()
-
         try:
-            kind, value, completed_at = self._result_queue.get(timeout=wait)
+            kind, value, completed_at = self._result_queue.get(
+                timeout=self._deadline_wait()
+            )
         except _queue.Empty:
-            to_raise = self._timeout_reason()
-            if to_raise is None:
-                to_raise = "timeout" if self.timer is not None else "inactivity"
-            self._cancel_timers()
-            self._closed = True
-            if to_raise == "timeout":
-                self._run_function(self.on_timeout)
-            else:
-                self._run_function(self.on_inactivity_timeout)
-            raise StopIteration from None
+            reason = self._timeout_reason()
+            if reason is None:
+                reason = "timeout" if self.timer is not None else "inactivity"
+            self._finish(reason)
 
         if kind == "error":
             captured_error = value
@@ -371,31 +376,17 @@ class TimedGenerator:
                     self._cancel_timers()
                     self._closed = True
                     raise captured_error
-                self._cancel_timers()
-                self._closed = True
-                if reason == "timeout":
-                    self._run_function(self.on_timeout)
-                else:
-                    self._run_function(self.on_inactivity_timeout)
-                raise StopIteration
+                self._finish(reason)
             raise captured_error
 
         if kind == "stop":
-            self._cancel_timers()
-            self._closed = True
-            raise StopIteration
+            self._finish(None)
 
         # Handle a completed item result.
         next_item = value
         reason = self._timeout_reason(completed_at)
         if reason is not None:
-            self._cancel_timers()
-            self._closed = True
-            if reason == "timeout":
-                self._run_function(self.on_timeout)
-            else:
-                self._run_function(self.on_inactivity_timeout)
-            raise StopIteration
+            self._finish(reason)
 
         self.reset_inactivity_timer()
         return next_item
