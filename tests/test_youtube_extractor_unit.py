@@ -2,6 +2,9 @@
 
 from chat_downloader.sites.youtube import extractor as yt_extractor
 from chat_downloader.sites.youtube import helpers as yt_helpers
+from chat_downloader.sites.youtube.helpers import (
+    _extract_browse_continuation_token_from_response,
+)
 
 
 def test_extract_browse_continuation_token_from_response_reload_endpoints() -> (
@@ -28,7 +31,7 @@ def test_extract_browse_continuation_token_from_response_reload_endpoints() -> (
     }
 
     assert (
-        yt_extractor._extract_browse_continuation_token_from_response(yt_info)
+        _extract_browse_continuation_token_from_response(yt_info)
         == "NEXT_TOKEN"
     )
 
@@ -55,7 +58,7 @@ def test_extract_browse_continuation_token_from_response_playlist_continuation_c
     }
 
     assert (
-        yt_extractor._extract_browse_continuation_token_from_response(yt_info)
+        _extract_browse_continuation_token_from_response(yt_info)
         == "PLAYLIST_NEXT"
     )
 
@@ -84,7 +87,7 @@ def test_extract_browse_continuation_token_from_response_reload_actions() -> (
     }
 
     assert (
-        yt_extractor._extract_browse_continuation_token_from_response(yt_info)
+        _extract_browse_continuation_token_from_response(yt_info)
         == "ACTION_TOKEN"
     )
 

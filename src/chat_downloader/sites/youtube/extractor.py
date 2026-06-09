@@ -24,9 +24,6 @@ from .client_auth import (
 from .constants_patterns import _VALID_URLS
 from .discovery_helpers import YouTubeDiscoveryHelpersMixin
 from .discovery_playlists import YouTubePlaylistDiscoveryMixin
-from .helpers import (
-    _extract_browse_continuation_token_from_response,  # noqa: F401
-)
 from .video_initialization import YouTubeVideoInitializationMixin
 from .video_metadata import YouTubeVideoMetadataCoreMixin
 

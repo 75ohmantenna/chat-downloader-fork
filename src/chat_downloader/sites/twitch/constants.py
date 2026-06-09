@@ -9,17 +9,35 @@ dictionaries, and message type definitions for Twitch chat downloading.
 import re
 from functools import cache
 
-from chat_downloader.sites.twitch.remappings import (  # noqa: F401
-    SUBSCRIPTION_TYPES,
-    build_author_remapping,
-    build_clip_remapping,
-    build_comment_remapping,
-    build_game_remapping,
-    build_irc_remapping,
-    build_livestream_remapping,
-    build_message_param_remapping,
-    build_user_remapping,
-    build_video_remapping,
+from chat_downloader.sites.twitch.remappings import (
+    SUBSCRIPTION_TYPES as SUBSCRIPTION_TYPES,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_author_remapping as build_author_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_clip_remapping as build_clip_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_comment_remapping as build_comment_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_game_remapping as build_game_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_irc_remapping as build_irc_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_livestream_remapping as build_livestream_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_message_param_remapping as build_message_param_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_user_remapping as build_user_remapping,
+)
+from chat_downloader.sites.twitch.remappings import (
+    build_video_remapping as build_video_remapping,
 )
 
 # API Configuration
