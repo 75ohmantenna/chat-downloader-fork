@@ -55,6 +55,8 @@ def _get_windows_console_handle(out: Any) -> Any:
     if fileno not in WIN_OUTPUT_IDS:
         return None
 
+    # ctypes.WINFUNCTYPE and ctypes.windll are Windows-only;
+    # absent from non-Windows ctypes stubs.
     GetStdHandle = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
         ctypes.wintypes.HANDLE, ctypes.wintypes.DWORD
     )(
@@ -78,6 +80,8 @@ def _is_valid_console(handle: Any) -> bool:
     if handle == INVALID_HANDLE_VALUE or handle is None:
         return False
 
+    # ctypes.WINFUNCTYPE and ctypes.windll are Windows-only;
+    # absent from non-Windows ctypes stubs.
     GetFileType = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
         ctypes.wintypes.DWORD, ctypes.wintypes.DWORD
     )(
@@ -123,6 +127,8 @@ def _write_to_windows_console(
     import ctypes
     import ctypes.wintypes
 
+    # ctypes.WINFUNCTYPE and ctypes.windll are Windows-only;
+    # absent from non-Windows ctypes stubs.
     WriteConsoleW = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
         ctypes.wintypes.BOOL,
         ctypes.wintypes.HANDLE,

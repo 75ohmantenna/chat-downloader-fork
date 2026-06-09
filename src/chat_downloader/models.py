@@ -425,9 +425,11 @@ class ChatRequest:
         """Construct a :class:`ChatRequest` from a ``**kwargs`` dict.
 
         Known keys are mapped to fields; unknown keys are silently ignored
-        by default for legacy direct callers.  New call sites should pass
-        ``strict=True`` to raise :exc:`TypeError` when any unknown key is
-        present.
+        by default.  Internal callers that forward an opaque ``params`` dict
+        (where the dict may contain keys intended for other consumers) rely on
+        this lenient default.  Pass ``strict=True`` to raise
+        :exc:`TypeError` when any unknown key is present; the public API
+        boundary (:func:`coerce_chat_request`) always uses ``strict=True``.
 
         This is the single canonical location for mapping a kwargs dict to a
         :class:`ChatRequest` — do not duplicate this logic elsewhere.
@@ -542,7 +544,11 @@ class RunConfig:
 def coerce_chat_request(
     params_or_request: ChatRequest | dict[str, Any],
 ) -> ChatRequest:
-    """Return a typed request from either a request object or legacy kwargs."""
+    """Return a typed :class:`ChatRequest` from a request object or params dict.
+
+    Applies ``strict=True`` so any unknown keys in a plain dict are rejected
+    at the public API boundary.
+    """
     if isinstance(params_or_request, ChatRequest):
         return params_or_request
     return ChatRequest.from_kwargs(strict=True, **params_or_request)

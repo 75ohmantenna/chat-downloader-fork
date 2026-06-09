@@ -258,6 +258,7 @@ def supports_colour() -> bool:
         except ImportError:
             return False
         else:
+            # winreg members are absent from non-Windows type stubs.
             reg_key = winreg.OpenKey(  # type: ignore[attr-defined]
                 winreg.HKEY_CURRENT_USER,  # type: ignore[attr-defined]
                 "Console",

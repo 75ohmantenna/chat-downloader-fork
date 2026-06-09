@@ -55,6 +55,8 @@ try:
         line = ""
 
         while time.monotonic() < end:
+            # msvcrt.kbhit/getwche are Windows-only;
+            # absent from non-Windows type stubs.
             if msvcrt.kbhit():  # type: ignore[attr-defined]
                 c = msvcrt.getwche()  # type: ignore[attr-defined]
                 if c in (CR, LF):
