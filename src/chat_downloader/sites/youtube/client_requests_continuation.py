@@ -325,8 +325,6 @@ def _get_continuation_info(
                 )
                 continue
 
-            return json_response
-
         except JSONDecodeError:
             log(
                 "error",
@@ -356,6 +354,9 @@ def _get_continuation_info(
                 RetriesExceeded,
             )
             continue
+
+        else:
+            return json_response
 
     # Unreachable: all loop paths either return, raise, or continue.
     # Explicit raise satisfies static analysis (mypy return-type check).

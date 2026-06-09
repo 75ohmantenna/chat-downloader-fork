@@ -9,37 +9,6 @@ dictionaries, and message type definitions for Twitch chat downloading.
 import re
 from functools import cache
 
-from chat_downloader.sites.twitch.remappings import (
-    SUBSCRIPTION_TYPES as SUBSCRIPTION_TYPES,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_author_remapping as build_author_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_clip_remapping as build_clip_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_comment_remapping as build_comment_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_game_remapping as build_game_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_irc_remapping as build_irc_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_livestream_remapping as build_livestream_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_message_param_remapping as build_message_param_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_user_remapping as build_user_remapping,
-)
-from chat_downloader.sites.twitch.remappings import (
-    build_video_remapping as build_video_remapping,
-)
-
 # API Configuration
 CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa"  # public client id
 GQL_API_URL = "https://gql.twitch.tv/gql"

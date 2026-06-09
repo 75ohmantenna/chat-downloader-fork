@@ -115,8 +115,6 @@ def _get_initial_info(
             )
             player_response_info = try_parse_json(player_response, {})
 
-            return yt_initial_data, ytcfg, player_response_info
-
         except (RequestException, OSError) as e:
             log(
                 "error",
@@ -127,6 +125,8 @@ def _get_initial_info(
                 retry_policy.wait(attempt_number, interruptible=False)
                 continue
             raise
+        else:
+            return yt_initial_data, ytcfg, player_response_info
 
     msg = f"Retries exhausted after {max_attempts} attempt(s) fetching: {url}"
     raise RetriesExceeded(  # pragma: no cover

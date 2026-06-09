@@ -76,11 +76,13 @@ select = [
     "FURB", # refurb
     "I",    # isort
     "ICN",  # flake8-import-conventions
+    "PLC0206", "PLC0414",  # pylint convention: dict-iter, useless-alias
     "PIE",  # flake8-pie
     "PTH",  # flake8-use-pathlib
     "RET",  # flake8-return
     "RUF",  # ruff-specific
     "SIM",  # flake8-simplify
+    "TRY300",  # flake8-tryceratops: return in else
     "TC",   # flake8-type-checking
     "TID",  # flake8-tidy-imports
     "UP",   # pyupgrade

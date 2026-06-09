@@ -334,7 +334,6 @@ class Chat:
         try:
             item: dict[str, Any] = next(self.chat)
             self._output_dispatcher.emit(item)
-            return item
         except BaseException:
             # Close writers while unwinding any generator termination,
             # including KeyboardInterrupt/SystemExit. Runner-level cleanup may
@@ -349,6 +348,8 @@ class Chat:
                     f"{close_error}",
                 )
             raise
+        else:
+            return item
 
     def print_formatted(self, item: dict[str, Any], flush: bool = True) -> None:
         """Safely print the formatted message."""

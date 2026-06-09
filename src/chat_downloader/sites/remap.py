@@ -79,12 +79,12 @@ class Remapper:
     ) -> dict[str, Any]:
         """Return a remapped dictionary."""
         info: dict[str, Any] = {}
-        for key in input_dictionary:
+        for key, value in input_dictionary.items():
             Remapper.remap(
                 info,
                 remapping_dict,
                 key,
-                input_dictionary[key],
+                value,
                 keep_unknown_keys=keep_unknown_keys,
                 replace_char_with_underscores=replace_char_with_underscores,
             )

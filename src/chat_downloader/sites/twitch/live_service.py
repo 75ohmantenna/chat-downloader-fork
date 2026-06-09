@@ -70,9 +70,10 @@ def iter_stream_chat_messages(
                 irc = irc_factory()
                 irc.set_timeout(request.message_receive_timeout)
                 irc.join_channel(stream_id)
-                return irc
             except OSError as error:
                 downloader.retry(attempt_number, error=error, request=request)
+            else:
+                return irc
         raise RuntimeError(
             "unreachable: retry should have raised RetriesExceeded"
         )

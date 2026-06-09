@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, cast
 from chat_downloader.debugging import log
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.session import (
-    _validate_cookie_domain as _validate_cookie_domain,
+    _validate_cookie_domain,
 )
 
 if TYPE_CHECKING:

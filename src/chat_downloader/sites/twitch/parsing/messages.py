@@ -174,8 +174,8 @@ def _parse_message_info(message: dict[str, Any]) -> dict[str, Any]:
     message_info["message"] = message_text
 
     if emotes:
-        for emote_id in emotes:
-            emotes[emote_id]["locations"] = ",".join(emote_locations[emote_id])
+        for emote_id, emote_data in emotes.items():
+            emote_data["locations"] = ",".join(emote_locations[emote_id])
         message_info["emotes"] = list(emotes.values())
 
     return message_info
@@ -269,8 +269,8 @@ def _parse_item(
 
     info: dict[str, Any] = {}
 
-    for key in item:
-        r.remap(info, comment_remapping, key, item[key])
+    for key, value in item.items():
+        r.remap(info, comment_remapping, key, value)
 
     if "time_in_seconds" in info:
         info["time_in_seconds"] -= offset
