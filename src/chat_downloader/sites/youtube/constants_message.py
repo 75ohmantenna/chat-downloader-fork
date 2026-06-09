@@ -20,6 +20,8 @@ _MESSAGE_GROUPS = {
         # Gifts
         "gift_message_view_model",
         "sponsorships_gift_purchase_announcement",
+        "sponsorships_gift_redemption_announcement",
+        "sponsorships_header",
     ],
     "tickers": [
         # superchat messages which appear ticker (at the top)
@@ -99,83 +101,6 @@ _CURRENCY_SYMBOLS = {
 # https://en.wikipedia.org/wiki/ISO_4217
 # e.g. 'CHF', 'COP', 'HUF', 'PLN', 'RUB', 'SEK', 'PEN', 'ARS', 'CLP',
 # 'NOK', 'BAM', 'SGD'
-
-# Message remapping configuration (static parts)
-_REMAPPING = {
-    "id": "message_id",
-    "authorExternalChannelId": "author_id",
-    "authorName": None,  # mapped in build_remapping
-    "purchaseAmountText": None,  # mapped in build_remapping
-    "message": None,  # mapped in build_remapping
-    "timestampText": None,  # mapped in build_remapping
-    "timestampUsec": ("timestamp", int),
-    "authorPhoto": None,  # mapped in build_remapping
-    "tooltip": "tooltip",
-    "icon": None,  # mapped in build_remapping
-    "authorBadges": None,  # mapped in build_remapping
-    # stickers
-    "sticker": None,  # mapped in build_remapping
-    # ticker_paid_message_item
-    "fullDurationSec": None,  # mapped in build_remapping
-    "amount": None,  # mapped in build_remapping
-    # ticker_sponsor_item
-    "detailText": None,  # mapped in build_remapping
-    "detailIcon": None,  # mapped in build_remapping
-    "customThumbnail": None,  # mapped in build_remapping
-    # membership_item
-    "headerPrimaryText": None,  # mapped in build_remapping
-    "headerSubtext": None,  # mapped in build_remapping
-    "sponsorPhoto": None,  # mapped in build_remapping
-    # ticker_paid_sticker_item
-    "tickerThumbnails": None,  # mapped in build_remapping
-    # deleted messages
-    "deletedStateMessage": None,  # mapped in build_remapping
-    "targetItemId": "target_message_id",
-    "externalChannelId": "author_id",
-    # action buttons
-    "actionButton": None,  # mapped in build_remapping
-    # addBannerToLiveChatCommand
-    "liveChatSummaryId": "summary_id",
-    "chatSummary": None,  # mapped in build_remapping
-    "text": None,  # mapped in build_remapping
-    "viewerIsCreator": "viewer_is_creator",
-    "targetId": "target_message_id",
-    "isStackable": "is_stackable",
-    "backgroundType": "background_type",
-    # removeBannerForLiveChatCommand
-    "targetActionId": "target_message_id",
-    # donation_announcement
-    "subtext": None,  # mapped in build_remapping
-    # tooltip
-    "detailsText": None,  # mapped in build_remapping
-    # gifts
-    "primaryText": None,  # mapped in build_remapping
-    "bannerType": "banner_type",
-    "bannerProperties": "banner_properties",
-    "headerOverlayImage": None,  # mapped in build_remapping
-    # hearted message
-    "creatorHeartButton": "creator_heart_button",
-    # paid message metadata (2026+)
-    "leaderboardBadge": None,  # mapped in build_remapping
-    # product item
-    "title": "product_title",
-    "accessibilityTitle": "product_accessibility_title",
-    "thumbnail": None,  # mapped in build_remapping
-    "price": "price",
-    "vendorName": "vendor_name",
-    "fromVendorText": "from_vendor_text",
-    "onClickCommand": None,  # mapped in build_remapping
-    "creatorMessage": "creator_message",
-    "creatorName": "creator_name",
-    "creatorCustomMessage": None,  # mapped in build_remapping
-    "isVerified": "is_verified",
-    # restricted participation
-    "autoModeratedItem": None,  # mapped in build_remapping
-    "headerText": None,  # mapped in build_remapping
-    "moderationButtons": "moderation_buttons",
-    # other
-    "lowerBumper": "lower_bumper",
-}
 
 # Remapping key metadata
 _COLOUR_KEYS = [
@@ -258,10 +183,6 @@ _KEYS_TO_IGNORE = [
     "informationButton",
     "informationDialog",
 ]
-
-_KNOWN_KEYS = set(
-    list(_REMAPPING.keys()) + _COLOUR_KEYS + _STICKER_KEYS + _KEYS_TO_IGNORE,
-)
 
 
 @cache
@@ -388,4 +309,16 @@ def build_video_remapping() -> Mapping[str, Any]:
             "viewCountText": r("view_count", _parse_text),
             "shortViewCountText": r("short_view_count", _parse_text),
         }
+    )
+
+
+@cache
+def known_keys() -> frozenset[str]:
+    """All payload keys the parser handles or deliberately ignores.
+
+    Derived from ``build_remapping()`` so there is a single source of truth;
+    used to detect newly-introduced (unknown) keys for drift logging.
+    """
+    return frozenset(build_remapping()) | frozenset(
+        _COLOUR_KEYS + _STICKER_KEYS + _KEYS_TO_IGNORE,
     )

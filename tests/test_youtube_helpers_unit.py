@@ -1,11 +1,15 @@
 # SPDX-License-Identifier: MIT
 
+import pytest
+
+from chat_downloader.errors import ParsingError
 from chat_downloader.sites.youtube.helpers import (
     _extract_browse_continuation_token,
     _extract_browse_continuation_token_from_response,
     _extract_menu_continuation_token,
     _safe_get_dict,
     extract_chat_submenu_continuations,
+    require_innertube_api_key,
 )
 
 
@@ -198,3 +202,15 @@ def test_extract_browse_continuation_token_from_response_checks_fallback_locatio
         == "resp-token"
     )
     assert _extract_browse_continuation_token_from_response({}) is None
+
+
+def test_require_innertube_api_key_raises_on_missing_or_empty() -> None:
+    with pytest.raises(ParsingError):
+        require_innertube_api_key({})
+    with pytest.raises(ParsingError):
+        require_innertube_api_key({"INNERTUBE_API_KEY": ""})
+    with pytest.raises(ParsingError):
+        require_innertube_api_key({"INNERTUBE_API_KEY": None})
+    assert (
+        require_innertube_api_key({"INNERTUBE_API_KEY": "AIzaXYZ"}) == "AIzaXYZ"
+    )

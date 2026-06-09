@@ -12,7 +12,7 @@ from chat_downloader.sites.youtube.constants_actions_messages_list import (
     _KNOWN_IGNORE_MESSAGE_TYPES,
 )
 from chat_downloader.sites.youtube.constants_message import (
-    _KNOWN_KEYS,
+    known_keys,
 )
 from chat_downloader.utils.string_utils import (
     camel_case_split,
@@ -40,7 +40,7 @@ def validate_and_finalize_message(
         return None
 
     test_for_missing_keys = original_item.get(original_message_type, {}).keys()
-    missing_keys = test_for_missing_keys - _KNOWN_KEYS
+    missing_keys = test_for_missing_keys - known_keys()
 
     if not data:
         capture_debug_sample(

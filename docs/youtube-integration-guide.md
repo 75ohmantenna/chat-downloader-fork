@@ -254,6 +254,54 @@ The mapping from wire action key to output `action_type` and `message_type`
 lives in `_KNOWN_REMOVE_ACTION_TYPES` in
 `src/chat_downloader/sites/youtube/constants_actions_messages_core.py`.
 
+## Capture-and-Fix Workflow for Drift
+
+When a real stream produces a new renderer or action type that the parser
+doesn't recognise, the runtime emits a `debug_log` and (with
+`CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`) saves a JSON snapshot in
+`tests/fixtures/youtube/debug_samples/`.
+
+To turn a captured drift sample into a permanent regression anchor:
+
+1. **Reproduce** — run the failing stream with
+   `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1` to confirm the snapshot file
+   is written.
+2. **Identify** — read the snapshot.  The `"Unknown action"` variant has
+   `{"action": {...}, ...}`; the `"Missing keys"` variant has
+   `{"original_item": {...}, ...}`.
+3. **Fix** — in order of what the message likely needs:
+   - New action type → add to the right constant set in
+     `src/chat_downloader/sites/youtube/constants_actions_messages_core.py`.
+   - New renderer → also ensure the derived `message_type` (strip `liveChat`
+     prefix and `Renderer` suffix, then `camel_case_split`) appears in a group
+     in `_MESSAGE_GROUPS` inside
+     `src/chat_downloader/sites/youtube/constants_message.py`; the invariant
+     test `test_every_routed_renderer_has_a_message_group` (in
+     `tests/test_youtube_remapping_invariants_unit.py`) will fail if you miss
+     this step.
+   - New field → add to `build_remapping()` in
+     `src/chat_downloader/sites/youtube/constants_message.py`; **do not** add
+     a matching entry to the static list that no longer exists — `known_keys()`
+     is now derived from `build_remapping()` automatically.
+   - New field to suppress → add to `_KEYS_TO_IGNORE` in the same file;
+     `test_remapping_contributor_sets_are_disjoint` will catch any duplicate
+     between `build_remapping()` and `_KEYS_TO_IGNORE`.
+4. **Capture raw continuation** — grab the raw InnerTube continuation JSON
+   that triggered the drift (e.g. save the HTTP response body).  Place it in
+   `tests/fixtures/youtube/live_events/` with a descriptive name.
+5. **Validate** — run the drift harness:
+   ```
+   uv run pytest -q tests/test_youtube_drift_harness_unit.py
+   ```
+   It parametrizes over every `live_events/*.json` dict-shaped file and asserts
+   no drift sentinel fires.  If the harness passes, the fix is complete and the
+   fixture is a permanent regression anchor.
+6. **Full suite** — run `make ci` before committing.
+
+The three sentinel phrases checked by the harness are `"Unknown action"`,
+`"Unknown message type"`, `"Missing keys found"`, and
+`"Parse of action returned empty"`.
+
 ## Common Failure Points
 
 The YouTube stack is most sensitive to changes in:

@@ -271,3 +271,13 @@ def test_get_initial_info_raises_parsing_error_when_html_unparseable() -> None:
                 r"ytInitialPlayerResponse\s*=\s*({.*?});"
             ),
         )
+
+
+def test_initial_contains_challenge_text_non_string() -> None:
+    from chat_downloader.sites.youtube.client_requests_initial import (
+        _contains_challenge_text,
+    )
+
+    assert _contains_challenge_text(None) is False
+    assert _contains_challenge_text(42) is False
+    assert _contains_challenge_text([]) is False

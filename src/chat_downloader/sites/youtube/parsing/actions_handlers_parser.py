@@ -5,6 +5,13 @@
 from typing import Any
 
 from chat_downloader.debugging import debug_log
+from chat_downloader.sites.youtube.constants_actions_messages_core import (
+    _PATH_BANNER_RENDERER,
+    _PATH_ITEM,
+    _PATH_REPLACEMENT_ITEM,
+    _PATH_TOOLTIP,
+    _RENDERER_BANNER_CHAT_SUMMARY,
+)
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
 
 from .message_content_text_parser import _parse_runs
@@ -18,7 +25,7 @@ def _handle_item_action(
     offset: float,
 ) -> tuple[dict[str, Any], dict[str, Any], str, str]:
     """Handle add item and ticker actions."""
-    original_item = multi_get(action, original_action_type, "item")
+    original_item = multi_get(action, original_action_type, _PATH_ITEM)
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)
@@ -47,7 +54,9 @@ def _handle_replace_action(
     offset: float,
 ) -> tuple[dict[str, Any], dict[str, Any], str, str]:
     """Handle message replacement actions."""
-    original_item = multi_get(action, original_action_type, "replacementItem")
+    original_item = multi_get(
+        action, original_action_type, _PATH_REPLACEMENT_ITEM
+    )
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)
@@ -60,7 +69,7 @@ def _handle_tooltip_action(
     offset: float,
 ) -> tuple[dict[str, Any], dict[str, Any], str, str]:
     """Handle tooltip display actions."""
-    original_item = multi_get(action, original_action_type, "tooltip")
+    original_item = multi_get(action, original_action_type, _PATH_TOOLTIP)
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)
@@ -73,14 +82,16 @@ def _handle_add_banner_action(
     offset: float,
 ) -> tuple[dict[str, Any], dict[str, Any], str | None, str]:
     """Handle add banner actions."""
-    original_item = multi_get(action, original_action_type, "bannerRenderer")
+    original_item = multi_get(
+        action, original_action_type, _PATH_BANNER_RENDERER
+    )
     if original_item:
         original_message_type = try_get_first_key(original_item)
         contents = original_item[original_message_type].get("contents")
         content_message_type = try_get_first_key(contents)
         parsed_contents = _parse_item(contents, offset=offset)
         data.update(parsed_contents)
-        if content_message_type == "liveChatBannerChatSummaryRenderer":
+        if content_message_type == _RENDERER_BANNER_CHAT_SUMMARY:
             original_item = contents
             original_message_type = content_message_type
     else:

@@ -2,6 +2,15 @@
 
 """Core action mapping constants."""
 
+# Payload wrapper-path keys used when extracting items from action dicts.
+# Centralised so a YouTube API rename is a one-line change, and a typo becomes
+# a NameError at import rather than a silently-empty parse result.
+_PATH_ITEM = "item"
+_PATH_REPLACEMENT_ITEM = "replacementItem"
+_PATH_TOOLTIP = "tooltip"
+_PATH_BANNER_RENDERER = "bannerRenderer"
+_RENDERER_BANNER_CHAT_SUMMARY = "liveChatBannerChatSummaryRenderer"
+
 # Action type mappings
 _KNOWN_ADD_TICKER_TYPES = {
     "addLiveChatTickerItemAction": [

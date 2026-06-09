@@ -191,7 +191,7 @@ def test_parse_item_parses_paid_message_leaderboard_badge() -> None:
 
 
 def test_known_keys_include_dynamic_state_data() -> None:
-    assert "dynamicStateData" in yt_constants._KNOWN_KEYS
+    assert "dynamicStateData" in yt_constants.known_keys()
 
 
 def test_parse_item_sets_author_role_booleans_from_badges() -> None:

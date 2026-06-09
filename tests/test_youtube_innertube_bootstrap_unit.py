@@ -132,3 +132,16 @@ def test_parse_video_data_does_not_fallback_for_clips(monkeypatch) -> None:
         dummy._parse_video_data("abc", video_type="clip")
 
     assert dummy.post_urls == []
+
+
+def test_build_fallback_ytcfg_handles_non_dict_client() -> None:
+    from chat_downloader.sites.youtube.client_requests_bootstrap import (
+        _build_fallback_ytcfg,
+    )
+
+    result = _build_fallback_ytcfg(
+        context={"client": "not-a-dict"},
+        player_response={},
+        next_response={},
+    )
+    assert isinstance(result, dict)

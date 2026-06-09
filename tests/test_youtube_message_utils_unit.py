@@ -5,6 +5,7 @@ from typing import Any, cast
 from chat_downloader.sites.youtube.parsing.message_content_badges import (
     _parse_badges,
     _parse_currency,
+    _safe_float,
 )
 from chat_downloader.sites.youtube.parsing.message_content_text_parser import (
     _get_simple_text,
@@ -485,3 +486,13 @@ def test_parse_lockup_badge_style_returns_none_for_unknown_badge() -> None:
 
 def test_parse_lockup_badge_style_returns_none_when_no_overlays() -> None:
     assert _parse_lockup_badge_style({}) is None
+
+
+def test_safe_float_returns_none_for_non_numeric_text() -> None:
+    assert _safe_float("Free") is None
+    assert _safe_float("N/A") is None
+
+
+def test_safe_float_returns_float_for_numeric_text() -> None:
+    assert _safe_float("1.99") == 1.99
+    assert _safe_float("1234") == 1234.0
