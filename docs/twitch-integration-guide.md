@@ -71,6 +71,11 @@ The Twitch flow depends on the target type.
 ### Parsing and shared Twitch data
 
 - `parsing/messages.py`: high-level IRC and replay parsing orchestration
+  (entry points `_parse_item` / `_parse_irc_item`)
+- `parsing/message_emotes.py`: emote regex, image-list generation, author
+  images, and text-with-emotes assembly
+- `parsing/message_irc_resolve.py`: IRC action type, message type, room-state,
+  shared-chat, ban/clearchat, and follower/slow-mode resolution
 - `parsing/tag_decoding.py`: IRC tag decoding and boolean parsing
 - `parsing/badges.py`: badge parsing and icon shaping helpers
 - `remappings.py`: remapping dictionary builders
@@ -182,6 +187,53 @@ downloader exceptions such as:
 The default public Client-ID is defined in `constants.py`; callers can override
 it with `DownloaderConfig(twitch_client_id=...)` or `--twitch_client_id`.
 
+## Capture-and-Fix Workflow for Drift
+
+When a live IRC message or GraphQL response triggers `debug_log` with an
+unknown type, the runtime emits a sentinel and (with
+`CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`) saves a JSON snapshot in
+`tests/fixtures/twitch/debug_samples/`.
+
+To turn a captured drift sample into a permanent regression anchor:
+
+1. **Reproduce** — run the failing stream with
+   `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1` and `--logging debug`.
+2. **Identify** — read the snapshot. The two sentinel phrases checked by the
+   harness are `"Unknown action type"` and `"Unknown message type"`.
+3. **Fix** — in order of what the message likely needs:
+   - New IRC action type → extend
+     `parsing/message_irc_resolve.py::_resolve_irc_action_and_message_type`.
+   - New IRC message type → extend
+     `parsing/message_irc_resolve.py::_resolve_message_type`.
+   - New IRC tag → add to `parsing/tag_decoding.py` and extend the
+     known-key set in `validation_keys.py`.
+   - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`;
+     see GraphQL Hash Rotation below.
+4. **Capture raw IRC line** — add a `{"raw": "<irc line>\\r\\n"}` fixture to
+   `tests/fixtures/twitch/live_events/` with a descriptive name.
+5. **Validate** — run the drift harness:
+   ```bash
+   uv run pytest -q tests/test_twitch_drift_harness_unit.py
+   ```
+   It replays every fixture and asserts no sentinel fires. A passing harness
+   makes the fix a permanent regression anchor.
+6. **Full suite** — run `make ci` before committing.
+
+## GraphQL Hash Rotation
+
+Persisted GraphQL query hashes are the primary fragility point. When Twitch
+rotates a hash:
+
+1. Update `OPERATION_HASHES` in `src/chat_downloader/sites/twitch/constants.py`.
+2. The guard test `test_operation_hashes_covers_all_used_operations` (in
+   `tests/test_twitch_drift_harness_unit.py`) fails immediately offline if
+   any operationName used in the client code is missing from `OPERATION_HASHES`.
+3. The companion test `test_operation_hashes_has_no_orphaned_entries` flags any
+   entry in `OPERATION_HASHES` no longer referenced by the client, keeping the
+   table clean.
+
+No network access is required — these are structural offline checks.
+
 ## Common Failure Points
 
 The Twitch stack is most sensitive to changes in:
@@ -193,8 +245,10 @@ The Twitch stack is most sensitive to changes in:
 
 When debugging Twitch breakage, inspect modules in this order:
 
-1. `graphql_client.py`
-2. `constants.py`
-3. `replay_service.py` or `live_service.py`
-4. `irc_transport.py`
-5. `parsing/messages.py`
+1. `graphql_client.py` — GraphQL request structure and error mapping
+2. `constants.py` — persisted-query hashes (`OPERATION_HASHES`) and known-key sets
+3. `replay_service.py` or `live_service.py` — service-layer orchestration
+4. `irc_transport.py` — low-level IRC socket and capability negotiation
+5. `parsing/message_irc_resolve.py` — IRC action/message-type resolution
+6. `parsing/message_emotes.py` — emote parsing and image-list assembly
+7. `parsing/messages.py` — high-level orchestration and field assembly

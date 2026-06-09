@@ -14,7 +14,7 @@ disclosures that apply to all changes in this repository.
 - Test framework: `pytest`
 - Formatter and primary linter: `ruff`
 - Type checker: `mypy` with configuration in `mypy.ini`
-- CLI/API parameter source of truth: `src/chat_downloader/models.py`
+- CLI/API parameter source of truth: `src/chat_downloader/models/` package
 
 ## Repository Map
 
@@ -22,7 +22,7 @@ disclosures that apply to all changes in this repository.
 | --- | --- |
 | `src/chat_downloader/chat_downloader.py` | Thin public facade, `ChatDownloader`, `run()` |
 | `src/chat_downloader/cli.py` | Argparse CLI generated from dataclass metadata plus CLI-only flags |
-| `src/chat_downloader/models.py` | `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata |
+| `src/chat_downloader/models/` | `DownloaderConfig`, `ChatRequest`, `RunConfig`, CLI metadata |
 | `src/chat_downloader/runtime/cli_bridge.py` | Split `run()` kwargs into init, chat-request, and runtime controls |
 | `src/chat_downloader/runtime/site_dispatch.py` | URL validation, site matching, site-default resolution |
 | `src/chat_downloader/runtime/chat_pipeline.py` | Message limits, timeouts, formatters, output writers |
@@ -105,6 +105,7 @@ The project `Makefile` wraps the commands above into convenient targets:
 | `make smoke` | build, then install the wheel in an isolated env and run `chat_downloader --version` |
 | `make check` | lint + fmt-check + typecheck + test (fast local loop) |
 | `make ci` | **canonical validation** — used locally and in GitHub Actions |
+| `make complexity` | advisory scan for functions above mccabe threshold 8 (non-blocking) |
 
 `make ci` is the single source of truth for validation. It runs the full
 deterministic offline path: `lock-check` → `lint` → `fmt-check` → `typecheck`
@@ -142,7 +143,7 @@ Coverage reproducibility notes:
 
 - Treat `src/chat_downloader/chat_downloader.py` as the public facade
 - Add CLI/API parameters to `DownloaderConfig`, `ChatRequest`, or `RunConfig`
-  before wiring them elsewhere
+  in `models/` before wiring them elsewhere
 - Prefer `DownloaderConfig`, `ChatRequest`, and `RunConfig` over ad hoc
   parameter paths
 - Keep `run()` keyword categorization in `runtime/cli_bridge.py`; unknown
@@ -209,6 +210,40 @@ Captured files land in a temp directory and use stable labels from
 `src/chat_downloader/debug_sample_utils.py`. Override the output directory with
 `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. Review generated files before promoting
 them into `tests/fixtures/`.
+
+### Twitch drift fix workflow
+
+When a live IRC message or GraphQL shape triggers `debug_log` with an unknown
+type or unrecognized action:
+
+1. **Reproduce** — run the failing stream with
+   `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1` and `--logging debug` to confirm
+   the snapshot is written to `tests/fixtures/twitch/debug_samples/`.
+2. **Identify** — read the snapshot. The log prefix `Unknown action type` or
+   `Unknown message type` points to `parsing/message_irc_resolve.py`; an
+   unexpected GraphQL shape points to `graphql_client.py`.
+3. **Fix** — in order of what the message likely needs:
+   - New IRC action type → extend the dispatch map in
+     `parsing/message_irc_resolve.py::_resolve_irc_action_and_message_type`.
+   - New IRC message type → extend
+     `parsing/message_irc_resolve.py::_resolve_message_type`.
+   - New IRC tag → add to the tag-decoding logic in `parsing/tag_decoding.py`
+     and extend the known-key set in `validation_keys.py`.
+   - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`;
+     the guard test `test_operation_hashes_covers_all_used_operations`
+     (in `tests/test_twitch_drift_harness_unit.py`) fails immediately if
+     a hash entry is missing.
+4. **Capture raw IRC line** — grab the verbatim IRC message that triggered
+   the drift. Add a `{"raw": "<irc line>\\r\\n"}` fixture to
+   `tests/fixtures/twitch/live_events/` with a descriptive name.
+5. **Validate** — run the Twitch drift harness:
+   ```bash
+   uv run pytest -q tests/test_twitch_drift_harness_unit.py
+   ```
+   It replays every fixture and asserts neither `"Unknown action type"` nor
+   `"Unknown message type"` sentinel fires. A passing harness means the fix is
+   a permanent regression anchor.
+6. **Full suite** — run `make ci` before committing.
 
 ## Version Bumps
 

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Architecture
+
+- Convert `models.py` (592 lines) into a `models/` package; three dataclasses
+  split into `_config.py`, `_request.py`, and `_runconfig.py` with a thin
+  `__init__.py` facade; all `from chat_downloader.models import ...` call
+  sites unchanged
+- Split `sites/twitch/parsing/messages.py` (687 lines) into three focused
+  modules: `message_emotes.py` (emote and image helpers), `message_irc_resolve.py`
+  (IRC type/action/room-state resolution), and `messages.py` (orchestration
+  entry points); public re-exports from `parsing/__init__.py` unchanged
+- Pin mccabe `max-complexity = 10` explicitly in `pyproject.toml`; add
+  `make complexity` advisory target (threshold 8, non-blocking) for tracking
+  refactor candidates before they hit the CI gate
+
+### Testing
+
+- Add `tests/test_twitch_drift_harness_unit.py`: fixture-parametrized replay
+  harness for Twitch IRC parsing, mirroring the YouTube harness; seeds six
+  curated IRC fixtures in `tests/fixtures/twitch/live_events/`
+- Add offline GraphQL hash-rotation guard: asserts every `operationName` used
+  in the Twitch client has an entry in `OPERATION_HASHES` (and vice versa)
+
 ### Fixed
 
 - Recognize additional YouTube live-chat product, automod, and restricted

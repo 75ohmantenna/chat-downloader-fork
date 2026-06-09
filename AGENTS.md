@@ -5,7 +5,7 @@ Personal fork of `xenova/chat-downloader`; no upstream support. See README.
 For deeper context see [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md).
 
 ## Structure
-- `src/chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI in `cli.py`; typed shapes in `models.py`.
+- `src/chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI in `cli.py`; typed shapes in `models/` package.
 - `src/chat_downloader/runtime/`: `cli_bridge`, `site_dispatch`, `chat_pipeline`, `runner`, `session_lifecycle`, `testing`.
 - `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).  Twitch `parsing/` contains `messages` (entry points), `message_emotes` (emote/image helpers), `message_irc_resolve` (IRC type/action/room-state resolution), `badges`, and `tag_decoding`.
 - `src/chat_downloader/output/`: `ContinuousWriter` plus JSON-lines, CSV, and text writer subclasses.
@@ -52,10 +52,10 @@ uv sync
 
 ## Style
 - Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 80-char lines, double quotes.
-- Types: `DownloaderConfig`/`ChatRequest`/`RunConfig`; `models.py` is canonical
-  and the source of truth for CLI and Python API shape. Add user-facing
-  request, init, or runtime fields there first so CLI help and the typed API
-  stay aligned.
+- Types: `DownloaderConfig`/`ChatRequest`/`RunConfig`; the `models/` package
+  is canonical and the source of truth for CLI and Python API shape. Add
+  user-facing request, init, or runtime fields there first so CLI help and
+  the typed API stay aligned.
 - `src/chat_downloader/chat_downloader.py` is a thin facade — keep it that way;
   runtime orchestration lives in `runtime/`.
 - Site logic lives in `sites/youtube/` and `sites/twitch/`.
