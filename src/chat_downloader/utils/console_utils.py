@@ -55,10 +55,10 @@ def _get_windows_console_handle(out: Any) -> Any:
     if fileno not in WIN_OUTPUT_IDS:
         return None
 
-    GetStdHandle = ctypes.WINFUNCTYPE(
+    GetStdHandle = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
         ctypes.wintypes.HANDLE, ctypes.wintypes.DWORD
     )(
-        ("GetStdHandle", ctypes.windll.kernel32),
+        ("GetStdHandle", ctypes.windll.kernel32),  # type: ignore[attr-defined]
     )
 
     return GetStdHandle(WIN_OUTPUT_IDS[fileno])
@@ -78,17 +78,17 @@ def _is_valid_console(handle: Any) -> bool:
     if handle == INVALID_HANDLE_VALUE or handle is None:
         return False
 
-    GetFileType = ctypes.WINFUNCTYPE(
+    GetFileType = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
         ctypes.wintypes.DWORD, ctypes.wintypes.DWORD
     )(
-        ("GetFileType", ctypes.windll.kernel32),
+        ("GetFileType", ctypes.windll.kernel32),  # type: ignore[attr-defined]
     )
 
-    GetConsoleMode = ctypes.WINFUNCTYPE(
+    GetConsoleMode = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
         ctypes.wintypes.BOOL,
         ctypes.wintypes.HANDLE,
         ctypes.POINTER(ctypes.wintypes.DWORD),
-    )(("GetConsoleMode", ctypes.windll.kernel32))
+    )(("GetConsoleMode", ctypes.windll.kernel32))  # type: ignore[attr-defined]
 
     file_type = GetFileType(handle) & ~FILE_TYPE_REMOTE
     if file_type != FILE_TYPE_CHAR:
@@ -123,14 +123,14 @@ def _write_to_windows_console(
     import ctypes
     import ctypes.wintypes
 
-    WriteConsoleW = ctypes.WINFUNCTYPE(
+    WriteConsoleW = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
         ctypes.wintypes.BOOL,
         ctypes.wintypes.HANDLE,
         ctypes.wintypes.LPWSTR,
         ctypes.wintypes.DWORD,
         ctypes.POINTER(ctypes.wintypes.DWORD),
         ctypes.wintypes.LPVOID,
-    )(("WriteConsoleW", ctypes.windll.kernel32))
+    )(("WriteConsoleW", ctypes.windll.kernel32))  # type: ignore[attr-defined]
 
     written = ctypes.wintypes.DWORD(0)
 
