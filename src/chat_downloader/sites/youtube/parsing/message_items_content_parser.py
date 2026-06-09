@@ -36,7 +36,7 @@ def _apply_author_roles(author: dict[str, Any]) -> None:
             author["is_sponsor"] = True
 
 
-def _get_remapping() -> tuple[dict[str, Any], list[str]]:
+def _get_remapping() -> tuple[Mapping[str, Any], list[str]]:
     """Return the module-level remapping table and colour-key list.
 
     Initialised once on first call so that the deferred import of
@@ -54,7 +54,9 @@ def _get_remapping() -> tuple[dict[str, Any], list[str]]:
 
         _REMAPPING = build_remapping()
         _COLOUR_KEYS = ck
-    return _REMAPPING, _COLOUR_KEYS  # type: ignore[return-value]
+    assert _REMAPPING is not None
+    assert _COLOUR_KEYS is not None
+    return _REMAPPING, _COLOUR_KEYS
 
 
 def _parse_item(

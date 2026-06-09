@@ -263,7 +263,8 @@ def iter_vod_chat_messages(
                 continue
 
             message_count += 1
-            yield data  # type: ignore[misc]
+            assert data is not None
+            yield data
 
         log("debug", f"Total number of messages: {message_count}")
 

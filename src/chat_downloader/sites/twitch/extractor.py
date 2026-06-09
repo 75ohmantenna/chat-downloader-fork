@@ -191,7 +191,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             return _download_gql(self._session_post, ops, auth_token)
         return _download_gql(self._session_post, ops, auth_token, client_id)
 
-    def generate_urls(  # type: ignore[override]
+    def generate_urls(  # type: ignore[override]  # test helper: signature intentionally diverges from base
         self,
         livestream_limit: int,
         vod_limit: int,
