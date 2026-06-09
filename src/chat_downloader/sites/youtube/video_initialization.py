@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
+from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.string_utils import regex_search
 
@@ -43,11 +44,19 @@ class YouTubeVideoInitializationMixin:
             # Indigo128 03.11.2025 >>
             # Continuation changes mid October 2025
             try:
-                client_continuation = yt_initial_data["contents"][
-                    "twoColumnWatchNextResults"
-                ]["conversationBar"]["liveChatRenderer"]["continuations"][0][
-                    "reloadContinuationData"
-                ]["continuation"]
+                client_continuation = multi_get(
+                    yt_initial_data,
+                    "contents",
+                    "twoColumnWatchNextResults",
+                    "conversationBar",
+                    "liveChatRenderer",
+                    "continuations",
+                    0,
+                    "reloadContinuationData",
+                    "continuation",
+                )
+                if not client_continuation:
+                    raise KeyError("liveChat reload continuation token missing")
                 proto = cast("YouTubeDownloaderProto", self)
                 if details["status"] in REPLAY_STATUSES:
                     response = proto._session_get(

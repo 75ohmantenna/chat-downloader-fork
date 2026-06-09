@@ -53,6 +53,13 @@ def _parse_badges(badge_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return badges
 
 
+def _safe_float(text: str) -> float | None:
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
 def _parse_currency(item: dict[str, Any]) -> dict[str, Any]:
     """Parse currency/monetary information from YouTube data."""
     from chat_downloader.sites.youtube.constants_message import (
@@ -65,10 +72,10 @@ def _parse_currency(item: dict[str, Any]) -> dict[str, Any]:
     if len(info) >= 2:  # Correct parse
         currency_symbol = info[0].strip()
         currency_code = _CURRENCY_SYMBOLS.get(currency_symbol, currency_symbol)
-        amount = float(info[1].replace(",", ""))
+        amount = _safe_float(info[1].replace(",", ""))
 
     else:  # Unable to get info
-        amount = float(re.sub(r"[^\d\.]+", "", mixed_text))
+        amount = _safe_float(re.sub(r"[^\d\.]+", "", mixed_text))
         currency_symbol = currency_code = None
 
     return {

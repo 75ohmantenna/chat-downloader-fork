@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from chat_downloader.utils.dict_utils import multi_get
+
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _LIVE_PLAYLIST_URL,
@@ -67,11 +69,22 @@ def _iter_video_ids(content: Any) -> Iterator[str]:
 
 def _get_rendered_content(yt_info: dict[str, Any], tab_index: int = 0) -> Any:
     """Extract rendered content from YouTube info."""
-    return yt_info["contents"]["twoColumnBrowseResultsRenderer"]["tabs"][
-        tab_index
-    ]["tabRenderer"]["content"]["sectionListRenderer"]["contents"][0][
-        "itemSectionRenderer"
-    ]["contents"][0]
+    return multi_get(
+        yt_info,
+        "contents",
+        "twoColumnBrowseResultsRenderer",
+        "tabs",
+        tab_index,
+        "tabRenderer",
+        "content",
+        "sectionListRenderer",
+        "contents",
+        0,
+        "itemSectionRenderer",
+        "contents",
+        0,
+        default={},
+    )
 
 
 class YouTubeDiscoveryHelpersMixin:

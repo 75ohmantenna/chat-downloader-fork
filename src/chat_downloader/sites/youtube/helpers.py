@@ -8,7 +8,19 @@ multiple YouTube modules after the large extractor refactor.
 
 from typing import Any
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.utils.dict_utils import multi_get
+
+
+def require_innertube_api_key(ytcfg: dict[str, Any]) -> str:
+    """Return the INNERTUBE_API_KEY from ytcfg or raise ParsingError."""
+    api_key = ytcfg.get("INNERTUBE_API_KEY")
+    if not isinstance(api_key, str) or not api_key:
+        raise ParsingError(
+            "YouTube INNERTUBE_API_KEY missing from ytcfg; "
+            "cannot build an InnerTube request URL."
+        )
+    return api_key
 
 
 def _safe_get_dict(obj: dict[str, Any], key: str) -> dict[str, Any]:

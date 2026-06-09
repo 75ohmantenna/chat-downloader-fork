@@ -19,7 +19,10 @@ from .constants_patterns import (
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
 from .discovery_helpers import _get_rendered_content
-from .helpers import _extract_browse_continuation_token_from_response
+from .helpers import (
+    _extract_browse_continuation_token_from_response,
+    require_innertube_api_key,
+)
 from .parsing.messages import _parse_video
 
 if TYPE_CHECKING:
@@ -60,7 +63,7 @@ class YouTubePlaylistDiscoveryMixin:
 
         page_contents = _get_rendered_content(yt_initial_data)
 
-        api_key = ytcfg.get("INNERTUBE_API_KEY")
+        api_key = require_innertube_api_key(ytcfg)
         continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
 
         continuation_params: dict[str, Any] = {

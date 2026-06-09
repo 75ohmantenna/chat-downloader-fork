@@ -15,6 +15,7 @@ from .client_context import apply_request_profile_to_innertube_context
 from .constants_patterns import _YT_HOME
 from .helpers import extract_chat_submenu_continuations
 
+# YouTube's public web InnerTube key — used only when no ytcfg is available yet.
 _DEFAULT_INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
 _DEFAULT_FALLBACK_PROFILE = "youtube_web"
 

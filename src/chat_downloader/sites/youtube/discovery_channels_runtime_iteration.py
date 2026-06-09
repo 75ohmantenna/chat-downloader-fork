@@ -20,7 +20,10 @@ from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
-from .helpers import _extract_browse_continuation_token_from_response
+from .helpers import (
+    _extract_browse_continuation_token_from_response,
+    require_innertube_api_key,
+)
 from .parsing.messages import _parse_video
 
 if TYPE_CHECKING:
@@ -144,7 +147,7 @@ def get_user_videos(
 
     page_contents = _select_videos_tab(yt_info, user_url, video_type)
 
-    api_key = ytcfg.get("INNERTUBE_API_KEY")
+    api_key = require_innertube_api_key(ytcfg)
     continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
     continuation_params: dict[str, Any] = {
         "context": _get_innertube_context(ytcfg)

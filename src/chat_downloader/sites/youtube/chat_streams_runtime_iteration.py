@@ -46,7 +46,7 @@ from .continuations import (
     parse_continuation_response,
     summarize_continuation_payload,
 )
-from .helpers import _safe_get_dict
+from .helpers import _safe_get_dict, require_innertube_api_key
 from .message_pipeline import process_pipeline_action
 from .video_status_models import REPLAY_STATUSES
 
@@ -309,7 +309,7 @@ def _build_chat_context(
         api_type += "_replay"
 
     init_page = f"{_YT_HOME}/{api_type}?continuation={continuation}"
-    api_key = ytcfg.get("INNERTUBE_API_KEY")
+    api_key = require_innertube_api_key(ytcfg)
     continuation_url = (
         f"{_YT_HOME}/youtubei/v1/live_chat/get_{api_type}?key={api_key}"
     )
