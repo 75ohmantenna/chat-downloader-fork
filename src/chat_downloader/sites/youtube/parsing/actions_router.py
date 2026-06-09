@@ -56,7 +56,7 @@ def _make_processed_action(
     )
 
 
-def process_action(
+def process_action(  # noqa: C901 — match dispatch over 10 action-type families is intrinsic
     action: dict[str, Any],
     offset: float = 0,
 ) -> ProcessedAction | None:

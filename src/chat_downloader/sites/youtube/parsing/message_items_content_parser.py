@@ -59,6 +59,33 @@ def _get_remapping() -> tuple[Mapping[str, Any], list[str]]:
     return _REMAPPING, _COLOUR_KEYS
 
 
+def _normalize_author(info: dict[str, Any]) -> None:
+    """Move author fields into a sub-dict and ensure name/roles are set."""
+    _move_to_dict(info, "author")
+    if "author" not in info:
+        return
+    if "name" not in info["author"]:
+        info["author"]["name"] = ""
+    _apply_author_roles(info["author"])
+
+
+def _reconcile_time_fields(info: dict[str, Any], offset: float) -> None:
+    """Sync time_in_seconds/time_text and apply offset."""
+    time_in_seconds = info.get("time_in_seconds")
+    time_text = info.get("time_text")
+    if time_in_seconds is not None:
+        if time_text is not None:
+            if time_in_seconds <= 0:
+                info["time_in_seconds"] = time_to_seconds(time_text)
+        else:
+            info["time_text"] = seconds_to_time(time_in_seconds)
+    elif time_text is not None:
+        info["time_in_seconds"] = time_to_seconds(time_text)
+    if offset and "time_in_seconds" in info:
+        info["time_in_seconds"] -= offset
+        info["time_text"] = seconds_to_time(info["time_in_seconds"])
+
+
 def _parse_item(
     item: dict[str, Any],
     info: dict[str, Any] | None = None,
@@ -75,8 +102,8 @@ def _parse_item(
 
     remapping, colour_keys = _get_remapping()
 
-    for key in item_info:
-        r.remap(info, remapping, key, item_info[key])
+    for key, value in item_info.items():
+        r.remap(info, remapping, key, value)
 
     for colour_key in colour_keys:
         if colour_key in item_info:
@@ -97,27 +124,9 @@ def _parse_item(
     if header:
         info.update(_parse_item(header, offset=offset))
 
-    _move_to_dict(info, "author")
-    if "author" in info:
-        if "name" not in info["author"]:
-            info["author"]["name"] = ""
-        _apply_author_roles(info["author"])
+    _normalize_author(info)
 
-    time_in_seconds = info.get("time_in_seconds")
-    time_text = info.get("time_text")
-
-    if time_in_seconds is not None:
-        if time_text is not None:
-            if time_in_seconds <= 0:
-                info["time_in_seconds"] = time_to_seconds(time_text)
-        else:
-            info["time_text"] = seconds_to_time(time_in_seconds)
-    elif time_text is not None:
-        info["time_in_seconds"] = time_to_seconds(time_text)
-
-    if offset and "time_in_seconds" in info:
-        info["time_in_seconds"] -= offset
-        info["time_text"] = seconds_to_time(info["time_in_seconds"])
+    _reconcile_time_fields(info, offset)
 
     if "message" not in info:
         info["message"] = None

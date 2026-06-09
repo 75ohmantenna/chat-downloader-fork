@@ -156,7 +156,7 @@ def _fetch_vod_page(
     raise RetriesExceeded(request.max_attempts)  # pragma: no cover
 
 
-def iter_vod_chat_messages(
+def iter_vod_chat_messages(  # noqa: C901 — VOD replay loop handles many segment/offset edge cases
     downloader: TwitchChatDownloader,
     vod_id: str,
     request: ChatRequest,

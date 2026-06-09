@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
 
 
-def _get_initial_info(
+def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop are intrinsic
     url: str,
     session_get: Callable[..., Any],
     params: ChatRequest | dict[str, Any] | None,

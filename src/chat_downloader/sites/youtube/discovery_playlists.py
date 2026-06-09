@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 class YouTubePlaylistDiscoveryMixin:
     """Methods for playlist video enumeration."""
 
-    def get_playlist_items(
+    def get_playlist_items(  # noqa: C901 — playlist pagination loop mirrors channel discovery structure
         self,
         playlist_url: str,
         params: ChatRequest | dict[str, Any] | None = None,

@@ -72,7 +72,7 @@ def create_message_callback(
     return deduplicating_callback
 
 
-def execute_run(
+def execute_run(  # noqa: C901 — exception-handler spread is intrinsic to the run loop
     downloader_cls: type,
     propagate_interrupt: bool = False,
     **kwargs: Any,

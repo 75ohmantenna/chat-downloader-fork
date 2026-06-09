@@ -466,7 +466,7 @@ def _advance_continuation_loop(
     return bool(cont_result.is_end)
 
 
-def _get_chat_messages(
+def _get_chat_messages(  # noqa: C901 — YouTube chat continuation loop handles many recovery paths
     self: YouTubeDownloaderProto,
     initial_info: dict[str, Any],
     ytcfg: dict[str, Any],

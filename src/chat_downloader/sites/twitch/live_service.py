@@ -46,7 +46,7 @@ def _is_duplicate_live_message(
     return not is_new
 
 
-def iter_stream_chat_messages(
+def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intrinsically branchy
     downloader: TwitchChatDownloader,
     stream_id: str,
     request: ChatRequest,
