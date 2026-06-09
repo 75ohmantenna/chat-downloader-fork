@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import re
 import socket
 import ssl
 import time
@@ -25,6 +24,7 @@ from .constants import (
 from .parsing.messages import _parse_irc_item
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Generator
 
     from chat_downloader.models import ChatRequest

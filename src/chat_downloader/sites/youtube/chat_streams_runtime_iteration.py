@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, SupportsIndex, SupportsInt
 
@@ -17,7 +16,6 @@ from chat_downloader.errors import (
 )
 from chat_downloader.request_profiles import get_next_request_profile
 from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
-from chat_downloader.sites.youtube._protocols import YouTubeDownloaderProto
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_utils import polling_sleep
@@ -53,7 +51,10 @@ from .message_pipeline import process_pipeline_action
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+
     from chat_downloader.models import ChatRequest
+    from chat_downloader.sites.youtube._protocols import YouTubeDownloaderProto
 
 _MS_PER_SECOND = 1000
 _YOUTUBE_POLL_DELAY_FALLBACK_MS = 5000

@@ -7,8 +7,6 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
-import requests
-
 from chat_downloader.errors import (
     InvalidParameter,
     InvalidURL,
@@ -49,6 +47,8 @@ from .session import (
 )
 
 if TYPE_CHECKING:
+    import requests
+
     from chat_downloader.models import ChatRequest
 
 

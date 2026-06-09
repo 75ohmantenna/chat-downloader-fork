@@ -4,14 +4,15 @@
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any, cast
 
-from ._protocols import YouTubeDownloaderProto
-
 if TYPE_CHECKING:
+    import re
+
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
+
+    from ._protocols import YouTubeDownloaderProto
 
 
 class YouTubeChatUsersRouterMixin:
@@ -42,7 +43,7 @@ class YouTubeChatUsersRouterMixin:
         self, channel_id: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat by channel ID."""
-        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+        return cast("YouTubeDownloaderProto", self)._get_chat_by_user_args(
             {"channel_id": channel_id}, params
         )
 
@@ -54,7 +55,7 @@ class YouTubeChatUsersRouterMixin:
         Such as NASAtelevision in
         https://www.youtube.com/user/NASAtelevision
         """
-        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+        return cast("YouTubeDownloaderProto", self)._get_chat_by_user_args(
             {"user_id": user_id}, params
         )
 
@@ -64,7 +65,7 @@ class YouTubeChatUsersRouterMixin:
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
         """Get chat by custom username."""
-        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+        return cast("YouTubeDownloaderProto", self)._get_chat_by_user_args(
             {"custom_username": custom_username}, params
         )
 
@@ -72,6 +73,6 @@ class YouTubeChatUsersRouterMixin:
         self, handle: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat by handle."""
-        return cast(YouTubeDownloaderProto, self)._get_chat_by_user_args(
+        return cast("YouTubeDownloaderProto", self)._get_chat_by_user_args(
             {"handle": handle}, params
         )

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from json.decoder import JSONDecodeError
 from typing import TYPE_CHECKING, Any
 
@@ -29,7 +28,7 @@ from .irc_transport import (
 _LIVE_SEEN_MESSAGE_LIMIT = 50_000
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from chat_downloader.models import ChatRequest
 

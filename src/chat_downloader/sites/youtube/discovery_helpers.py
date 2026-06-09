@@ -4,10 +4,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, cast
 
-from ._protocols import YouTubeDownloaderProto
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _LIVE_PLAYLIST_URL,
@@ -19,7 +17,11 @@ from .constants_patterns import (
 from .discovery_channels_runtime_iteration import get_user_videos
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from chat_downloader.models import ChatRequest
+
+    from ._protocols import YouTubeDownloaderProto
 
 
 def _iter_playlist_urls(content: Any) -> Iterator[str]:
@@ -88,7 +90,7 @@ class YouTubeDiscoveryHelpersMixin:
 
         yt_initial_data, _, _ = _get_initial_info(
             _LIVE_PLAYLIST_URL,
-            cast(YouTubeDownloaderProto, self)._session_get,
+            cast("YouTubeDownloaderProto", self)._session_get,
             params,
             _YT_INITIAL_DATA_RE,
             _YT_CFG_RE,
@@ -108,7 +110,7 @@ class YouTubeDiscoveryHelpersMixin:
             yield {"video_id": video_id}
 
         for playlist_url in _iter_playlist_urls(tab_content):
-            yield from cast(YouTubeDownloaderProto, self).get_playlist_items(
+            yield from cast("YouTubeDownloaderProto", self).get_playlist_items(
                 playlist_url
             )
 
@@ -125,7 +127,7 @@ class YouTubeDiscoveryHelpersMixin:
         if params is None:
             request = None
         else:
-            request = cast(YouTubeDownloaderProto, self)._coerce_chat_request(
+            request = cast("YouTubeDownloaderProto", self)._coerce_chat_request(
                 params
             )
         yield from get_user_videos(

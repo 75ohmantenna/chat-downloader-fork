@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, cast
 from chat_downloader.debugging import log
 from chat_downloader.utils.dict_utils import multi_get
 
-from ._protocols import YouTubeDownloaderProto
 from .client_context import _get_innertube_context
 from .client_requests_continuation import _get_continuation_info
 from .client_requests_initial import _get_initial_info
@@ -27,6 +26,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from chat_downloader.models import ChatRequest
+
+    from ._protocols import YouTubeDownloaderProto
 
 
 class YouTubePlaylistDiscoveryMixin:
@@ -47,7 +48,7 @@ class YouTubePlaylistDiscoveryMixin:
         else:
             request = ChatRequestModel.from_kwargs(**params)
 
-        proto = cast(YouTubeDownloaderProto, self)
+        proto = cast("YouTubeDownloaderProto", self)
         yt_initial_data, ytcfg, _ = _get_initial_info(
             playlist_url,
             proto._session_get,

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Generator
 from json.decoder import JSONDecodeError
 from typing import TYPE_CHECKING, Any, cast
 
@@ -30,7 +29,7 @@ from .parsing.messages import _parse_item
 from .replay_transport import get_chat_messages_by_vod_id
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Generator
 
     from chat_downloader.models import ChatRequest
 

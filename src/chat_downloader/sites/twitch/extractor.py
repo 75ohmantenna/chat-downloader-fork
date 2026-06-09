@@ -14,7 +14,6 @@ Logging Strategy:
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.debugging import logger
@@ -39,6 +38,7 @@ from .types import BadgeCache
 from .url_generation import generate_urls as generate_twitch_urls
 
 if TYPE_CHECKING:
+    import re
     from collections.abc import Generator, Iterable
 
     from chat_downloader.models import ChatRequest

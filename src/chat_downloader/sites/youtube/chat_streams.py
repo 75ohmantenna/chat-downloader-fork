@@ -4,17 +4,19 @@
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.time_utils import ensure_seconds
 
-from ._protocols import YouTubeDownloaderProto
 from .chat_streams_runtime_iteration import _get_chat_messages
 
 if TYPE_CHECKING:
+    import re
+
     from chat_downloader.models import ChatRequest
+
+    from ._protocols import YouTubeDownloaderProto
 
 
 class YouTubeChatStreamsMixin:
@@ -28,7 +30,7 @@ class YouTubeChatStreamsMixin:
     ) -> Any:
         """Yield chat messages from a YouTube continuation endpoint."""
         return _get_chat_messages(
-            cast(YouTubeDownloaderProto, self), initial_info, ytcfg, params
+            cast("YouTubeDownloaderProto", self), initial_info, ytcfg, params
         )
 
     def _get_chat_by_clip_id(
@@ -41,7 +43,7 @@ class YouTubeChatStreamsMixin:
         self, clip_id: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat messages for a YouTube clip."""
-        proto = cast(YouTubeDownloaderProto, self)
+        proto = cast("YouTubeDownloaderProto", self)
         request = proto._coerce_chat_request(params)
         initial_info, ytcfg = proto._get_initial_video_info(
             clip_id,
@@ -78,7 +80,7 @@ class YouTubeChatStreamsMixin:
         self, video_id: str, params: ChatRequest | dict[str, Any]
     ) -> Chat:
         """Get chat messages for a YouTube video, given its ID."""
-        proto = cast(YouTubeDownloaderProto, self)
+        proto = cast("YouTubeDownloaderProto", self)
         request = proto._coerce_chat_request(params)
         initial_info, ytcfg = proto._get_initial_video_info(video_id, request)
 

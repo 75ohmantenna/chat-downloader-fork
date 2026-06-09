@@ -9,10 +9,11 @@ concrete to check against.
 
 from __future__ import annotations
 
-from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from http.cookiejar import MozillaCookieJar
+
     from chat_downloader.models import ChatRequest, DownloaderConfig
     from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.sites.models import Chat

@@ -10,7 +10,6 @@ from chat_downloader.debugging import log
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.string_utils import regex_search
 
-from ._protocols import YouTubeDownloaderProto
 from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_LIVE_CHAT_REPLAY_URL,
@@ -22,6 +21,8 @@ from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
+
+    from ._protocols import YouTubeDownloaderProto
 
 
 class YouTubeVideoInitializationMixin:
@@ -35,7 +36,7 @@ class YouTubeVideoInitializationMixin:
     ) -> tuple[dict[str, Any], Any]:
         """Get initial YouTube video information and continuation metadata."""
         details, player_response_info, yt_initial_data, ytcfg = cast(
-            YouTubeDownloaderProto, self
+            "YouTubeDownloaderProto", self
         )._parse_video_data(video_id, params, video_type)
 
         # Indigo128 03.11.2025 >>
@@ -46,7 +47,7 @@ class YouTubeVideoInitializationMixin:
             ]["conversationBar"]["liveChatRenderer"]["continuations"][0][
                 "reloadContinuationData"
             ]["continuation"]
-            proto = cast(YouTubeDownloaderProto, self)
+            proto = cast("YouTubeDownloaderProto", self)
             if details["status"] in REPLAY_STATUSES:
                 response = proto._session_get(
                     f"{_YT_LIVE_CHAT_REPLAY_URL}?continuation={client_continuation}",

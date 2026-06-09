@@ -81,6 +81,7 @@ select = [
     "RET",  # flake8-return
     "RUF",  # ruff-specific
     "SIM",  # flake8-simplify
+    "TC",   # flake8-type-checking
     "TID",  # flake8-tidy-imports
     "UP",   # pyupgrade
     "W605", # pycodestyle warnings
