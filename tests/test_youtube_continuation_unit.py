@@ -44,7 +44,7 @@ def _make_response(
 
 class TestHandleHttpError:
     def _import(self):
-        from chat_downloader.sites.youtube.client_requests_continuation import (
+        from chat_downloader.sites.youtube.client_requests_errors import (
             _handle_http_error,
         )
 
@@ -107,7 +107,7 @@ class TestHandleHttpError:
 
 class TestHandleJsonApiError:
     def _import(self):
-        from chat_downloader.sites.youtube.client_requests_continuation import (
+        from chat_downloader.sites.youtube.client_requests_errors import (
             _handle_json_api_error,
         )
 
@@ -153,7 +153,7 @@ class TestHandleJsonApiError:
 
 class TestApplyRetryOrRaise:
     def _import(self):
-        from chat_downloader.sites.youtube.client_requests_continuation import (
+        from chat_downloader.sites.youtube.client_requests_errors import (
             _apply_retry_or_raise,
         )
 
@@ -195,7 +195,7 @@ class TestApplyRetryOrRaise:
 
 
 def test_yt_contains_challenge_text_non_string() -> None:
-    from chat_downloader.sites.youtube.client_requests_continuation import (
+    from chat_downloader.sites.youtube.client_requests_errors import (
         _contains_challenge_text,
     )
 
@@ -204,7 +204,7 @@ def test_yt_contains_challenge_text_non_string() -> None:
 
 
 def test_yt_is_retryable_status_non_int() -> None:
-    from chat_downloader.sites.youtube.client_requests_continuation import (
+    from chat_downloader.sites.youtube.client_requests_errors import (
         _is_retryable_status,
     )
 

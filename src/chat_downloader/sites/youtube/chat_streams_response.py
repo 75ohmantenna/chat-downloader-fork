@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from chat_downloader.debugging import capture_debug_sample, debug_log, log
+from chat_downloader.debugging import debug_log, log
 from chat_downloader.errors import ChatDownloaderError, NoChatReplay
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.utils.dict_utils import multi_get
 
 from .client_auth import _generate_sapisidhash_header

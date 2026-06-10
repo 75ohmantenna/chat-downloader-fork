@@ -18,7 +18,7 @@ from chat_downloader.errors import (
 )
 from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
 from chat_downloader.sites._seen_cache import _SeenMessageCache
-from chat_downloader.sites.models import SUPERCHAT_DEDUP_TYPES
+from chat_downloader.sites.output_dispatch import SUPERCHAT_DEDUP_TYPES
 
 from .cli_bridge import categorize_parameters
 from .testing import setup_testing_mode

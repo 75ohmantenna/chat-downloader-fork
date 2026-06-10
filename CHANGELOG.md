@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+### Internal / structural
+
+- Extract `_ChatOutputDispatcher`, `ChatOutputWriter` Protocol, and
+  `SUPERCHAT_DEDUP_TYPES` from `sites/models.py` into new
+  `sites/output_dispatch.py`; forward-ref cycle eliminated via `_ChatHost`
+  structural Protocol; no public API change (M1)
+- Extract token redaction and debug-sample capture (`REDACTED`,
+  `sanitize_for_log`, `capture_debug_sample`) from `debugging.py` into new
+  `redaction.py`; `supports_colour` stays with the handler it serves;
+  no public API change (M2)
+- Lower `Any`-density baselines: `sites/models.py` 20→13, `debugging.py` 8→3;
+  new modules (`sites/output_dispatch.py`, `redaction.py`) inherit moved
+  boundaries
+- Split `utils/timed_utils.py` (422 LOC) into `utils/timed_input.py`
+  (console-input concern) and `utils/timed_generator.py` (generator-timeout
+  concern); both under 400 LOC; removed from module-size ALLOWLIST (S1)
+- Extract `_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page` from
+  `sites/twitch/replay_service.py` into new `sites/twitch/_replay_vod_loop.py`;
+  `replay_service.py` drops from 377 → 353 LOC (S2)
+- Extract `_recover_incomplete_continuation` from `_get_chat_messages` in
+  `sites/youtube/chat_streams_runtime_iteration.py`; reduces the
+  `IncompleteContinuationError` recovery arm from ~8 lines to one call (S3)
+- Extract error/retry helper cluster from
+  `sites/youtube/client_requests_continuation.py` (367 LOC) into new
+  `sites/youtube/client_requests_errors.py` (~245 LOC);
+  `client_requests_continuation.py` drops to ~120 LOC (orchestration only);
+  no public API change (U1)
+- Land deferred T2 extraction: `_handle_missing_live_chat_continuation` moves
+  the missing-continuation guard out of `_get_continuation_info`
+  (McCabe 8 → ~6); `dict[str,Any]` param paid in the new errors module (U1/T2)
+- Lower `Any`-density baseline `client_requests_continuation.py` 8 → 6;
+  new `client_requests_errors.py: 4` (U1)
+
+---
+
 ## 1.0.7 — 2026-06-10
 
 ### Tooling

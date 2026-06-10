@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from .console_utils import pause
 from .conversion_utils import backoff_seconds
-from .timed_utils import timed_input
+from .timed_input import timed_input
 
 if TYPE_CHECKING:
     from collections.abc import Callable

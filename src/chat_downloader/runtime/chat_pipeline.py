@@ -12,7 +12,7 @@ from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.youtube.video_status_models import REPLAY_STATUSES
-from chat_downloader.utils.timed_utils import TimedGenerator
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest

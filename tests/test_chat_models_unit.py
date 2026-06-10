@@ -11,7 +11,8 @@ import pytest
 
 from chat_downloader.errors import NoChatReplay
 from chat_downloader.models import get_field_default
-from chat_downloader.sites.models import Chat, _ChatOutputDispatcher
+from chat_downloader.sites.models import Chat
+from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 
 
 def test_chat_output_dispatcher_close_is_idempotent_and_reports_error(
@@ -48,7 +49,7 @@ def test_chat_output_dispatcher_close_is_idempotent_and_reports_error(
     logs: list[str] = []
 
     monkeypatch.setattr(
-        "chat_downloader.sites.models.log",
+        "chat_downloader.sites.output_dispatch.log",
         lambda _level, message: logs.append(message),
     )
 
@@ -101,7 +102,7 @@ def test_chat_output_dispatcher_close_reports_all_writer_failures(
     dispatcher.attach_writer(WriterB(RuntimeError("a"), "a"))
     dispatcher.attach_writer(WriterB(OSError("b"), "b"))
     monkeypatch.setattr(
-        "chat_downloader.sites.models.log",
+        "chat_downloader.sites.output_dispatch.log",
         lambda _level, message: logs.append(message),
     )
 
@@ -143,7 +144,7 @@ def test_chat_close_suppresses_writer_close_failures(monkeypatch) -> None:
     chat.attach_writer(writer)
 
     monkeypatch.setattr(
-        "chat_downloader.sites.models.log",
+        "chat_downloader.sites.output_dispatch.log",
         lambda _level, message: logs.append(message),
     )
 
@@ -230,10 +231,12 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
     chat.attach_writer(Writer(RuntimeError("writer one failed")))
     chat.attach_writer(Writer(ValueError("writer two failed")))
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.models.log",
-        lambda _level, message: logs.append(str(message)),
-    )
+    # RuntimeError is caught+logged by the dispatcher (output_dispatch.log);
+    # ValueError is not in the dispatcher's except tuple so it propagates to
+    # Chat.__next__'s inner close guard, which logs via models.log.
+    log_fn = lambda _level, message: logs.append(str(message))  # noqa: E731
+    monkeypatch.setattr("chat_downloader.sites.output_dispatch.log", log_fn)
+    monkeypatch.setattr("chat_downloader.sites.models.log", log_fn)
 
     with pytest.raises(NoChatReplay, match="original"):
         next(chat)
@@ -346,7 +349,7 @@ def test_chat_output_dispatcher_close_suppresses_known_writer_errors(
     dispatcher.attach_writer(Writer())
     logs: list[str] = []
     monkeypatch.setattr(
-        "chat_downloader.sites.models.log",
+        "chat_downloader.sites.output_dispatch.log",
         lambda _level, message: logs.append(message),
     )
 

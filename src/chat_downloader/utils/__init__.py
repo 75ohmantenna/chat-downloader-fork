@@ -4,6 +4,6 @@
 
 from __future__ import annotations
 
-from .timed_utils import TimedGenerator
+from .timed_generator import TimedGenerator
 
 __all__ = ["TimedGenerator"]

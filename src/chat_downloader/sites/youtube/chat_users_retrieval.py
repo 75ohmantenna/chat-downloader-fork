@@ -108,6 +108,6 @@ class YouTubeChatUsersRetrievalMixin:
                 "There are no active or upcoming livestreams with a live "
                 f"chat. Retrying in {sleep_amount} seconds.",
             )
-            from chat_downloader.utils.timed_utils import polling_sleep
+            from chat_downloader.utils.timed_generator import polling_sleep
 
             polling_sleep(sleep_amount)

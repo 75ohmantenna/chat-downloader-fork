@@ -7,13 +7,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
-from chat_downloader.debugging import log, sanitize_for_log
+from chat_downloader.debugging import log
 from chat_downloader.errors import (
     ChatGeneratorError,
     InvalidURL,
     SiteNotSupported,
     URLNotProvided,
 )
+from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.sites import get_all_sites
 
 from .chat_pipeline import configure_chat

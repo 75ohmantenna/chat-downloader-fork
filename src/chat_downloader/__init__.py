@@ -45,7 +45,7 @@ from .sites.models import Chat, Image
 from .sites.remap import Remapper
 from .sites.twitch import TwitchChatDownloader, TwitchError
 from .sites.youtube import YouTubeChatDownloader
-from .utils.timed_utils import TimedGenerator
+from .utils.timed_generator import TimedGenerator
 
 __all__ = [
     "BaseChatDownloader",

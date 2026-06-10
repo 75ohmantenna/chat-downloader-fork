@@ -17,13 +17,12 @@ from chat_downloader.errors import (
     UserNotFound,
     VideoUnavailable,
 )
-from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.time_utils import ensure_seconds
 
-from .constants import MESSAGE_GROUPS, build_known_comment_keys
+from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
+from .constants import build_known_comment_keys
 from .graphql_client import _handle_gql_errors
 from .parsing.messages import _parse_item
 from .replay_transport import get_chat_messages_by_vod_id
@@ -156,7 +155,7 @@ def _fetch_vod_page(
     raise RetriesExceeded(request.max_attempts)  # pragma: no cover
 
 
-def iter_vod_chat_messages(  # noqa: C901 — VOD replay loop handles many segment/offset edge cases
+def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iteration check, and edge disposition fan-out are intrinsic to the VOD replay loop
     downloader: TwitchChatDownloader,
     vod_id: str,
     request: ChatRequest,
@@ -169,28 +168,7 @@ def iter_vod_chat_messages(  # noqa: C901 — VOD replay loop handles many segme
     fetch_messages = fetch_messages or get_chat_messages_by_vod_id
     logger_obj = logger_obj or logger
 
-    start_time = ensure_seconds(request.start_time, 0)
-    end_value = request.end_time
-    if offset is None:
-        offset = 0
-        end_time = ensure_seconds(end_value)
-        content_offset_seconds = (
-            start_time
-            if max_duration is None
-            else min(start_time, max_duration)
-        )
-    else:
-        end_time = ensure_seconds(end_value, max_duration)
-        content_offset_seconds = (start_time or 0) + offset
-
-    msg_filter = MessageFilter(
-        MESSAGE_GROUPS,
-        request.message_groups
-        if isinstance(request.message_groups, list)
-        else None,
-        request.message_types or [],
-    )
-    time_filter = TimeRangeFilter(start_time, end_time, skip_mode="always")
+    plan = _init_vod_loop(request, max_duration, offset)
 
     message_count = 0
     cursor = ""
@@ -205,7 +183,7 @@ def iter_vod_chat_messages(  # noqa: C901 — VOD replay loop handles many segme
             fetch_messages,
             vod_id,
             cursor,
-            content_offset_seconds,
+            plan.content_offset_seconds,
             request,
         )
 
@@ -228,15 +206,13 @@ def iter_vod_chat_messages(  # noqa: C901 — VOD replay loop handles many segme
 
         if not edges:
             consecutive_empty_pages += 1
-            if consecutive_empty_pages >= max_empty_pages:
-                log(
-                    "warning",
-                    f"VOD {vod_id}: {max_empty_pages} consecutive empty "
-                    "pages with hasNextPage=true and no cursor advance; "
-                    "stopping pagination to avoid an infinite loop.",
-                )
-                break
-            if not has_next_page:
+            page_action = _classify_empty_page(
+                consecutive=consecutive_empty_pages,
+                max_empty=max_empty_pages,
+                has_next_page=has_next_page,
+                vod_id=vod_id,
+            )
+            if page_action == "break":
                 break
             continue
 
@@ -247,18 +223,18 @@ def iter_vod_chat_messages(  # noqa: C901 — VOD replay loop handles many segme
             new_cursor = edge.get("cursor")
             if new_cursor:
                 cursor = new_cursor
-            data, disposition = _process_vod_edge(
+            data, edge_action = _process_vod_edge(
                 edge,
-                offset,
+                plan.offset,
                 creator_channel_id,
                 badge_set,
-                time_filter,
-                msg_filter,
+                plan.time_filter,
+                plan.msg_filter,
                 logger_obj,
             )
-            if disposition == "stop":
+            if edge_action == "stop":
                 return
-            if disposition == "skip":
+            if edge_action == "skip":
                 continue
 
             message_count += 1

@@ -23,7 +23,10 @@ BASELINE: dict[str, int] = {
     "formatting/format.py": 33,
     # Shared site infrastructure — heterogeneous field types resist TypedDict.
     "sites/base.py": 14,
-    "sites/models.py": 20,
+    "sites/models.py": 13,
+    # Dispatcher callbacks/writer protocol — dict[str,Any] is the chat-item
+    # boundary (moved from sites/models.py in M1).
+    "sites/output_dispatch.py": 9,
     "sites/session.py": 7,
     "sites/remap.py": 10,
     "sites/filters.py": 3,
@@ -58,9 +61,12 @@ BASELINE: dict[str, int] = {
     "sites/youtube/client_context.py": 9,
     "sites/youtube/video_status.py": 8,
     "sites/youtube/discovery_playlists.py": 8,
-    "sites/youtube/client_requests_continuation.py": 8,
+    "sites/youtube/client_requests_continuation.py": 6,
+    # Error/retry helpers extracted from client_requests_continuation (U1).
+    # T2 helper adds dict[str,Any] param; Any import duplicated across split.
+    "sites/youtube/client_requests_errors.py": 4,
     "sites/youtube/client_auth.py": 8,
-    "sites/youtube/chat_streams_runtime_iteration.py": 8,
+    "sites/youtube/chat_streams_runtime_iteration.py": 9,
     "sites/youtube/chat_streams_context.py": 8,
     "sites/youtube/parsing/message_items_video.py": 7,
     "sites/youtube/parsing/actions_handlers_validation.py": 7,
@@ -79,10 +85,12 @@ BASELINE: dict[str, int] = {
     "output/continuous_write.py": 3,
     # Utilities — generic helpers require Any for cross-type dispatch.
     "utils/dict_utils.py": 19,
-    "utils/timed_utils.py": 14,
+    "utils/timed_generator.py": 12,
+    "utils/timed_input.py": 3,
     "utils/conversion_utils.py": 12,
     "utils/json_utils.py": 11,
     "utils/console_utils.py": 7,
+    "utils/filename_utils.py": 0,
     "utils/string_utils.py": 6,
     "utils/time_utils.py": 3,
     # Runtime layer — orchestration and CLI glue.
@@ -96,7 +104,10 @@ BASELINE: dict[str, int] = {
     "models/_base.py": 5,
     "models/_runconfig.py": 4,
     # Top-level modules.
-    "debugging.py": 8,
+    "debugging.py": 3,
+    # Redaction-payload boundary — sanitize_for_log/capture_debug_sample accept
+    # Any because incoming payloads are untyped (moved from debugging.py in M2).
+    "redaction.py": 6,
     "chat_downloader.py": 5,
     "cli_args.py": 4,
     "request_profiles.py": 3,

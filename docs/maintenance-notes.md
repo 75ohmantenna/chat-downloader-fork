@@ -113,18 +113,19 @@ blocked the `X as X` re-export idiom.
 |-----------|-----------|
 | Import-layering contracts | `uv run lint-imports` (wired into `make lint`); config in `pyproject.toml [tool.importlinter]` |
 | Public-API snapshot | `tests/test_public_api_unit.py` — update the frozen sets when intentionally changing `__all__` |
-| Module-size gate | `tests/test_module_size_unit.py` — ceiling tightened to 400 (round-3); `utils/timed_utils.py` and `chat_downloader.py` allowlisted; four 360–399-LOC modules rely on headroom |
+| Module-size gate | `tests/test_module_size_unit.py` — ceiling tightened to 400 (round-3); `chat_downloader.py` allowlisted (docstring-dominated facade); `utils/timed_utils.py` split into two sub-400-LOC modules in S1 and removed from allowlist |
 
 ### Modules still over 360 LOC (intentional, E4-optional)
 
 | Module | LOC | Reason |
 |--------|-----|--------|
-| `utils/timed_utils.py` | 422 | Cohesive single-purpose utilities; no clean seam |
-| `chat_downloader.py` | 415 | Thin facade — intentionally kept minimal |
+| ~~`utils/timed_utils.py`~~ | ~~422~~ | Split into `timed_input.py` + `timed_generator.py` (S1); removed from allowlist |
+| `chat_downloader.py` | 416 | Docstring-dominated thin facade; `get_chat` docstring alone is ~90 lines. No split — harms single public entry point |
 | `sites/twitch/extractor.py` | 394 | Single-class extractor; split only if a seam emerges |
-| `sites/twitch/replay_service.py` | 377 | Single-class service; same reasoning |
+| `sites/twitch/replay_service.py` | 353 | Reduced from 377 LOC (S2 extracted helpers to `_replay_vod_loop.py`) |
 | `sites/youtube/client_requests_continuation.py` | 367 | Cohesive HTTP-layer module |
 | `cli_args.py` | 362 | Newly extracted argument machinery; just above budget |
+| ~~`utils/console_utils.py`~~ | ~~316~~ | Split out `utils/filename_utils.py` (T1); console output and encoding detection remain cohesive (Windows fast-path + POSIX fallback share the `out` stream); filename sanitization is independent. `console_utils.py` drops to ~245 LOC. |
 
 ---
 
@@ -168,3 +169,192 @@ commented in `tests/test_any_density_unit.py`.  The main categories:
   cannot express this without full TypedDict coverage of each message shape.
 - **Generic utilities** (`utils/dict_utils.py: 19`): cross-type dispatch helpers
   that are legitimately generic.
+
+---
+
+## Round-4 cohesion splits (2026-06)
+
+The following module extractions landed on the `maintainability-pass` branch
+in June 2026 (commits M1–M2).  Both are cohesion fixes, not size-driven
+(the host files were already under the 400-line ceiling).
+
+### Module splits
+
+| Before | After | Commit |
+|--------|-------|--------|
+| `sites/models.py` — contained `_ChatOutputDispatcher`, `ChatOutputWriter`, `SUPERCHAT_DEDUP_TYPES` | Moved to new `sites/output_dispatch.py` | M1 |
+| `debugging.py` — contained `REDACTED`, `sanitize_for_log`, `capture_debug_sample`, and helpers | Moved to new `redaction.py` | M2 |
+
+### Design decisions
+
+**`_ChatHost` Protocol (M1):** `_ChatOutputDispatcher.__init__` originally took
+`Chat` directly, which would have required a `TYPE_CHECKING` forward-reference
+cycle after extraction.  Instead, a narrow structural Protocol `_ChatHost`
+was defined in `sites/output_dispatch.py` exposing only the four members the
+dispatcher actually uses (`title`, `id`, `format`, `_register_seen_message_id`).
+`Chat` satisfies it structurally — no import of `Chat` needed in the new module.
+
+**`supports_colour` stays in `debugging.py` (M2):** `supports_colour()` exists
+solely to choose between `colorlog.StreamHandler` and `logging.StreamHandler`
+at module load time.  It is not an independent concern — moving it would add a
+cross-module import for a function with no other callers.  Colour detection
+remains beside the handler it serves.
+
+**One-way dependency:** `redaction.py` imports `debugging.logger` (the already-
+configured logger instance); `debugging.py` does not import from `redaction`.
+This keeps the cycle free and ensures `redaction.py` is a leaf-like module with
+no upward dependency on the logging setup it uses.
+
+### `Any`-density baseline changes (M1+M2)
+
+| Module | Before | After | Reason |
+|--------|--------|-------|--------|
+| `sites/models.py` | 20 | 13 | dispatcher callbacks moved out |
+| `sites/output_dispatch.py` | — | 9 | new module (moved boundary) |
+| `debugging.py` | 8 | 3 | redaction functions moved out |
+| `redaction.py` | — | 6 | new module (moved boundary) |
+
+---
+
+## Round-5 cohesion / complexity pass (2026-06)
+
+Commits S1–S3 on the `maintainability-pass` branch.
+
+### Module splits (S1, S2)
+
+| Before | After | Commit |
+|--------|-------|--------|
+| `utils/timed_utils.py` (422 LOC) — mixed console-input and generator-timeout concerns | `utils/timed_input.py` (~135 LOC) + `utils/timed_generator.py` (~255 LOC); import-independent (local poll constant in `timed_input`) | S1 |
+| `sites/twitch/replay_service.py` — `_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page` inline | New `sites/twitch/_replay_vod_loop.py` (~70 LOC); `replay_service.py` 377→353 LOC | S2 |
+
+### Complexity extractions (S2, S3)
+
+| Function | Extracted helper | Result |
+|----------|-----------------|--------|
+| `iter_vod_chat_messages` | `_init_vod_loop` + `_classify_empty_page` (moved to `_replay_vod_loop.py`) | McCabe 14→13; `# noqa: C901` retained |
+| `_get_chat_messages` | `_recover_incomplete_continuation` | McCabe 13→12; `# noqa: C901` retained |
+
+### Design decisions
+
+**`chat_downloader.py` keep-decision:** At 416 LOC, `chat_downloader.py` exceeds
+the 400-LOC ceiling but remains allowlisted. The `get_chat()` API docstring alone
+is ~90 lines; the implementation is a thin dispatch facade with no independent
+logic to extract.  Splitting would fragment the single public entry point without
+reducing cognitive complexity.
+
+**Import independence (S1):** `timed_input.py` uses a local `_INPUT_POLL_SECONDS
+= 0.1` constant rather than importing `POLLING_TIME` from `timed_generator.py`.
+This keeps the `utils` package a leaf in the import graph (import-linter
+contract) and means the two modules have zero cross-dependency.
+
+### `Any`-density baseline changes (S1, S3)
+
+| Module | Before | After | Reason |
+|--------|--------|-------|--------|
+| `utils/timed_utils.py` | 14 | removed | file deleted; split into two modules |
+| `utils/timed_generator.py` | — | 12 | new module (Generator/Callable/Queue signatures) |
+| `utils/timed_input.py` | — | 3 | new module (default param + cast + import) |
+| `sites/youtube/chat_streams_runtime_iteration.py` | 8 | 9 | new `_recover_incomplete_continuation` adds one `dict[str,Any]` param |
+
+---
+
+## Round-6 cohesion / complexity pass (2026-06)
+
+Commits T1–T2 on the `maintainability-pass` branch.
+
+### Module splits (T1)
+
+| Before | After | Commit |
+|--------|-------|--------|
+| `utils/console_utils.py` (316 LOC) — mixed console I/O and filename sanitization | `utils/filename_utils.py` (~80 LOC); `console_utils.py` drops to ~245 LOC | T1 |
+
+### Design decisions
+
+**Console I/O cohesion boundary (T1):** The Windows fast-path (`_windows_write_string`
+and its four helpers) and the POSIX/buffer fallback are both branches of `safe_print`
+and share the `out` stream and encoding logic.  They are one cohesive concern.
+Filename sanitization (`sanitize_filename_component`, `_RESERVED_WINDOWS_NAMES_RE`,
+`_MAX_FILENAME_BYTES`) has zero shared state with console I/O, uses a separate
+`import re`, and has zero `Any`.  The split is clean.
+
+**`cli_args.py` kept whole (T-series DECLINE):** `parse_header`, `str2bool`, and
+`splitter` are argparse `type=` converters that import `argparse` for
+`ArgumentTypeError` and are consumed only by parser-builder code in the same file.
+Extraction would carry the argparse coupling to a new module and require a back-import
+— adding indirection without removing any.  File is 362 LOC (below the 400 ceiling;
+the ~2-over-360 soft line is accepted, per Round-2 note above).
+
+**`_get_continuation_info` complexity (T2, Option A failed → documented):**
+Extraction of the missing-continuation guard into a `_handle_missing_live_chat_continuation`
+helper was attempted.  The helper's `json_response: dict[str, Any]` parameter would
+raise the module `Any`-density baseline from 8 → 9, violating the ratchet.  The function
+currently passes the McCabe-8 gate exactly; ruff's RUF100 rule also rejects a
+pre-emptive `# noqa: C901` when the check passes.  Recorded in
+`maintenance-backlog.md` (T2 entry): next edit adding a complexity branch must address
+the extraction at that time, accepting the one-unit Any-baseline rise or finding a
+zero-Any approach.
+
+### `Any`-density baseline changes (T1)
+
+| Module | Before | After | Reason |
+|--------|--------|-------|--------|
+| `utils/console_utils.py` | 7 | 7 | unchanged (sanitize block had zero Any; console I/O Any stays) |
+| `utils/filename_utils.py` | — | 0 | new module; no Any |
+
+---
+
+## Round-7 cohesion / complexity pass (2026-06)
+
+Commits U1 on the `maintainability-pass` branch.
+
+### Module split (U1)
+
+| Before | After | Commit |
+|--------|-------|--------|
+| `sites/youtube/client_requests_continuation.py` (367 LOC) — mixed error/retry helpers and continuation orchestration | `sites/youtube/client_requests_errors.py` (~245 LOC, error/retry layer) + `client_requests_continuation.py` (~120 LOC, orchestration only) | U1 |
+
+### T2 resolution (U1)
+
+The T2 deferral from Round-6 is resolved in U1.  The
+`_handle_missing_live_chat_continuation` helper (Option A from T2) now lives in
+`client_requests_errors.py` rather than in `client_requests_continuation.py`.
+The `json_response: dict[str, Any]` parameter that blocked the extraction in
+Round-6 (it would have pushed `continuation.py` baseline from 8 → 9) now lands
+in the *new* module instead, leaving `continuation.py` at 6.  `_get_continuation_info`
+McCabe drops from the gate-exact 8 to ~6, restoring complexity headroom for
+future edits.
+
+### Design decisions
+
+**Import direction (U1):** `continuation.py → client_requests_errors.py →
+continuations.py`.  One-directional; no Protocol shim needed (unlike M1's
+`_ChatHost`).  `continuations.py` has no back-import of either module.
+`RetryPolicy` is never instantiated in the errors module — only received as a
+parameter — so it goes under `TYPE_CHECKING`, keeping the errors module import-
+lean.
+
+**`sites/twitch/extractor.py` kept whole (U2 DECLINE):** `TwitchChatDownloader`
+is a single class already maximally delegated to extracted services
+(`graphql_client.py`, `replay_service.py`, `live_service.py`, `irc_transport.py`).
+The GraphQL plumbing (`_client_id_kwargs`, `_download_base_gql`, `_download_gql`,
+`_update_badge_info`) is `self`-bound glue around the free functions that already
+live in `graphql_client.py`; relocating it would require passing `self` back in
+— adding indirection without removing any.  The file is 394 LOC (6 under the
+ceiling); much of the size is the static `_TESTS` table (~58 lines) and
+docstrings.  Mirrors the T-series `cli_args.py` decline.  Pre-approved escape
+hatch if a future edit crosses 400: relocate the `_TESTS` table to a zero-`Any`,
+zero-logic `_test_cases.py` data module rather than fracturing the class.
+
+**Round-7 scan: no further clean seam (U3 STOP):** The other near-ceiling files
+(`parsing/message_irc_resolve.py` 352 LOC / 14 Any, `irc_transport.py` 349 LOC,
+`replay_service.py` 353 LOC, `cli_args.py` 362 LOC) have no high-value/low-risk
+seam.  All are 40–50 lines under the ceiling and stable; a forced split would
+add a module, import, and baseline churn to shave lines off files that are not
+growing.  These files are monitored but deferred by design.
+
+### `Any`-density baseline changes (U1)
+
+| Module | Before | After | Reason |
+|--------|--------|-------|--------|
+| `sites/youtube/client_requests_continuation.py` | 8 | 6 | error/retry helpers moved out |
+| `sites/youtube/client_requests_errors.py` | — | 4 | new module; moved helpers + T2 param + duplicated `Any` import |

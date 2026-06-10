@@ -17,7 +17,6 @@ ALLOWLIST: frozenset[str] = frozenset(
         "sites/twitch/constants.py",
         # Cohesive single-purpose modules intentionally over 400 LOC;
         # see docs/maintenance-notes.md "Modules still over 360 LOC".
-        "utils/timed_utils.py",
         "chat_downloader.py",
     }
 )

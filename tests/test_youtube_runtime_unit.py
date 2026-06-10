@@ -473,7 +473,7 @@ def test_get_chat_messages_by_user_args_stops_after_first_successful_chat(
             )
 
     monkeypatch.setattr(
-        "chat_downloader.utils.timed_utils.polling_sleep",
+        "chat_downloader.utils.timed_generator.polling_sleep",
         lambda _seconds: (_ for _ in ()).throw(_StopPolling()),
     )
 
@@ -1376,7 +1376,7 @@ def test_user_chat_lookup_retries_after_chat_errors(monkeypatch) -> None:
             raise ChatDownloaderError(msg)
 
     monkeypatch.setattr(
-        "chat_downloader.utils.timed_utils.polling_sleep",
+        "chat_downloader.utils.timed_generator.polling_sleep",
         lambda _seconds: (_ for _ in ()).throw(RetrySentinel()),
     )
 

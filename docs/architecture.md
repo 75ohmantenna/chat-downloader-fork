@@ -59,7 +59,8 @@ explicitly does not forbid `models → sites.models`.
 | `chat_downloader.py` | Thin facade; exposes `run()` and re-exports public types |
 | `cli.py` | Argument parsing entry point (`main()`), signal handler, arg-parser builder |
 | `cli_args.py` | Parser-construction machinery: `_ParamRegistrar`, all `_add_*_args` helpers, `splitter`/`parse_header`/`str2bool` converters |
-| `debugging.py` | Logging, testing modes, sanitisation, opt-in debug-sample capture |
+| `debugging.py` | Logging setup (colorlog/plain handler), testing modes, colour detection |
+| `redaction.py` | Token redaction (`sanitize_for_log`, `REDACTED`), opt-in debug-sample capture (`capture_debug_sample`) |
 | `errors.py` | Public exception hierarchy |
 | `metadata.py` | `__version__`, `__program__`, `__summary__` |
 | `request_profiles.py` | Named HTTP request profiles (headers presets) |
@@ -89,6 +90,19 @@ explicitly does not forbid `models → sites.models`.
 | `continuous_write.py` | `ContinuousWriter` factory; re-exports writer types |
 | `writers.py` | `ContinuousFileWriter` ABC; `CsvContinuousWriter`, `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
 | `csv_rewrite.py` | In-place CSV column-addition helper |
+
+### `sites/` (shared)
+| Module | Purpose |
+|--------|---------|
+| `base.py` | `BaseChatDownloader` ABC: URL matching, session setup, cookie handling |
+| `session.py` | `ChatDownloaderSession`: HTTP session, proxy config, auth |
+| `retry.py` | `ChatDownloaderRetry`: retry policy with back-off |
+| `filters.py` | Message-group validation and per-message filter application |
+| `models.py` | `Chat`, `Image`, `SiteDefault` |
+| `output_dispatch.py` | `ChatOutputWriter` Protocol, `_ChatOutputDispatcher`, `SUPERCHAT_DEDUP_TYPES` |
+| `remap.py` | `Remapper`: field-rename and transform machinery |
+| `_seen_cache.py` | `_SeenMessageCache`: bounded LRU dedup cache |
+| `_protocols.py` | Shared Protocol definitions |
 
 ### `sites/youtube/`
 

@@ -12,7 +12,8 @@ import os
 import tempfile
 
 from chat_downloader.output.continuous_write import ContinuousWriter
-from chat_downloader.sites.models import SUPERCHAT_DEDUP_TYPES, Chat
+from chat_downloader.sites.models import Chat
+from chat_downloader.sites.output_dispatch import SUPERCHAT_DEDUP_TYPES
 
 
 def test_superchat_dedup_types_constant() -> None:

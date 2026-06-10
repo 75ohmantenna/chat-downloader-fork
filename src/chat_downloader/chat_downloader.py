@@ -13,7 +13,7 @@ from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse
 
-from .debugging import log, sanitize_for_log
+from .debugging import log
 from .errors import InvalidParameter
 from .metadata import __version__
 from .models import (
@@ -25,6 +25,7 @@ from .models import (
     ChatRequest,
     DownloaderConfig,
 )
+from .redaction import sanitize_for_log
 from .runtime import (
     RunResult,
     clear_all_cookies,

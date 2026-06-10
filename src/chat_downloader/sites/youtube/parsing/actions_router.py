@@ -8,7 +8,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from chat_downloader.debugging import capture_debug_sample, debug_log
+from chat_downloader.debugging import debug_log
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_ADD_ACTION_TYPES,
     _KNOWN_ADD_BANNER_TYPES,

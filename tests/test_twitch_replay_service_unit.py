@@ -12,7 +12,7 @@ from requests.exceptions import RequestException
 
 from chat_downloader.errors import NoChatReplay, VideoUnavailable
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.twitch import replay_service
+from chat_downloader.sites.twitch import _replay_vod_loop, replay_service
 from chat_downloader.sites.twitch.replay_service import _process_vod_edge
 
 
@@ -144,10 +144,10 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
 
     with (
         patch.object(
-            replay_service, "TimeRangeFilter", return_value=fake_time_filter
+            _replay_vod_loop, "TimeRangeFilter", return_value=fake_time_filter
         ),
         patch.object(
-            replay_service, "MessageFilter", return_value=fake_msg_filter
+            _replay_vod_loop, "MessageFilter", return_value=fake_msg_filter
         ),
         patch.object(
             replay_service, "_parse_item", side_effect=parsed_messages

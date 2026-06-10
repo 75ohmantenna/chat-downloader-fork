@@ -7,7 +7,7 @@ For deeper context see [`docs/development-workflow-guide.md`](docs/development-w
 ## Structure
 - `src/chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI entry in `cli.py`; CLI argument machinery in `cli_args.py`; typed shapes in `models/` package.
 - `src/chat_downloader/runtime/`: `cli_bridge`, `site_dispatch`, `chat_pipeline`, `runner`, `session_lifecycle`, `testing`.
-- `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).  Twitch `parsing/` contains `messages` (entry points), `message_emotes` (emote/image helpers), `message_irc_resolve` (IRC type/action/room-state resolution), `badges`, and `tag_decoding`.
+- `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `output_dispatch`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).  Twitch `parsing/` contains `messages` (entry points), `message_emotes` (emote/image helpers), `message_irc_resolve` (IRC type/action/room-state resolution), `badges`, and `tag_decoding`.
 - `src/chat_downloader/output/`: `continuous_write.py` (`ContinuousWriter` factory + re-exports); `writers.py` (concrete writer types: CSV, JSONL, text).
 - `src/chat_downloader/formatting/`: `ItemFormatter` and bundled `custom_formats.json`.
 - `src/chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `string_utils`, `retry_utils`, `timed_utils`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`).
@@ -20,10 +20,10 @@ See [`docs/architecture.md`](docs/architecture.md) for the full layer diagram, m
 Key points:
 - `models/`: `DownloaderConfig` (`_config.py`), `ChatRequest` (`_request.py`), `RunConfig` + `coerce_chat_request` (`_runconfig.py`); shared helpers in `_base.py`; `__init__.py` is the single public import surface — `from chat_downloader.models import ...` is unchanged
 - `runtime/`: `cli_bridge.py` (strict `run()` param categorization), `site_dispatch.py` (URL→site + site defaults), `chat_pipeline.py` (limits/timeouts/format/output), `runner.py` (run loop + cleanup), `session_lifecycle.py` (cookies/sessions/cookie-domain validation), `testing.py`
-- `sites/`: `base.py`, `session.py` (proxy URL validation), `retry.py`, `filters.py` (message group validation), `models.py`, `remap.py`
+- `sites/`: `base.py`, `session.py` (proxy URL validation), `retry.py`, `filters.py` (message group validation), `models.py` (Chat, Image, SiteDefault), `output_dispatch.py` (ChatOutputWriter Protocol, _ChatOutputDispatcher, SUPERCHAT_DEDUP_TYPES), `remap.py`
 - `output/`: `ContinuousWriter` (factory in `continuous_write.py`); `ContinuousFileWriter` ABC and writer subclasses in `writers.py`
 - `formatting/`: `ItemFormatter` and bundled `custom_formats.json`
-- `debugging.py`: logging and testing modes, sanitization, opt-in debug sample capture; `debug_sample_utils.py`: fixture naming hints
+- `debugging.py`: logging setup, testing modes, colour detection; `redaction.py`: token redaction, `sanitize_for_log`, opt-in debug-sample capture; `debug_sample_utils.py`: fixture naming hints
 - `tests/fixtures/`: curated parser, error, and live-event fixtures
 - **Layering**: import-linter contracts enforce that `utils` is a leaf, `models` is isolated from runtime/output/cli, and `youtube`/`twitch` are mutually independent (see `pyproject.toml [tool.importlinter]`).
 

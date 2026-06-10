@@ -6,7 +6,7 @@ import contextlib
 
 import pytest
 
-from chat_downloader.utils.timed_utils import TimedGenerator
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 
 def test_timed_generator_basic() -> None:
@@ -151,7 +151,7 @@ def test_polling_sleep() -> None:
     """Test polling_sleep function."""
     import time
 
-    from chat_downloader.utils.timed_utils import polling_sleep
+    from chat_downloader.utils.timed_generator import polling_sleep
 
     start = time.time()
     polling_sleep(0.05)
@@ -165,7 +165,7 @@ def test_polling_sleep_non_positive_returns_immediately() -> None:
     """Test polling_sleep handles non-positive durations."""
     import time
 
-    from chat_downloader.utils.timed_utils import polling_sleep
+    from chat_downloader.utils.timed_generator import polling_sleep
 
     start = time.time()
     polling_sleep(0)
@@ -206,7 +206,7 @@ def test_timed_generator_exception_handling() -> None:
 
 def test_timeout_exception() -> None:
     """Test that TimeoutOccurred exception exists."""
-    from chat_downloader.utils.timed_utils import TimeoutOccurred
+    from chat_downloader.utils.timed_input import TimeoutOccurred
 
     exc = TimeoutOccurred("Test timeout")
     assert isinstance(exc, Exception)
@@ -214,7 +214,7 @@ def test_timeout_exception() -> None:
 
 def test_timed_input_with_timeout() -> None:
     """Test timed_input returns default on timeout."""
-    from chat_downloader.utils.timed_utils import timed_input
+    from chat_downloader.utils.timed_input import timed_input
 
     # Short timeout should return default
     result = timed_input(timeout=0.02, default="default_value")
@@ -223,7 +223,7 @@ def test_timed_input_with_timeout() -> None:
 
 def test_timed_input_without_timeout() -> None:
     """Test that timed_input with None timeout uses regular input."""
-    from chat_downloader.utils.timed_utils import timed_input
+    from chat_downloader.utils.timed_input import timed_input
 
     # This test just verifies the function exists and can be called
     # with None timeout (actual input testing would require user

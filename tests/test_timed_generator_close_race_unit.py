@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import threading
 
-from chat_downloader.utils.timed_utils import TimedGenerator
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 
 class BlockingCloseableIterator:

@@ -10,7 +10,7 @@ from chat_downloader.errors import (
     IncompleteContinuationError,
     RetriesExceeded,
 )
-from chat_downloader.sites.youtube.client_requests_continuation import (
+from chat_downloader.sites.youtube.client_requests_errors import (
     _apply_retry_or_raise,
     _captcha_guidance_message,
     _contains_challenge_text,

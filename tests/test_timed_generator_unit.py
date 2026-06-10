@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from chat_downloader.utils.timed_utils import TimedGenerator
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 
 class _FakeTimer:

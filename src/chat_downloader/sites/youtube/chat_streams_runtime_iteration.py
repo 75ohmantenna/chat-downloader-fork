@@ -11,7 +11,7 @@ from chat_downloader.debugging import log
 from chat_downloader.errors import IncompleteContinuationError, NoContinuation
 from chat_downloader.request_profiles import get_next_request_profile
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.timed_utils import polling_sleep
+from chat_downloader.utils.timed_generator import polling_sleep
 
 from .chat_streams_context import (
     _apply_live_timing,
@@ -188,7 +188,34 @@ def _advance_continuation_loop(
     return bool(cont_result.is_end)
 
 
-def _get_chat_messages(  # noqa: C901 — continuation loop is intrinsically branchy
+def _recover_incomplete_continuation(
+    self: YouTubeDownloaderProto,
+    ctx: _ChatContext,
+    ytcfg: dict[str, Any],
+    progress: _ContinuationProgress,
+) -> bool:
+    """Try profile fallback after an incomplete continuation.
+
+    Returns True if the loop should retry; False means the caller should
+    re-raise the active IncompleteContinuationError.
+    """
+    if progress.register_fallback():
+        log(
+            "warning",
+            "Exhausted profile fallbacks "
+            f"({progress.max_profile_fallbacks}) for incomplete continuation "
+            "responses; surfacing the underlying error.",
+        )
+        return False
+    if not _attempt_profile_fallback(self):
+        return False
+    ctx.innertube_context = _profiled_innertube_context(
+        ytcfg, getattr(self, "_request_profile", None)
+    )
+    return True
+
+
+def _get_chat_messages(  # noqa: C901 — live/replay branching, no-progress guard, and end-message injection are intrinsic to the continuation loop
     self: YouTubeDownloaderProto,
     initial_info: dict[str, Any],
     ytcfg: dict[str, Any],
@@ -217,20 +244,8 @@ def _get_chat_messages(  # noqa: C901 — continuation loop is intrinsically bra
                 json=continuation_params,
             )
         except IncompleteContinuationError:
-            if progress.register_fallback():
-                log(
-                    "warning",
-                    "Exhausted profile fallbacks "
-                    f"({progress.max_profile_fallbacks}) for incomplete "
-                    "continuation responses; surfacing the underlying error.",
-                )
+            if not _recover_incomplete_continuation(self, ctx, ytcfg, progress):
                 raise
-            if not _attempt_profile_fallback(self):
-                raise
-            ctx.innertube_context = _profiled_innertube_context(
-                ytcfg,
-                getattr(self, "_request_profile", None),
-            )
             continue
 
         _handle_continuation_response(self, yt_info, ytcfg, continuation_params)

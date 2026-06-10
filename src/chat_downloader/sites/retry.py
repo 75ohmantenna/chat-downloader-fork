@@ -11,7 +11,7 @@ from chat_downloader.debugging import log
 from chat_downloader.errors import RetriesExceeded
 from chat_downloader.utils.retry_utils import RetryPolicy
 from chat_downloader.utils.string_utils import get_title_of_webpage
-from chat_downloader.utils.timed_utils import polling_sleep
+from chat_downloader.utils.timed_generator import polling_sleep
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest

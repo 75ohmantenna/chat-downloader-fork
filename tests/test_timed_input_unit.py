@@ -10,8 +10,9 @@ from typing import Any, NoReturn, cast
 
 import pytest
 
-from chat_downloader.utils import timed_utils
-from chat_downloader.utils.timed_utils import TimedGenerator, TimeoutOccurred
+from chat_downloader.utils import timed_input as timed_utils
+from chat_downloader.utils.timed_generator import TimedGenerator
+from chat_downloader.utils.timed_input import TimeoutOccurred
 
 
 def _reload_timed_utils_with_msvcrt(fake_msvcrt: Any):
