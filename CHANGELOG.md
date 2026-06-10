@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.7 — 2026-06-10
 
 ### Tooling
 
@@ -79,6 +79,32 @@
   modules: `message_emotes.py` (emote and image helpers), `message_irc_resolve.py`
   (IRC type/action/room-state resolution), and `messages.py` (orchestration
   entry points); public re-exports from `parsing/__init__.py` unchanged
+
+### Architecture (round 4)
+
+- Remove dead `BaseChatDownloader._move_to_dict` class-level alias in
+  `sites/base.py`; no call sites used it (all callers import
+  `move_to_dict` directly from `utils/dict_utils`); also removes the
+  now-orphaned `from chat_downloader.utils.dict_utils import move_to_dict as
+  _move_to_dict` import line
+- Add `_ContinuationProgress` dataclass in
+  `sites/youtube/chat_streams_runtime_iteration`: encapsulates the fallback-count
+  and empty-poll-count bookkeeping from `_get_chat_messages`; replaces four
+  local variables with two methods (`register_fallback`, `register_poll`);
+  the noqa comment is retained but the rationale is updated to "intrinsically
+  branchy" (structural complexity verified at 13, not a suppressible smell)
+- Complete `runtime/_protocols.ChatDownloaderProto`: add `close()` method so
+  the protocol covers all methods the runtime layer calls; apply it in
+  `runtime/runner._finalize_run` (`chat: Chat | None`, `downloader:
+  ChatDownloaderProto | None`) and `runtime/session_lifecycle.create_session`
+  (`chat_downloader_class: type[BaseChatDownloader]`); lower per-module `Any`
+  baselines in `tests/test_any_density_unit.py` accordingly
+
+### Documentation (round 4)
+
+- Correct `docs/architecture.md` guardrails table: module-size gate ceiling
+  was still listed as 450 lines; update to 400 to match the actual gate in
+  `tests/test_module_size_unit.py` and `docs/maintenance-notes.md`
 
 ### Documentation
 

@@ -25,6 +25,8 @@ from chat_downloader.request_profiles import (
 )
 
 if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONAny
+
     from ._protocols import SessionOwnerProto
 
 _ALLOWED_PROXY_SCHEMES = frozenset(
@@ -115,7 +117,7 @@ def check_cookie_rotation(owner: SessionOwnerProto) -> None:
         owner._cookie_rotation_warned = True
 
 
-def get_session_headers(owner: SessionOwnerProto, key: str) -> Any:
+def get_session_headers(owner: SessionOwnerProto, key: str) -> str | None:
     """Return a session header value."""
     return owner.session.headers.get(key)
 
@@ -205,18 +207,18 @@ class CookieSpec:
     path: str = "/"
     secure: bool = False
     discard: bool = False
-    rest: dict[str, Any] | None = field(default=None)
+    rest: dict[str, str] | None = field(default=None)
 
 
 def _set_cookie_from_spec(owner: SessionOwnerProto, spec: CookieSpec) -> None:
     """Add a cookie described by *spec* to *owner*'s session cookie jar.
 
     Args:
-        owner: Any object that holds a ``session`` with a ``cookies``
+        owner: An object that holds a ``session`` with a ``cookies``
             ``CookieJar``.
         spec: The fully-specified cookie to add.
     """
-    cookie_rest: dict[str, Any] = {} if spec.rest is None else spec.rest
+    cookie_rest: dict[str, str] = {} if spec.rest is None else spec.rest
     cookie = Cookie(
         0,
         spec.name,
@@ -248,7 +250,7 @@ def set_cookie_value(
     path: str = "/",
     secure: bool = False,
     discard: bool = False,
-    rest: dict[str, Any] | None = None,
+    rest: dict[str, str] | None = None,
 ) -> None:
     """Set a cookie value on the session cookie jar."""
     _validate_cookie_domain(domain)
@@ -269,8 +271,8 @@ def set_cookie_value(
 
 
 def get_cookie_value(
-    owner: SessionOwnerProto, name: str, default: Any = None
-) -> Any:
+    owner: SessionOwnerProto, name: str, default: str | None = None
+) -> str | None:
     """Return a cookie value if present, otherwise default."""
     return get_cookies_dict(owner).get(name, default)
 
@@ -281,7 +283,9 @@ def close_session(owner: SessionOwnerProto) -> None:
     log("debug", "Session closed.")
 
 
-def session_post(owner: SessionOwnerProto, url: str, **kwargs: Any) -> Any:
+def session_post(
+    owner: SessionOwnerProto, url: str, **kwargs: Any
+) -> requests.Response:
     """Make a POST request using the configured session."""
     kwargs.setdefault("timeout", owner._http_timeout)
     response = owner.session.post(url, **kwargs)
@@ -289,7 +293,9 @@ def session_post(owner: SessionOwnerProto, url: str, **kwargs: Any) -> Any:
     return response
 
 
-def session_get(owner: SessionOwnerProto, url: str, **kwargs: Any) -> Any:
+def session_get(
+    owner: SessionOwnerProto, url: str, **kwargs: Any
+) -> requests.Response:
     """Make a GET request using the configured session."""
     kwargs.setdefault("timeout", owner._http_timeout)
     response = owner.session.get(url, **kwargs)
@@ -297,6 +303,8 @@ def session_get(owner: SessionOwnerProto, url: str, **kwargs: Any) -> Any:
     return response
 
 
-def session_get_json(owner: SessionOwnerProto, url: str, **kwargs: Any) -> Any:
+def session_get_json(
+    owner: SessionOwnerProto, url: str, **kwargs: Any
+) -> JSONAny:
     """Make a GET request and parse the response as JSON."""
-    return session_get(owner, url, **kwargs).json()
+    return cast("JSONAny", session_get(owner, url, **kwargs).json())

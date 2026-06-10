@@ -13,7 +13,6 @@ from chat_downloader.errors import (
     SiteNotSupported,
     URLNotProvided,
 )
-from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
 
 from .models import SiteDefault
 from .remap import Remapper
@@ -47,9 +46,12 @@ from .session import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     import requests
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONAny
 
 
 class BaseChatDownloader:
@@ -64,10 +66,6 @@ class BaseChatDownloader:
     _twitch_client_id: str | None
 
     _NAME: str | None = None
-
-    # Class-level alias so callers using BaseChatDownloader._move_to_dict(...)
-    # continue to work after the implementation moved to dict_utils.
-    _move_to_dict = staticmethod(_move_to_dict)
 
     _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "message_groups": ["messages"],
@@ -135,7 +133,7 @@ class BaseChatDownloader:
         """Warn once if the auth cookies have rotated away."""
         check_cookie_rotation(self)
 
-    def get_session_headers(self, key: str) -> Any:
+    def get_session_headers(self, key: str) -> str | None:
         """Return the current value of the named HTTP session header."""
         return session_header(self, key)
 
@@ -164,7 +162,7 @@ class BaseChatDownloader:
         path: str = "/",
         secure: bool = False,
         discard: bool = False,
-        rest: dict[str, Any] | None = None,
+        rest: dict[str, str] | None = None,
     ) -> None:
         """Set a cookie on the HTTP session.
 
@@ -192,7 +190,9 @@ class BaseChatDownloader:
             rest=rest,
         )
 
-    def get_cookie_value(self, name: str, default: Any = None) -> Any:
+    def get_cookie_value(
+        self, name: str, default: str | None = None
+    ) -> str | None:
         """Return the value of cookie ``name``, or ``default`` if absent."""
         return get_session_cookie_value(self, name, default)
 
@@ -200,13 +200,13 @@ class BaseChatDownloader:
         """Close the HTTP session and release associated resources."""
         close_session(self)
 
-    def _session_post(self, url: str, **kwargs: Any) -> Any:
+    def _session_post(self, url: str, **kwargs: Any) -> requests.Response:
         return session_post(self, url, **kwargs)
 
-    def _session_get(self, url: str, **kwargs: Any) -> Any:
+    def _session_get(self, url: str, **kwargs: Any) -> requests.Response:
         return session_get(self, url, **kwargs)
 
-    def _session_get_json(self, url: str, **kwargs: Any) -> Any:
+    def _session_get_json(self, url: str, **kwargs: Any) -> JSONAny:
         return session_get_json(self, url, **kwargs)
 
     def get_site_value(self, value: Any) -> Any:
@@ -237,7 +237,7 @@ class BaseChatDownloader:
     _VALID_URLS: ClassVar[dict[str, str]] = {}
 
     @classmethod
-    def matches(cls, url: str) -> tuple[str, Any] | None:
+    def matches(cls, url: str) -> tuple[str, re.Match[str]] | None:
         """Return ``(function_name, match)`` if ``url`` matches a pattern.
 
         Args:
@@ -254,7 +254,7 @@ class BaseChatDownloader:
                     return function_name, match
         return None
 
-    def generate_urls(self, **kwargs: Any) -> Any:
+    def generate_urls(self, **kwargs: Any) -> Iterator[str]:
         """Yield URLs supported by this site for testing or enumeration."""
         raise NotImplementedError
 

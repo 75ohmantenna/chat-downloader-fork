@@ -88,6 +88,8 @@ temporarily violating each and seeing it go red):
 |-----------|---------------|
 | `tests/test_facade_param_sync_unit.py` | `get_chat()` stays in sync with `ChatRequest`; params, defaults, and docstring |
 | `tests/test_any_density_unit.py` | Per-module `Any` occurrence count stays at or below the round-3 baseline; lower baselines as debt is paid off |
+
+Active ratchet targets, deferred items, and candidate splits: [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md).
 | `tests/test_module_size_unit.py` | Non-allowlisted modules stay under `MAX_LINES = 400` |
 
 ## Done means

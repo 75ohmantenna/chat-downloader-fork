@@ -9,7 +9,7 @@ import logging
 import pytest
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
-from chat_downloader.sites.models import _SeenMessageCache
+from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.twitch import live_service
 
 

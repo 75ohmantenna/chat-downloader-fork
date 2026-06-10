@@ -17,10 +17,8 @@ from chat_downloader.errors import (
     ParsingError,
 )
 from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
-from chat_downloader.sites.models import (
-    SUPERCHAT_DEDUP_TYPES,
-    _SeenMessageCache,
-)
+from chat_downloader.sites._seen_cache import _SeenMessageCache
+from chat_downloader.sites.models import SUPERCHAT_DEDUP_TYPES
 
 from .cli_bridge import categorize_parameters
 from .testing import setup_testing_mode
@@ -34,6 +32,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from chat_downloader.sites.models import Chat
+
+    from ._protocols import ChatDownloaderProto
 
 
 def _classify_run_error(e: Exception) -> str:
@@ -53,8 +53,8 @@ def _classify_run_error(e: Exception) -> str:
 
 
 def _finalize_run(
-    chat: Any,
-    downloader: Any,
+    chat: Chat | None,
+    downloader: ChatDownloaderProto | None,
     *,
     primary_error: bool,
 ) -> None:

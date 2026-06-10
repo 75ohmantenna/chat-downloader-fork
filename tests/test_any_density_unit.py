@@ -22,9 +22,9 @@ BASELINE: dict[str, int] = {
     # stable boundary between the JSON loader and the formatter internals).
     "formatting/format.py": 33,
     # Shared site infrastructure — heterogeneous field types resist TypedDict.
-    "sites/base.py": 23,
+    "sites/base.py": 14,
     "sites/models.py": 20,
-    "sites/session.py": 17,
+    "sites/session.py": 7,
     "sites/remap.py": 10,
     "sites/filters.py": 3,
     # Twitch site-specific accumulators and remapping tables.
@@ -86,8 +86,8 @@ BASELINE: dict[str, int] = {
     "utils/string_utils.py": 6,
     "utils/time_utils.py": 3,
     # Runtime layer — orchestration and CLI glue.
-    "runtime/session_lifecycle.py": 6,
-    "runtime/runner.py": 6,
+    "runtime/session_lifecycle.py": 5,
+    "runtime/runner.py": 4,
     "runtime/cli_bridge.py": 5,
     "runtime/chat_pipeline.py": 5,
     "runtime/site_dispatch.py": 4,

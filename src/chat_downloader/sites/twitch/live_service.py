@@ -11,8 +11,9 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import debug_log, log, logger
 from chat_downloader.errors import ParsingError, UserNotFound
+from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
-from chat_downloader.sites.models import Chat, _SeenMessageCache
+from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers
 from chat_downloader.utils.dict_utils import multi_get
 

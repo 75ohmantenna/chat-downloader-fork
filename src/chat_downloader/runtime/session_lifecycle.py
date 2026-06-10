@@ -139,19 +139,17 @@ def get_cookie_value(
 
 def create_session(
     owner: ChatDownloaderProto,
-    chat_downloader_class: type[Any],
+    chat_downloader_class: type[BaseChatDownloader],
     overwrite: bool = False,
 ) -> BaseChatDownloader:
     """Create or retrieve a site downloader session."""
     if not issubclass(chat_downloader_class, BaseChatDownloader):
-        msg = (
+        msg = (  # type: ignore[unreachable]
             f"Unable to create session, class must extend "
             f"BaseChatDownloader. Class given: "
             f"{chat_downloader_class}"
         )
-        raise TypeError(
-            msg,
-        )
+        raise TypeError(msg)
     if chat_downloader_class == BaseChatDownloader:
         msg = "Unable to create session, class may not be BaseChatDownloader."
         raise TypeError(

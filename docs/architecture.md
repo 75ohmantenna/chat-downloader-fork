@@ -126,6 +126,9 @@ explicitly does not forbid `models → sites.models`.
 |-----------|-------|
 | Import-layering contracts | `pyproject.toml [tool.importlinter]`; enforced by `uv run lint-imports` (wired into `make lint`) |
 | Public-API snapshot | `tests/test_public_api_unit.py` — frozen `__all__` sets for `chat_downloader` and `chat_downloader.models`; any intentional surface change must update the snapshot in the same commit |
-| Module-size gate | `tests/test_module_size_unit.py` — 450-line ceiling on all source modules (allowlist for intentional data tables); fails on future bloat |
+| Module-size gate | `tests/test_module_size_unit.py` — 400-line ceiling on all source modules (allowlist for intentional data tables and cohesive modules); fails on future bloat |
 | McCabe complexity | `ruff C9` rule, gate = 8; intrinsically branchy transport loops carry `# noqa: C901` with rationale |
 | 100% branch coverage | `pyproject.toml [tool.coverage.report]`; enforced by `make coverage` / `make ci` |
+| Any-density ratchet | `tests/test_any_density_unit.py` — per-module baseline; lower as typing debt is paid; never raise |
+
+Remaining targets and deferred decisions: [`docs/maintenance-backlog.md`](maintenance-backlog.md).

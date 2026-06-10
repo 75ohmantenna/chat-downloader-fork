@@ -305,7 +305,7 @@ class TimedGenerator:
             except (RuntimeError, StopIteration, ValueError) as error:
                 if self._is_reentrant_generator_close_error(error):
                     return
-                from chat_downloader.debugging import log
+                from chat_downloader.debugging import log  # cycle guard
 
                 log("debug", f"Suppressed generator close() error: {error}")
 

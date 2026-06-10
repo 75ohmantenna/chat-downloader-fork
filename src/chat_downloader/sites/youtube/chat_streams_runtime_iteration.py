@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, SupportsIndex, SupportsInt
 
 from chat_downloader.debugging import log
@@ -50,6 +51,29 @@ _YOUTUBE_POLL_DELAY_FALLBACK_MS = 5000
 _YOUTUBE_POLL_DELAY_MIN_MS = 500
 _YOUTUBE_POLL_DELAY_MAX_MS = 8000
 _PollDelayHint = str | bytes | bytearray | SupportsInt | SupportsIndex | None
+
+
+@dataclass(slots=True)
+class _ContinuationProgress:
+    """Tracks empty-poll and profile-fallback streaks for the chat loop."""
+
+    max_no_progress_polls: int
+    max_profile_fallbacks: int
+    no_progress_count: int = field(default=0)
+    fallback_count: int = field(default=0)
+
+    def register_fallback(self) -> bool:
+        """Count an incomplete-continuation fallback; True if exhausted."""
+        self.fallback_count += 1
+        return self.fallback_count > self.max_profile_fallbacks
+
+    def register_poll(self, *, made_progress: bool) -> bool:
+        """Track the empty-poll streak; True if the no-progress ceiling hit."""
+        if made_progress:
+            self.no_progress_count = 0
+            return False
+        self.no_progress_count += 1
+        return self.no_progress_count >= self.max_no_progress_polls
 
 
 def _attempt_profile_fallback(self: YouTubeDownloaderProto) -> bool:
@@ -164,7 +188,7 @@ def _advance_continuation_loop(
     return bool(cont_result.is_end)
 
 
-def _get_chat_messages(  # noqa: C901 — YouTube chat continuation loop handles many recovery paths
+def _get_chat_messages(  # noqa: C901 — continuation loop is intrinsically branchy
     self: YouTubeDownloaderProto,
     initial_info: dict[str, Any],
     ytcfg: dict[str, Any],
@@ -172,14 +196,10 @@ def _get_chat_messages(  # noqa: C901 — YouTube chat continuation loop handles
 ) -> Generator[dict[str, Any], None, None]:
     """Yield chat messages from a YouTube continuation endpoint."""
     ctx = _build_chat_context(self, initial_info, ytcfg, params)
+    progress = _ContinuationProgress(
+        _YT_MAX_NO_PROGRESS_POLLS, _YT_MAX_PROFILE_FALLBACKS
+    )
     ended_cleanly = False
-    # Defensive bounds: live chat normally produces actions or rotates the
-    # continuation token within seconds. If neither happens for several
-    # polls in a row, YouTube has effectively stopped serving us.
-    max_no_progress_polls = _YT_MAX_NO_PROGRESS_POLLS
-    max_profile_fallbacks = _YT_MAX_PROFILE_FALLBACKS
-    no_progress_count = 0
-    fallback_count = 0
 
     while True:
         continuation_params = build_continuation_params(
@@ -197,13 +217,12 @@ def _get_chat_messages(  # noqa: C901 — YouTube chat continuation loop handles
                 json=continuation_params,
             )
         except IncompleteContinuationError:
-            fallback_count += 1
-            if fallback_count > max_profile_fallbacks:
+            if progress.register_fallback():
                 log(
                     "warning",
                     "Exhausted profile fallbacks "
-                    f"({max_profile_fallbacks}) for incomplete continuation "
-                    "responses; surfacing the underlying error.",
+                    f"({progress.max_profile_fallbacks}) for incomplete "
+                    "continuation responses; surfacing the underlying error.",
                 )
                 raise
             if not _attempt_profile_fallback(self):
@@ -250,21 +269,17 @@ def _get_chat_messages(  # noqa: C901 — YouTube chat continuation loop handles
             ended_cleanly = True
             break
 
-        # No-progress guard for live chat: zero actions AND the token
-        # didn't rotate means YouTube has effectively stopped advancing us.
-        if not actions and ctx.loop_state.continuation == token_before_request:
-            no_progress_count += 1
-            if no_progress_count >= max_no_progress_polls:
-                msg = (
-                    "No progress on YouTube continuation: "
-                    f"{max_no_progress_polls} consecutive empty polls with "
-                    "an unchanged continuation token. The live chat may "
-                    "have ended without a terminator, or the token is "
-                    "stale."
-                )
-                raise NoContinuation(msg)
-        else:
-            no_progress_count = 0
+        made_progress = (
+            bool(actions) or ctx.loop_state.continuation != token_before_request
+        )
+        if progress.register_poll(made_progress=made_progress):
+            msg = (
+                "No progress on YouTube continuation: "
+                f"{progress.max_no_progress_polls} consecutive empty polls "
+                "with an unchanged continuation token. The live chat may "
+                "have ended without a terminator, or the token is stale."
+            )
+            raise NoContinuation(msg)
 
     if ended_cleanly:
         end_msg: dict[str, Any] = {
