@@ -19,13 +19,15 @@ from chat_downloader.sites import get_all_sites
 from .chat_pipeline import configure_chat
 
 if TYPE_CHECKING:
+    import re
+
     from chat_downloader.models import ChatRequest
     from chat_downloader.runtime._protocols import ChatDownloaderProto
     from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.sites.models import Chat
 
 
-def validate_url(url: Any) -> None:
+def validate_url(url: str) -> None:
     """Validate that a URL is provided."""
     if not url:
         msg = "No URL provided."
@@ -71,7 +73,7 @@ def _chat_debug_snapshot(chat: Chat) -> dict[str, Any]:
 def execute_chat_generator(
     site_object: BaseChatDownloader,
     generator_method_name: str,
-    match: Any,
+    match: re.Match[str],
     request: ChatRequest,
     site_name: str,
 ) -> Chat:
@@ -105,7 +107,7 @@ def execute_chat_generator(
 def create_chat_for_site(
     owner: ChatDownloaderProto,
     site: type,
-    match_info: tuple[str, Any],
+    match_info: tuple[str, re.Match[str]],
     request: ChatRequest,
 ) -> Chat:
     """Create and configure a chat object for a matched site."""

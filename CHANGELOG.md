@@ -4,6 +4,17 @@
 
 ### Tooling
 
+- Tighten module-size gate `MAX_LINES` 450 → 400; add `utils/timed_utils.py`
+  and `chat_downloader.py` to the allowlist as intentionally cohesive modules
+  over 400 LOC; four 360–399-LOC modules rely on the headroom without allowlisting
+- Add facade param-sync drift test (`tests/test_facade_param_sync_unit.py`):
+  pins `ChatDownloader.get_chat()` parameter names, defaults, and docstring
+  coverage against `ChatRequest` so the two cannot silently diverge
+- Add `Any`-density ratchet gate (`tests/test_any_density_unit.py`): caps
+  per-module `Any` occurrence counts at their post-round-3 baseline;
+  `DEFAULT_CAP = 2` for uncapped modules; lowers automatically as debt is paid
+  off, never raised
+
 - Enforce `from __future__ import annotations` in every source file via ruff
   rule `I002` (`required-imports`); auto-applied repo-wide; moves type-only
   stdlib/application imports into `if TYPE_CHECKING:` blocks; adds
@@ -20,6 +31,17 @@
   two drift-regression harness modules in addition to all of `src/`
 
 ### Architecture
+
+- Add `utils/json_types` leaf module: PEP 695 recursive `JSONScalar` /
+  `JSONList` / `JSONDict` / `JSONAny` type aliases plus narrowing accessors
+  (`get_str`, `get_int`, `get_float`, `get_bool`, `get_dict`, `get_list`,
+  `dig`) that accept `Mapping[str, object]` and return concrete types;
+  migrate highest-density payload modules (`actions_handlers_parser.py`,
+  `format.py`, `playability.py`, `message_irc_resolve.py`) to the new
+  accessors; wipe `Any` from these payload boundaries under strict mypy
+- Tighten internal `Any`: `_SiteValueResolver` Protocol in `models/_request.py`
+  replaces `site_object: Any`; `__exit__` context-manager params typed to
+  `type[BaseException] | None` / `BaseException | None` / `TracebackType | None`
 
 - Reduce cyclomatic complexity of 12 functions that measured 9–10 (above the
   new gate of 8) by extracting small named helpers:

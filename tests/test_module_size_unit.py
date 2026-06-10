@@ -6,14 +6,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-MAX_LINES = 450
+MAX_LINES = 400
 # Intentionally large data tables and cohesive single-purpose modules;
 # see docs/maintenance-notes.md for rationale.
 ALLOWLIST: frozenset[str] = frozenset(
     {
+        # Data tables — line counts are dominated by literal mappings.
         "sites/youtube/constants_message.py",
         "sites/twitch/remappings.py",
         "sites/twitch/constants.py",
+        # Cohesive single-purpose modules intentionally over 400 LOC;
+        # see docs/maintenance-notes.md "Modules still over 360 LOC".
+        "utils/timed_utils.py",
+        "chat_downloader.py",
     }
 )
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"

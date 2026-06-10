@@ -7,7 +7,7 @@ from __future__ import annotations
 import csv
 import os
 from pathlib import Path
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from chat_downloader.debugging import log
 from chat_downloader.output.writers import (
@@ -26,6 +26,9 @@ __all__ = [
     "JsonLinesContinuousWriter",
     "TextContinuousWriter",
 ]
+
+if TYPE_CHECKING:
+    import types
 
 DOT_PREFIX_LENGTH = 1
 _IGNORED_DEL_EXCEPTIONS = Exception
@@ -156,7 +159,12 @@ class ContinuousWriter:
         if writer is not None:
             writer.close()
 
-    def __exit__(self, _exc_type: Any, _exc_val: Any, _exc_tb: Any) -> None:
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: types.TracebackType | None,
+    ) -> None:
         """Exit the context manager, closing the writer."""
         self.close()
 

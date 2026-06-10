@@ -20,8 +20,10 @@ from chat_downloader.utils.conversion_utils import int_or_none
 if TYPE_CHECKING:
     import re
 
+    from chat_downloader.sites.twitch.types import BadgeSet
 
-def _parse_irc_int_flag(value: Any, default: int) -> int:
+
+def _parse_irc_int_flag(value: object, default: int) -> int:
     """Parse an IRC flag value as an integer, returning *default* on failure.
 
     Args:
@@ -77,7 +79,7 @@ def _set_message_type(info: dict[str, Any], original_message_type: str) -> None:
 def _resolve_irc_badges(
     info: dict[str, Any],
     channel_id: str,
-    badge_set: Any,
+    badge_set: BadgeSet | None,
 ) -> None:
     """Parse main and shared-chat IRC badges with subscriber metadata.
 

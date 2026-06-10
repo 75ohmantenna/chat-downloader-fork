@@ -17,7 +17,7 @@ from chat_downloader.utils.timed_utils import TimedGenerator
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.base import BaseChatDownloader
-    from chat_downloader.sites.models import Chat
+    from chat_downloader.sites.models import Chat, SiteDefault
 
 # Statuses that indicate an ongoing or recently-ended live broadcast.
 # post_live = DVR available but stream not yet fully processed.
@@ -41,7 +41,7 @@ def apply_message_limit(chat: Chat, max_messages: int | None) -> None:
 
 
 def configure_timeouts(
-    chat: Chat, timeout: Any, inactivity_timeout: Any
+    chat: Chat, timeout: float | None, inactivity_timeout: float | None
 ) -> None:
     """Configure timeout and inactivity timeout on a chat generator."""
     if timeout is None and inactivity_timeout is None:
@@ -78,7 +78,9 @@ def _is_youtube_chat(chat: Chat) -> bool:
     return getattr(site, "_NAME", None) == "youtube.com"
 
 
-def _resolve_format_name(chat: Chat, format_name: Any) -> Any:
+def _resolve_format_name(
+    chat: Chat, format_name: str | SiteDefault
+) -> str | SiteDefault:
     """Select a live-aware format override when both time fields exist."""
     if not isinstance(format_name, str):
         return format_name
@@ -89,16 +91,19 @@ def _resolve_format_name(chat: Chat, format_name: Any) -> Any:
     return format_name
 
 
-def configure_formatter(chat: Chat, format_file: Any, format_name: Any) -> None:
+def configure_formatter(
+    chat: Chat, format_file: str | None, format_name: str | SiteDefault
+) -> None:
     """Configure message formatting for chat output."""
     formatter = ItemFormatter(format_file)
-    resolved_format_name = _resolve_format_name(chat, format_name)
+    raw = _resolve_format_name(chat, format_name)
+    # By the time configure_formatter is called, format_name should have been
+    # resolved to a str via resolved_for_site().  SiteDefault.name is the
+    # fallback for any unresolved placeholders.
+    format_str = raw if isinstance(raw, str) else raw.name
 
     def format_callable(item: dict[str, Any]) -> str:
-        return formatter.format(
-            item,
-            format_name=resolved_format_name,
-        )
+        return formatter.format(item, format_name=format_str)
 
     chat.set_formatter(format_callable)
 

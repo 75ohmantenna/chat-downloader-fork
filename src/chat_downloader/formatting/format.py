@@ -9,7 +9,7 @@ import re
 import string
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
 from chat_downloader.utils.dict_utils import multi_get
@@ -19,6 +19,9 @@ from chat_downloader.utils.time_utils import (
     seconds_to_time,
     time_to_seconds,
 )
+
+if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
 
 
 class _SafeFormatter(string.Formatter):
@@ -99,7 +102,7 @@ class ItemFormatter:
 
     def format(
         self,
-        item: dict[str, Any],
+        item: JSONDict,
         format_name: str = DEFAULT_FORMAT_NAME,
         format_object: dict[str, Any] | None = None,
     ) -> str:
@@ -127,7 +130,7 @@ class ItemFormatter:
         self,
         format_name: str,
         format_object: dict[str, Any] | list[Any] | None,
-        item: dict[str, Any],
+        item: JSONDict,
     ) -> dict[str, Any] | None:
         """Return the format object to use, by name or matched from list."""
         if format_object is None:
@@ -160,7 +163,7 @@ class ItemFormatter:
     def _match_format_from_list(
         self,
         format_list: list[Any],
-        item: dict[str, Any],
+        item: JSONDict,
     ) -> dict[str, Any] | None:
         """Return the first matching format from *format_list* for *item*."""
         message_type = item.get(self.KEY_MESSAGE_TYPE)
@@ -174,7 +177,7 @@ class ItemFormatter:
     def _does_format_match(
         self,
         format_object: dict[str, Any],
-        message_type: str | None,
+        message_type: object,
     ) -> bool:
         """Return True when *format_object* matches *message_type*."""
         matching = format_object.get(self.KEY_MATCHING)
@@ -200,9 +203,7 @@ class ItemFormatter:
         return nested_update(deepcopy(parent), format_object)
 
     def _apply_template(
-        self,
-        format_object: dict[str, Any],
-        item: dict[str, Any],
+        self, format_object: dict[str, Any], item: JSONDict
     ) -> str:
         """Substitute template placeholders with values from *item*."""
         template = format_object.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
@@ -217,7 +218,7 @@ class ItemFormatter:
     def _replace_placeholder(
         self,
         match: re.Match[str],
-        item: dict[str, Any],
+        item: JSONDict,
         format_keys: dict[str, Any],
     ) -> str:
         """Replace a single template placeholder with its formatted value."""

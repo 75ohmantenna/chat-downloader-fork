@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
 from chat_downloader.debugging import debug_log, log
 from chat_downloader.errors import (
@@ -15,19 +15,23 @@ from chat_downloader.errors import (
     VideoUnplayable,
 )
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_value
+from chat_downloader.utils.json_types import get_dict, get_str
 
 from .parsing.messages import _parse_runs
 
+if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
 
-def is_age_gated(player_response_info: dict[str, Any]) -> bool:
+
+def is_age_gated(player_response_info: JSONDict) -> bool:
     """Return ``True`` when the video appears to be age-gated."""
-    playability_status = player_response_info.get("playabilityStatus", {})
+    playability_status = get_dict(player_response_info, "playabilityStatus")
 
     if playability_status.get("desktopLegacyAgeGateReason"):
         return True
 
-    status = playability_status.get("status", "")
-    reason = playability_status.get("reason", "")
+    status = get_str(playability_status, "status")
+    reason = get_str(playability_status, "reason")
 
     age_gate_keywords = (
         "confirm your age",
@@ -44,21 +48,21 @@ def is_age_gated(player_response_info: dict[str, Any]) -> bool:
     )
 
 
-def is_unplayable(player_response_info: dict[str, Any]) -> bool:
+def is_unplayable(player_response_info: JSONDict) -> bool:
     """Return ``True`` when the playability status is ``UNPLAYABLE``."""
-    playability_status = player_response_info.get("playabilityStatus", {})
-    return bool(playability_status.get("status") == "UNPLAYABLE")
+    playability_status = get_dict(player_response_info, "playabilityStatus")
+    return get_str(playability_status, "status") == "UNPLAYABLE"
 
 
 def _build_error_message(
-    error_info: dict[str, Any],
-    playability_status: dict[str, Any],
+    error_info: JSONDict,
+    playability_status: JSONDict,
 ) -> str:
     """Build a human-readable error message from an ``errorScreen`` entry."""
-    error_reasons: dict[str, Any] = {"reason": "", "subreason": ""}
+    error_reasons: JSONDict = {"reason": "", "subreason": ""}
 
     for error_reason in error_reasons:
-        text = (error_info.get(error_reason)) or {}
+        text = get_dict(error_info, error_reason)
         error_reasons[error_reason] = (
             text.get("simpleText")
             or _parse_runs(text, False)["message"]
@@ -80,9 +84,9 @@ def _build_error_message(
 
 
 def _raise_for_early_playability(
-    playability_status: dict[str, Any],
-    player_response_info: dict[str, Any],
-    error_screen: dict[str, Any],
+    playability_status: JSONDict,
+    player_response_info: JSONDict,
+    error_screen: JSONDict,
 ) -> None:
     """Raise for age-gate, unplayable, and CAPTCHA before error-screen parse."""
     if is_age_gated(player_response_info):
@@ -110,7 +114,7 @@ def _raise_for_early_playability(
 def _raise_for_status(
     status: str | None,
     error_message: str,
-    playability_status: dict[str, Any],
+    playability_status: JSONDict,
 ) -> None:
     """Dispatch to the correct exception based on playability *status*."""
     match status:
@@ -132,11 +136,11 @@ def _raise_for_status(
 
 
 def _raise_for_error_screen(
-    playability_status: dict[str, Any],
-    player_response_info: dict[str, Any],
+    playability_status: JSONDict,
+    player_response_info: JSONDict,
 ) -> None:
     """Raise for age-gated or status-based error-screen cases."""
-    error_screen = playability_status.get("errorScreen") or {}
+    error_screen = get_dict(playability_status, "errorScreen")
 
     _raise_for_early_playability(
         playability_status, player_response_info, error_screen
@@ -156,11 +160,13 @@ def _raise_for_error_screen(
         )
 
     _raise_for_status(
-        playability_status.get("status"), error_message, playability_status
+        get_str(playability_status, "status") or None,
+        error_message,
+        playability_status,
     )
 
 
-def _raise_for_popup(yt_initial_data: dict[str, Any]) -> None:
+def _raise_for_popup(yt_initial_data: JSONDict) -> None:
     popup_info = multi_get(
         yt_initial_data,
         "onResponseReceivedActions",
@@ -180,7 +186,7 @@ def _raise_for_popup(yt_initial_data: dict[str, Any]) -> None:
     raise VideoUnavailable(error_message)
 
 
-def _raise_for_replay_unavailable(yt_initial_data: dict[str, Any]) -> None:
+def _raise_for_replay_unavailable(yt_initial_data: JSONDict) -> None:
     if not yt_initial_data.get("contents"):
         log("debug", f"Initial YouTube data: {yt_initial_data}")
         msg = "Unable to find initial video contents."
@@ -214,11 +220,11 @@ def _raise_for_replay_unavailable(yt_initial_data: dict[str, Any]) -> None:
 
 
 def raise_if_playability_error(
-    player_response_info: dict[str, Any],
-    yt_initial_data: dict[str, Any],
+    player_response_info: JSONDict,
+    yt_initial_data: JSONDict,
 ) -> None:
     """Inspect playability state and raise the mapped domain exception."""
-    playability_status = player_response_info.get("playabilityStatus") or {}
+    playability_status = get_dict(player_response_info, "playabilityStatus")
 
     _raise_for_error_screen(playability_status, player_response_info)
     _raise_for_popup(yt_initial_data)

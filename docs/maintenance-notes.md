@@ -113,7 +113,7 @@ blocked the `X as X` re-export idiom.
 |-----------|-----------|
 | Import-layering contracts | `uv run lint-imports` (wired into `make lint`); config in `pyproject.toml [tool.importlinter]` |
 | Public-API snapshot | `tests/test_public_api_unit.py` — update the frozen sets when intentionally changing `__all__` |
-| Module-size gate | `tests/test_module_size_unit.py` — 450-line ceiling; tighten `MAX_LINES` as further splits happen |
+| Module-size gate | `tests/test_module_size_unit.py` — ceiling tightened to 400 (round-3); `utils/timed_utils.py` and `chat_downloader.py` allowlisted; four 360–399-LOC modules rely on headroom |
 
 ### Modules still over 360 LOC (intentional, E4-optional)
 
@@ -125,3 +125,46 @@ blocked the `X as X` re-export idiom.
 | `sites/twitch/replay_service.py` | 377 | Single-class service; same reasoning |
 | `sites/youtube/client_requests_continuation.py` | 367 | Cohesive HTTP-layer module |
 | `cli_args.py` | 362 | Newly extracted argument machinery; just above budget |
+
+---
+
+## Round-3 typing pass (2026-06)
+
+The following typing improvements and guardrails landed on the
+`maintainability-pass` branch in June 2026 (commits G1–G7).
+
+### Typed JSON foundation (`utils/json_types`)
+
+`src/chat_downloader/utils/json_types.py` is a new leaf module that provides:
+
+- PEP 695 recursive `type` aliases: `JSONScalar`, `JSONList`, `JSONDict`,
+  `JSONAny`.
+- Narrowing accessors `get_str`, `get_int`, `get_float`, `get_bool`,
+  `get_dict`, `get_list`, `dig` — all accept `Mapping[str, object]` and return
+  a concrete type, never `Any`.
+
+Payload-parsing modules that used to write `x: dict[str, Any] = resp.get(key)`
+now call `get_dict(resp, key)` and receive a fully typed `JSONDict`.  Modules
+still using `dict[str, Any]` for accumulators (dicts built by assigning
+heterogeneous parsed values) are intentionally left as-is; they are not JSON
+boundaries and cannot be typed with `JSONDict` without cascading TypedDicts.
+
+### New guardrails
+
+| Guardrail | File | How to use |
+|-----------|------|-----------|
+| Facade param-sync drift test | `tests/test_facade_param_sync_unit.py` | `uv run pytest -q tests/test_facade_param_sync_unit.py`; fails if `get_chat()` gains a param not in `ChatRequest` |
+| `Any`-density ratchet | `tests/test_any_density_unit.py` | `uv run pytest -q tests/test_any_density_unit.py`; fails if any module's `Any` count exceeds its baseline; do not raise baselines, only lower them |
+
+### Modules with large `Any` baselines (genuine boundaries, not debt)
+
+Files with the highest post-round-3 `Any` counts were classified and
+commented in `tests/test_any_density_unit.py`.  The main categories:
+
+- **Formatter internals** (`formatting/format.py: 33`): format-spec dicts are
+  loaded from user-supplied JSON files; `dict[str, Any]` is the stable boundary.
+- **Accumulator dicts** (Twitch IRC parsers, YouTube continuation parsers):
+  `info: dict[str, Any]` is populated with heterogeneous parsed values; `JSONDict`
+  cannot express this without full TypedDict coverage of each message shape.
+- **Generic utilities** (`utils/dict_utils.py: 19`): cross-type dispatch helpers
+  that are legitimately generic.

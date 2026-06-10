@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from chat_downloader.debugging import debug_log
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _PATH_BANNER_RENDERER,
@@ -15,17 +13,18 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _RENDERER_BANNER_CHAT_SUMMARY,
 )
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
+from chat_downloader.utils.json_types import JSONDict, get_dict
 
 from .message_content_text_parser import _parse_runs
 from .messages import _parse_item
 
 
 def _handle_item_action(
-    action: dict[str, Any],
+    action: JSONDict,
     original_action_type: str,
-    data: dict[str, Any],
+    data: JSONDict,
     offset: float,
-) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle add item and ticker actions."""
     original_item = multi_get(action, original_action_type, _PATH_ITEM)
     original_message_type = try_get_first_key(original_item)
@@ -34,11 +33,11 @@ def _handle_item_action(
 
 
 def _handle_remove_action(
-    action: dict[str, Any],
+    action: JSONDict,
     original_action_type: str,
-    data: dict[str, Any],
+    data: JSONDict,
     offset: float,
-) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle remove/delete/ban actions."""
     original_item = action
     if original_action_type == "markChatItemAsDeletedAction":
@@ -50,11 +49,11 @@ def _handle_remove_action(
 
 
 def _handle_replace_action(
-    action: dict[str, Any],
+    action: JSONDict,
     original_action_type: str,
-    data: dict[str, Any],
+    data: JSONDict,
     offset: float,
-) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle message replacement actions."""
     original_item = multi_get(
         action, original_action_type, _PATH_REPLACEMENT_ITEM
@@ -65,11 +64,11 @@ def _handle_replace_action(
 
 
 def _handle_tooltip_action(
-    action: dict[str, Any],
+    action: JSONDict,
     original_action_type: str,
-    data: dict[str, Any],
+    data: JSONDict,
     offset: float,
-) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle tooltip display actions."""
     original_item = multi_get(action, original_action_type, _PATH_TOOLTIP)
     original_message_type = try_get_first_key(original_item)
@@ -78,11 +77,11 @@ def _handle_tooltip_action(
 
 
 def _handle_add_banner_action(
-    action: dict[str, Any],
+    action: JSONDict,
     original_action_type: str,
-    data: dict[str, Any],
+    data: JSONDict,
     offset: float,
-) -> tuple[dict[str, Any], dict[str, Any], str | None, str]:
+) -> tuple[JSONDict, JSONDict, str | None, str]:
     """Handle add banner actions."""
     original_item = multi_get(
         action, original_action_type, _PATH_BANNER_RENDERER
@@ -105,11 +104,11 @@ def _handle_add_banner_action(
 
 
 def _handle_remove_banner_action(
-    action: dict[str, Any],
+    action: JSONDict,
     original_action_type: str,
-    data: dict[str, Any],
+    data: JSONDict,
     offset: float,
-) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle remove banner actions."""
     original_item = action
     original_message_type = "removeBanner"
@@ -118,14 +117,14 @@ def _handle_remove_banner_action(
 
 
 def _handle_poll_action(
-    action: dict[str, Any],
+    action: JSONDict,
     original_action_type: str,
-    data: dict[str, Any],
+    data: JSONDict,
     offset: float,
-) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle poll create, update, and close actions."""
     if original_action_type == "closeLiveChatActionPanelAction":
-        action_data = action.get("closeLiveChatActionPanelAction") or {}
+        action_data = get_dict(action, "closeLiveChatActionPanelAction")
         data["poll_id"] = action_data.get("targetPanelId")
         return (data, action, "pollClosedEvent", original_action_type)
 

@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: MIT
+
+"""Ratchet: no module may exceed its post-round-3 baseline count of `Any`."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"
+_ANY = re.compile(r"\bAny\b")
+DEFAULT_CAP = 2
+
+# Baseline captured after round-3 Step G5 migrations (2026-06).
+# Counts are total occurrences of `Any` in each file (not line count).
+# Files at DEFAULT_CAP or below are omitted — they are implicitly capped.
+# Every entry above DEFAULT_CAP is a genuine payload/accumulator boundary;
+# do not raise these values; tighten them as further migrations happen.
+# See docs/maintenance-notes.md "Round-3 typing pass" for context.
+BASELINE: dict[str, int] = {
+    # Format spec objects loaded from JSON config files (dict[str,Any] is the
+    # stable boundary between the JSON loader and the formatter internals).
+    "formatting/format.py": 33,
+    # Shared site infrastructure — heterogeneous field types resist TypedDict.
+    "sites/base.py": 23,
+    "sites/models.py": 20,
+    "sites/session.py": 17,
+    "sites/remap.py": 10,
+    "sites/filters.py": 3,
+    # Twitch site-specific accumulators and remapping tables.
+    "sites/twitch/replay_service.py": 18,
+    "sites/twitch/extractor.py": 18,
+    "sites/twitch/discovery.py": 15,
+    "sites/twitch/parsing/message_irc_resolve.py": 14,
+    "sites/twitch/parsing/messages.py": 14,
+    "sites/twitch/graphql_client.py": 12,
+    "sites/twitch/remappings.py": 11,
+    "sites/twitch/parsing/badges.py": 9,
+    "sites/twitch/irc_transport.py": 6,
+    "sites/twitch/replay_transport.py": 6,
+    "sites/twitch/types.py": 5,
+    "sites/twitch/parsing/message_emotes.py": 5,
+    "sites/twitch/live_service.py": 5,
+    # YouTube site-specific accumulators and remapping tables.
+    "sites/youtube/_protocols.py": 18,
+    "sites/youtube/continuations.py": 16,
+    "sites/youtube/client_requests_bootstrap.py": 16,
+    "sites/youtube/parsing/message_content_text_parser.py": 14,
+    "sites/youtube/parsing/message_items_content_parser.py": 13,
+    "sites/youtube/parsing/actions_router.py": 11,
+    "sites/youtube/helpers.py": 11,
+    "sites/youtube/discovery_channels_runtime_iteration.py": 10,
+    "sites/youtube/chat_streams_response.py": 10,
+    "sites/youtube/video_metadata.py": 9,
+    "sites/youtube/parsing/message_content_badges.py": 9,
+    "sites/youtube/discovery_helpers.py": 9,
+    "sites/youtube/continuation_loop_runtime.py": 9,
+    "sites/youtube/client_context.py": 9,
+    "sites/youtube/video_status.py": 8,
+    "sites/youtube/discovery_playlists.py": 8,
+    "sites/youtube/client_requests_continuation.py": 8,
+    "sites/youtube/client_auth.py": 8,
+    "sites/youtube/chat_streams_runtime_iteration.py": 8,
+    "sites/youtube/chat_streams_context.py": 8,
+    "sites/youtube/parsing/message_items_video.py": 7,
+    "sites/youtube/parsing/actions_handlers_validation.py": 7,
+    "sites/youtube/client_requests_initial.py": 7,
+    "sites/youtube/video_status_helpers.py": 6,
+    "sites/youtube/chat_streams.py": 6,
+    "sites/youtube/message_pipeline.py": 5,
+    "sites/youtube/chat_users_router.py": 5,
+    "sites/youtube/video_initialization.py": 3,
+    "sites/youtube/extractor.py": 3,
+    "sites/youtube/constants_message.py": 3,
+    "sites/youtube/chat_users_retrieval.py": 3,
+    # Output and formatting layers — writers receive heterogeneous items.
+    "output/writers.py": 13,
+    "output/csv_rewrite.py": 6,
+    "output/continuous_write.py": 3,
+    # Utilities — generic helpers require Any for cross-type dispatch.
+    "utils/dict_utils.py": 19,
+    "utils/timed_utils.py": 14,
+    "utils/conversion_utils.py": 12,
+    "utils/json_utils.py": 11,
+    "utils/console_utils.py": 7,
+    "utils/string_utils.py": 6,
+    "utils/time_utils.py": 3,
+    # Runtime layer — orchestration and CLI glue.
+    "runtime/session_lifecycle.py": 6,
+    "runtime/runner.py": 6,
+    "runtime/cli_bridge.py": 5,
+    "runtime/chat_pipeline.py": 5,
+    "runtime/site_dispatch.py": 4,
+    # Models layer.
+    "models/_request.py": 5,
+    "models/_base.py": 5,
+    "models/_runconfig.py": 4,
+    # Top-level modules.
+    "debugging.py": 8,
+    "chat_downloader.py": 5,
+    "cli_args.py": 4,
+    "request_profiles.py": 3,
+}
+
+
+def _count(path: Path) -> int:
+    return len(_ANY.findall(path.read_text(encoding="utf-8")))
+
+
+def test_any_density_within_baseline() -> None:
+    offenders = []
+    for path in SRC.rglob("*.py"):
+        rel = path.relative_to(SRC).as_posix()
+        cap = BASELINE.get(rel, DEFAULT_CAP)
+        n = _count(path)
+        if n > cap:
+            offenders.append(f"{rel}: {n} > {cap}")
+    assert not offenders, "Any-density over baseline:\n" + "\n".join(offenders)

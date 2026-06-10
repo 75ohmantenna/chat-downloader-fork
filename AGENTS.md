@@ -71,11 +71,24 @@ details.
 - CLI help is generated from dataclass metadata; change the dataclass first.
 - Prefer focused modules over broad utility or compatibility-style imports.
 - Test file naming: `test_<behavior>.py` or `test_<area>_unit.py`.
+- Parse upstream JSON via `utils/json_types` accessors (`get_str`, `get_int`,
+  `get_dict`, `get_list`, `dig`); avoid annotating payload locals as `Any`.
+  Reserve `dict[str, Any]` only for accumulator dicts that are built by
+  assigning heterogeneous parsed values, not for incoming API payloads.
 
 ## Testing
 Default to the offline suite (`-m "not network"`). Mark live-network tests
 `@pytest.mark.network`. Add regression tests for any parser, retry, output,
 or runtime change. Keep curated fixtures under `tests/fixtures/`.
+
+Three ratchet guardrails prevent regressions (fail closed — verify by
+temporarily violating each and seeing it go red):
+
+| Test file | What it guards |
+|-----------|---------------|
+| `tests/test_facade_param_sync_unit.py` | `get_chat()` stays in sync with `ChatRequest`; params, defaults, and docstring |
+| `tests/test_any_density_unit.py` | Per-module `Any` occurrence count stays at or below the round-3 baseline; lower baselines as debt is paid off |
+| `tests/test_module_size_unit.py` | Non-allowlisted modules stay under `MAX_LINES = 400` |
 
 ## Done means
 A behavior, runtime, or tooling change is not done until:

@@ -7,7 +7,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 from dataclasses import fields as dc_fields
-from typing import Any, Literal, Self
+from typing import Any, Literal, Protocol, Self
 
 from chat_downloader.models._base import (
     DEFAULT_BUFFER_SIZE,
@@ -16,6 +16,12 @@ from chat_downloader.models._base import (
     _cli,
 )
 from chat_downloader.sites.models import SiteDefault
+
+
+class _SiteValueResolver(Protocol):
+    """Structural interface for objects that resolve site-default values."""
+
+    def get_site_value(self, value: object) -> object: ...
 
 
 @dataclass(slots=True)
@@ -293,7 +299,7 @@ class ChatRequest:
         """Return a copy of the request with selected fields replaced."""
         return replace(self, **kwargs)
 
-    def resolved_for_site(self, site_object: Any) -> Self:
+    def resolved_for_site(self, site_object: _SiteValueResolver) -> Self:
         """Resolve any site-default placeholder values for a specific site."""
         return self.with_updates(
             **{
