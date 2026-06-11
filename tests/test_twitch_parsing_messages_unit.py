@@ -18,7 +18,7 @@ from chat_downloader.sites.twitch.parsing import (
 )
 from chat_downloader.sites.twitch.parsing.messages import _parse_irc_item
 from chat_downloader.sites.twitch.parsing.tag_decoding import (
-    _decode_pseudo_BNF,
+    _decode_pseudo_bnf,
     _parse_bool,
     _parse_bool_text,
 )
@@ -213,7 +213,7 @@ def test_parse_irc_item_sets_shared_chat_fields_for_same_channel_source() -> (
 
 
 def test_decode_pseudo_bnf() -> None:
-    assert _decode_pseudo_BNF(r"hello\sworld\:\:") == "hello world;;"
+    assert _decode_pseudo_bnf(r"hello\sworld\:\:") == "hello world;;"
 
 
 def test_parse_bool_and_bool_text() -> None:
@@ -664,7 +664,7 @@ def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -
 
 
 def test_decode_pseudo_bnf_converts_backslash_escape() -> None:
-    assert _decode_pseudo_BNF(r"a\\b") == r"a\b"
+    assert _decode_pseudo_bnf(r"a\\b") == r"a\b"
 
 
 def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() -> (  # noqa: E501

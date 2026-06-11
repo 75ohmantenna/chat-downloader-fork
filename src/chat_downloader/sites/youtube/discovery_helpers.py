@@ -90,7 +90,7 @@ def _get_rendered_content(yt_info: dict[str, Any], tab_index: int = 0) -> Any:
 class YouTubeDiscoveryHelpersMixin:
     """Shared discovery helpers for rendered content and test items."""
 
-    def generate_urls(self, **kwargs: Any) -> Iterator[str]:
+    def generate_urls(self, **kwargs: Any) -> Iterator[str]:  # noqa: ARG002 — base class contract from BaseChatDownloader
         """Generate URLs for testing purposes."""
         items = self._get_testing_items()
 

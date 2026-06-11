@@ -20,7 +20,7 @@ def test_jsonl_rejects_naive_datetime(tmp_path: Path) -> None:
     writer = JsonLinesContinuousWriter(str(tmp_path / "out.jsonl"))
     try:
         with pytest.raises(ValueError, match="naive datetime"):
-            writer.write({"timestamp": datetime.datetime(2024, 1, 1, 12, 0, 0)})
+            writer.write({"timestamp": datetime.datetime(2024, 1, 1, 12, 0, 0)})  # noqa: DTZ001 — intentional naive datetime to test rejection
     finally:
         writer.close()
 
@@ -62,7 +62,7 @@ def test_jsonl_assert_only_inspects_top_level(tmp_path: Path) -> None:
         # path. The contract is enforced at the surface where regressions
         # would actually appear.
         writer.write(
-            {"nested": {"ts": datetime.datetime(2024, 1, 1).isoformat()}}
+            {"nested": {"ts": datetime.datetime(2024, 1, 1).isoformat()}}  # noqa: DTZ001 — intentional naive datetime (tests non-surface bypass)
         )
     finally:
         writer.close()

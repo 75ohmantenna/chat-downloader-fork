@@ -22,7 +22,9 @@ def _parse_subscription_type(value: Any) -> str | None:
 @cache
 def build_author_remapping() -> dict[str, Any]:
     """Build author remapping with parsing functions."""
-    from chat_downloader.sites.remap import Remapper as r
+    from chat_downloader.sites.remap import (
+        Remapper as r,  # noqa: N813 — compact table-construction alias
+    )
     from chat_downloader.utils.conversion_utils import str_or_none
     from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
@@ -55,7 +57,9 @@ def build_user_remapping() -> dict[str, Any]:
 @cache
 def build_comment_remapping() -> dict[str, Any]:
     """Build comment remapping with parsing functions."""
-    from chat_downloader.sites.remap import Remapper as r
+    from chat_downloader.sites.remap import (
+        Remapper as r,  # noqa: N813 — compact table-construction alias
+    )
     from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
     from .parsing.messages import _parse_message_info, _parse_user
@@ -72,11 +76,13 @@ def build_comment_remapping() -> dict[str, Any]:
 @cache
 def build_message_param_remapping() -> dict[str, Any]:
     """Build message parameter remapping with parsing functions."""
-    from chat_downloader.sites.remap import Remapper as r
+    from chat_downloader.sites.remap import (
+        Remapper as r,  # noqa: N813 — compact table-construction alias
+    )
     from chat_downloader.utils.conversion_utils import int_or_none
 
     from .parsing.tag_decoding import (
-        _decode_pseudo_BNF,
+        _decode_pseudo_bnf,
         _parse_bool,
         _parse_bool_text,
     )
@@ -108,7 +114,7 @@ def build_message_param_remapping() -> dict[str, Any]:
             _parse_subscription_type,
         ),
         "msg-param-sub-plan-name": r(
-            "subscription_plan_name", _decode_pseudo_BNF
+            "subscription_plan_name", _decode_pseudo_bnf
         ),
         "msg-param-sub-benefit-end-month": r(
             "sub_benefit_end_month", int_or_none
@@ -131,7 +137,7 @@ def build_message_param_remapping() -> dict[str, Any]:
         "msg-param-trigger-type": "trigger_type",
         "msg-param-total-reward-count": r("total_reward_count", int_or_none),
         "msg-param-trigger-amount": r("trigger_amount", int_or_none),
-        "msg-param-origin-id": r("origin_id", _decode_pseudo_BNF),
+        "msg-param-origin-id": r("origin_id", _decode_pseudo_bnf),
         "msg-param-community-gift-id": "community_gift_id",
         "msg-param-sender-count": r("sender_count", int_or_none),
         "msg-param-mass-gift-count": r("mass_gift_count", int_or_none),
@@ -182,11 +188,13 @@ def build_message_param_remapping() -> dict[str, Any]:
 @cache
 def build_irc_remapping() -> dict[str, Any]:
     """Build IRC remapping with parsing functions."""
-    from chat_downloader.sites.remap import Remapper as r
+    from chat_downloader.sites.remap import (
+        Remapper as r,  # noqa: N813 — compact table-construction alias
+    )
     from chat_downloader.utils.conversion_utils import int_or_none, str_or_none
 
     from .parsing.message_emotes import _parse_emotes
-    from .parsing.tag_decoding import _decode_pseudo_BNF, _parse_bool
+    from .parsing.tag_decoding import _decode_pseudo_bnf, _parse_bool
 
     message_param_remapping = build_message_param_remapping()
 
@@ -209,7 +217,7 @@ def build_irc_remapping() -> dict[str, Any]:
         "turbo": r("author_is_turbo", _parse_bool),
         "client-nonce": "client_nonce",
         "user-type": "user_type",
-        "reply-parent-msg-body": r("in_reply_to_message", _decode_pseudo_BNF),
+        "reply-parent-msg-body": r("in_reply_to_message", _decode_pseudo_bnf),
         "reply-parent-user-id": r("in_reply_to_author_id", str_or_none),
         "reply-parent-msg-id": "in_reply_to_message_id",
         "reply-parent-display-name": "in_reply_to_author_display_name",
@@ -239,7 +247,7 @@ def build_irc_remapping() -> dict[str, Any]:
         "slow": r("slow_mode", int_or_none),
         "subs-only": r("subscriber_only", _parse_bool),
         "rituals": r("rituals_enabled", _parse_bool),
-        "system-msg": r("system_message", _decode_pseudo_BNF),
+        "system-msg": r("system_message", _decode_pseudo_bnf),
         "number-of-viewers": "number_of_viewers",
         "target-user-id": r("target_author_id", str_or_none),
         "animation-id": "animation_id",
@@ -261,7 +269,9 @@ def build_game_remapping() -> dict[str, Any]:
 @cache
 def build_clip_remapping() -> dict[str, Any]:
     """Build clip remapping with parsing functions."""
-    from chat_downloader.sites.remap import Remapper as r
+    from chat_downloader.sites.remap import (
+        Remapper as r,  # noqa: N813 — compact table-construction alias
+    )
     from chat_downloader.utils.conversion_utils import str_or_none
     from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
@@ -287,7 +297,9 @@ def build_clip_remapping() -> dict[str, Any]:
 @cache
 def build_video_remapping() -> dict[str, Any]:
     """Build video remapping with parsing functions."""
-    from chat_downloader.sites.remap import Remapper as r
+    from chat_downloader.sites.remap import (
+        Remapper as r,  # noqa: N813 — compact table-construction alias
+    )
     from chat_downloader.utils.conversion_utils import str_or_none
     from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
@@ -310,7 +322,9 @@ def build_video_remapping() -> dict[str, Any]:
 @cache
 def build_livestream_remapping() -> dict[str, Any]:
     """Build livestream remapping with parsing functions."""
-    from chat_downloader.sites.remap import Remapper as r
+    from chat_downloader.sites.remap import (
+        Remapper as r,  # noqa: N813 — compact table-construction alias
+    )
     from chat_downloader.utils.conversion_utils import str_or_none
 
     from .parsing.messages import _parse_game, _parse_user

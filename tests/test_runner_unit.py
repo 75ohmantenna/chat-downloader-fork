@@ -6,7 +6,10 @@ from typing import Any, NoReturn
 from unittest.mock import MagicMock
 
 import pytest
-from requests.exceptions import ConnectionError, RequestException
+from requests.exceptions import (
+    ConnectionError,  # noqa: A004 — intentional: requests.ConnectionError shadows builtin; test needs the requests type
+    RequestException,
+)
 
 from chat_downloader.debugging import (
     TestingException as RuntimeTestingException,

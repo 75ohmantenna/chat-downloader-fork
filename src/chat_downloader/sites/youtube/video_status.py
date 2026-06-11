@@ -7,15 +7,15 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
-from chat_downloader.debugging import logger
-from chat_downloader.utils.conversion_utils import float_or_none
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.time_utils import parse_iso8601
 
 from .video_status_helpers import (
+    _derive_duration,
     _determine_status,
     _determine_video_type,
     _extract_continuation_info,
+    _log_player_response_shape,
 )
 from .video_status_models import VideoDetails
 
@@ -54,28 +54,11 @@ def parse_video_details(
             f"YouTube returned player response for wrong video. "
             f"Requested: {video_id}, Got: {pr_video_id}"
         )
-        raise ParsingError(
-            msg,
-        )
+        raise ParsingError(msg)
 
-    logger.debug(
-        f"Player response top-level keys: {list(player_response_info.keys())}"
+    _log_player_response_shape(
+        player_response_info, video_details, live_details, player_renderer
     )
-    logger.debug(f"videoDetails keys: {list(video_details.keys())}")
-    logger.debug(f"liveBroadcastDetails keys: {list(live_details.keys())}")
-
-    microformat = player_response_info.get("microformat", {})
-    player_microformat = microformat.get("playerMicroformatRenderer", {})
-    if microformat and "liveBroadcastDetails" in player_microformat:
-        logger.debug(
-            f"Found liveBroadcastDetails in microformat: "
-            f"{player_microformat['liveBroadcastDetails']}",
-        )
-    if "liveStreamingDetails" in player_response_info:
-        logger.debug(
-            f"Found liveStreamingDetails: "
-            f"{player_response_info['liveStreamingDetails']}",
-        )
 
     title = video_details.get("title")
     author = video_details.get("author")
@@ -92,28 +75,11 @@ def parse_video_details(
     start_time = parse_iso8601(start_timestamp) if start_timestamp else None
     end_time = parse_iso8601(end_timestamp) if end_timestamp else None
 
-    approx_ms = float_or_none(first_format.get("approxDurationMs", 0)) or 0.0
-    duration: float | None = (
-        approx_ms / 1e3
-        or float_or_none(video_details.get("lengthSeconds"))
-        or float_or_none(player_renderer.get("lengthSeconds"))
+    duration = _derive_duration(
+        first_format, video_details, player_renderer, start_time, end_time
     )
-    if not duration and start_time and end_time:
-        duration = (end_time - start_time) / 1e6
-
     continuation_info = _extract_continuation_info(yt_initial_data)
     status = _determine_status(video_details, live_details)
-
-    live_broadcast_content = player_microformat.get(
-        "liveBroadcastDetails", {}
-    ).get(
-        "liveBroadcastContent",
-    )
-    if live_broadcast_content:
-        logger.debug(
-            "Found official liveBroadcastContent field: "
-            f"{live_broadcast_content}",
-        )
 
     return VideoDetails(
         title=title,

@@ -22,11 +22,11 @@ from .messages import (
     _parse_message_info,
     _parse_user,
 )
-from .tag_decoding import _decode_pseudo_BNF, _parse_bool, _parse_bool_text
+from .tag_decoding import _decode_pseudo_bnf, _parse_bool, _parse_bool_text
 
 __all__ = [
     "_add_text_for_emotes",
-    "_decode_pseudo_BNF",
+    "_decode_pseudo_bnf",
     # Emote parsing
     "_generate_emote_image_list",
     # Image/author parsing

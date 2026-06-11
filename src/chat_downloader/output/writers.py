@@ -61,7 +61,10 @@ class ContinuousFileWriter(ABC):
     """
 
     def __init__(
-        self, file_name: str, overwrite: bool = True, **kwargs: Any
+        self,
+        file_name: str,
+        overwrite: bool = True,
+        **kwargs: Any,  # noqa: ARG002 — base class contract; subclasses consume kwargs
     ) -> None:
         """Initialise the writer for the given file path."""
         self.file_name = file_name
@@ -155,7 +158,8 @@ class CsvContinuousWriter(ContinuousFileWriter):
     def _load_existing_columns(self) -> None:
         """Load existing CSV columns without reading all rows into memory."""
         if self.file is None:
-            raise RuntimeError("File must be initialized before use")
+            msg = "File must be initialized before use"
+            raise RuntimeError(msg)
         self.file.seek(FILE_EMPTY_POSITION)
         csv_reader = csv.DictReader(self.file)
         self.columns = list(csv_reader.fieldnames or [])
@@ -164,7 +168,8 @@ class CsvContinuousWriter(ContinuousFileWriter):
     def _reset_csv_writer(self) -> None:
         """Recreate CSV writer with current column configuration."""
         if self.file is None:
-            raise RuntimeError("File must be initialized before use")
+            msg = "File must be initialized before use"
+            raise RuntimeError(msg)
         if self.columns:
             self.csv_dict_writer = csv.DictWriter(
                 self.file, fieldnames=self.columns
@@ -202,7 +207,8 @@ class CsvContinuousWriter(ContinuousFileWriter):
     def _handle_new_columns(self, item: dict[str, Any]) -> None:
         """Rewrite the entire file to add newly discovered columns."""
         if self.file is None:
-            raise RuntimeError("File must be initialized before use")
+            msg = "File must be initialized before use"
+            raise RuntimeError(msg)
         new_columns = [column for column in item if column not in self.columns]
         self.columns.extend(new_columns)
         if self.sort_keys:
@@ -243,7 +249,8 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
     def write(self, item: Any, flush: bool = False) -> None:
         """Write *item* as a single JSON line."""
         if self.file is None:
-            raise RuntimeError("File must be initialized before use")
+            msg = "File must be initialized before use"
+            raise RuntimeError(msg)
         _assert_utc_aware(item)
         self.file.write(json.dumps(item, sort_keys=self.sort_keys) + "\n")
         self._persist_after_write()
@@ -263,7 +270,8 @@ class TextContinuousWriter(ContinuousFileWriter):
     def write(self, item: Any, flush: bool = False) -> None:
         """Write *item* as a string line."""
         if self.file is None:
-            raise RuntimeError("File must be initialized before use")
+            msg = "File must be initialized before use"
+            raise RuntimeError(msg)
         self.file.write(str(item) + "\n")
         self._persist_after_write()
         if flush:

@@ -56,7 +56,8 @@ class YouTubeVideoInitializationMixin:
                     "continuation",
                 )
                 if not client_continuation:
-                    raise KeyError("liveChat reload continuation token missing")
+                    msg = "liveChat reload continuation token missing"
+                    raise KeyError(msg)  # noqa: TRY301 — intentionally caught by the enclosing except to trigger the fallback-path warning
                 proto = cast("YouTubeDownloaderProto", self)
                 if details["status"] in REPLAY_STATUSES:
                     response = proto._session_get(

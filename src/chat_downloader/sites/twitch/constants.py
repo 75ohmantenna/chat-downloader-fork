@@ -25,7 +25,7 @@ IRC_CAP_REQUEST = (
     "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership"
 )
 # Any PASS value and a justinfan* NICK grants anonymous read-only IRC access.
-IRC_ANONYMOUS_PASSWORD = "SCHMOOPIIE"
+IRC_ANONYMOUS_PASSWORD = "SCHMOOPIIE"  # noqa: S105 — not a real password; any PASS value grants Twitch anonymous IRC access
 IRC_ANONYMOUS_NICK = "justinfan67420"
 
 # GraphQL Operation Hashes (UPDATED from patch - includes GlobalBadges)

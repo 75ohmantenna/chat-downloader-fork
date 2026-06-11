@@ -8,7 +8,9 @@ from functools import cache
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
-from chat_downloader.sites.remap import Remapper as r
+from chat_downloader.sites.remap import (
+    Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

@@ -358,3 +358,137 @@ growing.  These files are monitored but deferred by design.
 |--------|--------|-------|--------|
 | `sites/youtube/client_requests_continuation.py` | 8 | 6 | error/retry helpers moved out |
 | `sites/youtube/client_requests_errors.py` | — | 4 | new module; moved helpers + T2 param + duplicated `Any` import |
+
+---
+
+## Round-8 lint-floor / seam-tests pass (2026-06)
+
+Commits V1a–V1d, V2 on the `maintainability-pass` branch.
+
+### V1 — Ruff rule expansion
+
+Added eleven new rule families to `pyproject.toml [tool.ruff.lint] select` in
+four graduated commits:
+
+**V1a (zero-cost):** `RSE`, `PGH`, `ISC`, `FLY`, `INT`, `PLE`, `DTZ`, `PT` —
+no source changes; zero violations in src at adoption.  PGH additionally
+enforces code-specific `# noqa` annotations going forward (bare `# noqa` is
+now a lint error).
+
+**V1b (mechanical fixes):** `PERF`, `G`, `BLE`, `PLW`, `ARG`, `A` — ~20
+violations.  Notable: PERF102 → `.values()` in `base.py`; G004 → `%`-args
+logging in `twitch/replay_service.py`; A002 → rename or `# noqa` for public
+`format`/`id` params.
+
+**V1c (exception discipline):** `EM`, `S`, `TRY` — EM101/EM102 auto-fixed via
+`--unsafe-fixes` in ~10 files; S101 asserts converted to `if … raise` in src;
+S105 noqa for IRC anonymous-password constant; TRY301 noqa ×2 for intentional
+re-raise-into-outer-handler patterns; TRY003 globally ignored (inline
+exception messages are more readable; EM already governs message hygiene).
+
+**V1d (naming subset + declines):** `N` — N818 globally ignored (exception
+names are in the frozen public API snapshot; renaming breaks
+`test_public_api_unit.py`); N813 (12) noqa with reason; N806 (6) noqa for
+Windows API names; N802 and N811 fixed.
+
+**Declined families (V1 evaluation):**
+
+| Family | Violations | Decision | Reason |
+|--------|-----------|----------|--------|
+| `FBT` | 109 | DECLINE | Positional-bool rule fights frozen public signatures (`ChatRequest`, `Chat`, `BaseChatDownloader`) |
+| `SLF` | 53 | DECLINE | Cross-module `_`-prefixed helper access is the deliberate pattern created by rounds 5–7 extractions |
+
+### V2 — Seam unit tests
+
+Added direct unit tests for modules extracted in rounds 5–7 that were
+previously covered only indirectly:
+
+- `tests/test_youtube_client_requests_errors_unit.py`: 20 tests covering
+  `_handle_http_error`, `_handle_json_api_error`, and
+  `_handle_missing_live_chat_continuation`.
+- `tests/test_twitch_replay_vod_loop_unit.py`: 13 tests covering `_VodLoopPlan`
+  (frozen/slots dataclass), `_init_vod_loop` (offset/filter setup), and
+  `_classify_empty_page` (parametrized edge dispositions).
+
+Also added `# pragma: no cover` to the unreachable defensive guard in
+`message_items_content_parser.py` (lines set then immediately checked) to
+restore 100% coverage after the V1c assert→if-raise conversion.
+
+### V3 — TypedDict investigation (DECLINE)
+
+`sites/twitch/parsing/messages.py` (14 Any) and `message_irc_resolve.py`
+(14 Any) use `info: dict[str, Any]` as a mutable IRC-tag accumulator built
+from remapping tables across ~13 function signatures each.  A `total=False`
+TypedDict would enumerate ~40+ optional keys and fight intermediate state
+(fields consumed by one resolver before being re-set by another).  The
+remapping writes make even a return-type TypedDict impractical.
+
+Decision: move both modules to the Any-density "Out of scope" table.  Do not
+reopen without a third site or a zero-boilerplate TypedDict approach.  The
+Any-density baselines (14 each) are stable and must not be raised.
+
+---
+
+## Round-9 cohesion / complexity pass (2026-06)
+
+Commits W1–W4 on the `maintainability-pass` branch.
+
+### Function decompositions
+
+| Function | Extracted helpers | Result |
+|----------|-------------------|--------|
+| `video_status.py::parse_video_details` (~109 LOC) | `_log_player_response_shape`, `_derive_duration` → `video_status_helpers.py` | Body shrinks to ~77 LOC; redundant `microformat`/`player_microformat` locals collapsed into `player_renderer` |
+| `chat_streams_context.py::_build_chat_context` (~106 LOC) | `_build_continuation_urls`, `_build_message_filters`, `_apply_session_headers` (same module) | Body shrinks to ~78 LOC; orchestrator reads as a linear named-step sequence |
+
+### Design decisions
+
+**Helpers home (W1):** `_log_player_response_shape` and `_derive_duration`
+join `_determine_*`/`_extract_*` in `video_status_helpers.py` — the
+established home for `parse_video_details`' sub-steps.  Both use
+`Mapping[str, object]` params (from `collections.abc`, under `TYPE_CHECKING`)
+so no new `Any` is introduced; `logger` and `float_or_none` imports are
+removed from `video_status.py` as they are no longer needed there.
+
+**Redundant local collapsed (W1):** `player_response_info["microformat"]
+["playerMicroformatRenderer"]` was computed twice — once as `player_renderer`
+(via `multi_get`) and again as `player_microformat` (via two `.get()` calls).
+The two locals are semantically identical; `player_microformat` is removed and
+`player_renderer` is passed to `_log_player_response_shape`.
+
+**`loop_state` type tightened (W2):** `_apply_live_timing`'s `loop_state`
+parameter was typed `Any`; tightened to `ContinuationLoopState` (the only
+type ever passed by the single call site in
+`chat_streams_runtime_iteration.py`).  This frees one `Any` slot to
+accommodate the new `_apply_session_headers(ytcfg: dict[str, Any])` helper
+without raising the module baseline.
+
+**`_apply_session_headers` SLF pattern (W2):** takes `self:
+YouTubeDownloaderProto` directly — the deliberate cross-module `_`-helper
+pattern blessed by the V1d SLF decline.  No Protocol shim needed;
+`YouTubeDownloaderProto` already exists in `_protocols.py`.
+
+**Dead `skip_mode="none"` branch removed (W2):** the original
+`TimeRangeFilter(skip_mode="first_page" if is_replay else "none")` inside
+`if is_replay` was dead: the `"none"` branch could never be reached because
+the `else None` at the enclosing ternary already handles the non-replay case.
+`_build_message_filters` unconditionally uses `skip_mode="first_page"`.
+
+### `Any`-density baseline changes (W1, W2)
+
+All three files hold their existing baselines; no ratchet update required.
+
+| Module | Baseline | After | Reason |
+|--------|----------|-------|--------|
+| `sites/youtube/video_status.py` | 8 | 8 | logging + duration blocks moved; import removals balanced |
+| `sites/youtube/video_status_helpers.py` | 6 | 6 | new helpers use `Mapping[str, object]` — no new `Any` |
+| `sites/youtube/chat_streams_context.py` | 8 | 8 | `loop_state: Any→ContinuationLoopState` offsets new helper param |
+
+### Deferred declines reaffirmed (W-series STOP)
+
+The following items remain closed; do not reopen without a third site, a new
+cross-site abstraction, or a seam that does not exist today:
+- Cross-site remapping/badge/retry dedup (§1–3 above).
+- YouTube mixin consolidation.
+- FBT / SLF ruff families (V1d).
+- `chat_downloader.py` / `extractor.py` / `cli_args.py` size ceilings.
+- `_get_initial_info` (113 LOC, `# noqa: C901` intrinsic).

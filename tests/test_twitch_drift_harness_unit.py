@@ -67,7 +67,7 @@ def _raw_irc_fixtures() -> list[Path]:
     return paths
 
 
-@pytest.fixture()
+@pytest.fixture
 def drift_recorder(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Spy on debug_log in IRC parsing modules; record drift-sentinel calls."""
     seen: list[str] = []

@@ -33,9 +33,6 @@ concrete `requests.Response` / return-type annotations for HTTP boundaries.
 |--------|-----------------|----------|-----------|
 | ~~`sites/base.py`~~ | ~~23~~ → **14** | done (L3c) | concrete HTTP return types; `str\|None` cookie; `re.Match[str]` tuple; `Iterator[str]` generate_urls |
 | ~~`sites/session.py`~~ | ~~17~~ → **7** | done (L3a) | `-> requests.Response`/`JSONAny`/`str\|None`; `dict[str,str]` cookie spec |
-| `sites/twitch/parsing/messages.py` | 14 | low | All `Any` is accumulator (`info: dict[str,Any]`) + remapping tables — G5 accessor pattern does not reduce these |
-| `sites/twitch/parsing/message_irc_resolve.py` | 14 | low | Same — G5d already applied; remainder is accumulator + mutation-only patterns |
-
 **Out of scope** — documented stable boundaries; do not lower without re-reading
 `maintenance-notes.md`:
 
@@ -44,6 +41,8 @@ concrete `requests.Response` / return-type annotations for HTTP boundaries.
 | `formatting/format.py` | 33 | stable JSON-config ↔ formatter boundary |
 | `sites/twitch/remappings.py` | 11 | remapping-table data; see cross-site dedup note |
 | `sites/youtube/constants_message.py` | 3 | remapping-table data |
+| `sites/twitch/parsing/messages.py` | 14 | accumulator `info: dict[str,Any]` fed by ~40+ remapping-table writes; TypedDict investigated (V3) and declined — see `maintenance-notes.md § Round-8` |
+| `sites/twitch/parsing/message_irc_resolve.py` | 14 | same pattern; V3 declined — do not reopen without a third site or a zero-boilerplate TypedDict solution |
 
 ---
 
@@ -180,3 +179,69 @@ Round-7` for full rationale and the `_TESTS`-table escape hatch if it crosses
 (353), `cli_args.py` (362) — all 40–50 lines under the ceiling, stable, and
 each already declined or a dense-`Any` parser where split cost ≈ benefit. No
 further extraction warranted; these files are monitored but deferred by design.
+
+---
+
+### Round-8 lint-floor / seam-tests pass (V-series)
+
+#### ~~Expand ruff rule set~~ → done (V1a–V1d)
+Added N, EM, S, TRY, PERF, G, BLE, PLW, ARG, A, RSE, PGH, ISC, FLY, INT,
+PLE, DTZ, PT families to `pyproject.toml [tool.ruff.lint] select`.  Fixed ~80
+violations across src and tests; added per-file-ignores for test-incompatible
+rules (S101, ARG, BLE001, EM, N802, N806).  Two families evaluated and
+declined with documented rationale:
+- **FBT** (109 violations): boolean positional-argument rule fights frozen
+  public signatures that the project deliberately cannot rename.
+- **SLF** (53 violations): cross-module `_`-prefixed helper access is the
+  deliberate pattern created by rounds 5–7 extractions.
+
+#### ~~Seam unit tests for extracted modules~~ → done (V2)
+Added `test_youtube_client_requests_errors_unit.py` (HTTP/JSON error handlers)
+and `test_twitch_replay_vod_loop_unit.py` (`_VodLoopPlan`, `_init_vod_loop`,
+`_classify_empty_page`).  Both modules had only indirect coverage; direct tests
+pin their observable surface.
+
+#### Twitch IRC-parser TypedDict — declined (V3)
+`sites/twitch/parsing/messages.py` (14 Any) and `message_irc_resolve.py`
+(14 Any) use `info: dict[str, Any]` as a mutable IRC-tag accumulator across
+~13 function signatures each.  A `total=False` TypedDict would need ~40+
+optional keys; the intermediate states differ from the final state; remapping
+writes fight the TypedDict pattern.  Moved to the "Out of scope" Any-density
+table above.  Do not reopen without a third site or a zero-boilerplate
+TypedDict approach.
+
+---
+
+### Round-9 cohesion / complexity pass (W-series)
+
+#### ~~`parse_video_details` in `sites/youtube/video_status.py`~~ → done (W1)
+Extracted `_log_player_response_shape` (debug-shape logging) and
+`_derive_duration` (duration fallback chain) to `video_status_helpers.py`.
+Both helpers use `Mapping[str, object]` params — zero new `Any`.  Redundant
+`microformat`/`player_microformat` locals collapsed into the already-computed
+`player_renderer`.  `video_status.py` loses the `logger` and `float_or_none`
+imports.  Function body: ~109 → ~77 LOC.  `Any`-density baselines unchanged.
+
+#### ~~`_build_chat_context` in `sites/youtube/chat_streams_context.py`~~ → done (W2)
+Extracted `_build_continuation_urls`, `_build_message_filters`,
+`_apply_session_headers` to the same module.  `_apply_live_timing`'s
+`loop_state: Any` tightened to `ContinuationLoopState` to offset the one new
+`dict[str, Any]` param in `_apply_session_headers`; module baseline stays at 8.
+Dead `skip_mode="none"` branch removed (unreachable inside `if is_replay`).
+Function body: ~106 → ~78 LOC.  `Any`-density baselines unchanged.
+
+#### ~~Seam unit tests for W1/W2 helpers~~ → done (W3)
+New `tests/test_youtube_video_status_unit.py`: 5 parametrized `_derive_duration`
+cases + 4 `_log_player_response_shape` branch-coverage tests.
+Appended to `tests/test_youtube_chat_context_unit.py`: 2
+`_build_continuation_urls` + 4 `_build_message_filters` + 1
+`_apply_session_headers` tests.  Coverage stays at 100%.
+
+#### Round-9 scan: no further clean seam (W4 STOP)
+`_get_initial_info` in `client_requests_initial.py` (113 LOC, `# noqa: C901`)
+is the next candidate; HTTP-status dispatch could be extracted à la U1.
+Deferred: the function's complexity is documented intrinsic (status-code
+dispatch + retry loop) and the file is well under the 400-LOC ceiling.
+Revisit only if a future edit raises its McCabe score above 8 again.
+All other candidates in the 340–400 LOC range were declined in U3 (Round-7)
+and remain closed.

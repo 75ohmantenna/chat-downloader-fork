@@ -15,7 +15,7 @@ def _parse_bool_text(text: str) -> bool:
     return text == "true"
 
 
-def _decode_pseudo_BNF(text: str) -> str:
+def _decode_pseudo_bnf(text: str) -> str:
     """Decode text according to IRC v3 message-tags spec."""
     return (
         text.replace(r"\\", "\x00BACKSLASH\x00")

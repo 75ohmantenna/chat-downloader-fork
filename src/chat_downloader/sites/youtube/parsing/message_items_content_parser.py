@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from chat_downloader.sites.remap import Remapper as r
+from chat_downloader.sites.remap import (
+    Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
+)
 from chat_downloader.utils.color_utils import argb_int_to_rgba, rgba_to_hex
 from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
@@ -47,10 +49,10 @@ def _get_remapping() -> tuple[Mapping[str, Any], list[str]]:
     ``constants_message`` does not run during package initialisation (which
     would trigger a circular-import error).
     """
-    global _REMAPPING, _COLOUR_KEYS
+    global _REMAPPING, _COLOUR_KEYS  # noqa: PLW0603 — lazy circular-import init; both vars set together
     if _REMAPPING is None:
         from chat_downloader.sites.youtube.constants_message import (
-            _COLOUR_KEYS as ck,
+            _COLOUR_KEYS as ck,  # noqa: N811 — alias avoids local/global name collision with the module-level _COLOUR_KEYS
         )
         from chat_downloader.sites.youtube.constants_message import (
             build_remapping,
@@ -58,8 +60,9 @@ def _get_remapping() -> tuple[Mapping[str, Any], list[str]]:
 
         _REMAPPING = build_remapping()
         _COLOUR_KEYS = ck
-    assert _REMAPPING is not None
-    assert _COLOUR_KEYS is not None
+    if _REMAPPING is None or _COLOUR_KEYS is None:  # pragma: no cover
+        msg = "Remapping tables failed to initialise"
+        raise RuntimeError(msg)
     return _REMAPPING, _COLOUR_KEYS
 
 

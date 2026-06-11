@@ -174,7 +174,8 @@ def test_timer_callbacks_set_expiry_flags() -> None:
     tg.inactivity_timeout = 1
     tg.start_timer()
     tg.start_inactivity_timer()
-    assert tg.timer is not None and tg.inactivity_timer is not None
+    assert tg.timer is not None
+    assert tg.inactivity_timer is not None
     tg.timer.function()
     tg.inactivity_timer.function()
     assert tg._timeout_expired.is_set()

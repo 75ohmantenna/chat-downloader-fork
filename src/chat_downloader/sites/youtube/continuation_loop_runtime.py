@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 def build_continuation_params(
     innertube_context: dict[str, Any],
     state: ContinuationLoopState,
-    is_replay: bool,
+    is_replay: bool,  # noqa: ARG001 — reserved; continuation body is the same for live and replay
 ) -> dict[str, Any]:
     """Build the JSON POST body for the next live-chat continuation request."""
     # Shallow-copy context so callers' dict is never mutated between calls.

@@ -45,7 +45,7 @@ class ContinuousWriter:
         self,
         file_name: str | None = None,
         overwrite: bool = True,
-        format: str | None = None,
+        format: str | None = None,  # noqa: A002 — public ContinuousWriter API; renaming would break callers
         lazy_initialise: bool = False,
         **kwargs: Any,
     ) -> None:

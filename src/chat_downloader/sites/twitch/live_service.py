@@ -75,9 +75,8 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                 downloader.retry(attempt_number, error=error, request=request)
             else:
                 return irc
-        raise RuntimeError(
-            "unreachable: retry should have raised RetriesExceeded"
-        )
+        msg_0 = "unreachable: retry should have raised RetriesExceeded"
+        raise RuntimeError(msg_0)
 
     twitch_chat_irc = create_connection()
     message_count = 0
@@ -103,7 +102,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                             "reconnecting.",
                         )
                         msg = "Server requested reconnect."
-                        raise ConnectionError(msg)
+                        raise ConnectionError(msg)  # noqa: TRY301 — drives the outer reconnect loop via the enclosing except
 
                     if _is_duplicate_live_message(
                         raw_message.get("message_id"),

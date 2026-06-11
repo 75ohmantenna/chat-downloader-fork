@@ -120,7 +120,7 @@ def _handle_poll_action(
     action: JSONDict,
     original_action_type: str,
     data: JSONDict,
-    offset: float,
+    offset: float,  # noqa: ARG001 — uniform action-handler callable signature
 ) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle poll create, update, and close actions."""
     if original_action_type == "closeLiveChatActionPanelAction":

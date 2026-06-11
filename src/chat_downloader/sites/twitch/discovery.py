@@ -8,7 +8,9 @@ import base64
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
-from chat_downloader.sites.remap import Remapper as r
+from chat_downloader.sites.remap import (
+    Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
+)
 from chat_downloader.sites.twitch.remappings import (
     build_clip_remapping,
     build_livestream_remapping,

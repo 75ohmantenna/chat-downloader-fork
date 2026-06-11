@@ -18,7 +18,7 @@ from chat_downloader.utils.string_utils import (
 
 
 @pytest.mark.parametrize(
-    "text,pattern,kwargs,expected",
+    ("text", "pattern", "kwargs", "expected"),
     [
         ("test123abc", r"(\d+)", {}, "123"),
         ("test", r"(\d+)", {}, None),

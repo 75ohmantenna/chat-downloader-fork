@@ -102,7 +102,7 @@ def create_message_callback(
 ) -> Callable[[dict[str, Any]], None]:
     """Create a callback function for processing retrieved messages."""
     if quiet:
-        return lambda message: None
+        return lambda _: None
 
     cache = _SeenMessageCache(max_seen_message_ids)
 

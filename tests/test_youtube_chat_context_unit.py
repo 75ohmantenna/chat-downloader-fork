@@ -7,8 +7,12 @@ import pytest
 from chat_downloader.errors import InvalidParameter, NoContinuation
 from chat_downloader.models import ChatRequest
 from chat_downloader.request_profiles import REQUEST_PROFILE_INNERTUBE_CONTEXTS
+from chat_downloader.sites.filters import TimeRangeFilter
 from chat_downloader.sites.youtube.chat_streams_context import (
+    _apply_session_headers,
     _build_chat_context,
+    _build_continuation_urls,
+    _build_message_filters,
 )
 
 
@@ -281,3 +285,111 @@ def test_build_chat_context_message_types_override_default_groups(
 
     assert ctx.msg_filter.should_add({"message_type": "paid_message"})
     assert not ctx.msg_filter.should_add({"message_type": "text_message"})
+
+
+# ---------------------------------------------------------------------------
+# W2 seam tests: _build_continuation_urls
+# ---------------------------------------------------------------------------
+
+
+def test_build_continuation_urls_live() -> None:
+    init_page, url = _build_continuation_urls("TOKEN", "KEY", is_replay=False)
+    assert "continuation=TOKEN" in init_page
+    assert "live_chat?" in init_page
+    assert "replay" not in init_page
+    assert "get_live_chat?key=KEY" in url
+    assert "replay" not in url
+
+
+def test_build_continuation_urls_replay() -> None:
+    init_page, url = _build_continuation_urls("TOKEN", "KEY", is_replay=True)
+    assert "live_chat_replay?" in init_page
+    assert "get_live_chat_replay?key=KEY" in url
+
+
+# ---------------------------------------------------------------------------
+# W2 seam tests: _build_message_filters
+# ---------------------------------------------------------------------------
+
+
+def test_build_message_filters_live_no_time_filter() -> None:
+    msg_filter, time_filter = _build_message_filters(
+        ChatRequest(url="https://www.youtube.com/watch?v=abc"),
+        [],
+        is_replay=False,
+        start_time=None,
+        end_time=None,
+        offset=None,
+    )
+    assert time_filter is None
+    assert msg_filter is not None
+
+
+def test_build_message_filters_replay_has_time_filter() -> None:
+    _msg_filter, time_filter = _build_message_filters(
+        ChatRequest(url="https://www.youtube.com/watch?v=abc"),
+        [],
+        is_replay=True,
+        start_time=0.0,
+        end_time=None,
+        offset=None,
+    )
+    assert isinstance(time_filter, TimeRangeFilter)
+
+
+def test_build_message_filters_types_override_groups() -> None:
+    """Explicit message_types causes message_groups to be ignored."""
+    params = ChatRequest(
+        url="https://www.youtube.com/watch?v=abc",
+        message_groups=["messages"],
+        message_types=["paid_message"],
+    )
+    msg_filter, _ = _build_message_filters(
+        params,
+        ["paid_message"],
+        is_replay=False,
+        start_time=None,
+        end_time=None,
+        offset=None,
+    )
+    assert msg_filter.should_add({"message_type": "paid_message"})
+    assert not msg_filter.should_add({"message_type": "text_message"})
+
+
+def test_build_message_filters_groups_non_list_yields_empty() -> None:
+    """message_groups that is not a list resolves to no group filtering."""
+    params = ChatRequest(
+        url="https://www.youtube.com/watch?v=abc",
+        message_groups="messages",  # type: ignore[arg-type]
+    )
+    msg_filter, _ = _build_message_filters(
+        params,
+        [],
+        is_replay=False,
+        start_time=None,
+        end_time=None,
+        offset=None,
+    )
+    assert msg_filter is not None
+
+
+# ---------------------------------------------------------------------------
+# W2 seam tests: _apply_session_headers
+# ---------------------------------------------------------------------------
+
+
+def test_apply_session_headers_calls_update_twice(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        lambda *_a, **_k: {"x-youtube-client-name": "1"},
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.chat_streams_context._generate_sapisidhash_header",
+        lambda *_a, **_k: None,
+    )
+    downloader = _DummyDownloader()
+    _apply_session_headers(downloader, {}, "https://www.youtube.com/init")
+    assert len(downloader.header_updates) == 2
+    combined = {k: v for d in downloader.header_updates for k, v in d.items()}
+    assert "content-type" in combined
+    assert "referer" in combined

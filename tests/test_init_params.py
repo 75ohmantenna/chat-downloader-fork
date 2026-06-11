@@ -25,7 +25,7 @@ def _get_one_message(expected_error=None, **init_params) -> None:
 
     except Exception as e:
         assert expected_error is not None
-        assert isinstance(e, expected_error)
+        assert isinstance(e, expected_error)  # noqa: PT017 — finally: session.close() requires try/except structure
     finally:
         session.close()
 

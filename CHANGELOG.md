@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-06-11
 
 ### Internal / structural
 
@@ -34,6 +34,14 @@
   (McCabe 8 → ~6); `dict[str,Any]` param paid in the new errors module (U1/T2)
 - Lower `Any`-density baseline `client_requests_continuation.py` 8 → 6;
   new `client_requests_errors.py: 4` (U1)
+- Expand ruff lint rule set (V1): add N, EM, S, TRY (TRY003 ignored), PERF, G,
+  BLE, PLW, ARG, A, RSE, PGH, ISC, FLY, INT, PLE, DTZ, PT families; fix ~80
+  violations across src and tests; decline FBT (109) and SLF (53) with
+  documented rationale; PGH now enforces code-specific `# noqa` annotations
+- Add seam unit tests (V2): `test_youtube_client_requests_errors_unit.py`
+  (HTTP/JSON error-handler cluster) and `test_twitch_replay_vod_loop_unit.py`
+  (`_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page`); pin the Round-5/7
+  extraction surfaces with direct unit tests
 
 ---
 

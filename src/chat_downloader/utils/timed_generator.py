@@ -74,9 +74,8 @@ class TimedGenerator:
     def start_timer(self) -> None:
         """Start (or restart) the overall timeout timer."""
         if self.timeout is None:
-            raise RuntimeError(
-                "start_timer() called without a configured timeout"
-            )
+            msg = "start_timer() called without a configured timeout"
+            raise RuntimeError(msg)
         self._timeout_expired.clear()
         self._timeout_deadline = time.monotonic() + self.timeout
 
@@ -89,10 +88,11 @@ class TimedGenerator:
     def start_inactivity_timer(self) -> None:
         """Start (or restart) the inactivity timeout timer."""
         if self.inactivity_timeout is None:
-            raise RuntimeError(
+            msg = (
                 "start_inactivity_timer() called without a configured "
                 "inactivity_timeout"
             )
+            raise RuntimeError(msg)
         self._inactivity_expired.clear()
         self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
 

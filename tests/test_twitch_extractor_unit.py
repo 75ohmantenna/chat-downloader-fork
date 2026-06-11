@@ -185,7 +185,8 @@ class TestTypenameValidation:
 
         # Should log debug message about skipping
         mock_logger.debug.assert_any_call(
-            "Skipping unexpected edge type: UnexpectedEdgeType",
+            "Skipping unexpected edge type: %s",
+            "UnexpectedEdgeType",
         )
 
     @patch("chat_downloader.sites.twitch.extractor.get_chat_messages_by_vod_id")
@@ -241,7 +242,8 @@ class TestTypenameValidation:
 
         # Should log debug message about skipping
         mock_logger.debug.assert_any_call(
-            "Skipping unexpected node type: UnexpectedNodeType",
+            "Skipping unexpected node type: %s",
+            "UnexpectedNodeType",
         )
 
     @patch("chat_downloader.sites.twitch.extractor.get_chat_messages_by_vod_id")

@@ -17,15 +17,15 @@ DEFAULT_BUFFER_SIZE: int = 4096
 
 
 def _cli(
-    help: str, group: str = "general", flags: list[str] | None = None
+    description: str, group: str = "general", flags: list[str] | None = None
 ) -> dict[str, Any]:
     """Build the ``"cli"`` metadata dict for a dataclass field.
 
-    :param help: Help text shown in ``--help`` output.
+    :param description: Help text shown in ``--help`` output.
     :param group: Argument group name (must match a group in ``cli.main``).
     :param flags: Additional short-form flags, e.g. ``["-s"]``.
     """
-    m: dict[str, Any] = {"help": help, "group": group}
+    m: dict[str, Any] = {"help": description, "group": group}
     if flags:
         m["flags"] = flags
     return m

@@ -107,7 +107,7 @@ def time_to_seconds(time: str) -> int:
 
 def seconds_to_time(
     seconds: float,
-    format: str = "{}:{:02}:{:02}",
+    format: str = "{}:{:02}:{:02}",  # noqa: A002 — public API parameter; callers pass format= by name
     remove_leading_zeroes: bool = True,
 ) -> str:
     """Convert seconds to timestamp.
@@ -135,7 +135,7 @@ def seconds_to_time(
 
 def microseconds_to_timestamp(
     microseconds: float,
-    format: str = "%Y-%m-%d %H:%M:%S",
+    format: str = "%Y-%m-%d %H:%M:%S",  # noqa: A002 — public API parameter; callers pass format= by name
 ) -> str:
     """Convert unix time to human-readable timestamp.
 

@@ -241,8 +241,9 @@ def test_recv_loop_handles_socket_timeout_silently() -> None:
 
     collected = []
     with pytest.raises(ConnectionError):
-        for msg in get_chat_messages_by_stream_id(irc, "testchan", params):
-            collected.append(msg)
+        collected.extend(
+            get_chat_messages_by_stream_id(irc, "testchan", params)
+        )
 
     # No messages were parsed (the timeout buffer had no IRC content).
     assert collected == []

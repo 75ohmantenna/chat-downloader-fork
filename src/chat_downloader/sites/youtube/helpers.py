@@ -24,10 +24,11 @@ def require_innertube_api_key(ytcfg: dict[str, Any]) -> str:
     """Return the INNERTUBE_API_KEY from ytcfg or raise ParsingError."""
     api_key = ytcfg.get("INNERTUBE_API_KEY")
     if not isinstance(api_key, str) or not api_key:
-        raise ParsingError(
+        msg = (
             "YouTube INNERTUBE_API_KEY missing from ytcfg; "
             "cannot build an InnerTube request URL."
         )
+        raise ParsingError(msg)
     return api_key
 
 

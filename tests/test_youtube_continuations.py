@@ -75,8 +75,14 @@ _CONTINUATION_CASES = [
 
 
 @pytest.mark.parametrize(
-    "fixture_name,expected_token,expected_timeout_ms,"
-    "expected_actions_len,expected_is_end,expected_debug_key",
+    (
+        "fixture_name",
+        "expected_token",
+        "expected_timeout_ms",
+        "expected_actions_len",
+        "expected_is_end",
+        "expected_debug_key",
+    ),
     _CONTINUATION_CASES,
     ids=[c[0] for c in _CONTINUATION_CASES],
 )

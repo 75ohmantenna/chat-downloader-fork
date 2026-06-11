@@ -665,7 +665,7 @@ def test_twitch_chat_irc_close_connection_sends_quit_before_closing(
     irc.socket = Mock()
     irc.socket.shutdown = Mock()
     sent: list[str] = []
-    irc.send_raw = lambda msg: sent.append(msg)
+    irc.send_raw = sent.append
 
     irc.close_connection()
 

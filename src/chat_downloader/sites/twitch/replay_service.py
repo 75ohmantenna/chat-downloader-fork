@@ -68,7 +68,7 @@ def _process_vod_edge(
     """
     edge_typename = edge.get("__typename")
     if edge_typename not in ("VideoCommentEdge", None):
-        logger_obj.debug(f"Skipping unexpected edge type: {edge_typename}")
+        logger_obj.debug("Skipping unexpected edge type: %s", edge_typename)
         return None, "skip"
 
     node = edge.get("node")
@@ -77,7 +77,7 @@ def _process_vod_edge(
 
     node_typename = node.get("__typename")
     if node_typename not in ("Comment", "VideoComment", None):
-        logger_obj.debug(f"Skipping unexpected node type: {node_typename}")
+        logger_obj.debug("Skipping unexpected node type: %s", node_typename)
         return None, "skip"
 
     data = _parse_item(node, offset, creator_channel_id, badge_set)
@@ -238,7 +238,9 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 continue
 
             message_count += 1
-            assert data is not None
+            if data is None:
+                msg = "Unexpected None data for non-skip edge"
+                raise ValueError(msg)
             yield data
 
         log("debug", f"Total number of messages: {message_count}")

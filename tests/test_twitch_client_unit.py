@@ -146,12 +146,8 @@ def test_get_user_videos_raises_user_not_found_on_empty_user_id() -> None:
         limit=1,
     )
 
-    try:
+    with pytest.raises(UserNotFound, match="doesnotexist"):
         next(gen)
-        msg = "Expected UserNotFound"
-        raise AssertionError(msg)
-    except UserNotFound as exc:
-        assert "doesnotexist" in str(exc)
 
 
 def test_get_chat_messages_by_vod_id_uses_scalar_offset_for_first_page() -> (

@@ -122,6 +122,7 @@ explicitly does not forbid `models → sites.models`.
 | `client_context.py` | InnerTube context dict construction and request-profile application |
 | `client_requests_bootstrap.py` | Fallback InnerTube bootstrap requests (initial video data) |
 | `client_requests_continuation.py` | HTTP continuation polling: request dispatch, retry, error surfacing |
+| `client_requests_errors.py` | HTTP/JSON error classification, captcha detection, retry helpers (U1) |
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |
 
 #### Chat-streams split (post-round-2)

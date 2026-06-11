@@ -90,14 +90,57 @@ select = [
     "TID",  # flake8-tidy-imports
     "UP",   # pyupgrade
     "W605", # pycodestyle warnings
+    # V1d: naming conventions (N818 excluded — frozen public API exception names)
+    "N",    # pep8-naming
+    # V1c: error-message & exception discipline
+    "EM",   # flake8-errmsg: hoist exception strings to locals
+    "S",    # flake8-bandit: security checks
+    "TRY",  # flake8-tryceratops
+    # V1b: low-count mechanical fixes
+    "PERF", # perflint
+    "G",    # flake8-logging-format
+    "BLE",  # flake8-blind-except
+    "PLW",  # pylint warnings
+    "ARG",  # flake8-unused-arguments
+    "A",    # flake8-builtins
+    # V1a: zero-violation correctness families
+    "RSE",  # flake8-raise: unnecessary-paren-on-raise-exception
+    "PGH",  # pygrep-hooks: blanket noqa/type-ignore must cite a code
+    "ISC",  # flake8-implicit-str-concat
+    "FLY",  # flynt: static-join-to-f-string
+    "INT",  # flake8-gettext
+    "PLE",  # pylint errors
+    "DTZ",  # flake8-datetimez
+    "PT",   # flake8-pytest-style
 ]
-ignore = ["D206", "D300"]
+ignore = [
+    "D206",   # docstring-tab-indentation
+    "D300",   # triple-single-quotes
+    "TRY003", # raise-vanilla-args: inline exception messages are more readable; EM already governs message hygiene
+    "N818",   # error-suffix-on-exception-name: exception names are in the frozen public API (test_public_api_unit.py)
+]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 8
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["C9", "D1", "PTH"]
+"tests/**/*.py" = [
+    "C9",    # complexity (tests are exempt)
+    "D1",    # missing-docstring
+    "PTH",   # use-pathlib
+    "PT011", # pytest-raises-too-broad: structural test patterns; match= not always applicable
+    "PT012", # pytest-raises-with-multiple-statements: signal-handler tests need sleep loops
+    "ARG",   # unused-argument: mock callbacks/stubs must match callable signatures
+    "BLE001",# blind-except: top-level test guards are different from production guards
+    "S101",  # assert: pytest tests assert everywhere by design
+    "S108",  # hardcoded-temp-file: tests use /tmp paths
+    "S110",  # try-except-pass: tests sometimes need to swallow errors
+    "S324",  # insecure-hash-function: tests may hash test data for convenience
+    "TRY002",# raise-vanilla-class: tests raise bare exception classes for simplicity
+    "EM",    # errmsg: inline exception strings are natural in test setup / mock.side_effect
+    "N802",  # invalid-function-name: mock methods must match the API names they stub (e.g. WINFUNCTYPE, setFormatter)
+    "N806",  # non-lowercase-variable-in-function: mock objects and Windows API constants use uppercase
+]
 
 [tool.ruff.lint.isort]
 required-imports = ["from __future__ import annotations"]

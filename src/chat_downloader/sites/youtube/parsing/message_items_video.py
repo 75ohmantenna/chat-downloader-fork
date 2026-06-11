@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from chat_downloader.sites.remap import Remapper as r
+from chat_downloader.sites.remap import (
+    Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
+)
 from chat_downloader.utils.dict_utils import multi_get
 
 
@@ -111,5 +113,5 @@ def _parse_video(video_renderer: dict[str, Any]) -> dict[str, Any]:
 
     video_renderer["videoType"] = video_type
 
-    _VIDEO_REMAPPING = build_video_remapping()
-    return r.remap_dict(video_renderer, _VIDEO_REMAPPING)
+    _video_remapping = build_video_remapping()
+    return r.remap_dict(video_renderer, _video_remapping)

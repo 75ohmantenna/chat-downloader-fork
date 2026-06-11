@@ -54,7 +54,7 @@ def test_timestamp_to_microseconds_without_fractional_part() -> None:
 
 
 @pytest.mark.parametrize(
-    "text,expected",
+    ("text", "expected"),
     [
         ("", 0),
         (None, 0),

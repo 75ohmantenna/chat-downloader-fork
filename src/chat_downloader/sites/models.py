@@ -67,9 +67,9 @@ class Chat:
         status: str | None = None,
         video_type: str | None = None,
         start_time: float | None = None,
-        id: str | None = None,
+        id: str | None = None,  # noqa: A002 — public Chat API; renaming `id` would break callers
         max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ARG002 — forward-compat absorber; site subclasses pass extra fields
     ) -> None:
         """Set up chat metadata, output dispatch, and deduplication state."""
         self.chat = chat
@@ -88,7 +88,7 @@ class Chat:
 
         # Formatter used by print_formatted() and writer callbacks. The default
         # keeps Chat usable without pipeline configuration.
-        self._formatter: Callable[[dict[str, Any]], str] = lambda item: str(
+        self._formatter: Callable[[dict[str, Any]], str] = lambda item: str(  # noqa: PLW0108 — type annotation requires lambda; `str` alone fails mypy Callable check
             item
         )
 
@@ -154,7 +154,7 @@ class Chat:
             # call close() again; the dispatcher keeps that idempotent.
             try:
                 self.close()
-            except Exception as close_error:
+            except Exception as close_error:  # noqa: BLE001 — close() must not mask the iteration error being unwound
                 # Preserve the original iteration error.
                 log(
                     "debug",

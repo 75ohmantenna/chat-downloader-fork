@@ -25,7 +25,7 @@ _ALL_SITE_TESTS = [
 
 
 @pytest.mark.network
-@pytest.mark.parametrize("site,test", _ALL_SITE_TESTS)
+@pytest.mark.parametrize(("site", "test"), _ALL_SITE_TESTS)
 def test_site_integration(site, test) -> None:
     site_object = ChatDownloader()
     try:

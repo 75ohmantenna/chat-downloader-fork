@@ -57,10 +57,13 @@ def _download_base_gql(
     status_code = getattr(response, "status_code", 200)
     body_text = getattr(response, "text", "")
     if status_code >= 400 and _contains_challenge_text(body_text):
-        raise CaptchaChallengeRequired(
+        msg = (
             "Twitch is requiring a captcha/challenge for GraphQL requests. "
             f"HTTP {status_code}. Try fresh cookies or "
-            "--request_profile twitch_web.",
+            "--request_profile twitch_web."
+        )
+        raise CaptchaChallengeRequired(
+            msg,
         )
     if status_code >= 400:
         response.raise_for_status()

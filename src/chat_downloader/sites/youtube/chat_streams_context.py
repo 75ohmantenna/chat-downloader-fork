@@ -88,7 +88,7 @@ def _profiled_innertube_context(
 
 def _apply_live_timing(
     message: dict[str, Any],
-    loop_state: Any,
+    loop_state: ContinuationLoopState,
     live_start_time_ms: int,
 ) -> None:
     """Enrich a live message with player-offset timing and update loop state."""
@@ -96,6 +96,72 @@ def _apply_live_timing(
     if live_offset is not None:
         enrich_live_message_timing(message, live_offset)
         loop_state.offset_milliseconds = live_offset
+
+
+def _build_continuation_urls(
+    continuation: str,
+    api_key: str,
+    *,
+    is_replay: bool,
+) -> tuple[str, str]:
+    """Return (init_page, continuation_url) for the chat loop."""
+    api_type = "live_chat_replay" if is_replay else "live_chat"
+    init_page = f"{_YT_HOME}/{api_type}?continuation={continuation}"
+    continuation_url = (
+        f"{_YT_HOME}/youtubei/v1/live_chat/get_{api_type}?key={api_key}"
+    )
+    return init_page, continuation_url
+
+
+def _build_message_filters(
+    params: ChatRequest,
+    messages_types_to_add: list[str],
+    *,
+    is_replay: bool,
+    start_time: float | None,
+    end_time: float | None,
+    offset: float | None,
+) -> tuple[MessageFilter, TimeRangeFilter | None]:
+    """Assemble the message-group filter and optional replay time filter."""
+    messages_groups_to_add = (
+        []
+        if messages_types_to_add
+        else (
+            params.message_groups
+            if isinstance(params.message_groups, list)
+            else []
+        )
+    )
+    msg_filter = MessageFilter(
+        _MESSAGE_GROUPS,
+        messages_groups_to_add or None,
+        messages_types_to_add,
+    )
+    time_filter = (
+        TimeRangeFilter(
+            start_time,
+            end_time,
+            offset=offset,
+            skip_mode="first_page",
+        )
+        if is_replay
+        else None
+    )
+    return msg_filter, time_filter
+
+
+def _apply_session_headers(
+    self: YouTubeDownloaderProto,
+    ytcfg: dict[str, Any],
+    init_page: str,
+) -> None:
+    """Install the InnerTube auth and content-type headers on the session."""
+    self.update_session_headers(
+        _generate_headers(ytcfg, self, _YT_HOME, _generate_sapisidhash_header),
+    )
+    self.update_session_headers(
+        {"content-type": "application/json", "referer": init_page},
+    )
 
 
 def _build_chat_context(
@@ -133,61 +199,33 @@ def _build_chat_context(
     )
     log("debug", f"Getting {chat_type.title()} chat ({continuation_label}).")
 
-    api_type = "live_chat"
-    if is_replay:
-        api_type += "_replay"
-
-    init_page = f"{_YT_HOME}/{api_type}?continuation={continuation}"
     api_key = require_innertube_api_key(ytcfg)
-    continuation_url = (
-        f"{_YT_HOME}/youtubei/v1/live_chat/get_{api_type}?key={api_key}"
+    init_page, continuation_url = _build_continuation_urls(
+        continuation, api_key, is_replay=is_replay
+    )
+
+    messages_types_to_add = params.message_types or []
+    self.check_for_invalid_types(messages_types_to_add, _MESSAGE_TYPES)
+    msg_filter, time_filter = _build_message_filters(
+        params,
+        messages_types_to_add,
+        is_replay=is_replay,
+        start_time=start_time,
+        end_time=end_time,
+        offset=offset,
+    )
+
+    _apply_session_headers(self, ytcfg, init_page)
+
+    innertube_context = _profiled_innertube_context(
+        ytcfg,
+        getattr(self, "_request_profile", None),
     )
     offset_milliseconds = (
         start_time * _MS_PER_SECOND
         if isinstance(start_time, (float, int))
         else None
     )
-
-    messages_types_to_add = params.message_types or []
-    messages_groups_to_add = (
-        []
-        if messages_types_to_add
-        else (
-            params.message_groups
-            if isinstance(params.message_groups, list)
-            else []
-        )
-    )
-    self.check_for_invalid_types(messages_types_to_add, _MESSAGE_TYPES)
-
-    msg_filter = MessageFilter(
-        _MESSAGE_GROUPS,
-        messages_groups_to_add or None,
-        messages_types_to_add,
-    )
-
-    self.update_session_headers(
-        _generate_headers(ytcfg, self, _YT_HOME, _generate_sapisidhash_header),
-    )
-    self.update_session_headers(
-        {"content-type": "application/json", "referer": init_page},
-    )
-
-    innertube_context = _profiled_innertube_context(
-        ytcfg,
-        getattr(self, "_request_profile", None),
-    )
-    time_filter = (
-        TimeRangeFilter(
-            start_time,
-            end_time,
-            offset=offset,
-            skip_mode="first_page" if is_replay else "none",
-        )
-        if is_replay
-        else None
-    )
-
     loop_state = ContinuationLoopState(
         continuation=continuation,
         offset_milliseconds=offset_milliseconds,

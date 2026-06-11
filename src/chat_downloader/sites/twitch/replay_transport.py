@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 def get_chat_messages_by_vod_id(
-    session_post: Callable[..., Any],
+    session_post: Callable[..., Any],  # noqa: ARG001 — uniform transport callable signature; live transport uses this
     download_gql_func: Callable[..., Any],
     vod_id: str,
     cursor: str | None,

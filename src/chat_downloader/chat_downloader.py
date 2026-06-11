@@ -140,10 +140,11 @@ class ChatDownloader:
                     "credentials will be visible to the local proxy process.",
                 )
             else:
-                raise InvalidParameter(
+                msg = (
                     "A proxy must not be used with cookie authentication: "
                     "credentials would be exposed to the proxy."
                 )
+                raise InvalidParameter(msg)
 
         self.config = DownloaderConfig(
             headers=headers,
@@ -230,7 +231,7 @@ class ChatDownloader:
         overwrite: bool = True,
         sort_keys: bool = True,
         # Formatting
-        format: SiteDefault | str = _DEFAULT_FORMAT,
+        format: SiteDefault | str = _DEFAULT_FORMAT,  # noqa: A002 — public get_chat() API; renaming would break callers
         format_file: str | None = None,
         # YouTube
         chat_type: Literal["live", "top"] = "live",

@@ -58,7 +58,7 @@ def _get_windows_console_handle(out: Any) -> Any:
 
     # ctypes.WINFUNCTYPE and ctypes.windll are Windows-only;
     # absent from non-Windows ctypes stubs.
-    GetStdHandle = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
+    GetStdHandle = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]  # noqa: N806 — Windows API name
         ctypes.wintypes.HANDLE, ctypes.wintypes.DWORD
     )(
         ("GetStdHandle", ctypes.windll.kernel32),  # type: ignore[attr-defined]
@@ -76,20 +76,20 @@ def _is_valid_console(handle: Any) -> bool:
     import ctypes
     import ctypes.wintypes
 
-    INVALID_HANDLE_VALUE = ctypes.wintypes.DWORD(-1).value
+    INVALID_HANDLE_VALUE = ctypes.wintypes.DWORD(-1).value  # noqa: N806 — Windows API constant name
 
     if handle == INVALID_HANDLE_VALUE or handle is None:
         return False
 
     # ctypes.WINFUNCTYPE and ctypes.windll are Windows-only;
     # absent from non-Windows ctypes stubs.
-    GetFileType = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
+    GetFileType = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]  # noqa: N806 — Windows API name
         ctypes.wintypes.DWORD, ctypes.wintypes.DWORD
     )(
         ("GetFileType", ctypes.windll.kernel32),  # type: ignore[attr-defined]
     )
 
-    GetConsoleMode = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
+    GetConsoleMode = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]  # noqa: N806 — Windows API name
         ctypes.wintypes.BOOL,
         ctypes.wintypes.HANDLE,
         ctypes.POINTER(ctypes.wintypes.DWORD),
@@ -130,7 +130,7 @@ def _write_to_windows_console(
 
     # ctypes.WINFUNCTYPE and ctypes.windll are Windows-only;
     # absent from non-Windows ctypes stubs.
-    WriteConsoleW = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
+    WriteConsoleW = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]  # noqa: N806 — Windows API name
         ctypes.wintypes.BOOL,
         ctypes.wintypes.HANDLE,
         ctypes.wintypes.LPWSTR,
@@ -164,16 +164,16 @@ def _write_to_windows_console(
         # Update position in string
         if not count:  # We just wrote a non-BMP character
             if written.value != 2:
-                raise RuntimeError(
+                msg_0 = (
                     "Expected 2 code units for non-BMP character, "
                     f"got {written.value}"
                 )
+                raise RuntimeError(msg_0)
             text = text[1:]
         else:
             if written.value <= 0:
-                raise RuntimeError(
-                    "WriteConsoleW reported zero characters written"
-                )
+                msg_0 = "WriteConsoleW reported zero characters written"
+                raise RuntimeError(msg_0)
             text = text[written.value :]
 
     return True

@@ -72,11 +72,8 @@ def test_timed_generator_inactivity_timeout() -> None:
     timed_gen = TimedGenerator(inactive_generator(), inactivity_timeout=0.02)
 
     result = []
-    try:
-        for item in timed_gen:
-            result.append(item)
-    except StopIteration:
-        pass
+    with contextlib.suppress(StopIteration):
+        result.extend(timed_gen)
 
     # Should only get first item before inactivity timeout
     assert len(result) == 1
@@ -198,8 +195,7 @@ def test_timed_generator_exception_handling() -> None:
 
     result = []
     with pytest.raises(ValueError):
-        for item in timed_gen:
-            result.append(item)
+        result.extend(timed_gen)
 
     assert result == [1]
 

@@ -4,12 +4,68 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 from chat_downloader.debugging import logger
 from chat_downloader.utils.conversion_utils import float_or_none
+from chat_downloader.utils.json_types import get_dict
 
 from .helpers import extract_chat_submenu_continuations
+
+
+def _log_player_response_shape(
+    player_response_info: Mapping[str, object],
+    video_details: Mapping[str, object],
+    live_details: Mapping[str, object],
+    player_microformat: Mapping[str, object],
+) -> None:
+    """Log the shape of a player response for debugging schema drift."""
+    logger.debug(
+        f"Player response top-level keys: {list(player_response_info.keys())}"
+    )
+    logger.debug(f"videoDetails keys: {list(video_details.keys())}")
+    logger.debug(f"liveBroadcastDetails keys: {list(live_details.keys())}")
+    if "liveBroadcastDetails" in player_microformat:
+        logger.debug(
+            "Found liveBroadcastDetails in microformat: "
+            f"{player_microformat['liveBroadcastDetails']}",
+        )
+    if "liveStreamingDetails" in player_response_info:
+        logger.debug(
+            "Found liveStreamingDetails: "
+            f"{player_response_info['liveStreamingDetails']}",
+        )
+    live_broadcast_content = get_dict(
+        player_microformat, "liveBroadcastDetails"
+    ).get("liveBroadcastContent")
+    if live_broadcast_content:
+        logger.debug(
+            "Found official liveBroadcastContent field: "
+            f"{live_broadcast_content}",
+        )
+
+
+def _derive_duration(
+    first_format: Mapping[str, object],
+    video_details: Mapping[str, object],
+    player_renderer: Mapping[str, object],
+    start_time: float | None,
+    end_time: float | None,
+) -> float | None:
+    """Derive duration in seconds; fall back to the live start/end span."""
+    approx_ms = float_or_none(first_format.get("approxDurationMs", 0)) or 0.0
+    duration: float | None = (
+        approx_ms / 1e3
+        or float_or_none(video_details.get("lengthSeconds"))
+        or float_or_none(player_renderer.get("lengthSeconds"))
+    )
+    if not duration and start_time and end_time:
+        # parse_iso8601 returns microseconds since epoch.
+        duration = (end_time - start_time) / 1e6
+    return duration
 
 
 def _determine_video_type(

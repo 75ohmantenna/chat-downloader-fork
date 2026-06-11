@@ -70,7 +70,7 @@ def _raw_continuation_fixtures() -> list[Path]:
     return paths
 
 
-@pytest.fixture()
+@pytest.fixture
 def drift_recorder(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     """Spy on debug_log in all parsing modules; record drift-sentinel calls."""
     seen: list[str] = []

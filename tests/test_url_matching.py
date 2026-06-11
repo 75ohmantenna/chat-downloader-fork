@@ -38,7 +38,7 @@ def test_youtube_video_url_matching(url: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "url,expected_id",
+    ("url", "expected_id"),
     [
         ("https://www.youtube.com/watch?v=jfKfPfyJRdk", "jfKfPfyJRdk"),
         ("https://youtu.be/dQw4w9WgXcQ", "dQw4w9WgXcQ"),

@@ -75,7 +75,8 @@ def _apply_retry_or_raise(
     if policy.can_retry(attempt_number):
         policy.wait(attempt_number, interruptible=False)
         return
-    raise exc_cls(f"Retries exhausted. {message}. Endpoint: {url}")
+    msg = f"Retries exhausted. {message}. Endpoint: {url}"
+    raise exc_cls(msg)
 
 
 def _retry_or_raise_incomplete(

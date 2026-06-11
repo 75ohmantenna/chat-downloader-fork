@@ -225,38 +225,38 @@ class ChatRequest:
         if self.max_messages is not None and (
             not isinstance(self.max_messages, int) or self.max_messages <= 0
         ):
-            raise ValueError(
+            msg = (
                 "max_messages must be a positive integer or None, "
                 f"got {self.max_messages!r}"
             )
+            raise ValueError(msg)
         if self.max_attempts < 1:
-            raise ValueError(
-                f"max_attempts must be >= 1, got {self.max_attempts!r}"
-            )
+            msg = f"max_attempts must be >= 1, got {self.max_attempts!r}"
+            raise ValueError(msg)
         if self.buffer_size <= 0:
-            raise ValueError(
-                f"buffer_size must be positive, got {self.buffer_size!r}"
-            )
+            msg = f"buffer_size must be positive, got {self.buffer_size!r}"
+            raise ValueError(msg)
         if self.chat_type not in ("live", "top"):
-            raise ValueError(
-                f"chat_type must be 'live' or 'top', got {self.chat_type!r}"
-            )
+            msg = f"chat_type must be 'live' or 'top', got {self.chat_type!r}"
+            raise ValueError(msg)
         for name, value in (
             ("timeout", self.timeout),
             ("inactivity_timeout", self.inactivity_timeout),
         ):
             if value is not None and (not math.isfinite(value) or value <= 0):
-                raise ValueError(
+                msg = (
                     f"{name} must be a finite positive number or None, "
                     f"got {value!r}"
                 )
+                raise ValueError(msg)
         if not math.isfinite(self.message_receive_timeout) or (
             self.message_receive_timeout <= 0
         ):
-            raise ValueError(
+            msg = (
                 "message_receive_timeout must be a finite positive number, "
                 f"got {self.message_receive_timeout!r}"
             )
+            raise ValueError(msg)
 
     @classmethod
     def from_kwargs(cls, *, strict: bool = False, **kwargs: Any) -> Self:

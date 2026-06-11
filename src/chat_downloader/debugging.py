@@ -37,7 +37,7 @@ def set_testing_mode(new_mode: TestingModes) -> None:
     Args:
         new_mode: The desired testing mode from :class:`TestingModes`.
     """
-    global TESTING_MODE
+    global TESTING_MODE  # noqa: PLW0603 — module-level singleton mutated by test setup
     TESTING_MODE = new_mode
 
 

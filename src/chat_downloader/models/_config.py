@@ -95,9 +95,8 @@ class DownloaderConfig:
             ("read_timeout", self.read_timeout),
         ):
             if not math.isfinite(value) or value <= 0:
-                raise ValueError(
-                    f"{name} must be a finite positive number, got {value!r}"
-                )
+                msg = f"{name} must be a finite positive number, got {value!r}"
+                raise ValueError(msg)
 
     def as_dict(self) -> dict[str, Any]:
         """Return all fields as a plain ``dict``.

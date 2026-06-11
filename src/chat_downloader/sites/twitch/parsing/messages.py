@@ -16,7 +16,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import debug_log
-from chat_downloader.sites.remap import Remapper as r
+from chat_downloader.sites.remap import (
+    Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
+)
 from chat_downloader.sites.twitch.parsing.badges import _parse_badge_info
 from chat_downloader.sites.twitch.parsing.message_emotes import (
     _generate_emote_image_list,

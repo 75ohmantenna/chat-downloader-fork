@@ -60,7 +60,8 @@ def _maybe_send_keepalive(
     try:
         irc.send_raw("PING")
     except OSError as e:
-        raise ConnectionError("Lost connection while sending PING.") from e
+        msg = "Lost connection while sending PING."
+        raise ConnectionError(msg) from e
     return current_time
 
 
@@ -276,12 +277,13 @@ def _handle_ping(irc: TwitchChatIRC, readbuffer: str) -> None:
     try:
         irc.send_raw(PONG_TEXT)
     except OSError as e:
-        raise ConnectionError("Lost connection while sending PONG.") from e
+        msg = "Lost connection while sending PONG."
+        raise ConnectionError(msg) from e
 
 
 def get_chat_messages_by_stream_id(
     irc: TwitchChatIRC,
-    channel: str,
+    channel: str,  # noqa: ARG001 — part of the uniform transport callable signature
     params: ChatRequest | dict[str, Any],
     badge_set: BadgeSet | None = None,
 ) -> Generator[dict[str, Any], None, None]:

@@ -325,8 +325,6 @@ class BaseChatDownloader:
             Set of all destination key values.
         """
         mapped_keys = set()
-        for _, value in remapping.items():
-            if isinstance(value, Remapper):
-                value = value.new_key
-            mapped_keys.add(value)
+        for raw in remapping.values():
+            mapped_keys.add(raw.new_key if isinstance(raw, Remapper) else raw)
         return mapped_keys
