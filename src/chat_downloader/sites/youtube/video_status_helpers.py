@@ -23,9 +23,7 @@ def _log_player_response_shape(
     player_microformat: Mapping[str, object],
 ) -> None:
     """Log the shape of a player response for debugging schema drift."""
-    logger.debug(
-        f"Player response top-level keys: {list(player_response_info.keys())}"
-    )
+    logger.debug(f"Player response top-level keys: {list(player_response_info.keys())}")
     logger.debug(f"videoDetails keys: {list(video_details.keys())}")
     logger.debug(f"liveBroadcastDetails keys: {list(live_details.keys())}")
     if "liveBroadcastDetails" in player_microformat:
@@ -38,13 +36,12 @@ def _log_player_response_shape(
             "Found liveStreamingDetails: "
             f"{player_response_info['liveStreamingDetails']}",
         )
-    live_broadcast_content = get_dict(
-        player_microformat, "liveBroadcastDetails"
-    ).get("liveBroadcastContent")
+    live_broadcast_content = get_dict(player_microformat, "liveBroadcastDetails").get(
+        "liveBroadcastContent"
+    )
     if live_broadcast_content:
         logger.debug(
-            "Found official liveBroadcastContent field: "
-            f"{live_broadcast_content}",
+            f"Found official liveBroadcastContent field: {live_broadcast_content}",
         )
 
 
@@ -75,9 +72,7 @@ def _determine_video_type(
     """Resolve video type and optional clip offsets."""
     clip_config = player_response_info.get("clipConfig")
     if clip_config:
-        clip_start = (
-            float_or_none(clip_config.get("startTimeMs", 0)) or 0.0
-        ) / 1e3
+        clip_start = (float_or_none(clip_config.get("startTimeMs", 0)) or 0.0) / 1e3
         clip_end = (float_or_none(clip_config.get("endTimeMs", 0)) or 0.0) / 1e3
         return "clip", clip_start, clip_end
     if not video_details.get("isLiveContent"):
@@ -115,8 +110,7 @@ def _determine_status(
         return "was_live"
     if is_live is False or live_content is False:
         has_broadcast_details = bool(
-            live_details.get("startTimestamp")
-            or live_details.get("endTimestamp"),
+            live_details.get("startTimestamp") or live_details.get("endTimestamp"),
         )
         return "was_live" if has_broadcast_details else "not_live"
     return "past"

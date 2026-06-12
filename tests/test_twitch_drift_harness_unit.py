@@ -43,9 +43,7 @@ from chat_downloader.sites.twitch.constants import (
 from chat_downloader.sites.twitch.parsing.messages import _parse_irc_item
 from chat_downloader.sites.twitch.types import BadgeSet
 
-_FX_DIR = (
-    Path(__file__).resolve().parent / "fixtures" / "twitch" / "live_events"
-)
+_FX_DIR = Path(__file__).resolve().parent / "fixtures" / "twitch" / "live_events"
 
 # Sentinel substrings that indicate an unhandled IRC action or message type.
 _DRIFT_MARKERS = (
@@ -98,9 +96,8 @@ def test_irc_fixture_parses_without_drift(
         pytest.skip(f"{path.name}: MESSAGE_REGEX did not match the raw string")
     badge_set = BadgeSet(global_badges={}, channel_badges={})
     _parse_irc_item(match, badge_set=badge_set)
-    assert not drift_recorder, (
-        f"{path.name} triggered drift log(s):\n"
-        + "\n".join(f"  {line}" for line in drift_recorder)
+    assert not drift_recorder, f"{path.name} triggered drift log(s):\n" + "\n".join(
+        f"  {line}" for line in drift_recorder
     )
 
 

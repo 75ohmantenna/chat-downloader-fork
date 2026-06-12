@@ -26,9 +26,7 @@ def _reload_debugging(
     original_stdout = sys.stdout
     original_colorama = sys.modules.get("colorama")
     original_colorlog = sys.modules.get("colorlog")
-    original_handlers = {
-        logger: list(logger.handlers) for logger in dbg.loggers
-    }
+    original_handlers = {logger: list(logger.handlers) for logger in dbg.loggers}
 
     if stdout is not None:
         monkeypatch.setattr(sys, "stdout", stdout)
@@ -135,9 +133,7 @@ def test_supports_colour_registry_import_error_returns_false(
 
 
 def test_debugging_import_handles_colorama_init_oserror(monkeypatch) -> None:
-    fake_colorama = SimpleNamespace(
-        init=lambda: (_ for _ in ()).throw(OSError("boom"))
-    )
+    fake_colorama = SimpleNamespace(init=lambda: (_ for _ in ()).throw(OSError("boom")))
 
     (
         module,
@@ -239,13 +235,9 @@ def test_set_log_level_updates_all_configured_loggers() -> None:
 
     try:
         dbg.set_log_level("error")
-        assert [logger.level for logger in dbg.loggers] == [
-            logging.ERROR
-        ] * len(
+        assert [logger.level for logger in dbg.loggers] == [logging.ERROR] * len(
             dbg.loggers,
         )
     finally:
-        for logger, original_level in zip(
-            dbg.loggers, original_levels, strict=True
-        ):
+        for logger, original_level in zip(dbg.loggers, original_levels, strict=True):
             logger.setLevel(original_level)

@@ -61,11 +61,7 @@ def test_link_helpers_normalize_supported_youtube_url_forms() -> None:
 def test_parse_navigation_endpoint_returns_default_on_invalid_payload() -> None:
     assert (
         _parse_navigation_endpoint(
-            {
-                "commandMetadata": {
-                    "webCommandMetadata": {"url": "/watch?v=abc123"}
-                }
-            },
+            {"commandMetadata": {"webCommandMetadata": {"url": "/watch?v=abc123"}}},
         )
         == "https://www.youtube.com/watch?v=abc123"
     )
@@ -193,9 +189,7 @@ def test_thumbnail_and_action_button_helpers_parse_expected_shapes() -> None:
         {
             "buttonRenderer": {
                 "navigationEndpoint": {
-                    "commandMetadata": {
-                        "webCommandMetadata": {"url": "/watch?v=xyz"}
-                    },
+                    "commandMetadata": {"webCommandMetadata": {"url": "/watch?v=xyz"}},
                 },
                 "text": {"simpleText": "Open"},
             },
@@ -284,9 +278,7 @@ def test_parse_currency_uses_numeric_fallback_when_split_fails(
 
 def test_parse_item_returns_existing_info_for_empty_renderer() -> None:
     info = {"kept": True}
-    assert _parse_item({"liveChatTextMessageRenderer": {}}, info=info) == {
-        "kept": True
-    }
+    assert _parse_item({"liveChatTextMessageRenderer": {}}, info=info) == {"kept": True}
 
 
 def test_parse_item_recurses_moves_author_and_normalizes_time(
@@ -317,9 +309,7 @@ def test_parse_item_recurses_moves_author_and_normalizes_time(
                 "showItemEndpoint": {
                     "showLiveChatItemEndpoint": {
                         "renderer": {
-                            "nestedRenderer": {
-                                "authorImages": {"thumb": "img"}
-                            },
+                            "nestedRenderer": {"authorImages": {"thumb": "img"}},
                         },
                     },
                 },
@@ -469,17 +459,11 @@ def _make_lockup_with_badge(text: str) -> dict[str, Any]:
 
 
 def test_parse_lockup_badge_style_returns_upcoming_for_premiere() -> None:
-    assert (
-        _parse_lockup_badge_style(_make_lockup_with_badge("PREMIERE"))
-        == "UPCOMING"
-    )
+    assert _parse_lockup_badge_style(_make_lockup_with_badge("PREMIERE")) == "UPCOMING"
 
 
 def test_parse_lockup_badge_style_returns_upcoming_for_upcoming() -> None:
-    assert (
-        _parse_lockup_badge_style(_make_lockup_with_badge("UPCOMING"))
-        == "UPCOMING"
-    )
+    assert _parse_lockup_badge_style(_make_lockup_with_badge("UPCOMING")) == "UPCOMING"
 
 
 def test_parse_lockup_badge_style_returns_none_for_unknown_badge() -> None:

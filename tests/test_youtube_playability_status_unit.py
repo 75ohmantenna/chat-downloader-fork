@@ -67,9 +67,7 @@ def test_build_error_message_prefers_simple_text_runs_and_fallbacks() -> None:
 
 
 def test_playability_rules_detect_age_gate_and_unplayable_status() -> None:
-    assert is_age_gated(
-        {"playabilityStatus": {"desktopLegacyAgeGateReason": "legacy"}}
-    )
+    assert is_age_gated({"playabilityStatus": {"desktopLegacyAgeGateReason": "legacy"}})
     assert is_age_gated(
         {
             "playabilityStatus": {
@@ -78,9 +76,7 @@ def test_playability_rules_detect_age_gate_and_unplayable_status() -> None:
             },
         },
     )
-    assert not is_age_gated(
-        {"playabilityStatus": {"status": "OK", "reason": ""}}
-    )
+    assert not is_age_gated({"playabilityStatus": {"status": "OK", "reason": ""}})
 
     assert is_unplayable({"playabilityStatus": {"status": "UNPLAYABLE"}})
     assert not is_unplayable({"playabilityStatus": {"status": "OK"}})
@@ -200,9 +196,7 @@ def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
             },
         )
 
-    with pytest.raises(
-        VideoUnavailable, match="Unable to find initial video contents"
-    ):
+    with pytest.raises(VideoUnavailable, match="Unable to find initial video contents"):
         _raise_for_replay_unavailable({})
 
     with pytest.raises(ChatDisabled, match="disabled for this video"):
@@ -231,9 +225,7 @@ def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
         )
 
     with pytest.raises(NoChatReplay, match="Video does not have a chat replay"):
-        _raise_for_replay_unavailable(
-            {"contents": {"twoColumnWatchNextResults": {}}}
-        )
+        _raise_for_replay_unavailable({"contents": {"twoColumnWatchNextResults": {}}})
 
     # Member-only chats are reported via availabilityMessage; the runtime
     # used to fall through to NoChatReplay. Now classified as VideoUnplayable.
@@ -263,9 +255,7 @@ def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
         )
 
 
-def test_raise_if_playability_error_delegates_to_popup_and_replay_checks() -> (
-    None
-):
+def test_raise_if_playability_error_delegates_to_popup_and_replay_checks() -> None:
     with pytest.raises(VideoUnavailable, match="Popup title"):
         raise_if_playability_error(
             {"playabilityStatus": {}},
@@ -307,9 +297,7 @@ def test_raise_if_playability_error_delegates_to_popup_and_replay_checks() -> (
     mod._raise_for_replay_unavailable = record_replay
     try:
         assert (
-            raise_if_playability_error(
-                {"playabilityStatus": {}}, {"contents": {}}
-            )
+            raise_if_playability_error({"playabilityStatus": {}}, {"contents": {}})
             is None
         )
     finally:
@@ -324,9 +312,7 @@ def test_raise_if_playability_error_delegates_to_popup_and_replay_checks() -> (
     ]
 
 
-def test_video_status_helpers_resolve_types_statuses_and_continuations() -> (
-    None
-):
+def test_video_status_helpers_resolve_types_statuses_and_continuations() -> None:
     assert _determine_video_type(
         {"clipConfig": {"startTimeMs": "2000", "endTimeMs": "7000"}},
         {"isLiveContent": True},
@@ -376,15 +362,15 @@ def test_video_status_helpers_resolve_types_statuses_and_continuations() -> (
                                                 {
                                                     "title": "Top chat",
                                                     "continuation": {
-                                                        "reloadContinuationData": {  # noqa: E501
-                                                            "continuation": "top-token",  # noqa: E501
+                                                        "reloadContinuationData": {
+                                                            "continuation": "top-token",
                                                         },
                                                     },
                                                 },
                                                 {
                                                     "title": "Live chat",
                                                     "continuation": {
-                                                        "reloadContinuationData": {  # noqa: E501
+                                                        "reloadContinuationData": {
                                                             "continuation": "live-token",  # noqa: E501
                                                         },
                                                     },
@@ -447,9 +433,7 @@ def test_video_status_helpers_resolve_types_statuses_and_continuations() -> (
 def test_parse_video_details_builds_expected_model_and_dict() -> None:
     details = parse_video_details(
         {
-            "streamingData": {
-                "adaptiveFormats": [{"approxDurationMs": "10000"}]
-            },
+            "streamingData": {"adaptiveFormats": [{"approxDurationMs": "10000"}]},
             "microformat": {
                 "playerMicroformatRenderer": {
                     "liveBroadcastDetails": {
@@ -481,7 +465,7 @@ def test_parse_video_details_builds_expected_model_and_dict() -> None:
                                                 {
                                                     "title": "Live chat",
                                                     "continuation": {
-                                                        "reloadContinuationData": {  # noqa: E501
+                                                        "reloadContinuationData": {
                                                             "continuation": "live-token",  # noqa: E501
                                                         },
                                                     },
@@ -514,7 +498,7 @@ def test_parse_video_details_builds_expected_model_and_dict() -> None:
     assert video_details_to_dict(details)["title"] == "Example title"
 
 
-def test_parse_video_details_raises_for_wrong_video_id_but_allows_clip_override() -> (  # noqa: E501
+def test_parse_video_details_raises_for_wrong_video_id_but_allows_clip_override() -> (
     None
 ):
     player_response = {

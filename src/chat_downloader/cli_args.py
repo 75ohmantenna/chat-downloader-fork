@@ -70,19 +70,13 @@ def parse_header(value: str) -> tuple[str, str]:
             msg,
         )
 
-    if (
-        "\n" in key
-        or "\r" in key
-        or "\n" in header_value
-        or "\r" in header_value
-    ):
+    if "\n" in key or "\r" in key or "\n" in header_value or "\r" in header_value:
         err_msg = "Header keys and values cannot contain newline characters."
         raise argparse.ArgumentTypeError(err_msg)
 
     if not HEADER_NAME_PATTERN.fullmatch(key):
         err_msg = (
-            f"Invalid header name {key!r}. Only RFC 7230 token characters "
-            "are allowed."
+            f"Invalid header name {key!r}. Only RFC 7230 token characters are allowed."
         )
         raise argparse.ArgumentTypeError(err_msg)
 
@@ -212,15 +206,11 @@ class _ParamRegistrar:
         arg_kwargs.update(kwargs)
         group.add_argument(*arg_names, **arg_kwargs)
 
-    def chat(
-        self, group: _ArgumentTarget, *keys: str, **kwargs: object
-    ) -> None:
+    def chat(self, group: _ArgumentTarget, *keys: str, **kwargs: object) -> None:
         """Register a ChatRequest parameter."""
         self.add("chat", group, *keys, **kwargs)
 
-    def init(
-        self, group: _ArgumentTarget, *keys: str, **kwargs: object
-    ) -> None:
+    def init(self, group: _ArgumentTarget, *keys: str, **kwargs: object) -> None:
         """Register a DownloaderConfig parameter."""
         self.add("init", group, *keys, **kwargs)
 
@@ -229,9 +219,7 @@ class _ParamRegistrar:
         self.add("run", group, *keys, **kwargs)
 
 
-def _add_chat_args(
-    reg: _ParamRegistrar, parser: argparse.ArgumentParser
-) -> None:
+def _add_chat_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:
     """Register top-level chat and timing argument groups."""
     reg.chat(parser, "url")
 
@@ -245,9 +233,7 @@ def _add_chat_args(
     reg.chat(type_options, "--message_groups", type=splitter)
 
 
-def _add_retry_args(
-    reg: _ParamRegistrar, parser: argparse.ArgumentParser
-) -> None:
+def _add_retry_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:
     """Register retry and termination argument groups."""
     retry_group = parser.add_argument_group("Retry Arguments")
     reg.chat(retry_group, "--max_attempts", type=int)
@@ -274,9 +260,7 @@ def _add_format_site_output_args(
     reg.chat(format_group, "--format")
     reg.chat(format_group, "--format_file")
 
-    youtube_group = parser.add_argument_group(
-        "[Site Specific] YouTube Arguments"
-    )
+    youtube_group = parser.add_argument_group("[Site Specific] YouTube Arguments")
     reg.chat(youtube_group, "--chat_type", choices=["live", "top"])
     reg.chat(youtube_group, "--ignore", type=splitter)
 
@@ -290,9 +274,7 @@ def _add_format_site_output_args(
     reg.chat(output_group, "--sort_keys", type=str2bool, nargs="?", const=True)
 
 
-def _add_debug_args(
-    reg: _ParamRegistrar, parser: argparse.ArgumentParser
-) -> None:
+def _add_debug_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:
     """Register debugging/testing argument group."""
     debug_group = parser.add_argument_group("Debugging/Testing Arguments")
 
@@ -323,9 +305,7 @@ def _add_debug_args(
     reg.run(debug_group, "--quiet", "-q", action="store_true")
 
 
-def _add_init_args(
-    reg: _ParamRegistrar, parser: argparse.ArgumentParser
-) -> None:
+def _add_init_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:
     """Register initialisation argument group."""
     init_group = parser.add_argument_group("Initialisation Arguments")
     reg.init(init_group, "--cookies", "-c")
@@ -355,8 +335,5 @@ def _add_init_args(
         default=None,
         type=parse_header,
         metavar="NAME:VALUE",
-        help=(
-            "Custom HTTP header (repeatable), e.g. --header "
-            '"Accept-Language: en"'
-        ),
+        help=('Custom HTTP header (repeatable), e.g. --header "Accept-Language: en"'),
     )

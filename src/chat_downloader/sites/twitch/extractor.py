@@ -83,10 +83,7 @@ class TwitchChatDownloader(BaseChatDownloader):
                 # instead.
                 "messages_condition": lambda messages: (
                     len(messages) <= 30
-                    and any(
-                        m.get("message_type") == "text_message"
-                        for m in messages
-                    )
+                    and any(m.get("message_type") == "text_message" for m in messages)
                 ),
             },
         },
@@ -107,16 +104,13 @@ class TwitchChatDownloader(BaseChatDownloader):
                 "replay is no longer available."
             ),
             "params": {
-                "url": (
-                    "https://clips.twitch.tv/AverageSparklyTortoisePeoplesChamp"
-                ),
+                "url": ("https://clips.twitch.tv/AverageSparklyTortoisePeoplesChamp"),
             },
             "expected_result": {"error": NoChatReplay},
         },
         {
             "name": (
-                "Sorry. Unless you've got a time machine, that content is "
-                "unavailable."
+                "Sorry. Unless you've got a time machine, that content is unavailable."
             ),
             "params": {
                 "url": "https://www.twitch.tv/videos/1",
@@ -202,9 +196,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         Yields:
             URLs for livestreams, their VODs, and their clips.
         """
-        yield from generate_twitch_urls(
-            self, livestream_limit, vod_limit, clip_limit
-        )
+        yield from generate_twitch_urls(self, livestream_limit, vod_limit, clip_limit)
 
     def _get_chat_messages_by_vod_id(
         self,

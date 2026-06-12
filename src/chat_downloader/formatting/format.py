@@ -110,9 +110,7 @@ class ItemFormatter:
 
         Raises FormatNotFound if format_name is not found.
         """
-        format_object = self._resolve_format_object(
-            format_name, format_object, item
-        )
+        format_object = self._resolve_format_object(format_name, format_object, item)
 
         if not format_object:
             msg = f'No valid format found for "{format_name}"'
@@ -190,9 +188,7 @@ class ItemFormatter:
 
         return matching == message_type
 
-    def _apply_inheritance(
-        self, format_object: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _apply_inheritance(self, format_object: dict[str, Any]) -> dict[str, Any]:
         """Return *format_object* merged onto its inherited parent, if any."""
         inherit = format_object.get(self.KEY_INHERIT)
 
@@ -202,9 +198,7 @@ class ItemFormatter:
         parent = self.format_file.get(inherit) or {}
         return nested_update(deepcopy(parent), format_object)
 
-    def _apply_template(
-        self, format_object: dict[str, Any], item: JSONDict
-    ) -> str:
+    def _apply_template(self, format_object: dict[str, Any], item: JSONDict) -> str:
         """Substitute template placeholders with values from *item*."""
         template = format_object.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
         keys = format_object.get(self.KEY_KEYS, {})
@@ -247,9 +241,7 @@ class ItemFormatter:
             return str(value)
 
         template = self._extract_template(field_config)
-        formatted_value = self._apply_field_formatting(
-            field_path, value, field_config
-        )
+        formatted_value = self._apply_field_formatting(field_path, value, field_config)
 
         return _SAFE_FORMATTER.format(template, formatted_value)
 
@@ -319,9 +311,7 @@ class ItemFormatter:
             return value
 
         if field_path == self.FIELD_AUTHOR_BADGES:
-            return separator.join(
-                filter(None, (badge.get("title") for badge in value))
-            )
+            return separator.join(filter(None, (badge.get("title") for badge in value)))
 
         if isinstance(value, (tuple, list)):
             return separator.join(map(str, value))

@@ -60,15 +60,9 @@ def test_remapping_contributor_sets_are_disjoint() -> None:
     remap = set(cm.build_remapping())
     colour = set(cm._COLOUR_KEYS)
     ignore = set(cm._KEYS_TO_IGNORE)
-    assert remap & ignore == set(), (
-        f"in both remap and ignore: {remap & ignore}"
-    )
-    assert colour & ignore == set(), (
-        f"in both colour and ignore: {colour & ignore}"
-    )
-    assert remap & colour == set(), (
-        f"in both remap and colour: {remap & colour}"
-    )
+    assert remap & ignore == set(), f"in both remap and ignore: {remap & ignore}"
+    assert colour & ignore == set(), f"in both colour and ignore: {colour & ignore}"
+    assert remap & colour == set(), f"in both remap and colour: {remap & colour}"
 
 
 def test_known_keys_derived_from_build_remapping() -> None:

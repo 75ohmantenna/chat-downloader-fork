@@ -36,13 +36,9 @@ def _privmsg(message_id: str, text: str) -> str:
         ("this content was deleted", VideoUnavailable),
     ],
 )
-def test_handle_gql_errors_maps_known_messages(
-    message, expected_exception
-) -> None:
+def test_handle_gql_errors_maps_known_messages(message, expected_exception) -> None:
     with pytest.raises(expected_exception):
-        graphql_client._handle_gql_errors(
-            [{"message": message, "path": ["root"]}]
-        )
+        graphql_client._handle_gql_errors([{"message": message, "path": ["root"]}])
 
 
 def test_handle_gql_errors_raises_parsing_error_with_path() -> None:
@@ -61,9 +57,7 @@ def test_handle_gql_errors_raises_parsing_error_with_path() -> None:
     assert "VideoCommentsByOffsetOrCursor" in str(excinfo.value)
 
 
-def test_handle_gql_errors_reports_persisted_query_failures_actionably() -> (
-    None
-):
+def test_handle_gql_errors_reports_persisted_query_failures_actionably() -> None:
     with pytest.raises(ParsingError) as excinfo:
         graphql_client._handle_gql_errors(
             [{"message": "PersistedQueryNotFound", "path": ["video"]}],
@@ -94,9 +88,7 @@ def test_download_gql_handles_dict_error_response() -> None:
             session_post,
             [
                 {
-                    "operationName": next(
-                        iter(graphql_client.OPERATION_HASHES)
-                    ),
+                    "operationName": next(iter(graphql_client.OPERATION_HASHES)),
                     "variables": {},
                 },
             ],
@@ -122,9 +114,7 @@ def test_download_gql_handles_list_error_response() -> None:
             session_post,
             [
                 {
-                    "operationName": next(
-                        iter(graphql_client.OPERATION_HASHES)
-                    ),
+                    "operationName": next(iter(graphql_client.OPERATION_HASHES)),
                     "variables": {},
                 },
             ],
@@ -147,9 +137,7 @@ def test_download_base_gql_raises_captcha_challenge_required_on_challenge_respon
         )()
 
     with pytest.raises(CaptchaChallengeRequired) as exc_info:
-        graphql_client._download_base_gql(
-            session_post, [{"operationName": "x"}]
-        )
+        graphql_client._download_base_gql(session_post, [{"operationName": "x"}])
 
     assert "twitch_web" in str(exc_info.value)
 
@@ -217,11 +205,7 @@ def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
         type(
             "_Context",
             (),
-            {
-                "wrap_socket": staticmethod(
-                    lambda sock, server_hostname: fake_socket
-                )
-            },
+            {"wrap_socket": staticmethod(lambda sock, server_hostname: fake_socket)},
         ),
     )
 
@@ -230,9 +214,7 @@ def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
     assert fake_socket.settimeout.call_args_list == [((None,), {})]
     assert fake_socket.sendall.call_args_list == [
         (
-            (
-                b"CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",  # noqa: E501
-            ),
+            (b"CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",),
             {},
         ),
         ((b"PASS SCHMOOPIIE\r\n",), {}),
@@ -322,14 +304,12 @@ def test_process_irc_buffer_keeps_partial_tail_without_final_newline() -> None:
     assert matches[0].group(3) == "one"
 
 
-def test_consume_irc_buffer_returns_unmatched_full_buffer_only_for_complete_lines() -> (  # noqa: E501
+def test_consume_irc_buffer_returns_unmatched_full_buffer_only_for_complete_lines() -> (
     None
 ):
-    remaining, matches, unmatched_full_buffer = (
-        irc_transport._consume_irc_buffer(
-            "UNKNOWN LINE\r\n",
-            irc_transport.MESSAGE_REGEX,
-        )
+    remaining, matches, unmatched_full_buffer = irc_transport._consume_irc_buffer(
+        "UNKNOWN LINE\r\n",
+        irc_transport.MESSAGE_REGEX,
     )
 
     assert remaining == ""
@@ -412,7 +392,7 @@ def test_irc_transport_logs_unknown_full_buffer_when_no_matches() -> None:
     mock_log.assert_any_call("debug", 'No matches found in "\nUNKNOWN LINE\n"')
 
 
-def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive() -> (  # noqa: E501
+def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive() -> (
     None
 ):
     class FakeIRC:
@@ -439,9 +419,7 @@ def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive
     time_values = iter([0.0, 61.0, 62.0])
 
     with (
-        patch.object(
-            irc_transport.time, "time", side_effect=lambda: next(time_values)
-        ),
+        patch.object(irc_transport.time, "time", side_effect=lambda: next(time_values)),
         patch.object(
             irc_transport,
             "_parse_irc_item",
@@ -467,8 +445,7 @@ def test_irc_transport_does_not_log_progress_every_250_messages() -> None:
     class FakeIRC:
         def __init__(self) -> None:
             payload = "\r\n".join(
-                _privmsg(str(index), f"message-{index}")
-                for index in range(1, 251)
+                _privmsg(str(index), f"message-{index}") for index in range(1, 251)
             )
             self.responses = iter([payload + "\r\n", ""])
 
@@ -479,14 +456,10 @@ def test_irc_transport_does_not_log_progress_every_250_messages() -> None:
         def send_raw(self, _message: str) -> None:
             return None
 
-    parsed_messages = [
-        {"message": f"message-{index}"} for index in range(1, 251)
-    ]
+    parsed_messages = [{"message": f"message-{index}"} for index in range(1, 251)]
 
     with (
-        patch.object(
-            irc_transport, "_parse_irc_item", side_effect=parsed_messages
-        ),
+        patch.object(irc_transport, "_parse_irc_item", side_effect=parsed_messages),
         patch.object(irc_transport, "log") as mock_log,
         pytest.raises(ConnectionError),
     ):
@@ -506,7 +479,7 @@ def test_irc_transport_does_not_log_progress_every_250_messages() -> None:
     mock_log.assert_not_called()
 
 
-def test_irc_transport_preserves_trailing_unmatched_buffer_after_complete_match() -> (  # noqa: E501
+def test_irc_transport_preserves_trailing_unmatched_buffer_after_complete_match() -> (
     None
 ):
     class FakeIRC:
@@ -537,9 +510,7 @@ def test_irc_transport_preserves_trailing_unmatched_buffer_after_complete_match(
         ) == [{"message": "hello"}]
 
 
-def test_irc_transport_swallows_timeout_and_continues_until_disconnect() -> (
-    None
-):
+def test_irc_transport_swallows_timeout_and_continues_until_disconnect() -> None:
     class FakeIRC:
         def __init__(self) -> None:
             self.responses = iter([TimeoutError("timed out"), ""])
@@ -610,9 +581,7 @@ def test_irc_transport_ping_oserror_raises_connection_error() -> None:
     time_values = iter([0.0, 61.0])
 
     with (
-        patch.object(
-            irc_transport.time, "time", side_effect=lambda: next(time_values)
-        ),
+        patch.object(irc_transport.time, "time", side_effect=lambda: next(time_values)),
         pytest.raises(ConnectionError),
     ):
         list(
@@ -643,11 +612,7 @@ def test_twitch_chat_irc_constructor_closes_socket_on_send_raw_oserror(
         type(
             "_Context",
             (),
-            {
-                "wrap_socket": staticmethod(
-                    lambda sock, server_hostname: fake_socket
-                )
-            },
+            {"wrap_socket": staticmethod(lambda sock, server_hostname: fake_socket)},
         ),
     )
 
@@ -697,9 +662,7 @@ def test_update_badge_info_skips_malformed_badge_and_keeps_others() -> None:
     import base64
 
     def make_badge_id(set_id: str, version: str, channel_id: str) -> str:
-        return base64.b64encode(
-            f"{set_id};{version};{channel_id}".encode()
-        ).decode()
+        return base64.b64encode(f"{set_id};{version};{channel_id}".encode()).decode()
 
     good_badge = {
         "id": make_badge_id("subscriber", "6", ""),

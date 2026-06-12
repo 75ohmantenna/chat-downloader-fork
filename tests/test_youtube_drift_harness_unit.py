@@ -39,9 +39,7 @@ from chat_downloader.sites.youtube.message_pipeline import (
     process_pipeline_action,
 )
 
-_FX_DIR = (
-    Path(__file__).resolve().parent / "fixtures" / "youtube" / "live_events"
-)
+_FX_DIR = Path(__file__).resolve().parent / "fixtures" / "youtube" / "live_events"
 
 # Sentinel substrings that indicate a parsing gap.
 _DRIFT_MARKERS = (
@@ -104,11 +102,8 @@ def test_continuation_fixture_parses_without_drift(
     )
 
     for action in result.actions:
-        process_pipeline_action(
-            json.loads(json.dumps(action)), 0, msg_filter, None
-        )
+        process_pipeline_action(json.loads(json.dumps(action)), 0, msg_filter, None)
 
-    assert not drift_recorder, (
-        f"{path.name} triggered drift log(s):\n"
-        + "\n".join(f"  {line}" for line in drift_recorder)
+    assert not drift_recorder, f"{path.name} triggered drift log(s):\n" + "\n".join(
+        f"  {line}" for line in drift_recorder
     )

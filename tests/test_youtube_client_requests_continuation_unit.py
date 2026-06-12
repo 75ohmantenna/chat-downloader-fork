@@ -107,9 +107,7 @@ def test_apply_retry_or_raise_raises_when_budget_exhausted() -> None:
 
 def test_apply_retry_or_raise_propagates_custom_exc_class() -> None:
     with pytest.raises(ValueError, match="Retries exhausted"):
-        _apply_retry_or_raise(
-            _POLICY_EXHAUSTED, 1, "http://url", "msg", ValueError
-        )
+        _apply_retry_or_raise(_POLICY_EXHAUSTED, 1, "http://url", "msg", ValueError)
 
 
 def test_apply_retry_or_raise_error_message_includes_url() -> None:
@@ -153,13 +151,9 @@ def test_retry_or_raise_incomplete_returns_when_retry_allowed() -> None:
 
 def test_retry_or_raise_incomplete_raises_on_budget_exhausted() -> None:
     with pytest.raises(IncompleteContinuationError):
-        _retry_or_raise_incomplete(
-            1, "reason", 1, _POLICY_EXHAUSTED, "http://url"
-        )
+        _retry_or_raise_incomplete(1, "reason", 1, _POLICY_EXHAUSTED, "http://url")
 
 
 def test_retry_or_raise_incomplete_error_message_includes_endpoint() -> None:
     with pytest.raises(IncompleteContinuationError, match="http://url"):
-        _retry_or_raise_incomplete(
-            1, "reason", 1, _POLICY_EXHAUSTED, "http://url"
-        )
+        _retry_or_raise_incomplete(1, "reason", 1, _POLICY_EXHAUSTED, "http://url")

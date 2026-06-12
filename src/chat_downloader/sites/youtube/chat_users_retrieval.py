@@ -73,8 +73,7 @@ class YouTubeChatUsersRetrievalMixin:
                 if video["video_type"] not in ("LIVE", "UPCOMING"):
                     log(
                         "debug",
-                        f'Skipping video with ID: "{video_id}" '
-                        "(not live/upcoming)",
+                        f'Skipping video with ID: "{video_id}" (not live/upcoming)',
                     )
                     continue
 
@@ -83,9 +82,9 @@ class YouTubeChatUsersRetrievalMixin:
                     continue
 
                 try:
-                    chat = cast(
-                        "YouTubeDownloaderProto", self
-                    ).get_chat_by_video_id(video_id, params)
+                    chat = cast("YouTubeDownloaderProto", self).get_chat_by_video_id(
+                        video_id, params
+                    )
 
                     log(
                         "info",

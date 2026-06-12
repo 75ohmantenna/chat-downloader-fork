@@ -74,9 +74,7 @@ def test_site_integration(site, test) -> None:
                 raise Exception(msg)  # Invalid test
 
         actual_result = {"message_types": [], "action_types": []}
-        types_to_check = [
-            key for key in actual_result if key in expected_result
-        ]
+        types_to_check = [key for key in actual_result if key in expected_result]
 
         if types_to_check:
             for message in messages_list:
@@ -89,9 +87,7 @@ def test_site_integration(site, test) -> None:
                     actual_result["action_types"].append(action_type)
 
             for check in types_to_check:
-                assert set(expected_result.get(check)) == set(
-                    actual_result.get(check)
-                )
+                assert set(expected_result.get(check)) == set(actual_result.get(check))
 
     finally:
         site_object.close()

@@ -172,9 +172,7 @@ def _handle_http_error(
         response_text
     ):
         raise CaptchaChallengeRequired(
-            _captcha_guidance_message(
-                endpoint=continuation_url, detail=error_message
-            ),
+            _captcha_guidance_message(endpoint=continuation_url, detail=error_message),
         )
     if _is_retryable_status(response.status_code):
         return _retry_or_raise_exhausted(
@@ -232,10 +230,7 @@ def _handle_json_api_error(
             detail,
             "API error",
         )
-    if (
-        isinstance(error_message, str)
-        and "unknown error" in error_message.lower()
-    ):
+    if isinstance(error_message, str) and "unknown error" in error_message.lower():
         _retry_or_raise_incomplete(
             attempt_number,
             detail,
@@ -267,9 +262,7 @@ def _handle_missing_live_chat_continuation(
         require_live_chat_continuation
         and not error
         and json_response
-        and multi_get(
-            json_response, "continuationContents", "liveChatContinuation"
-        )
+        and multi_get(json_response, "continuationContents", "liveChatContinuation")
         is None
     ):
         return False

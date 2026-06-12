@@ -103,9 +103,7 @@ class Chat:
         self._seen_message_cache = _SeenMessageCache(max_seen_message_ids)
 
     def _register_seen_message_id(self, message_id: str) -> bool:
-        added, evicted_message_id = self._seen_message_cache.register(
-            message_id
-        )
+        added, evicted_message_id = self._seen_message_cache.register(message_id)
 
         if not added:
             return False
@@ -158,8 +156,7 @@ class Chat:
                 # Preserve the original iteration error.
                 log(
                     "debug",
-                    "Suppressed close() error while unwinding chat: "
-                    f"{close_error}",
+                    f"Suppressed close() error while unwinding chat: {close_error}",
                 )
             raise
         else:

@@ -38,9 +38,7 @@ def test_describe_debug_sample_falls_back_to_misc_for_unknown_label() -> None:
 
 
 def test_shared_name_inference_helpers_match_promoter_behavior() -> None:
-    sample_path = Path(
-        "youtube-missing-keys-liveChatMadeUpRenderer-abc123def456.json"
-    )
+    sample_path = Path("youtube-missing-keys-liveChatMadeUpRenderer-abc123def456.json")
 
     assert infer_site_from_sample_name(sample_path) == "youtube"
     assert infer_group_from_sample_name(sample_path) == "messages"

@@ -29,9 +29,7 @@ if TYPE_CHECKING:
 
     from ._protocols import SessionOwnerProto
 
-_ALLOWED_PROXY_SCHEMES = frozenset(
-    {"http", "https", "socks4", "socks5", "socks5h"}
-)
+_ALLOWED_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks5", "socks5h"})
 
 
 def _validate_cookie_domain(domain: str) -> None:
@@ -50,9 +48,7 @@ def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
     """Initialize HTTP session, headers, proxies, cookies, and timeout state."""
     owner.session = requests.Session()
 
-    connect_timeout = float(
-        kwargs.get("connect_timeout", DEFAULT_CONNECT_TIMEOUT)
-    )
+    connect_timeout = float(kwargs.get("connect_timeout", DEFAULT_CONNECT_TIMEOUT))
     read_timeout = float(kwargs.get("read_timeout", DEFAULT_READ_TIMEOUT))
     owner._http_timeout = (connect_timeout, read_timeout)
 
@@ -62,9 +58,7 @@ def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
     owner.session.headers.clear()
     owner.session.headers.update(merged_headers)
     owner._request_profile = request_profile
-    owner._auto_profile_fallback = bool(
-        kwargs.get("auto_profile_fallback", True)
-    )
+    owner._auto_profile_fallback = bool(kwargs.get("auto_profile_fallback", True))
     owner._twitch_client_id = kwargs.get("twitch_client_id")
 
     proxy = kwargs.get("proxy")
@@ -135,9 +129,7 @@ def apply_request_profile(owner: SessionOwnerProto, profile_name: str) -> bool:
     if not profile_headers:
         return False
     session_headers = cast("dict[str, str]", dict(owner.session.headers))
-    merged_headers = build_request_profile_headers(
-        profile_name, session_headers
-    )
+    merged_headers = build_request_profile_headers(profile_name, session_headers)
     owner.session.headers.clear()
     owner.session.headers.update(merged_headers)
     owner._request_profile = profile_name
@@ -293,9 +285,7 @@ def session_post(
     return response
 
 
-def session_get(
-    owner: SessionOwnerProto, url: str, **kwargs: Any
-) -> requests.Response:
+def session_get(owner: SessionOwnerProto, url: str, **kwargs: Any) -> requests.Response:
     """Make a GET request using the configured session."""
     kwargs.setdefault("timeout", owner._http_timeout)
     response = owner.session.get(url, **kwargs)
@@ -303,8 +293,6 @@ def session_get(
     return response
 
 
-def session_get_json(
-    owner: SessionOwnerProto, url: str, **kwargs: Any
-) -> JSONAny:
+def session_get_json(owner: SessionOwnerProto, url: str, **kwargs: Any) -> JSONAny:
     """Make a GET request and parse the response as JSON."""
     return cast("JSONAny", session_get(owner, url, **kwargs).json())

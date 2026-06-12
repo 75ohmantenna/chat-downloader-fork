@@ -32,9 +32,7 @@ def test_chat_output_dispatcher_close_is_idempotent_and_reports_error(
         def initialize(self) -> None:
             return None
 
-        def write(
-            self, item: dict[str, Any] | str, flush: bool = False
-        ) -> None:
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             del item, flush
 
         def close(self) -> None:
@@ -77,9 +75,7 @@ def test_chat_output_dispatcher_close_reports_all_writer_failures(
         def initialize(self) -> None:
             return None
 
-        def write(
-            self, item: dict[str, Any] | str, flush: bool = False
-        ) -> None:
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             del item, flush
 
         def close(self) -> None:
@@ -129,9 +125,7 @@ def test_chat_close_suppresses_writer_close_failures(monkeypatch) -> None:
         def initialize(self) -> None:
             return None
 
-        def write(
-            self, item: dict[str, Any] | str, flush: bool = False
-        ) -> None:
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             del item, flush
 
         def close(self) -> None:
@@ -215,9 +209,7 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
         def initialize(self) -> None:
             return None
 
-        def write(
-            self, item: dict[str, Any] | str, flush: bool = False
-        ) -> None:
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             del item, flush
 
         def close(self) -> None:
@@ -264,9 +256,7 @@ def test_pre_initialised_writer_receives_emit_callback() -> None:
         def initialize(self) -> None:
             raise AssertionError("initialize() must not be called")
 
-        def write(
-            self, item: dict[str, Any] | str, flush: bool = False
-        ) -> None:
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             received.append(item)
 
         def close(self) -> None:
@@ -296,9 +286,7 @@ def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
         def initialize(self) -> None:
             pass
 
-        def write(
-            self, item: dict[str, Any] | str, flush: bool = False
-        ) -> None:
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             received.append(item)
 
         def close(self) -> None:
@@ -336,9 +324,7 @@ def test_chat_output_dispatcher_close_suppresses_known_writer_errors(
         def initialize(self) -> None:
             return None
 
-        def write(
-            self, item: dict[str, Any] | str, flush: bool = False
-        ) -> None:
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             del item, flush
 
         def close(self) -> None:

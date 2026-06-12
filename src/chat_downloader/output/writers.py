@@ -171,9 +171,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
             msg = "File must be initialized before use"
             raise RuntimeError(msg)
         if self.columns:
-            self.csv_dict_writer = csv.DictWriter(
-                self.file, fieldnames=self.columns
-            )
+            self.csv_dict_writer = csv.DictWriter(self.file, fieldnames=self.columns)
         else:
             self.csv_dict_writer = csv.DictWriter(self.file, fieldnames=[])
 

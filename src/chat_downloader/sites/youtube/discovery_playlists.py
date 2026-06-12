@@ -85,13 +85,10 @@ class YouTubePlaylistDiscoveryMixin:
 
         api_key = require_innertube_api_key(ytcfg)
         continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
-        continuation_params: dict[str, Any] = {
-            "context": _get_innertube_context(ytcfg)
-        }
+        continuation_params: dict[str, Any] = {"context": _get_innertube_context(ytcfg)}
 
         first_items: list[Any] = (
-            multi_get(page_contents, "playlistVideoListRenderer", "contents")
-            or []
+            multi_get(page_contents, "playlistVideoListRenderer", "contents") or []
         )
         videos, continuation = _extract_playlist_items(first_items)
         yield from videos

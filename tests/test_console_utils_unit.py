@@ -162,21 +162,15 @@ def _install_fake_ctypes(monkeypatch, handlers) -> None:
 def test_get_windows_console_handle_handles_invalid_streams(
     monkeypatch,
 ) -> None:
-    _install_fake_ctypes(
-        monkeypatch, {"GetStdHandle": lambda value: value + 100}
-    )
+    _install_fake_ctypes(monkeypatch, {"GetStdHandle": lambda value: value + 100})
 
     assert console_utils._get_windows_console_handle(object()) is None
     assert (
-        console_utils._get_windows_console_handle(
-            SimpleNamespace(fileno=lambda: 9)
-        )
+        console_utils._get_windows_console_handle(SimpleNamespace(fileno=lambda: 9))
         is None
     )
     assert (
-        console_utils._get_windows_console_handle(
-            SimpleNamespace(fileno=lambda: 1)
-        )
+        console_utils._get_windows_console_handle(SimpleNamespace(fileno=lambda: 1))
         == console_utils.STD_OUTPUT_HANDLE + 100
     )
 
@@ -259,10 +253,7 @@ def test_write_to_windows_console_retries_when_skip_errors_enabled(
 
     _install_fake_ctypes(monkeypatch, {"WriteConsoleW": write_console})
 
-    assert (
-        console_utils._write_to_windows_console(7, "hello", skip_errors=True)
-        is True
-    )
+    assert console_utils._write_to_windows_console(7, "hello", skip_errors=True) is True
     assert calls == [
         (7, "hello", 5),
         (7, "hello", 5),
@@ -298,22 +289,14 @@ def test_write_to_windows_console_raises_on_zero_bmp_written(
 def test_windows_write_string_delegates_only_for_valid_console(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(
-        console_utils, "_get_windows_console_handle", lambda _out: None
-    )
+    monkeypatch.setattr(console_utils, "_get_windows_console_handle", lambda _out: None)
     assert console_utils._windows_write_string("hello", object()) is False
 
-    monkeypatch.setattr(
-        console_utils, "_get_windows_console_handle", lambda _out: 11
-    )
-    monkeypatch.setattr(
-        console_utils, "_is_valid_console", lambda _handle: False
-    )
+    monkeypatch.setattr(console_utils, "_get_windows_console_handle", lambda _out: 11)
+    monkeypatch.setattr(console_utils, "_is_valid_console", lambda _handle: False)
     assert console_utils._windows_write_string("hello", object()) is False
 
-    monkeypatch.setattr(
-        console_utils, "_is_valid_console", lambda _handle: True
-    )
+    monkeypatch.setattr(console_utils, "_is_valid_console", lambda _handle: True)
     monkeypatch.setattr(
         console_utils,
         "_write_to_windows_console",

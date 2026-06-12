@@ -73,9 +73,7 @@ def _log_continuation_debug_info(cont_result: Any) -> None:
     )
 
 
-def _update_visitor_data(
-    self: YouTubeDownloaderProto, yt_info: dict[str, Any]
-) -> None:
+def _update_visitor_data(self: YouTubeDownloaderProto, yt_info: dict[str, Any]) -> None:
     """Propagate visitor-data from the response into session headers."""
     visitor_data = extract_visitor_data(yt_info)
     if visitor_data:

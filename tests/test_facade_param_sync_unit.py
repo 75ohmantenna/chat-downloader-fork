@@ -42,9 +42,7 @@ def test_get_chat_defaults_match_field_defaults() -> None:
         # url has no positional default in the signature; skip if empty sentinel
         if actual is inspect.Parameter.empty:
             continue
-        if isinstance(expected, SiteDefault) and isinstance(
-            actual, SiteDefault
-        ):
+        if isinstance(expected, SiteDefault) and isinstance(actual, SiteDefault):
             assert expected.name == actual.name, name
         else:
             assert actual == expected, name

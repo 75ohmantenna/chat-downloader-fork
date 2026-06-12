@@ -103,9 +103,7 @@ def _parse_emotes(text: str) -> list[dict[str, Any]]:
     return emotes
 
 
-def _add_text_for_emotes(
-    message: str, emote_list: list[dict[str, Any]]
-) -> None:
+def _add_text_for_emotes(message: str, emote_list: list[dict[str, Any]]) -> None:
     """Add emote text/name to emote dictionaries from message.
 
     Args:

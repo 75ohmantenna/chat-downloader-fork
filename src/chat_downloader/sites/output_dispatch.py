@@ -113,12 +113,10 @@ class _ChatOutputDispatcher:
                 continue
 
             if not writer.is_initialised():
-                safe_title = sanitize_filename_component(
-                    self._chat.title
-                ).replace("..", "_")
-                safe_id = sanitize_filename_component(self._chat.id).replace(
+                safe_title = sanitize_filename_component(self._chat.title).replace(
                     "..", "_"
                 )
+                safe_id = sanitize_filename_component(self._chat.id).replace("..", "_")
                 writer.file_name = writer.file_name.format(
                     title=safe_title,
                     id=safe_id,

@@ -18,9 +18,7 @@ if TYPE_CHECKING:
 class YouTubeChatUsersRouterMixin:
     """Resolve user/channel route parameters to chat lookup calls."""
 
-    def _get_chat_by_user(
-        self, match: re.Match[str], params: ChatRequest
-    ) -> Chat:
+    def _get_chat_by_user(self, match: re.Match[str], params: ChatRequest) -> Chat:
         """Get chat by user from regex match."""
         match_id = match.group("id")
         user_type = match.group("type") or ""

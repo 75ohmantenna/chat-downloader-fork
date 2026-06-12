@@ -37,16 +37,11 @@ class RetryPolicy:
             return backoff_seconds(attempt_number, timeout)
         return None
 
-    def sleep_text(
-        self, attempt_number: int, interruptible: bool | None = None
-    ) -> str:
+    def sleep_text(self, attempt_number: int, interruptible: bool | None = None) -> str:
         """Return human-readable sleep text used in retry logs."""
         seconds = self.sleep_seconds(attempt_number)
         if seconds is None:
-            if (
-                isinstance(self.retry_timeout, (int, float))
-                and self.retry_timeout < 0
-            ):
+            if isinstance(self.retry_timeout, (int, float)) and self.retry_timeout < 0:
                 return "(press Enter to continue)"
             return ""
         use_interruptible = (

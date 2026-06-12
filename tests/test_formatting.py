@@ -44,9 +44,7 @@ def test_item_formatter_with_custom_path() -> None:
     # Create a temporary format file
     custom_format = {"test_format": {"template": "Test: {message}"}}
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(custom_format, f)
         temp_path = f.name
 
@@ -220,9 +218,7 @@ def test_format_file_structure(formatter: ItemFormatter) -> None:
             continue
         if isinstance(format_spec, list):
             for entry in format_spec:
-                assert isinstance(entry, dict), (
-                    f"{format_name} entries should be dicts"
-                )
+                assert isinstance(entry, dict), f"{format_name} entries should be dicts"
             continue
         pytest.fail(f"{format_name} should be a dict or list of dicts")
 
@@ -374,9 +370,7 @@ def test_format_time_text_field() -> None:
             },
         },
     }
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
         json.dump(custom_format, f)
         temp_path = f.name
     try:

@@ -60,9 +60,7 @@ class YouTubeChatDownloader(
         """
         has_login_info = bool(self.get_cookie_value("LOGIN_INFO"))
         yt_sapisid, yt_1psapisid, yt_3psapisid = _get_sid_cookies(self)
-        return has_login_info and bool(
-            yt_sapisid or yt_1psapisid or yt_3psapisid
-        )
+        return has_login_info and bool(yt_sapisid or yt_1psapisid or yt_3psapisid)
 
     _NAME = "youtube.com"
 

@@ -15,8 +15,7 @@ class TestSanitizeFilenameComponent:
 
     def test_windows_hostile_chars_replaced(self) -> None:
         assert (
-            sanitize_filename_component('a/b\\c:d*e?f"g<h>i|j')
-            == "a_b_c_d_e_f_g_h_i_j"
+            sanitize_filename_component('a/b\\c:d*e?f"g<h>i|j') == "a_b_c_d_e_f_g_h_i_j"
         )
 
     def test_backslash_replaced(self) -> None:

@@ -42,9 +42,7 @@ def _initialize_consent(session: Any) -> None:
     socs = session.get_cookie_value("SOCS")
     if socs and not socs.startswith(_YT_SOCS_CONSENTED_PREFIX):  # not consented
         return
-    session.set_cookie_value(
-        _YT_DOMAIN, "SOCS", _YT_SOCS_INIT_VALUE, secure=True
-    )
+    session.set_cookie_value(_YT_DOMAIN, "SOCS", _YT_SOCS_INIT_VALUE, secure=True)
 
 
 def _get_sid_cookies(session: Any) -> tuple[str | None, str | None, str | None]:

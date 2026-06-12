@@ -64,9 +64,7 @@ def test_retry_logs_json_decode_context_and_page_title(monkeypatch) -> None:
         "polling_sleep",
         sleeps.append,
     )
-    monkeypatch.setattr(
-        site_retry, "get_title_of_webpage", lambda html: "Example page"
-    )
+    monkeypatch.setattr(site_retry, "get_title_of_webpage", lambda html: "Example page")
 
     site_retry.retry(
         attempt_number=1,

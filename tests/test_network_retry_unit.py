@@ -43,9 +43,7 @@ def test_backoff_seconds_formula(attempt, retry_timeout, expected) -> None:
         "chat_downloader.utils.conversion_utils._SYSTEM_RANDOM.uniform",
         return_value=0.0,
     ):
-        assert backoff_seconds(attempt, retry_timeout) == pytest.approx(
-            expected
-        )
+        assert backoff_seconds(attempt, retry_timeout) == pytest.approx(expected)
 
 
 def test_backoff_seconds_returns_float() -> None:
@@ -81,9 +79,7 @@ def test_base_chat_downloader_custom_http_timeout() -> None:
     assert d._http_timeout == (5.0, 60.0)
 
 
-def test_session_get_injects_http_timeout(
-    monkeypatch, make_fake_http_response
-) -> None:
+def test_session_get_injects_http_timeout(monkeypatch, make_fake_http_response) -> None:
     """_session_get uses self._http_timeout, not the hardcoded constant."""
     d = BaseChatDownloader(connect_timeout=3.0, read_timeout=15.0)
 
@@ -153,9 +149,7 @@ def test_twitch_irc_create_connection_retries_on_oserror() -> None:
     assert call_counts["n"] == 3
 
 
-def test_twitch_irc_create_connection_succeeds_after_transient_oserror() -> (
-    None
-):
+def test_twitch_irc_create_connection_succeeds_after_transient_oserror() -> None:
     """create_connection recovers when OSError clears on a later attempt."""
     from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 

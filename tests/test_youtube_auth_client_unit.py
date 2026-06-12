@@ -10,7 +10,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 
 import chat_downloader.sites.youtube.client_auth as _yt_auth
 import chat_downloader.sites.youtube.client_context as _yt_context
-import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation  # noqa: E501
+import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation
 import chat_downloader.sites.youtube.client_requests_initial as _yt_initial
 from chat_downloader.errors import VideoNotFound
 
@@ -94,9 +94,7 @@ def test_make_sid_authorization_supports_additional_parts() -> None:
 def test_generate_sapisidhash_header_returns_none_without_sid_cookies() -> None:
     session = _FakeSession()
 
-    assert (
-        _generate_sapisidhash_header(session, "https://www.youtube.com") is None
-    )
+    assert _generate_sapisidhash_header(session, "https://www.youtube.com") is None
     assert session.set_calls == []
 
 
@@ -232,12 +230,8 @@ def test_initialize_consent_sets_cookie_for_missing_or_consented_socs() -> None:
     _initialize_consent(missing)
     _initialize_consent(consented)
 
-    assert missing.set_calls == [
-        (".youtube.com", "SOCS", "CAI", {"secure": True})
-    ]
-    assert consented.set_calls == [
-        (".youtube.com", "SOCS", "CAI", {"secure": True})
-    ]
+    assert missing.set_calls == [(".youtube.com", "SOCS", "CAI", {"secure": True})]
+    assert consented.set_calls == [(".youtube.com", "SOCS", "CAI", {"secure": True})]
 
 
 def test_get_sid_cookies_returns_all_variants() -> None:
@@ -252,16 +246,10 @@ def test_get_sid_cookies_returns_all_variants() -> None:
     assert _get_sid_cookies(session) == ("sap", "onep", "threep")
 
 
-def test_extract_account_syncid_prefers_delegated_datasync_and_falls_back() -> (
-    None
-):
-    assert _extract_account_syncid({"DATASYNC_ID": "delegated||user"}) == (
-        "delegated"
-    )
+def test_extract_account_syncid_prefers_delegated_datasync_and_falls_back() -> None:
+    assert _extract_account_syncid({"DATASYNC_ID": "delegated||user"}) == ("delegated")
     assert _extract_account_syncid({"DATASYNC_ID": "user-only"}) is None
-    assert _extract_account_syncid({"DELEGATED_SESSION_ID": "fallback"}) == (
-        "fallback"
-    )
+    assert _extract_account_syncid({"DELEGATED_SESSION_ID": "fallback"}) == ("fallback")
 
 
 def test_generate_headers_handles_optional_auth_and_minimal_paths() -> None:
@@ -337,15 +325,13 @@ def test_get_innertube_context_handles_non_dict_and_missing_client() -> None:
     }
 
 
-def test_get_continuation_info_logs_non_retriable_http_errors_without_json_body() -> (  # noqa: E501
+def test_get_continuation_info_logs_non_retriable_http_errors_without_json_body() -> (
     None
 ):
     response = _Resp(
         404,
         payload=lambda call_number: (
-            (_ for _ in ()).throw(ValueError("bad json"))
-            if call_number == 1
-            else {}
+            (_ for _ in ()).throw(ValueError("bad json")) if call_number == 1 else {}
         ),
     )
 
@@ -386,9 +372,7 @@ def test_get_continuation_info_retries_after_json_decode_error() -> None:
     assert calls["count"] == 2
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_json_parse_failure() -> (  # noqa: E501
-    None
-):
+def test_get_continuation_info_raises_retries_exceeded_on_json_parse_failure() -> None:
     """Exhausted retries on JSONDecodeError now surface as RetriesExceeded."""
     from chat_downloader.errors import RetriesExceeded
 
@@ -407,18 +391,14 @@ def test_get_continuation_info_raises_retries_exceeded_on_json_parse_failure() -
         )
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_network_error() -> (
-    None
-):
+def test_get_continuation_info_raises_retries_exceeded_on_network_error() -> None:
     """Exhausted retries on a network error now surface as RetriesExceeded."""
     from chat_downloader.errors import RetriesExceeded
 
     with pytest.raises(RetriesExceeded, match="ConnectionError"):
         _get_continuation_info(
             "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            lambda *_a, **_k: (_ for _ in ()).throw(
-                RequestsConnectionError("boom")
-            ),
+            lambda *_a, **_k: (_ for _ in ()).throw(RequestsConnectionError("boom")),
             {"max_attempts": 1},
             json={"continuation": "abc"},
         )
@@ -439,13 +419,9 @@ def test_get_initial_info_raises_video_not_found(monkeypatch) -> None:
     monkeypatch.setattr(
         _yt_initial,
         "try_parse_json",
-        lambda _value, default=None: (
-            {"contents": {}} if default is None else default
-        ),
+        lambda _value, default=None: {"contents": {}} if default is None else default,
     )
-    monkeypatch.setattr(
-        _yt_initial, "get_title_of_webpage", lambda _html: "Missing"
-    )
+    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: "Missing")
 
     with pytest.raises(VideoNotFound, match="Missing"):
         _get_initial_info(
@@ -486,9 +462,7 @@ def test_get_initial_info_retries_network_error_before_success(
     monkeypatch.setattr(
         _yt_initial,
         "try_parse_json",
-        lambda _value, default=None: (
-            {"contents": {}} if default is None else default
-        ),
+        lambda _value, default=None: {"contents": {}} if default is None else default,
     )
 
     yt_initial_data, ytcfg, player_response = _get_initial_info(
@@ -506,9 +480,7 @@ def test_get_initial_info_retries_network_error_before_success(
     assert player_response == {}
 
 
-def test_get_initial_info_raises_retries_exceeded_when_attempts_disabled() -> (
-    None
-):
+def test_get_initial_info_raises_retries_exceeded_when_attempts_disabled() -> None:
     with pytest.raises(ValueError, match="max_attempts"):
         _get_initial_info(
             "https://www.youtube.com/watch?v=test",
@@ -527,9 +499,7 @@ def test_get_initial_info_uses_default_attempts_when_params_missing(
     monkeypatch.setattr(
         _yt_initial,
         "try_parse_json",
-        lambda _value, default=None: (
-            {"contents": {}} if default is None else default
-        ),
+        lambda _value, default=None: {"contents": {}} if default is None else default,
     )
 
     yt_initial_data, ytcfg, player_response = _get_initial_info(

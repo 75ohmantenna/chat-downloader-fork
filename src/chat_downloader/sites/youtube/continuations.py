@@ -63,9 +63,7 @@ def summarize_continuation_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     continuation_contents = payload.get("continuationContents")
     if isinstance(continuation_contents, dict):
-        summary["continuation_contents_keys"] = list(
-            continuation_contents.keys()
-        )
+        summary["continuation_contents_keys"] = list(continuation_contents.keys())
 
     info = multi_get(payload, "continuationContents", "liveChatContinuation")
     if isinstance(info, dict):
@@ -78,8 +76,7 @@ def summarize_continuation_payload(payload: dict[str, Any]) -> dict[str, Any]:
             summary["continuation_keys"] = [
                 try_get_first_key(item)
                 for item in continuations
-                if isinstance(item, dict)
-                and try_get_first_key(item) is not None
+                if isinstance(item, dict) and try_get_first_key(item) is not None
             ]
 
     return summary
@@ -200,9 +197,7 @@ def parse_continuation_response(
         )
 
     actions = _extract_actions(info)
-    token, _click_tracking, raw_timeout, debug_info = (
-        _extract_next_continuation(info)
-    )
+    token, _click_tracking, raw_timeout, debug_info = _extract_next_continuation(info)
     if debug_info:
         debug_info = {
             **debug_info,

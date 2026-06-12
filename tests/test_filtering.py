@@ -44,9 +44,7 @@ def test_must_add_item_with_multiple_groups() -> None:
     groups = ["messages", "superchat"]
     assert _must_add({"message_type": "text_message"}, groups=groups)
     assert _must_add({"message_type": "paid_message"}, groups=groups)
-    assert not _must_add(
-        {"message_type": "donation_announcement"}, groups=groups
-    )
+    assert not _must_add({"message_type": "donation_announcement"}, groups=groups)
 
 
 def test_must_add_item_with_all_keyword() -> None:
@@ -116,12 +114,8 @@ def test_superchat_group_includes_multiple_types(msg_type: str) -> None:
         ("unknown_type", False),
     ],
 )
-def test_complex_filtering_scenario(
-    message_type: str, should_add: bool
-) -> None:
-    result = _must_add(
-        {"message_type": message_type}, groups=["messages", "superchat"]
-    )
+def test_complex_filtering_scenario(message_type: str, should_add: bool) -> None:
+    result = _must_add({"message_type": message_type}, groups=["messages", "superchat"])
     assert result == should_add
 
 

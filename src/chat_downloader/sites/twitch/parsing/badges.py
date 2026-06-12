@@ -37,9 +37,7 @@ def _parse_badge_info(
 
     new_badge_info = None
     if channel_id is not None:
-        new_badge_info = multi_get(
-            subscriber_info, str(channel_id), (name, version)
-        )
+        new_badge_info = multi_get(subscriber_info, str(channel_id), (name, version))
 
     if not new_badge_info:
         new_badge_info = multi_get(global_info, (name, version))
@@ -48,9 +46,7 @@ def _parse_badge_info(
         for key in BADGE_KEYS:
             new_badge[key] = new_badge_info.get(key)
 
-        image_urls = [
-            (new_badge.pop(f"image{i}x", ""), i * 18) for i in (1, 2, 4)
-        ]
+        image_urls = [(new_badge.pop(f"image{i}x", ""), i * 18) for i in (1, 2, 4)]
 
         icons: list[dict[str, Any]] = []
         for image_url, size in image_urls:
@@ -76,7 +72,5 @@ def _parse_irc_badges(
         if key_length == 1:
             split.append("")
 
-        info.append(
-            _parse_badge_info(split[0], split[1], channel_id, badge_set)
-        )
+        info.append(_parse_badge_info(split[0], split[1], channel_id, badge_set))
     return info

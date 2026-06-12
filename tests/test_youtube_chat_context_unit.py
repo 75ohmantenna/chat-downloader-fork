@@ -44,9 +44,7 @@ class _DummyDownloader:
         return True
 
 
-def _make_initial_info(
-    status: str = "live", offset: float | None = None
-) -> dict:
+def _make_initial_info(status: str = "live", offset: float | None = None) -> dict:
     info: dict = {
         "continuation_info": {
             "Top chat": "top-token",
@@ -81,9 +79,7 @@ def test_build_chat_context_returns_correct_continuation_url(
         downloader,
         _make_initial_info(status="live"),
         {"INNERTUBE_API_KEY": "testkey"},
-        ChatRequest(
-            url="https://www.youtube.com/watch?v=abc", chat_type="live"
-        ),
+        ChatRequest(url="https://www.youtube.com/watch?v=abc", chat_type="live"),
     )
 
     assert "testkey" in ctx.continuation_url
@@ -112,9 +108,7 @@ def test_build_chat_context_replay_status_sets_is_replay(monkeypatch) -> None:
         downloader,
         _make_initial_info(status="past"),
         {"INNERTUBE_API_KEY": "testkey"},
-        ChatRequest(
-            url="https://www.youtube.com/watch?v=abc", chat_type="live"
-        ),
+        ChatRequest(url="https://www.youtube.com/watch?v=abc", chat_type="live"),
     )
 
     assert ctx.is_replay is True
@@ -180,9 +174,7 @@ def test_build_chat_context_applies_request_profile_to_innertube_context(
                 },
             },
         },
-        ChatRequest(
-            url="https://www.youtube.com/watch?v=abc", chat_type="live"
-        ),
+        ChatRequest(url="https://www.youtube.com/watch?v=abc", chat_type="live"),
     )
 
     assert ctx.innertube_context["client"]["clientName"] == "ANDROID"

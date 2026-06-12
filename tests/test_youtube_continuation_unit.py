@@ -127,9 +127,7 @@ class TestHandleJsonApiError:
         error = {"code": 429, "message": "Rate limit exceeded"}
         policy = MagicMock(spec=RetryPolicy)
         policy.can_retry.return_value = True
-        result = _handle_json_api_error(
-            error, "https://example.com/", 1, 3, policy
-        )
+        result = _handle_json_api_error(error, "https://example.com/", 1, 3, policy)
         assert result is True
         policy.wait.assert_called_once()
 
@@ -139,9 +137,7 @@ class TestHandleJsonApiError:
         error = {"code": 0, "message": "Unknown error occurred"}
         policy = MagicMock(spec=RetryPolicy)
         policy.can_retry.return_value = True
-        result = _handle_json_api_error(
-            error, "https://example.com/", 1, 3, policy
-        )
+        result = _handle_json_api_error(error, "https://example.com/", 1, 3, policy)
         assert result is True
         policy.wait.assert_called_once()
 
@@ -228,9 +224,7 @@ def test_extract_next_continuation_skips_non_dict_value() -> None:
     )
 
     # Value is a string, not a dict → continue
-    result = _extract_next_continuation(
-        {"continuations": [{"someKey": "not_a_dict"}]}
-    )
+    result = _extract_next_continuation({"continuations": [{"someKey": "not_a_dict"}]})
     assert result == (None, None, None, {})
 
 
@@ -255,23 +249,17 @@ def test_get_initial_info_raises_parsing_error_when_html_unparseable() -> None:
         _get_initial_info,
     )
 
-    response = SimpleNamespace(
-        text="<html>nothing useful</html>", status_code=200
-    )
+    response = SimpleNamespace(text="<html>nothing useful</html>", status_code=200)
     session_get = MagicMock(return_value=response)
 
-    with pytest.raises(
-        ParsingError, match="Unable to parse initial video data"
-    ):
+    with pytest.raises(ParsingError, match="Unable to parse initial video data"):
         _get_initial_info(
             url="https://www.youtube.com/watch?v=abc",
             session_get=session_get,
             params=None,
             yt_initial_data_re=r"ytInitialData\s*=\s*({.*?});",
             yt_cfg_re=r"ytcfg\.set\(({.*?})\);",
-            yt_initial_player_response_re=(
-                r"ytInitialPlayerResponse\s*=\s*({.*?});"
-            ),
+            yt_initial_player_response_re=(r"ytInitialPlayerResponse\s*=\s*({.*?});"),
         )
 
 

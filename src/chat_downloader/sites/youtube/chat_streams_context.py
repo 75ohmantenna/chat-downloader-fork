@@ -60,9 +60,7 @@ def _select_initial_continuation(
     if chat_type == "top":
         labels = ("Top chat replay", "Top chat") if is_replay else ("Top chat",)
     else:
-        labels = (
-            ("Live chat replay", "Live chat") if is_replay else ("Live chat",)
-        )
+        labels = ("Live chat replay", "Live chat") if is_replay else ("Live chat",)
 
     for label in labels:
         token = initial_continuation_info.get(label)
@@ -107,9 +105,7 @@ def _build_continuation_urls(
     """Return (init_page, continuation_url) for the chat loop."""
     api_type = "live_chat_replay" if is_replay else "live_chat"
     init_page = f"{_YT_HOME}/{api_type}?continuation={continuation}"
-    continuation_url = (
-        f"{_YT_HOME}/youtubei/v1/live_chat/get_{api_type}?key={api_key}"
-    )
+    continuation_url = f"{_YT_HOME}/youtubei/v1/live_chat/get_{api_type}?key={api_key}"
     return init_page, continuation_url
 
 
@@ -126,11 +122,7 @@ def _build_message_filters(
     messages_groups_to_add = (
         []
         if messages_types_to_add
-        else (
-            params.message_groups
-            if isinstance(params.message_groups, list)
-            else []
-        )
+        else (params.message_groups if isinstance(params.message_groups, list) else [])
     )
     msg_filter = MessageFilter(
         _MESSAGE_GROUPS,
@@ -180,9 +172,7 @@ def _build_chat_context(
         NoContinuation: When the requested chat type index is absent.
         InvalidParameter: When an unknown message group is requested.
     """
-    initial_continuation_info = _safe_get_dict(
-        initial_info, "continuation_info"
-    )
+    initial_continuation_info = _safe_get_dict(initial_info, "continuation_info")
 
     status = initial_info.get("status")
     offset = initial_info.get("offset")  # Clips
@@ -222,9 +212,7 @@ def _build_chat_context(
         getattr(self, "_request_profile", None),
     )
     offset_milliseconds = (
-        start_time * _MS_PER_SECOND
-        if isinstance(start_time, (float, int))
-        else None
+        start_time * _MS_PER_SECOND if isinstance(start_time, (float, int)) else None
     )
     loop_state = ContinuationLoopState(
         continuation=continuation,

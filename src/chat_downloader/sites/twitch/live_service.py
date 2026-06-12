@@ -59,9 +59,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     message_generator = message_generator or get_chat_messages_by_stream_id
     msg_filter = MessageFilter(
         MESSAGE_GROUPS,
-        request.message_groups
-        if isinstance(request.message_groups, list)
-        else None,
+        request.message_groups if isinstance(request.message_groups, list) else None,
         request.message_types or [],
     )
 
@@ -98,8 +96,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     if raw_message.get("action_type") == "reconnect":
                         log(
                             "info",
-                            "Twitch IRC server requested reconnect; "
-                            "reconnecting.",
+                            "Twitch IRC server requested reconnect; reconnecting.",
                         )
                         msg = "Server requested reconnect."
                         raise ConnectionError(msg)  # noqa: TRY301 — drives the outer reconnect loop via the enclosing except
@@ -110,9 +107,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     ):
                         continue
 
-                    unexpected_keys = (
-                        raw_message.keys() - build_known_irc_keys()
-                    )
+                    unexpected_keys = raw_message.keys() - build_known_irc_keys()
                     if unexpected_keys:
                         debug_log(
                             f"Unexpected keys found: {unexpected_keys}",
@@ -181,11 +176,7 @@ def get_chat_by_stream_id(
 
     stream_type = multi_get(stream_info, "stream", "type")
     is_live = stream_type in ("live", "rerun")
-    title = (
-        multi_get(stream_info, "lastBroadcast", "title")
-        if is_live
-        else stream_id
-    )
+    title = multi_get(stream_info, "lastBroadcast", "title") if is_live else stream_id
 
     if stream_type == "rerun":
         log("info", f'Channel "{stream_id}" is broadcasting a rerun')

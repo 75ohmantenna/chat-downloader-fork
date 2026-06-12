@@ -55,9 +55,7 @@ def _handle_replace_action(
     offset: float,
 ) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle message replacement actions."""
-    original_item = multi_get(
-        action, original_action_type, _PATH_REPLACEMENT_ITEM
-    )
+    original_item = multi_get(action, original_action_type, _PATH_REPLACEMENT_ITEM)
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)
@@ -83,9 +81,7 @@ def _handle_add_banner_action(
     offset: float,
 ) -> tuple[JSONDict, JSONDict, str | None, str]:
     """Handle add banner actions."""
-    original_item = multi_get(
-        action, original_action_type, _PATH_BANNER_RENDERER
-    )
+    original_item = multi_get(action, original_action_type, _PATH_BANNER_RENDERER)
     if original_item:
         original_message_type = try_get_first_key(original_item)
         contents = original_item[original_message_type].get("contents")
@@ -96,9 +92,7 @@ def _handle_add_banner_action(
             original_item = contents
             original_message_type = content_message_type
     else:
-        debug_log(
-            "No bannerRenderer item", f"Action type: {original_action_type}"
-        )
+        debug_log("No bannerRenderer item", f"Action type: {original_action_type}")
         original_message_type = None
     return (data, original_item, original_message_type, original_action_type)
 
@@ -159,9 +153,7 @@ def _handle_poll_action(
 
     data["poll_choices"] = [
         {
-            "text": (
-                _parse_runs(c["text"]).get("message") if c.get("text") else None
-            ),
+            "text": (_parse_runs(c["text"]).get("message") if c.get("text") else None),
             "vote_ratio": c.get("voteRatio"),
             "selected": c.get("selected", False),
         }

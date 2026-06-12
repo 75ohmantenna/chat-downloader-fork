@@ -73,12 +73,8 @@ class TimeRangeFilter:
         """Check if the message's time is within range."""
         time_in_seconds = data.get("time_in_seconds", 0) + self.offset
 
-        before_start = (
-            self.start_time is not None and time_in_seconds < self.start_time
-        )
-        after_end = (
-            self.end_time is not None and time_in_seconds > self.end_time
-        )
+        before_start = self.start_time is not None and time_in_seconds < self.start_time
+        after_end = self.end_time is not None and time_in_seconds > self.end_time
 
         if after_end:
             return "stop"

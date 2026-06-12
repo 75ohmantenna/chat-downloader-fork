@@ -26,14 +26,10 @@ def generate_urls(
 ) -> Generator[str, None, None]:
     """Generate livestream, VOD, and clip URLs from Twitch discovery data."""
     num_vods = (
-        math.ceil(vod_limit / livestream_limit)
-        if livestream_limit > 0
-        else vod_limit
+        math.ceil(vod_limit / livestream_limit) if livestream_limit > 0 else vod_limit
     )
     num_clips = (
-        math.ceil(clip_limit / livestream_limit)
-        if livestream_limit > 0
-        else clip_limit
+        math.ceil(clip_limit / livestream_limit) if livestream_limit > 0 else clip_limit
     )
 
     livestreams = get_top_livestreams(

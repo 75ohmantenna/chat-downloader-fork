@@ -176,9 +176,7 @@ def test_chat_closes_writers_when_generator_raises(
 
     path = str(tmp_path / "output.jsonl")
     chat = FormattedChat(chat=broken_generator(), title="Test", id="chat-1")
-    chat.attach_writer(
-        ContinuousWriter(path, overwrite=True, lazy_initialise=True)
-    )
+    chat.attach_writer(ContinuousWriter(path, overwrite=True, lazy_initialise=True))
 
     first = next(chat)
     assert first["message"] == "first"

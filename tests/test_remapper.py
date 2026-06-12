@@ -65,9 +65,7 @@ def test_remap_with_string_mapping() -> None:
 def test_remap_with_remapper_object() -> None:
     """Test remapping with Remapper object."""
     remapping = {
-        "field": Remapper(
-            new_key="new_field", remap_function=lambda x: x.upper()
-        ),
+        "field": Remapper(new_key="new_field", remap_function=lambda x: x.upper()),
     }
     info = {}
 
@@ -77,9 +75,7 @@ def test_remap_with_remapper_object() -> None:
 
 def test_remap_with_identity_transformation() -> None:
     """Test remapping with identity transformation function."""
-    remapping = {
-        "field": Remapper(new_key="new_field", remap_function=lambda x: x)
-    }
+    remapping = {"field": Remapper(new_key="new_field", remap_function=lambda x: x)}
     info = {}
 
     Remapper.remap(info, remapping, "field", "value")
@@ -92,9 +88,7 @@ def test_remap_with_unpack() -> None:
     def parse_author(data):
         return {"author_name": data["name"], "author_id": data["id"]}
 
-    remapping = {
-        "author": Remapper(remap_function=parse_author, to_unpack=True)
-    }
+    remapping = {"author": Remapper(remap_function=parse_author, to_unpack=True)}
     info = {}
     author_data = {"name": "John", "id": "123"}
 
@@ -225,13 +219,9 @@ def test_remap_dict_complex_scenario() -> None:
         return [badge.get("tooltip") for badge in badges]
 
     remapping = {
-        "authorName": Remapper(
-            new_key="author_name", remap_function=extract_text
-        ),
+        "authorName": Remapper(new_key="author_name", remap_function=extract_text),
         "authorExternalChannelId": "author_id",
-        "message": Remapper(
-            new_key="message_text", remap_function=extract_runs
-        ),
+        "message": Remapper(new_key="message_text", remap_function=extract_runs),
         "timestampUsec": Remapper(
             new_key="timestamp",
             remap_function=int,

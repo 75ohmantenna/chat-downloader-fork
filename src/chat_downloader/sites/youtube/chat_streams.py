@@ -33,9 +33,7 @@ class YouTubeChatStreamsMixin:
             cast("YouTubeDownloaderProto", self), initial_info, ytcfg, params
         )
 
-    def _get_chat_by_clip_id(
-        self, match: re.Match[str], params: ChatRequest
-    ) -> Chat:
+    def _get_chat_by_clip_id(self, match: re.Match[str], params: ChatRequest) -> Chat:
         """Get chat by clip ID from regex match."""
         return self.get_chat_by_clip_id(match.group("id"), params)
 
@@ -51,9 +49,7 @@ class YouTubeChatStreamsMixin:
             video_type="clip",
         )
 
-        initial_info["offset"] = clip_start_time = initial_info.get(
-            "clip_start_time"
-        )
+        initial_info["offset"] = clip_start_time = initial_info.get("clip_start_time")
         clip_end_time = initial_info.get("clip_end_time")
 
         if clip_start_time is None or clip_end_time is None:
@@ -66,8 +62,7 @@ class YouTubeChatStreamsMixin:
 
         request = request.with_updates(
             start_time=ensure_seconds(request.start_time, 0) + clip_start_time,
-            end_time=ensure_seconds(request.end_time, max_duration)
-            + clip_start_time,
+            end_time=ensure_seconds(request.end_time, max_duration) + clip_start_time,
         )
 
         return Chat(
@@ -90,8 +85,6 @@ class YouTubeChatStreamsMixin:
             **initial_info,
         )
 
-    def _get_chat_by_video_id(
-        self, match: re.Match[str], params: ChatRequest
-    ) -> Chat:
+    def _get_chat_by_video_id(self, match: re.Match[str], params: ChatRequest) -> Chat:
         """Get chat by video ID from regex match."""
         return self.get_chat_by_video_id(match.group("id"), params)

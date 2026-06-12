@@ -53,10 +53,7 @@ def test_chat_downloader_session_helpers_delegate_to_runtime_helpers(
 def test_chat_downloader_init_defaults_are_canonical_model_defaults() -> None:
     signature = inspect.signature(ChatDownloader)
 
-    assert (
-        signature.parameters["connect_timeout"].default
-        == DEFAULT_CONNECT_TIMEOUT
-    )
+    assert signature.parameters["connect_timeout"].default == DEFAULT_CONNECT_TIMEOUT
     assert signature.parameters["read_timeout"].default == DEFAULT_READ_TIMEOUT
 
 
@@ -148,9 +145,7 @@ def test_run_time_program_parameters_log_is_sanitized(monkeypatch) -> None:
             return value
 
         def get_chat_by_id(self, _match, _request):
-            return Chat(
-                iter(()), title="Example title", status="live", id="abc"
-            )
+            return Chat(iter(()), title="Example title", status="live", id="abc")
 
     class FakeOwner:
         def __init__(self) -> None:

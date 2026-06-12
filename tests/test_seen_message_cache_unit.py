@@ -33,9 +33,7 @@ def test_seen_message_cache_warns_on_invalid_limit(
         cache = _SeenMessageCache(limit=bad_limit)  # type: ignore[arg-type]
 
     assert cache.limit == DEFAULT_MAX_SEEN_MESSAGE_IDS
-    assert any(
-        "ignoring invalid limit" in record.message for record in caplog.records
-    )
+    assert any("ignoring invalid limit" in record.message for record in caplog.records)
 
 
 def test_seen_message_cache_zero_limit_silent_fallback_to_default(
@@ -45,9 +43,7 @@ def test_seen_message_cache_zero_limit_silent_fallback_to_default(
     with caplog.at_level(logging.WARNING):
         cache = _SeenMessageCache(limit=0)
     assert cache.limit == DEFAULT_MAX_SEEN_MESSAGE_IDS
-    assert not any(
-        "ignoring invalid limit" in r.message for r in caplog.records
-    )
+    assert not any("ignoring invalid limit" in r.message for r in caplog.records)
     # Dedup still works with the default limit.
     assert cache.register("a")[0] is True
     assert cache.register("a")[0] is False
@@ -60,9 +56,7 @@ def test_seen_message_cache_accepts_fractional_via_int_cast(
     with caplog.at_level(logging.WARNING):
         cache = _SeenMessageCache(limit=1.5)  # type: ignore[arg-type]
     assert cache.limit == 1
-    assert not any(
-        "ignoring invalid limit" in r.message for r in caplog.records
-    )
+    assert not any("ignoring invalid limit" in r.message for r in caplog.records)
 
 
 def test_seen_message_cache_evicts_exactly_at_limit() -> None:

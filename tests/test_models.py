@@ -112,9 +112,7 @@ def test_downloader_config_as_dict_keys() -> None:
 
 def test_downloader_config_as_dict_values_match_fields() -> None:
     headers = {"Accept": "application/json"}
-    cfg = DownloaderConfig(
-        headers=headers, cookies="c.txt", proxy="http://proxy:8080"
-    )
+    cfg = DownloaderConfig(headers=headers, cookies="c.txt", proxy="http://proxy:8080")
     d = cfg.as_dict()
     assert d["headers"] == headers
     assert d["cookies"] == "c.txt"
@@ -251,9 +249,7 @@ def test_format_instances_are_independent() -> None:
 def test_with_updates_returns_modified_copy(
     sample_request: ChatRequest,
 ) -> None:
-    updated = sample_request.with_updates(
-        url="https://example.com/watch?v=updated"
-    )
+    updated = sample_request.with_updates(url="https://example.com/watch?v=updated")
     assert updated.url == "https://example.com/watch?v=updated"
     assert sample_request.url == "https://example.com/watch?v=abc"
     assert updated is not sample_request
@@ -393,9 +389,7 @@ def test_as_dict_format_is_site_default(sample_request_dict: dict) -> None:
 @pytest.mark.parametrize(
     "key", ["start_time", "end_time", "max_messages", "output", "format_file"]
 )
-def test_as_dict_none_values_present(
-    sample_request_dict: dict, key: str
-) -> None:
+def test_as_dict_none_values_present(sample_request_dict: dict, key: str) -> None:
     assert sample_request_dict[key] is None
 
 
@@ -546,9 +540,7 @@ def test_from_kwargs_strict_empty_call_passes() -> None:
 
 
 def test_from_kwargs_strict_does_not_treat_strict_as_field() -> None:
-    req = ChatRequest.from_kwargs(
-        strict=True, url="https://youtube.com/watch?v=z"
-    )
+    req = ChatRequest.from_kwargs(strict=True, url="https://youtube.com/watch?v=z")
     assert not hasattr(req, "strict")
 
 

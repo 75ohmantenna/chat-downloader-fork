@@ -283,9 +283,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
     },
     {
-        "name": (
-            "The uploader has not made this video available in your country."
-        ),
+        "name": ("The uploader has not made this video available in your country."),
         "params": {
             "url": "https://www.youtube.com/watch?v=sJL6WA-aGkQ",
         },

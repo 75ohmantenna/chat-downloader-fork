@@ -44,9 +44,7 @@ def test_execute_chat_generator_uses_site_prepared_request_shape() -> None:
 
 def test_youtube_video_entry_accepts_chat_request_and_bridges_later() -> None:
     class DummyYouTubeStreams(YouTubeChatStreamsMixin):
-        _coerce_chat_request = staticmethod(
-            BaseChatDownloader._coerce_chat_request
-        )
+        _coerce_chat_request = staticmethod(BaseChatDownloader._coerce_chat_request)
 
         def __init__(self) -> None:
             self.initial_request = None
@@ -60,9 +58,7 @@ def test_youtube_video_entry_accepts_chat_request_and_bridges_later() -> None:
             self.message_params = params
             return iter(())
 
-    request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc", max_messages=3
-    )
+    request = ChatRequest(url="https://www.youtube.com/watch?v=abc", max_messages=3)
     downloader = DummyYouTubeStreams()
 
     chat = downloader.get_chat_by_video_id("abc", request)
@@ -117,13 +113,9 @@ def test_youtube_clip_entry_match_wrapper_calls_clip_entry() -> None:
     assert called_request is request
 
 
-def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -> (  # noqa: E501
-    None
-):
+def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -> None:
     class DummyVideoInitialization:
-        _coerce_chat_request = staticmethod(
-            BaseChatDownloader._coerce_chat_request
-        )
+        _coerce_chat_request = staticmethod(BaseChatDownloader._coerce_chat_request)
 
         def __init__(self) -> None:
             self.parse_request = None
@@ -141,9 +133,7 @@ def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -
         YouTubeVideoInitializationMixin,
     )
 
-    class DummyDownloader(
-        YouTubeVideoInitializationMixin, DummyVideoInitialization
-    ):
+    class DummyDownloader(YouTubeVideoInitializationMixin, DummyVideoInitialization):
         pass
 
     request = ChatRequest(url="https://www.youtube.com/watch?v=abc")
@@ -156,9 +146,7 @@ def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -
 
 def test_youtube_clip_entry_updates_times_without_mutating_request() -> None:
     class DummyYouTubeStreams(YouTubeChatStreamsMixin):
-        _coerce_chat_request = staticmethod(
-            BaseChatDownloader._coerce_chat_request
-        )
+        _coerce_chat_request = staticmethod(BaseChatDownloader._coerce_chat_request)
 
         def __init__(self) -> None:
             self.initial_request = None
@@ -193,13 +181,9 @@ def test_youtube_clip_entry_updates_times_without_mutating_request() -> None:
     assert downloader.message_params.end_time == 70
 
 
-def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -> (  # noqa: E501
-    None
-):
+def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -> None:
     class DummyYouTubeUsers(YouTubeChatUsersRetrievalMixin):
-        _coerce_chat_request = staticmethod(
-            BaseChatDownloader._coerce_chat_request
-        )
+        _coerce_chat_request = staticmethod(BaseChatDownloader._coerce_chat_request)
 
         def __init__(self) -> None:
             self.discovery_params = None
@@ -231,9 +215,7 @@ def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -
     )
     downloader = DummyYouTubeUsers()
 
-    chat_item = downloader._get_chat_by_user_args(
-        {"handle": "example"}, request
-    )
+    chat_item = downloader._get_chat_by_user_args({"handle": "example"}, request)
     first_message = next(chat_item.chat)
 
     assert first_message["message_type"] == "text_message"
@@ -278,9 +260,7 @@ def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
 
-    def fake_get_continuation_info(
-        _url, _session_post, program_params, **_kwargs
-    ):
+    def fake_get_continuation_info(_url, _session_post, program_params, **_kwargs):
         captured["program_params"] = program_params
         return {
             "continuationContents": {"liveChatContinuation": {"actions": []}},

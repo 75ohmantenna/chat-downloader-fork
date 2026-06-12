@@ -134,9 +134,7 @@ def test_parse_irc_item_uses_badge_set() -> None:
     # At least one badge should carry the correct title from badge_set
     badges = result.get("author", {}).get("badges", [])
     titles = [b.get("title") for b in badges if b.get("title")]
-    assert "CORRECT_GLOBAL" in titles, (
-        f"Expected CORRECT_GLOBAL in titles: {titles}"
-    )
+    assert "CORRECT_GLOBAL" in titles, f"Expected CORRECT_GLOBAL in titles: {titles}"
 
 
 def test_parse_item_uses_badge_set() -> None:
@@ -162,14 +160,10 @@ def test_parse_item_uses_badge_set() -> None:
             "fragments": [{"text": "hello"}],
         },
     }
-    result = _parse_item(
-        node, offset=0.0, channel_id="999", badge_set=badge_set
-    )
+    result = _parse_item(node, offset=0.0, channel_id="999", badge_set=badge_set)
     badges = result.get("author", {}).get("badges", [])
     titles = [b.get("title") for b in badges if b.get("title")]
-    assert "CORRECT_CHANNEL" in titles, (
-        f"Expected CORRECT_CHANNEL in titles: {titles}"
-    )
+    assert "CORRECT_CHANNEL" in titles, f"Expected CORRECT_CHANNEL in titles: {titles}"
 
 
 # ---------------------------------------------------------------------------

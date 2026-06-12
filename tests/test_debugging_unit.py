@@ -29,9 +29,7 @@ def _restore_loggers():
 def _restore_logger_levels():
     original_levels = [logger.level for logger in dbg.loggers]
     yield
-    for logger, original_level in zip(
-        dbg.loggers, original_levels, strict=True
-    ):
+    for logger, original_level in zip(dbg.loggers, original_levels, strict=True):
         logger.setLevel(original_level)
 
 

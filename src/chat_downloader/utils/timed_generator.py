@@ -124,10 +124,7 @@ class TimedGenerator:
         now = time.monotonic() if at_time is None else at_time
         if self._timeout_deadline is not None and now >= self._timeout_deadline:
             return "timeout"
-        if (
-            self._inactivity_deadline is not None
-            and now >= self._inactivity_deadline
-        ):
+        if self._inactivity_deadline is not None and now >= self._inactivity_deadline:
             return "inactivity"
 
         return None

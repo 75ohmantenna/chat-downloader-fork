@@ -74,9 +74,7 @@ def test_build_video_remapping_returns_mapping_with_expected_keys() -> None:
     assert "title" in mapping
 
 
-def test_process_action_replay_chat_item_action_rebases_time_and_action() -> (
-    None
-):
+def test_process_action_replay_chat_item_action_rebases_time_and_action() -> None:
     action = {
         "replayChatItemAction": {
             "videoOffsetTimeMsec": "2345",
@@ -84,7 +82,7 @@ def test_process_action_replay_chat_item_action_rebases_time_and_action() -> (
                 {
                     "addChatItemAction": {
                         "item": {
-                            "liveChatTextMessageRenderer": _renderer_with_timestamp(),  # noqa: E501
+                            "liveChatTextMessageRenderer": _renderer_with_timestamp(),
                         },
                     },
                 },
@@ -103,9 +101,7 @@ def test_process_action_replay_chat_item_action_rebases_time_and_action() -> (
 def test_process_action_add_chat_item_action() -> None:
     action = {
         "addChatItemAction": {
-            "item": {
-                "liveChatTextMessageRenderer": _renderer_with_timestamp("1")
-            },
+            "item": {"liveChatTextMessageRenderer": _renderer_with_timestamp("1")},
         },
     }
 
@@ -211,16 +207,12 @@ def test_process_action_product_item_renderer(monkeypatch) -> None:
     assert finalized is not None
     assert finalized["message_type"] == "purchased_product_message"
     assert finalized["product_title"] == "Channel hoodie"
-    assert finalized["product_accessibility_title"] == (
-        "Channel hoodie product"
-    )
+    assert finalized["product_accessibility_title"] == ("Channel hoodie product")
     assert finalized["price"] == "$25.00"
     assert finalized["vendor_name"] == "Creator shop"
     assert finalized["url"] == "https://example.invalid/product"
     assert finalized["message"] == "New merch"
-    assert finalized["product_images"][0]["url"] == (
-        "https://example.invalid/hoodie"
-    )
+    assert finalized["product_images"][0]["url"] == ("https://example.invalid/hoodie")
     assert logs == []
     assert samples == []
 
@@ -444,9 +436,7 @@ def test_process_action_add_and_remove_banner_actions() -> None:
             "bannerRenderer": {
                 "liveChatBannerRenderer": {
                     "contents": {
-                        "liveChatTextMessageRenderer": _renderer_with_timestamp(
-                            "6"
-                        ),
+                        "liveChatTextMessageRenderer": _renderer_with_timestamp("6"),
                     },
                 },
             },
@@ -581,9 +571,7 @@ def test_process_action_show_live_chat_action_panel_poll() -> None:
                             "liveChatPollId": "poll-456",
                             "header": {
                                 "pollHeaderRenderer": {
-                                    "pollQuestion": {
-                                        "runs": [{"text": "Best color?"}]
-                                    }
+                                    "pollQuestion": {"runs": [{"text": "Best color?"}]}
                                 }
                             },
                             "choices": [
@@ -800,9 +788,7 @@ def test_validate_and_finalize_message_without_message_type_returns_none(
     assert logs == [("No message type", "Action type: addChatItemAction")]
 
 
-def test_validate_and_finalize_message_unknown_keys_logs_and_continues() -> (
-    None
-):
+def test_validate_and_finalize_message_unknown_keys_logs_and_continues() -> None:
     """Lines 203-207: debug_log fires when item has keys not in _KNOWN_KEYS."""
     item = {"liveChatTextMessageRenderer": {"unknownField2026XYZ": "value"}}
     result = validate_and_finalize_message(
@@ -815,9 +801,7 @@ def test_validate_and_finalize_message_unknown_keys_logs_and_continues() -> (
     assert result.get("message_type") == "text_message"
 
 
-def test_validate_and_finalize_message_known_ignore_message_type_returns_none() -> (  # noqa: E501
-    None
-):
+def test_validate_and_finalize_message_known_ignore_message_type_returns_none() -> None:
     """Line 218: messages in _KNOWN_IGNORE_MESSAGE_TYPES are dropped."""
     result = validate_and_finalize_message(
         {"timestamp": 1},
@@ -828,9 +812,7 @@ def test_validate_and_finalize_message_known_ignore_message_type_returns_none() 
     assert result is None
 
 
-def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> (  # noqa: E501
-    None
-):
+def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> None:
     action = {
         "replayChatItemAction": {
             "videoOffsetTimeMsec": "1",
@@ -838,9 +820,7 @@ def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> 
                 {
                     "addChatItemAction": {
                         "item": {
-                            "liveChatMadeUpRenderer": _renderer_with_timestamp(
-                                "8"
-                            ),
+                            "liveChatMadeUpRenderer": _renderer_with_timestamp("8"),
                         },
                     },
                 },
@@ -884,7 +864,7 @@ def test_validate_and_finalize_message_missing_keys_captures_debug_sample(
     )
 
 
-def test_validate_and_finalize_message_unknown_message_type_captures_debug_sample(  # noqa: E501
+def test_validate_and_finalize_message_unknown_message_type_captures_debug_sample(
     monkeypatch,
 ) -> None:
     captures = []

@@ -35,9 +35,7 @@ class _DummyTimeFilter:
         return self.result
 
 
-def test_validate_pipeline_message_returns_none_for_missing_parse_result() -> (
-    None
-):
+def test_validate_pipeline_message_returns_none_for_missing_parse_result() -> None:
     assert _validate_pipeline_message(None) is None
 
 
@@ -53,7 +51,7 @@ def test_validate_pipeline_message_returns_finalized_message(
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.validate_and_finalize_message",
-        lambda data, original_item, original_message_type, original_action_type: {  # noqa: E501
+        lambda data, original_item, original_message_type, original_action_type: {
             "data": data,
             "item": original_item,
             "message_type": original_message_type,
@@ -78,14 +76,8 @@ def test_check_time_filter_propagates_skip_and_stop() -> None:
     stop_filter = _DummyTimeFilter("stop")
     message = {"message": "hello"}
 
-    assert (
-        _check_time_filter(message, cast("TimeRangeFilter", skip_filter))
-        == "skip"
-    )
-    assert (
-        _check_time_filter(message, cast("TimeRangeFilter", stop_filter))
-        == "stop"
-    )
+    assert _check_time_filter(message, cast("TimeRangeFilter", skip_filter)) == "skip"
+    assert _check_time_filter(message, cast("TimeRangeFilter", stop_filter)) == "stop"
     assert skip_filter.seen_messages == [message]
     assert stop_filter.seen_messages == [message]
 

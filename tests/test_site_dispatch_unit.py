@@ -98,9 +98,7 @@ def test_execute_chat_generator_passes_typed_request_directly() -> None:
         def get_chat_by_id(self, _match, params):
             return params
 
-    request = ChatRequest(
-        url="https://example.invalid/watch?id=1", max_messages=7
-    )
+    request = ChatRequest(url="https://example.invalid/watch?id=1", max_messages=7)
     site = FakeSite()
 
     result = execute_chat_generator(
@@ -141,9 +139,7 @@ def test_create_chat_for_site_configures_chat_without_owner_wrapper() -> None:
             return value
 
         def get_chat_by_id(self, _match, _request):
-            return Chat(
-                iter(()), title="Example title", status="live", id="abc"
-            )
+            return Chat(iter(()), title="Example title", status="live", id="abc")
 
     class FakeOwner:
         def __init__(self) -> None:
@@ -190,9 +186,7 @@ def test_create_chat_for_site_logs_sanitized_chat_snapshot(monkeypatch) -> None:
             return value
 
         def get_chat_by_id(self, _match, _request):
-            return Chat(
-                iter(()), title="Example title", status="live", id="abc"
-            )
+            return Chat(iter(()), title="Example title", status="live", id="abc")
 
     class FakeOwner:
         def __init__(self) -> None:

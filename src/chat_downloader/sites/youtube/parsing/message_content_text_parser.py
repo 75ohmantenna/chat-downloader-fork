@@ -93,9 +93,7 @@ def _parse_thumbnails(item: list[Any] | dict[str, Any]) -> list[dict[str, Any]]:
     if final:
         final.insert(
             0,
-            Image(
-                _get_source_image_url(final[0]["url"]), image_id="source"
-            ).json(),
+            Image(_get_source_image_url(final[0]["url"]), image_id="source").json(),
         )
 
     return final

@@ -10,7 +10,7 @@ import pytest
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
 import chat_downloader.sites.youtube.client_context as _yt_context
-import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation  # noqa: E501
+import chat_downloader.sites.youtube.client_requests_continuation as _yt_continuation
 import chat_downloader.sites.youtube.client_requests_initial as _yt_initial
 from chat_downloader.errors import (
     CaptchaChallengeRequired,
@@ -132,7 +132,7 @@ def test_get_continuation_info_accepts_chat_request(
     assert calls["count"] == 2
 
 
-def test_get_continuation_info_retries_on_incomplete_live_chat_continuation_body(  # noqa: E501
+def test_get_continuation_info_retries_on_incomplete_live_chat_continuation_body(
     make_fake_http_response,
 ) -> None:
     calls = {"count": 0}
@@ -153,9 +153,7 @@ def test_get_continuation_info_retries_on_incomplete_live_chat_continuation_body
         json={"continuation": "abc"},
     )
 
-    assert result == {
-        "continuationContents": {"liveChatContinuation": {"actions": []}}
-    }
+    assert result == {"continuationContents": {"liveChatContinuation": {"actions": []}}}
     assert calls["count"] == 2
 
 
@@ -182,9 +180,7 @@ def test_get_continuation_info_retries_on_unknown_error_in_200_ok_body(
         json={"continuation": "abc"},
     )
 
-    assert result == {
-        "continuationContents": {"liveChatContinuation": {"actions": []}}
-    }
+    assert result == {"continuationContents": {"liveChatContinuation": {"actions": []}}}
     assert calls["count"] == 2
 
 
@@ -203,9 +199,7 @@ def test_get_initial_info_retries_on_5xx_with_one_based_attempts(
     monkeypatch.setattr(
         _yt_initial,
         "try_parse_json",
-        lambda _value, default=None: (
-            {"contents": {}} if default is None else default
-        ),
+        lambda _value, default=None: {"contents": {}} if default is None else default,
     )
     monkeypatch.setattr(
         _yt_initial, "get_title_of_webpage", lambda _html: "Server Error"
@@ -232,18 +226,14 @@ def test_get_initial_info_retries_on_429(monkeypatch) -> None:
     def session_get(_url):
         calls["count"] += 1
         if calls["count"] == 1:
-            return _PageResp(
-                429, "<html><title>Too Many Requests</title></html>"
-            )
+            return _PageResp(429, "<html><title>Too Many Requests</title></html>")
         return _PageResp(200, "<html>ok</html>")
 
     monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: "{}")
     monkeypatch.setattr(
         _yt_initial,
         "try_parse_json",
-        lambda _value, default=None: (
-            {"contents": {}} if default is None else default
-        ),
+        lambda _value, default=None: {"contents": {}} if default is None else default,
     )
     monkeypatch.setattr(
         _yt_initial,
@@ -312,9 +302,7 @@ def test_get_initial_info_accepts_chat_request(monkeypatch) -> None:
     monkeypatch.setattr(
         _yt_initial,
         "try_parse_json",
-        lambda _value, default=None: (
-            {"contents": {}} if default is None else default
-        ),
+        lambda _value, default=None: {"contents": {}} if default is None else default,
     )
     monkeypatch.setattr(
         _yt_initial, "get_title_of_webpage", lambda _html: "Server Error"
@@ -469,7 +457,7 @@ def test_get_continuation_info_returns_non_retryable_json_api_error(
     )
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_exhausted_incomplete_body(  # noqa: E501
+def test_get_continuation_info_raises_retries_exceeded_on_exhausted_incomplete_body(
     make_fake_http_response,
 ) -> None:
     def session_post(_url, **_kwargs):
@@ -513,7 +501,7 @@ def test_get_continuation_info_allows_browse_continuation_payload(
     )
 
 
-def test_get_continuation_info_raises_captcha_challenge_required_on_http_challenge(  # noqa: E501
+def test_get_continuation_info_raises_captcha_challenge_required_on_http_challenge(
     make_fake_http_response,
 ) -> None:
     def session_post(_url, **_kwargs):
@@ -534,7 +522,7 @@ def test_get_continuation_info_raises_captcha_challenge_required_on_http_challen
     assert "--request_profile" in str(exc_info.value)
 
 
-def test_get_continuation_info_raises_captcha_challenge_required_on_json_error_message(  # noqa: E501
+def test_get_continuation_info_raises_captcha_challenge_required_on_json_error_message(
     make_fake_http_response,
 ) -> None:
     def session_post(_url, **_kwargs):
@@ -564,12 +552,8 @@ def test_get_initial_info_retries_on_5xx_then_raises_retries_exceeded(
 
     # Simulate page that produces no parseable ytInitialData
     monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: None)
-    monkeypatch.setattr(
-        _yt_initial, "try_parse_json", lambda _v, default=None: default
-    )
-    monkeypatch.setattr(
-        _yt_initial, "get_title_of_webpage", lambda _h: "503 Error"
-    )
+    monkeypatch.setattr(_yt_initial, "try_parse_json", lambda _v, default=None: default)
+    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _h: "503 Error")
 
     with pytest.raises(RetriesExceeded) as exc_info:
         _get_initial_info(

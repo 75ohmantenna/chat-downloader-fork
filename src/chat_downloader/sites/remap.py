@@ -75,9 +75,7 @@ class Remapper:
                 raise ValueError(msg)
         elif keep_unknown_keys:
             if replace_char_with_underscores:
-                remap_key = remap_key.replace(
-                    replace_char_with_underscores, "_"
-                )
+                remap_key = remap_key.replace(replace_char_with_underscores, "_")
             info[remap_key] = remap_input
 
     @staticmethod

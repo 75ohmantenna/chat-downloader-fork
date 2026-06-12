@@ -47,18 +47,14 @@ def wrap_as_list(item: Any) -> list[Any] | tuple[Any, ...]:
     return [item]
 
 
-def remove_prefixes(
-    text: str, prefixes: str | list[str] | tuple[str, ...]
-) -> str:
+def remove_prefixes(text: str, prefixes: str | list[str] | tuple[str, ...]) -> str:
     """Remove each ``prefixes`` entry from the start of ``text`` in order."""
     for prefix in wrap_as_list(prefixes):
         text = text.removeprefix(prefix)
     return text
 
 
-def remove_suffixes(
-    text: str, suffixes: str | list[str] | tuple[str, ...]
-) -> str:
+def remove_suffixes(text: str, suffixes: str | list[str] | tuple[str, ...]) -> str:
     """Remove each suffix in ``suffixes`` from the end of ``text`` in order."""
     for suffix in wrap_as_list(suffixes):
         text = text.removesuffix(suffix)

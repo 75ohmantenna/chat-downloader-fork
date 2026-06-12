@@ -98,9 +98,7 @@ def validate_and_finalize_message(
         debug_log("No message type", f"Action type: {original_action_type}")
         return None
 
-    missing_keys = (
-        original_item.get(original_message_type, {}).keys() - known_keys()
-    )
+    missing_keys = original_item.get(original_message_type, {}).keys() - known_keys()
     _emit_parse_diagnostics(
         data,
         original_item,

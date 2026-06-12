@@ -114,9 +114,7 @@ def _find_next_nonbmp_position(s: str) -> int:
         return len(s)
 
 
-def _write_to_windows_console(
-    handle: Any, text: str, skip_errors: bool = True
-) -> bool:
+def _write_to_windows_console(handle: Any, text: str, skip_errors: bool = True) -> bool:
     """Write text to Windows console using WriteConsoleW API.
 
     :param handle: Windows console handle
@@ -165,8 +163,7 @@ def _write_to_windows_console(
         if not count:  # We just wrote a non-BMP character
             if written.value != 2:
                 msg_0 = (
-                    "Expected 2 code units for non-BMP character, "
-                    f"got {written.value}"
+                    f"Expected 2 code units for non-BMP character, got {written.value}"
                 )
                 raise RuntimeError(msg_0)
             text = text[1:]

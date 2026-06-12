@@ -67,9 +67,7 @@ def attempts(max_attempts: int) -> range:
     return range(1, max_attempts + 1)
 
 
-def backoff_seconds(
-    attempt_number: int, retry_timeout: float | None = None
-) -> float:
+def backoff_seconds(attempt_number: int, retry_timeout: float | None = None) -> float:
     """Return sleep duration for the given attempt (1-indexed).
 
     When *retry_timeout* is ``None`` the formula is exponential back-off

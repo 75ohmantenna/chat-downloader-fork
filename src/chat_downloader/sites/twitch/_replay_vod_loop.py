@@ -34,18 +34,14 @@ def _init_vod_loop(
         offset = 0.0
         end_time = ensure_seconds(request.end_time)
         content_offset_seconds = (
-            start_time
-            if max_duration is None
-            else min(start_time, max_duration)
+            start_time if max_duration is None else min(start_time, max_duration)
         )
     else:
         end_time = ensure_seconds(request.end_time, max_duration)
         content_offset_seconds = (start_time or 0) + offset
     msg_filter = MessageFilter(
         MESSAGE_GROUPS,
-        request.message_groups
-        if isinstance(request.message_groups, list)
-        else None,
+        request.message_groups if isinstance(request.message_groups, list) else None,
         request.message_types or [],
     )
     time_filter = TimeRangeFilter(start_time, end_time, skip_mode="always")

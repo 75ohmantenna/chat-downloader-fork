@@ -143,9 +143,7 @@ def _process_actions(
         if pipeline_result.disposition == "stop":
             return True
         if not is_replay and pipeline_result.message is not None:
-            _apply_live_timing(
-                pipeline_result.message, loop_state, live_start_time_ms
-            )
+            _apply_live_timing(pipeline_result.message, loop_state, live_start_time_ms)
         message_count += 1
         if pipeline_result.message is not None:
             yield pipeline_result.message
@@ -250,9 +248,7 @@ def _get_chat_messages(  # noqa: C901 — live/replay branching, no-progress gua
 
         _handle_continuation_response(self, yt_info, ytcfg, continuation_params)
 
-        info = multi_get(
-            yt_info, "continuationContents", "liveChatContinuation"
-        )
+        info = multi_get(yt_info, "continuationContents", "liveChatContinuation")
         if not info:
             summary = summarize_continuation_payload(yt_info)
             msg = (

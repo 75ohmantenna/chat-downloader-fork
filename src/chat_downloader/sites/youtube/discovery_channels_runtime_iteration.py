@@ -55,13 +55,9 @@ def _build_channel_url(
     return user_url, f"{user_url}/{vid_type}"
 
 
-def _select_videos_tab(
-    yt_info: dict[str, Any], user_url: str, video_type: str
-) -> Any:
+def _select_videos_tab(yt_info: dict[str, Any], user_url: str, video_type: str) -> Any:
     """Return the page_contents for the requested tab, or raise."""
-    tabs = multi_get(
-        yt_info, "contents", "twoColumnBrowseResultsRenderer", "tabs"
-    )
+    tabs = multi_get(yt_info, "contents", "twoColumnBrowseResultsRenderer", "tabs")
     if not tabs:
         msg = f'Unable to find user: "{user_url}"'
         raise UserNotFound(msg)
@@ -77,10 +73,7 @@ def _select_videos_tab(
                 f'"{tab_title}" tab is not visible for this channel '
                 "(i.e. there are no such videos).",
             )
-            msg = (
-                "This channel has no videos of the requested type "
-                f"({video_type})."
-            )
+            msg = f"This channel has no videos of the requested type ({video_type})."
             raise NoVideos(msg)
         return tab_data.get("content")
     return None
@@ -149,9 +142,7 @@ def get_user_videos(
 
     api_key = require_innertube_api_key(ytcfg)
     continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
-    continuation_params: dict[str, Any] = {
-        "context": _get_innertube_context(ytcfg)
-    }
+    continuation_params: dict[str, Any] = {"context": _get_innertube_context(ytcfg)}
 
     # Process the first page directly; subsequent pages come from continuations.
     first_items: list[Any] = (

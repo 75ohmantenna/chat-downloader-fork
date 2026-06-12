@@ -54,7 +54,7 @@ def test_process_actions_yields_accepted_messages() -> None:
     assert result == [{"text": "hello"}, {"text": "world"}]
 
 
-def test_process_actions_stop_disposition_signals_stop_and_yields_nothing_after() -> (  # noqa: E501
+def test_process_actions_stop_disposition_signals_stop_and_yields_nothing_after() -> (
     None
 ):
     """A 'stop' action makes _process_actions stop and return True."""
@@ -67,9 +67,7 @@ def test_process_actions_stop_disposition_signals_stop_and_yields_nothing_after(
         [
             SimpleNamespace(disposition="yield", message={"text": "first"}),
             SimpleNamespace(disposition="stop", message=None),
-            SimpleNamespace(
-                disposition="yield", message={"text": "should-not-appear"}
-            ),
+            SimpleNamespace(disposition="yield", message={"text": "should-not-appear"}),
         ]
     )
 
@@ -142,9 +140,7 @@ def test_process_actions_skip_disposition_does_not_yield() -> None:
     assert result == [{"text": "kept"}]
 
 
-def test_enrich_live_message_timing_skips_when_time_in_seconds_present() -> (
-    None
-):
+def test_enrich_live_message_timing_skips_when_time_in_seconds_present() -> None:
     from chat_downloader.sites.youtube.continuation_loop_runtime import (
         enrich_live_message_timing,
     )

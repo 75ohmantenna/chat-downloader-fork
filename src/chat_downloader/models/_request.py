@@ -160,9 +160,7 @@ class ChatRequest:
     )
     overwrite: bool = field(
         default=True,
-        metadata={
-            "cli": _cli("Overwrite existing output file", group="output")
-        },
+        metadata={"cli": _cli("Overwrite existing output file", group="output")},
     )
     sort_keys: bool = field(
         default=True,
@@ -181,9 +179,7 @@ class ChatRequest:
     )
     format_file: str | None = field(
         default=None,
-        metadata={
-            "cli": _cli("Path to custom format definition file", group="format")
-        },
+        metadata={"cli": _cli("Path to custom format definition file", group="format")},
     )
 
     # ── YouTube-specific ──────────────────────────────────────────────────────
@@ -213,9 +209,7 @@ class ChatRequest:
     )
     buffer_size: int = field(
         default=DEFAULT_BUFFER_SIZE,
-        metadata={
-            "cli": _cli("Buffer size for message retrieval", group="twitch")
-        },
+        metadata={"cli": _cli("Buffer size for message retrieval", group="twitch")},
     )
 
     # ── Constructors ──────────────────────────────────────────────────────────
@@ -244,10 +238,7 @@ class ChatRequest:
             ("inactivity_timeout", self.inactivity_timeout),
         ):
             if value is not None and (not math.isfinite(value) or value <= 0):
-                msg = (
-                    f"{name} must be a finite positive number or None, "
-                    f"got {value!r}"
-                )
+                msg = f"{name} must be a finite positive number or None, got {value!r}"
                 raise ValueError(msg)
         if not math.isfinite(self.message_receive_timeout) or (
             self.message_receive_timeout <= 0
@@ -303,9 +294,7 @@ class ChatRequest:
         """Resolve any site-default placeholder values for a specific site."""
         return self.with_updates(
             **{
-                field.name: site_object.get_site_value(
-                    getattr(self, field.name)
-                )
+                field.name: site_object.get_site_value(getattr(self, field.name))
                 for field in dc_fields(self)
             },
         )
@@ -328,6 +317,4 @@ class ChatRequest:
 
 
 #: All field names belonging to :class:`ChatRequest`.
-CHAT_PARAM_NAMES: frozenset[str] = frozenset(
-    f.name for f in dc_fields(ChatRequest)
-)
+CHAT_PARAM_NAMES: frozenset[str] = frozenset(f.name for f in dc_fields(ChatRequest))

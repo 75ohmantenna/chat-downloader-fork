@@ -161,8 +161,7 @@ class ChatDownloader:
         log("debug", f"Program version: {__version__}")
         log(
             "debug",
-            "Initialisation parameters: "
-            f"{sanitize_for_log(self.config.as_dict())}",
+            f"Initialisation parameters: {sanitize_for_log(self.config.as_dict())}",
         )
 
         # Session cache: {site_class_name: site_instance}
@@ -330,9 +329,7 @@ class ChatDownloader:
         params = locals()
         params = {k: v for k, v in params.items() if k != "self"}
         params["url"] = "" if url is None else url
-        return self.get_chat_request(
-            ChatRequest.from_kwargs(strict=True, **params)
-        )
+        return self.get_chat_request(ChatRequest.from_kwargs(strict=True, **params))
 
     def get_chat_request(self, request: ChatRequest) -> Chat:
         """Typed entry point for chat retrieval via :class:`ChatRequest`."""

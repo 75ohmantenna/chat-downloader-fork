@@ -13,9 +13,7 @@ from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 
 def test_twitch_vod_entry_accepts_chat_request() -> None:
     downloader = TwitchChatDownloader()
-    request = ChatRequest(
-        url="https://www.twitch.tv/videos/123", max_attempts=2
-    )
+    request = ChatRequest(url="https://www.twitch.tv/videos/123", max_attempts=2)
     captured = {}
 
     downloader._download_gql = Mock(

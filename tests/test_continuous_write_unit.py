@@ -418,9 +418,7 @@ def test_factory_validate_file_name_raises() -> None:
 def test_initialize_if_needed_clears_writer_on_oserror(
     tmp_path: pathlib.Path,
 ) -> None:
-    writer = ContinuousWriter(
-        _ext_path(tmp_path, "jsonl"), lazy_initialise=True
-    )
+    writer = ContinuousWriter(_ext_path(tmp_path, "jsonl"), lazy_initialise=True)
     writer._open_writer = lambda _: (_ for _ in ()).throw(  # type: ignore[method-assign]
         OSError("disk full")
     )
@@ -458,20 +456,13 @@ def test_factory_file_name_property(tmp_path: pathlib.Path) -> None:
 
 def test_factory_overwrite_property(tmp_path: pathlib.Path) -> None:
     path = _ext_path(tmp_path, "jsonl")
-    assert ContinuousWriter(
-        path, overwrite=True, lazy_initialise=True
-    ).overwrite
-    assert not ContinuousWriter(
-        path, overwrite=False, lazy_initialise=True
-    ).overwrite
+    assert ContinuousWriter(path, overwrite=True, lazy_initialise=True).overwrite
+    assert not ContinuousWriter(path, overwrite=False, lazy_initialise=True).overwrite
 
 
 def test_factory_format_property(tmp_path: pathlib.Path) -> None:
     path = _ext_path(tmp_path, "jsonl")
-    assert (
-        ContinuousWriter(path, format="csv", lazy_initialise=True).format
-        == "csv"
-    )
+    assert ContinuousWriter(path, format="csv", lazy_initialise=True).format == "csv"
 
 
 def test_factory_lazy_initialise_property(tmp_path: pathlib.Path) -> None:
@@ -581,9 +572,7 @@ def test_factory_del_io_error_log_contained_in_test(
         gc.collect()
 
     logged = [call.args[0] for call in mock_debug.call_args_list]
-    assert any(
-        "Suppressed error" in msg and "disk full" in msg for msg in logged
-    )
+    assert any("Suppressed error" in msg and "disk full" in msg for msg in logged)
 
 
 def test_factory_del_suppresses_non_io_cleanup_errors(
@@ -621,9 +610,7 @@ def test_continuous_file_writer_closed_file_branch() -> None:
 
 
 def test_csv_jsonl_text_and_continuous_writer_edge_paths(tmp_path) -> None:
-    csv_writer = ContinuousWriter(
-        str(tmp_path / "sample.csv"), lazy_initialise=True
-    )
+    csv_writer = ContinuousWriter(str(tmp_path / "sample.csv"), lazy_initialise=True)
     csv_writer.initialize()
     with pytest.raises(TypeError, match="dictionary item"):
         csv_writer.write("bad")
@@ -641,9 +628,7 @@ def test_csv_jsonl_text_and_continuous_writer_edge_paths(tmp_path) -> None:
     lazy = ContinuousWriter(None, lazy_initialise=True)
     with pytest.raises(ValueError, match="File name not set"):
         lazy.initialize()
-    broken = ContinuousWriter(
-        str(tmp_path / "broken.jsonl"), lazy_initialise=True
-    )
+    broken = ContinuousWriter(str(tmp_path / "broken.jsonl"), lazy_initialise=True)
     broken._open_writer = lambda _file_name: (_ for _ in ()).throw(
         RuntimeError("open failed")
     )  # type: ignore[method-assign]
@@ -660,9 +645,7 @@ def test_csv_jsonl_text_and_continuous_writer_edge_paths(tmp_path) -> None:
         missing.write("x")
 
 
-def test_continuous_writer_del_suppresses_ignored_errors(
-    monkeypatch, tmp_path
-) -> None:
+def test_continuous_writer_del_suppresses_ignored_errors(monkeypatch, tmp_path) -> None:
     messages: list[str] = []
     writer = ContinuousWriter(str(tmp_path / "del.txt"), lazy_initialise=True)
     writer.close = lambda: (_ for _ in ()).throw(ReferenceError("gone"))  # type: ignore[method-assign]
@@ -674,6 +657,5 @@ def test_continuous_writer_del_suppresses_ignored_errors(
     writer.__del__()
 
     assert any(
-        "Suppressed error during garbage-collection close" in m
-        for m in messages
+        "Suppressed error during garbage-collection close" in m for m in messages
     )

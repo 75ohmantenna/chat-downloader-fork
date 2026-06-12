@@ -127,9 +127,7 @@ def seconds_to_time(
     m, s = divmod(remainder, SECONDS_PER_MINUTE)
     time_string = format.format(h, m, s)
     return ("-" if seconds < 0 else "") + (
-        re.sub(r"^0:0?", "", time_string)
-        if remove_leading_zeroes
-        else time_string
+        re.sub(r"^0:0?", "", time_string) if remove_leading_zeroes else time_string
     )
 
 
@@ -155,9 +153,7 @@ def microseconds_to_timestamp(
     ).strftime(format)
 
 
-def ensure_seconds(
-    time: float | str | None, default: Any = None
-) -> float | Any:
+def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any:
     """Ensure time is returned in seconds.
 
     :param time: The time, in seconds or 'hh:mm:ss'.

@@ -41,9 +41,7 @@ def set_testing_mode(new_mode: TestingModes) -> None:
     TESTING_MODE = new_mode
 
 
-def log(
-    level: str, items: Any, to_pause: bool = False, to_exit: bool = False
-) -> None:
+def log(level: str, items: Any, to_pause: bool = False, to_exit: bool = False) -> None:
     """Log one or more items at the given level, optionally pausing or raising.
 
     Args:

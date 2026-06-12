@@ -9,9 +9,7 @@ from chat_downloader.sites.youtube.helpers import (
 )
 
 
-def test_extract_browse_continuation_token_from_response_reload_endpoints() -> (
-    None
-):
+def test_extract_browse_continuation_token_from_response_reload_endpoints() -> None:
     yt_info = {
         "onResponseReceivedEndpoints": [
             {
@@ -20,9 +18,7 @@ def test_extract_browse_continuation_token_from_response_reload_endpoints() -> (
                         {
                             "continuationItemRenderer": {
                                 "continuationEndpoint": {
-                                    "continuationCommand": {
-                                        "token": "NEXT_TOKEN"
-                                    },
+                                    "continuationCommand": {"token": "NEXT_TOKEN"},
                                 },
                             },
                         },
@@ -32,10 +28,7 @@ def test_extract_browse_continuation_token_from_response_reload_endpoints() -> (
         ],
     }
 
-    assert (
-        _extract_browse_continuation_token_from_response(yt_info)
-        == "NEXT_TOKEN"
-    )
+    assert _extract_browse_continuation_token_from_response(yt_info) == "NEXT_TOKEN"
 
 
 def test_extract_browse_continuation_token_from_response_playlist_continuation_contents() -> (  # noqa: E501
@@ -48,9 +41,7 @@ def test_extract_browse_continuation_token_from_response_playlist_continuation_c
                     {
                         "continuationItemRenderer": {
                             "continuationEndpoint": {
-                                "continuationCommand": {
-                                    "token": "PLAYLIST_NEXT"
-                                },
+                                "continuationCommand": {"token": "PLAYLIST_NEXT"},
                             },
                         },
                     },
@@ -59,15 +50,10 @@ def test_extract_browse_continuation_token_from_response_playlist_continuation_c
         },
     }
 
-    assert (
-        _extract_browse_continuation_token_from_response(yt_info)
-        == "PLAYLIST_NEXT"
-    )
+    assert _extract_browse_continuation_token_from_response(yt_info) == "PLAYLIST_NEXT"
 
 
-def test_extract_browse_continuation_token_from_response_reload_actions() -> (
-    None
-):
+def test_extract_browse_continuation_token_from_response_reload_actions() -> None:
     yt_info = {
         "onResponseReceivedActions": [
             {
@@ -76,9 +62,7 @@ def test_extract_browse_continuation_token_from_response_reload_actions() -> (
                         {
                             "continuationItemRenderer": {
                                 "continuationEndpoint": {
-                                    "continuationCommand": {
-                                        "token": "ACTION_TOKEN"
-                                    },
+                                    "continuationCommand": {"token": "ACTION_TOKEN"},
                                 },
                             },
                         },
@@ -88,15 +72,10 @@ def test_extract_browse_continuation_token_from_response_reload_actions() -> (
         ],
     }
 
-    assert (
-        _extract_browse_continuation_token_from_response(yt_info)
-        == "ACTION_TOKEN"
-    )
+    assert _extract_browse_continuation_token_from_response(yt_info) == "ACTION_TOKEN"
 
 
-def test_extract_chat_submenu_continuations_uses_fallback_for_unlabeled_items() -> (  # noqa: E501
-    None
-):
+def test_extract_chat_submenu_continuations_uses_fallback_for_unlabeled_items() -> None:
     yt_info = {
         "continuationContents": {
             "liveChatContinuation": {
@@ -127,7 +106,7 @@ def test_extract_chat_submenu_continuations_uses_fallback_for_unlabeled_items() 
                                         "continuation": {
                                             "continuationEndpoint": {
                                                 "getLiveChatEndpoint": {
-                                                    "continuation": "SKIP_TITLE_EMPTY",  # noqa: E501
+                                                    "continuation": "SKIP_TITLE_EMPTY",
                                                 },
                                             },
                                         },

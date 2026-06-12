@@ -49,9 +49,7 @@ def test_video_details_to_dict_serializes_dataclass_fields() -> None:
     }
 
 
-def test_channel_discovery_mixin_coerces_typed_request_before_delegating() -> (
-    None
-):
+def test_channel_discovery_mixin_coerces_typed_request_before_delegating() -> None:
     captured = []
 
     class DummyDiscovery(YouTubeDiscoveryHelpersMixin):
@@ -80,9 +78,7 @@ def test_channel_discovery_mixin_coerces_typed_request_before_delegating() -> (
     }
 
 
-def test_chat_streams_mixin_get_chat_messages_delegates_runtime_helper() -> (
-    None
-):
+def test_chat_streams_mixin_get_chat_messages_delegates_runtime_helper() -> None:
     class DummyStreams(YouTubeChatStreamsMixin):
         pass
 
@@ -146,9 +142,7 @@ def test_chat_streams_mixin_clip_entry_raises_when_clip_times_missing() -> None:
                 "clip_end_time": 10,
             }, {}
 
-    with pytest.raises(
-        ParsingError, match="Could not determine clip time range"
-    ):
+    with pytest.raises(ParsingError, match="Could not determine clip time range"):
         DummyStreams().get_chat_by_clip_id(
             "clip-1",
             ChatRequest(url="https://www.youtube.com/clip/clip-1"),

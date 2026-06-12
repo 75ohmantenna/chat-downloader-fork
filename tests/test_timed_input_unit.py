@@ -39,10 +39,7 @@ def test_timed_input_without_timeout_uses_builtin_input(monkeypatch) -> None:
 
     monkeypatch.setattr("builtins.input", fake_input)
 
-    assert (
-        timed_utils.timed_input(timeout=None, prompt="Enter value:")
-        == "typed value"
-    )
+    assert timed_utils.timed_input(timeout=None, prompt="Enter value:") == "typed value"
     assert prompts == ["Enter value:"]
 
 
@@ -53,9 +50,7 @@ def test_timed_input_returns_default_on_timeout(monkeypatch) -> None:
         lambda *_args: (_ for _ in ()).throw(TimeoutOccurred()),
     )
 
-    assert (
-        timed_utils.timed_input(timeout=0.5, default="fallback") == "fallback"
-    )
+    assert timed_utils.timed_input(timeout=0.5, default="fallback") == "fallback"
 
 
 def test_posix_timed_input_returns_line_when_selector_has_event(
@@ -72,9 +67,7 @@ def test_posix_timed_input_returns_line_when_selector_has_event(
             return [
                 (
                     SimpleNamespace(
-                        fileobj=SimpleNamespace(
-                            readline=lambda: "hello world\n"
-                        ),
+                        fileobj=SimpleNamespace(readline=lambda: "hello world\n"),
                     ),
                     None,
                 ),
@@ -88,8 +81,7 @@ def test_posix_timed_input_returns_line_when_selector_has_event(
     )
 
     assert (
-        timed_utils.posix_timed_input(1.5, "Prompt: ", newline=False)
-        == "hello world"
+        timed_utils.posix_timed_input(1.5, "Prompt: ", newline=False) == "hello world"
     )
     assert outputs == ["Prompt: "]
 
@@ -143,9 +135,7 @@ def test_posix_timed_input_timeout_flushes_stdin(monkeypatch) -> None:
         timed_utils.posix_timed_input(1.0, "Prompt: ", newline=True)
 
     assert outputs == ["Prompt: ", timed_utils.LF]
-    assert tcflush_calls == [
-        (timed_utils.sys.stdin, timed_utils.termios.TCIFLUSH)
-    ]
+    assert tcflush_calls == [(timed_utils.sys.stdin, timed_utils.termios.TCIFLUSH)]
 
 
 def test_posix_timed_input_timeout_ignores_tcflush_errors(monkeypatch) -> None:
@@ -185,9 +175,7 @@ def test_win_timed_input_handles_backspace_and_newline(monkeypatch) -> None:
 
     try:
         monkeypatch.setattr(module, "echo", outputs.append)
-        monkeypatch.setattr(
-            module.time, "monotonic", lambda: next(monotonic_values)
-        )
+        monkeypatch.setattr(module.time, "monotonic", lambda: next(monotonic_values))
         monkeypatch.setattr(module.time, "sleep", lambda *_args: None)
 
         assert module.win_timed_input(1.0, "P>", newline=False) == "ac"
@@ -225,9 +213,7 @@ def test_win_timed_input_timeout_prints_newline(monkeypatch) -> None:
 
     try:
         monkeypatch.setattr(module, "echo", outputs.append)
-        monkeypatch.setattr(
-            module.time, "monotonic", lambda: next(monotonic_values)
-        )
+        monkeypatch.setattr(module.time, "monotonic", lambda: next(monotonic_values))
         monkeypatch.setattr(module.time, "sleep", lambda *_args: None)
 
         with pytest.raises(module.TimeoutOccurred):
@@ -249,9 +235,7 @@ class _AliveTimer:
         self.cancelled = True
 
 
-def test_timed_generator_keyboard_interrupt_with_active_timer_propagates() -> (
-    None
-):
+def test_timed_generator_keyboard_interrupt_with_active_timer_propagates() -> None:
     class InterruptingIterator:
         def __iter__(self):
             return self

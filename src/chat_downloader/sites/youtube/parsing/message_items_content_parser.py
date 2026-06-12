@@ -115,9 +115,7 @@ def _merge_nested_renderers(
     """Recursively merge showItemEndpoint and header renderers into *info*."""
     item_endpoint = item_info.get("showItemEndpoint")
     if item_endpoint:
-        renderer = multi_get(
-            item_endpoint, "showLiveChatItemEndpoint", "renderer"
-        )
+        renderer = multi_get(item_endpoint, "showLiveChatItemEndpoint", "renderer")
         if renderer:
             info.update(_parse_item(renderer, offset=offset))
 

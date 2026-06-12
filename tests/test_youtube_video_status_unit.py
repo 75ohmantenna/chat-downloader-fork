@@ -37,9 +37,7 @@ def test_derive_duration(
     end: float | None,
     want: float | None,
 ) -> None:
-    result = _derive_duration(
-        first_format, video_details, player_renderer, start, end
-    )
+    result = _derive_duration(first_format, video_details, player_renderer, start, end)
     assert result == want
 
 

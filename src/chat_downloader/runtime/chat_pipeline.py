@@ -65,8 +65,7 @@ def configure_timeouts(
         def log_on_inactivity_timeout() -> None:
             log(
                 "debug",
-                "Inactivity timeout occurred after "
-                f"{inactivity_timeout} seconds.",
+                f"Inactivity timeout occurred after {inactivity_timeout} seconds.",
             )
 
         chat.chat.on_inactivity_timeout = log_on_inactivity_timeout
@@ -136,9 +135,7 @@ def configure_output_writer(
     if not request.output:
         return
 
-    outputs = (
-        request.output if isinstance(request.output, list) else [request.output]
-    )
+    outputs = request.output if isinstance(request.output, list) else [request.output]
     seen: set[str] = set()
     for output_file in outputs:
         if output_file in seen:
@@ -148,9 +145,7 @@ def configure_output_writer(
             )
             continue
         seen.add(output_file)
-        chat.attach_writer(
-            build_output_writer(output_file, request, writer_factory)
-        )
+        chat.attach_writer(build_output_writer(output_file, request, writer_factory))
 
 
 def configure_chat(

@@ -61,12 +61,8 @@ def _chat_debug_snapshot(chat: Chat) -> dict[str, Any]:
 
     output_dispatcher = getattr(chat, "_output_dispatcher", None)
     if output_dispatcher is not None:
-        snapshot["writer_count"] = len(
-            getattr(output_dispatcher, "writers", ())
-        )
-        snapshot["callback_count"] = len(
-            getattr(output_dispatcher, "callbacks", ())
-        )
+        snapshot["writer_count"] = len(getattr(output_dispatcher, "writers", ()))
+        snapshot["callback_count"] = len(getattr(output_dispatcher, "callbacks", ()))
 
     return cast("dict[str, Any]", sanitize_for_log(snapshot))
 
@@ -81,9 +77,7 @@ def execute_chat_generator(
     """Execute the site-specific chat generator method."""
     chat_generator = getattr(site_object, generator_method_name, None)
     if not chat_generator:
-        msg = (
-            f"{generator_method_name} has not been implemented in {site_name}."
-        )
+        msg = f"{generator_method_name} has not been implemented in {site_name}."
         raise NotImplementedError(
             msg,
         )

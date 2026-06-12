@@ -85,9 +85,7 @@ def move_to_dict(
         replace_key = dict_name + "_"
 
     new_dict: dict[str, Any] = {}
-    keys_to_check = (
-        list(info_keys) if info_keys else list(info.keys() if info else [])
-    )
+    keys_to_check = list(info_keys) if info_keys else list(info.keys() if info else [])
 
     for key in keys_to_check:
         if replace_key in key:

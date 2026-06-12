@@ -25,9 +25,7 @@ _LINE_PATTERN: re.Pattern[str] = re.compile(r"[^\r\n]+\r\n", re.MULTILINE)
 
 # Minimal Twitch PRIVMSG line that matches MESSAGE_REGEX.
 _TAG = "@badge-info=;badges=;color=;display-name=User;emotes=;id=1;mod=0;room-id=1;subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;user-type="  # noqa: E501
-_PRIVMSG_TEMPLATE = (
-    "{tag} :user!user@user.tmi.twitch.tv PRIVMSG #example :{text}"
-)
+_PRIVMSG_TEMPLATE = "{tag} :user!user@user.tmi.twitch.tv PRIVMSG #example :{text}"
 
 
 def _privmsg(text: str) -> str:
@@ -85,9 +83,7 @@ def test_process_irc_buffer_partial_last_line_drops_incomplete_match() -> None:
     assert len(matches) == 1, "Partial match must be excluded from results"
     # The remainder must begin at the start of the partial match so it can
     # be prepended to the next recv() chunk.
-    assert remaining.startswith("@"), (
-        "Remainder should start at the partial match's @"
-    )
+    assert remaining.startswith("@"), "Remainder should start at the partial match's @"
     assert "second_partial" in remaining
 
 
@@ -98,12 +94,8 @@ def test_process_irc_buffer_single_partial_line_yields_no_matches() -> None:
     buf = _privmsg("only_partial")  # no \r\n — the line is still arriving
     remaining, matches = _process_irc_buffer(buf, MESSAGE_REGEX)
 
-    assert matches == [], (
-        "No complete matches expected for a pure partial buffer"
-    )
-    assert remaining == buf, (
-        "Full buffer must be returned for prepending to next chunk"
-    )
+    assert matches == [], "No complete matches expected for a pure partial buffer"
+    assert remaining == buf, "Full buffer must be returned for prepending to next chunk"
 
 
 def test_process_irc_buffer_empty_buffer_returns_empty() -> None:
@@ -176,9 +168,7 @@ def test_should_send_keepalive_returns_true_when_interval_elapsed() -> None:
     assert _should_send_keepalive(now, last_ping, 60.0) is True
 
 
-def test_should_send_keepalive_returns_false_when_interval_not_elapsed() -> (
-    None
-):
+def test_should_send_keepalive_returns_false_when_interval_not_elapsed() -> None:
     """Returns False when fewer than ping_every seconds have passed."""
     now = time.time()
     last_ping = now - 1.0

@@ -70,9 +70,7 @@ def test_video_metadata_wrapper_methods_delegate_to_mapper(monkeypatch) -> None:
     player_response = {"playabilityStatus": {"status": "LOGIN_REQUIRED"}}
 
     assert YouTubeVideoMetadataCoreMixin._is_age_gated(player_response) is True
-    assert (
-        YouTubeVideoMetadataCoreMixin._is_unplayable(player_response) is False
-    )
+    assert YouTubeVideoMetadataCoreMixin._is_unplayable(player_response) is False
     assert age_gate_calls == [player_response]
     assert unplayable_calls == [player_response]
 
@@ -130,23 +128,17 @@ def test_parse_video_data_uses_watch_url_and_serializes_video_details(
         )
         return parsed_details
 
-    monkeypatch.setattr(
-        video_metadata, "_get_initial_info", fake_get_initial_info
-    )
-    monkeypatch.setattr(
-        video_metadata, "parse_video_details", fake_parse_video_details
-    )
+    monkeypatch.setattr(video_metadata, "_get_initial_info", fake_get_initial_info)
+    monkeypatch.setattr(video_metadata, "parse_video_details", fake_parse_video_details)
     monkeypatch.setattr(
         video_metadata,
         "video_details_to_dict",
         lambda details: {"title": details.title, "status": details.status},
     )
 
-    details, player_response_info, yt_initial_data, ytcfg = (
-        dummy._parse_video_data(
-            "abc",
-            request,
-        )
+    details, player_response_info, yt_initial_data, ytcfg = dummy._parse_video_data(
+        "abc",
+        request,
     )
 
     assert calls["original_url"].endswith("/watch?v=abc")
@@ -208,11 +200,9 @@ def test_parse_video_data_uses_clip_url_and_logs_missing_player_response(
         lambda level, value: logs.append((level, value)),
     )
 
-    details, player_response_info, yt_initial_data, ytcfg = (
-        dummy._parse_video_data(
-            "clip123",
-            video_type="clip",
-        )
+    details, player_response_info, yt_initial_data, ytcfg = dummy._parse_video_data(
+        "clip123",
+        video_type="clip",
     )
 
     assert captured["original_url"].endswith("/clip/clip123")
@@ -299,9 +289,7 @@ def test_initial_video_info_adds_live_chat_continuations(monkeypatch) -> None:
     )
     raise_calls = []
 
-    monkeypatch.setattr(
-        video_initialization, "regex_search", lambda *_args: "{}"
-    )
+    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
     monkeypatch.setattr(
         video_initialization,
         "try_parse_json",
@@ -386,9 +374,7 @@ def test_initial_video_info_maps_reordered_labeled_chat_submenus(
         ),
     )
 
-    monkeypatch.setattr(
-        video_initialization, "regex_search", lambda *_args: "{}"
-    )
+    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
     monkeypatch.setattr(
         video_initialization,
         "try_parse_json",
@@ -428,9 +414,7 @@ def test_initial_video_info_maps_reordered_labeled_chat_submenus(
     monkeypatch.setattr(
         video_initialization,
         "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(
-            AssertionError("should not be called")
-        ),
+        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
     )
 
     returned_details, _ytcfg = dummy._get_initial_video_info("abc", None)
@@ -457,7 +441,7 @@ def test_initial_video_info_adds_replay_chat_continuations(monkeypatch) -> None:
                                 "continuations": [
                                     {
                                         "reloadContinuationData": {
-                                            "continuation": "client-replay-token",  # noqa: E501
+                                            "continuation": "client-replay-token",
                                         },
                                     },
                                 ],
@@ -470,9 +454,7 @@ def test_initial_video_info_adds_replay_chat_continuations(monkeypatch) -> None:
         ),
     )
 
-    monkeypatch.setattr(
-        video_initialization, "regex_search", lambda *_args: "{}"
-    )
+    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
     monkeypatch.setattr(
         video_initialization,
         "try_parse_json",
@@ -487,14 +469,14 @@ def test_initial_video_info_adds_replay_chat_continuations(monkeypatch) -> None:
                                         {
                                             "continuation": {
                                                 "reloadContinuationData": {
-                                                    "continuation": "top-replay",  # noqa: E501
+                                                    "continuation": "top-replay",
                                                 },
                                             },
                                         },
                                         {
                                             "continuation": {
                                                 "reloadContinuationData": {
-                                                    "continuation": "live-replay",  # noqa: E501
+                                                    "continuation": "live-replay",
                                                 },
                                             },
                                         },
@@ -510,9 +492,7 @@ def test_initial_video_info_adds_replay_chat_continuations(monkeypatch) -> None:
     monkeypatch.setattr(
         video_initialization,
         "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(
-            AssertionError("should not be called")
-        ),
+        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
     )
 
     returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
@@ -545,7 +525,7 @@ def test_initial_video_info_uses_fallback_labels_for_unlabeled_replay_submenus(
                                 "continuations": [
                                     {
                                         "reloadContinuationData": {
-                                            "continuation": "client-replay-token",  # noqa: E501
+                                            "continuation": "client-replay-token",
                                         },
                                     },
                                 ],
@@ -558,9 +538,7 @@ def test_initial_video_info_uses_fallback_labels_for_unlabeled_replay_submenus(
         ),
     )
 
-    monkeypatch.setattr(
-        video_initialization, "regex_search", lambda *_args: "{}"
-    )
+    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
     monkeypatch.setattr(
         video_initialization,
         "try_parse_json",
@@ -575,7 +553,7 @@ def test_initial_video_info_uses_fallback_labels_for_unlabeled_replay_submenus(
                                         {
                                             "continuation": {
                                                 "reloadContinuationData": {
-                                                    "continuation": "top-replay",  # noqa: E501
+                                                    "continuation": "top-replay",
                                                 },
                                             },
                                         },
@@ -598,9 +576,7 @@ def test_initial_video_info_uses_fallback_labels_for_unlabeled_replay_submenus(
     monkeypatch.setattr(
         video_initialization,
         "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(
-            AssertionError("should not be called")
-        ),
+        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
     )
 
     returned_details, _ytcfg = dummy._get_initial_video_info("abc", None)
@@ -668,10 +644,7 @@ def test_initial_video_info_logs_warning_when_bootstrap_shape_is_invalid(
     assert returned_details is details
     assert warning_logs
     assert warning_logs[0][0] == "warning"
-    assert (
-        "Unable to enrich chat submenu continuation tokens"
-        in warning_logs[0][1]
-    )
+    assert "Unable to enrich chat submenu continuation tokens" in warning_logs[0][1]
     assert raise_calls == [(player_response, yt_initial_data)]
 
 
@@ -693,9 +666,7 @@ def test_initial_video_info_skips_playability_check_when_continuation_exists(
     monkeypatch.setattr(
         video_initialization,
         "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(
-            AssertionError("should not be called")
-        ),
+        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
     )
 
     returned_details, _ = dummy._get_initial_video_info("abc", None)

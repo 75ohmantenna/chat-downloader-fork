@@ -423,9 +423,7 @@ def test_base_downloader_misc_helpers() -> None:
 
     assert downloader._has_auth_cookies is False
     assert downloader.get_site_value(SiteDefault("format")) == "demo"
-    assert downloader.get_site_value(SiteDefault("message_groups")) == [
-        "messages"
-    ]
+    assert downloader.get_site_value(SiteDefault("message_groups")) == ["messages"]
     assert downloader.get_site_value("plain") == "plain"
     assert DemoDownloader.matches("https://twitch.tv/videos/42")[0] == "vod"
     assert DemoDownloader.matches("https://example.com") is None
@@ -466,9 +464,7 @@ def test_session_profile_helpers_and_json_builder(monkeypatch) -> None:
     assert owner.session.headers == {"Existing": "1", "Profile": "youtube_web"}
     assert owner._request_profile == "youtube_web"
 
-    assert _build_session_headers({}, None)["User-Agent"].startswith(
-        "Mozilla/5.0"
-    )
+    assert _build_session_headers({}, None)["User-Agent"].startswith("Mozilla/5.0")
     assert _build_session_headers({"User-Agent": "Custom"}, None) == {
         "User-Agent": "Custom",
         "Profile": None,

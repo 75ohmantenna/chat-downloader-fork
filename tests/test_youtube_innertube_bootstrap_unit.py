@@ -18,10 +18,7 @@ from chat_downloader.sites.youtube.video_metadata import (
 )
 
 _FIXTURE_DIR = (
-    Path(__file__).resolve().parent
-    / "fixtures"
-    / "youtube"
-    / "innertube_bootstrap"
+    Path(__file__).resolve().parent / "fixtures" / "youtube" / "innertube_bootstrap"
 )
 
 
@@ -52,13 +49,9 @@ class _FallbackDummy(YouTubeVideoMetadataCoreMixin):
     def _session_post(self, url: str, **_kwargs):
         self.post_urls.append(url)
         if "/player?" in url:
-            return _JsonResponse(
-                _load_fixture("youtube-IzopCEgh2G8-player-web.json")
-            )
+            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-player-web.json"))
         if "/next?" in url:
-            return _JsonResponse(
-                _load_fixture("youtube-IzopCEgh2G8-next-web.json")
-            )
+            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-next-web.json"))
         raise AssertionError(f"unexpected URL: {url}")
 
 
@@ -68,13 +61,9 @@ def test_innertube_bootstrap_extracts_primary_live_continuation() -> None:
     def session_post(url: str, **kwargs):
         calls.append((url, kwargs["json"]))
         if "/player?" in url:
-            return _JsonResponse(
-                _load_fixture("youtube-IzopCEgh2G8-player-web.json")
-            )
+            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-player-web.json"))
         if "/next?" in url:
-            return _JsonResponse(
-                _load_fixture("youtube-IzopCEgh2G8-next-web.json")
-            )
+            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-next-web.json"))
         raise AssertionError(f"unexpected URL: {url}")
 
     yt_initial_data, ytcfg, player_response = get_innertube_video_bootstrap(

@@ -68,9 +68,7 @@ class BadgeCache:
             Mutated in-place by :func:`~.client.update_badge_info`.
     """
 
-    global_badges: dict[tuple[str, str], dict[str, Any]] = field(
-        default_factory=dict
-    )
+    global_badges: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)
     channel_badges: dict[str, dict[tuple[str, str], dict[str, Any]]] = field(
         default_factory=dict,
     )

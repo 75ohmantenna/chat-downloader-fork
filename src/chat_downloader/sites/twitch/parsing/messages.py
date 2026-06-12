@@ -191,9 +191,7 @@ def _parse_item(
     badges = info.pop("author_badges", None)
     if badges:
         info["author"]["badges"] = [
-            _parse_badge_info(
-                x.get("setID"), x.get("version"), channel_id, badge_set
-            )
+            _parse_badge_info(x.get("setID"), x.get("version"), channel_id, badge_set)
             for x in badges
             if x.get("setID") and x.get("version")
         ]
@@ -249,8 +247,6 @@ def _parse_irc_item(
     _move_to_dict(info, "author")
 
     original_action_type = match.group(2)
-    _resolve_irc_action_and_message_type(
-        info, original_action_type, message_match
-    )
+    _resolve_irc_action_and_message_type(info, original_action_type, message_match)
 
     return info

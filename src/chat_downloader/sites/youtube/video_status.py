@@ -36,17 +36,11 @@ def parse_video_details(
         or {}
     )
     player_renderer: dict[str, Any] = (
-        multi_get(
-            player_response_info, "microformat", "playerMicroformatRenderer"
-        )
+        multi_get(player_response_info, "microformat", "playerMicroformatRenderer")
         or {}
     )
-    live_details: dict[str, Any] = (
-        player_renderer.get("liveBroadcastDetails") or {}
-    )
-    video_details: dict[str, Any] = (
-        player_response_info.get("videoDetails") or {}
-    )
+    live_details: dict[str, Any] = player_renderer.get("liveBroadcastDetails") or {}
+    video_details: dict[str, Any] = player_response_info.get("videoDetails") or {}
 
     pr_video_id = video_details.get("videoId")
     if pr_video_id and pr_video_id != video_id and video_type != "clip":

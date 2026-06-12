@@ -46,9 +46,7 @@ def test_user_router_dispatches_supported_user_types() -> None:
     router = _DummyUserRouter()
     request = ChatRequest(url="https://www.youtube.com/@example/live")
 
-    assert router._get_chat_by_user(
-        _DummyMatch("abc", "channel/"), request
-    ) == (
+    assert router._get_chat_by_user(_DummyMatch("abc", "channel/"), request) == (
         "channel",
         "abc",
         request,
@@ -136,10 +134,7 @@ def test_channel_discovery_mixin_passes_none_params_without_coercion(
         fake_get_user_videos,
     )
 
-    assert (
-        list(DummyDiscovery().get_user_videos(channel_id="abc", params=None))
-        == []
-    )
+    assert list(DummyDiscovery().get_user_videos(channel_id="abc", params=None)) == []
     assert captured[0][1]["params"] is None
 
 
@@ -199,11 +194,7 @@ def test_get_user_videos_raises_no_videos_when_selected_tab_mismatch(
     )
 
     with pytest.raises(NoVideos, match="has no videos of the requested type"):
-        list(
-            get_user_videos(
-                DummyDownloader(), channel_id="abc", video_type="videos"
-            )
-        )
+        list(get_user_videos(DummyDownloader(), channel_id="abc", video_type="videos"))
 
 
 def test_get_user_videos_returns_empty_when_no_selected_tab_has_content(
@@ -224,18 +215,14 @@ def test_get_user_videos_returns_empty_when_no_selected_tab_has_content(
                                 "tabRenderer": {
                                     "selected": False,
                                     "title": "Videos",
-                                    "content": {
-                                        "richGridRenderer": {"contents": []}
-                                    },
+                                    "content": {"richGridRenderer": {"contents": []}},
                                 },
                             },
                             {
                                 "tabRenderer": {
                                     "selected": False,
                                     "title": "Shorts",
-                                    "content": {
-                                        "richGridRenderer": {"contents": []}
-                                    },
+                                    "content": {"richGridRenderer": {"contents": []}},
                                 },
                             },
                         ],
@@ -248,11 +235,7 @@ def test_get_user_videos_returns_empty_when_no_selected_tab_has_content(
     )
 
     assert (
-        list(
-            get_user_videos(
-                DummyDownloader(), channel_id="abc", video_type="videos"
-            )
-        )
+        list(get_user_videos(DummyDownloader(), channel_id="abc", video_type="videos"))
         == []
     )
 
@@ -285,7 +268,7 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
                                                     "richItemRenderer": {
                                                         "content": {
                                                             "videoRenderer": {
-                                                                "videoId": "one",  # noqa: E501
+                                                                "videoId": "one",
                                                             },
                                                         },
                                                     },
@@ -300,10 +283,10 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
                                                     },
                                                 },
                                                 {
-                                                    "continuationItemRenderer": {  # noqa: E501
-                                                        "continuationEndpoint": {  # noqa: E501
-                                                            "continuationCommand": {  # noqa: E501
-                                                                "token": "cont-1",  # noqa: E501
+                                                    "continuationItemRenderer": {
+                                                        "continuationEndpoint": {
+                                                            "continuationCommand": {
+                                                                "token": "cont-1",
                                                             },
                                                         },
                                                     },
@@ -331,9 +314,7 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
                         "continuationItems": [
                             {
                                 "richItemRenderer": {
-                                    "content": {
-                                        "videoRenderer": {"videoId": "two"}
-                                    },
+                                    "content": {"videoRenderer": {"videoId": "two"}},
                                 },
                             },
                         ],
@@ -353,8 +334,7 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_channels_runtime_iteration._parse_video",
         lambda video: {
-            "video_id": video.get("videoId")
-            or video["lockupViewModel"]["contentId"]
+            "video_id": video.get("videoId") or video["lockupViewModel"]["contentId"]
         },
     )
 
@@ -375,7 +355,7 @@ def test_get_user_videos_yields_items_from_initial_page_and_continuation(
     assert continuation_calls == [(request, "cont-1")]
 
 
-def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_response(  # noqa: E501
+def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_response(
     monkeypatch,
 ) -> None:
     class DummyPlaylistDiscovery(YouTubePlaylistDiscoveryMixin):
@@ -419,11 +399,7 @@ def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_r
         [
             {
                 "onResponseReceivedActions": [
-                    {
-                        "appendContinuationItemsAction": {
-                            "continuationItems": []
-                        }
-                    },
+                    {"appendContinuationItemsAction": {"continuationItems": []}},
                 ],
                 "continuationContents": {
                     "playlistVideoListContinuation": {
@@ -431,9 +407,7 @@ def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_r
                             {
                                 "continuationItemRenderer": {
                                     "continuationEndpoint": {
-                                        "continuationCommand": {
-                                            "token": "cont-2"
-                                        },
+                                        "continuationCommand": {"token": "cont-2"},
                                     },
                                 },
                             },
@@ -504,8 +478,8 @@ def test_get_testing_items_uses_live_playlist_and_delegates_playlist_loading(
                                                     "itemSectionRenderer": {
                                                         "contents": [
                                                             {
-                                                                "shelfRenderer": {  # noqa: E501
-                                                                    "endpoint": {  # noqa: E501
+                                                                "shelfRenderer": {
+                                                                    "endpoint": {
                                                                         "commandMetadata": {  # noqa: E501
                                                                             "webCommandMetadata": {  # noqa: E501
                                                                                 "url": "/playlist?list=PL123",  # noqa: E501
@@ -534,9 +508,7 @@ def test_get_testing_items_uses_live_playlist_and_delegates_playlist_loading(
     helpers = DummyDiscoveryHelpers()
 
     assert list(helpers._get_testing_items()) == [{"video_id": "abc123"}]
-    assert helpers.playlist_urls == [
-        "https://www.youtube.com/playlist?list=PL123"
-    ]
+    assert helpers.playlist_urls == ["https://www.youtube.com/playlist?list=PL123"]
 
 
 def test_get_testing_items_finds_playlist_url_without_section_list_renderer(
@@ -569,7 +541,7 @@ def test_get_testing_items_finds_playlist_url_without_section_list_renderer(
                                                         "content": {
                                                             "shelfRenderer": {
                                                                 "endpoint": {
-                                                                    "commandMetadata": {  # noqa: E501
+                                                                    "commandMetadata": {
                                                                         "webCommandMetadata": {  # noqa: E501
                                                                             "url": "/playlist?list=PL999",  # noqa: E501
                                                                         },
@@ -596,9 +568,7 @@ def test_get_testing_items_finds_playlist_url_without_section_list_renderer(
     helpers = DummyDiscoveryHelpers()
 
     assert list(helpers._get_testing_items()) == [{"video_id": "xyz789"}]
-    assert helpers.playlist_urls == [
-        "https://www.youtube.com/playlist?list=PL999"
-    ]
+    assert helpers.playlist_urls == ["https://www.youtube.com/playlist?list=PL999"]
 
 
 def test_get_testing_items_yields_direct_video_renderers_from_rich_shelf(
@@ -625,11 +595,11 @@ def test_get_testing_items_yields_direct_video_renderers_from_rich_shelf(
                                                 {
                                                     "richSectionRenderer": {
                                                         "content": {
-                                                            "richShelfRenderer": {  # noqa: E501
+                                                            "richShelfRenderer": {
                                                                 "contents": [
                                                                     {
                                                                         "richItemRenderer": {  # noqa: E501
-                                                                            "content": {  # noqa: E501
+                                                                            "content": {
                                                                                 "videoRenderer": {  # noqa: E501
                                                                                     "videoId": "one",  # noqa: E501
                                                                                 },
@@ -638,7 +608,7 @@ def test_get_testing_items_yields_direct_video_renderers_from_rich_shelf(
                                                                     },
                                                                     {
                                                                         "richItemRenderer": {  # noqa: E501
-                                                                            "content": {  # noqa: E501
+                                                                            "content": {
                                                                                 "videoRenderer": {  # noqa: E501
                                                                                     "videoId": "two",  # noqa: E501
                                                                                 },
@@ -647,7 +617,7 @@ def test_get_testing_items_yields_direct_video_renderers_from_rich_shelf(
                                                                     },
                                                                     {
                                                                         "richItemRenderer": {  # noqa: E501
-                                                                            "content": {  # noqa: E501
+                                                                            "content": {
                                                                                 "videoRenderer": {  # noqa: E501
                                                                                     "videoId": "one",  # noqa: E501
                                                                                 },
@@ -696,9 +666,7 @@ def test_get_rendered_content_extracts_selected_tab_content() -> None:
                                         "contents": [
                                             {
                                                 "itemSectionRenderer": {
-                                                    "contents": [
-                                                        {"target": "value"}
-                                                    ],
+                                                    "contents": [{"target": "value"}],
                                                 },
                                             },
                                         ],
@@ -786,9 +754,7 @@ def test_playlist_discovery_accepts_none_params_without_continuation(
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
-        lambda _yt_info, tab_index=0: {
-            "playlistVideoListRenderer": {"contents": []}
-        },
+        lambda _yt_info, tab_index=0: {"playlistVideoListRenderer": {"contents": []}},
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",
@@ -960,9 +926,7 @@ def test_youtube_discovery_supports_non_channel_selectors(monkeypatch) -> None:
                                 "tabRenderer": {
                                     "selected": True,
                                     "title": "Videos",
-                                    "content": {
-                                        "richGridRenderer": {"contents": []}
-                                    },
+                                    "content": {"richGridRenderer": {"contents": []}},
                                 },
                             },
                         ],
@@ -983,10 +947,7 @@ def test_youtube_discovery_supports_non_channel_selectors(monkeypatch) -> None:
     )
 
     assert list(get_user_videos(DummyDownloader(), user_id="user123")) == []
-    assert (
-        list(get_user_videos(DummyDownloader(), custom_username="creator"))
-        == []
-    )
+    assert list(get_user_videos(DummyDownloader(), custom_username="creator")) == []
     assert list(get_user_videos(DummyDownloader(), handle="name")) == []
     assert seen_urls == [
         "https://www.youtube.com/user/user123/videos",
@@ -1022,10 +983,10 @@ def test_youtube_discovery_breaks_on_continuation_loop(monkeypatch) -> None:
                                         "richGridRenderer": {
                                             "contents": [
                                                 {
-                                                    "continuationItemRenderer": {  # noqa: E501
-                                                        "continuationEndpoint": {  # noqa: E501
-                                                            "continuationCommand": {  # noqa: E501
-                                                                "token": "loop-token",  # noqa: E501
+                                                    "continuationItemRenderer": {
+                                                        "continuationEndpoint": {
+                                                            "continuationCommand": {
+                                                                "token": "loop-token",
                                                             },
                                                         },
                                                     },

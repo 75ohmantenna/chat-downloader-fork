@@ -171,10 +171,7 @@ def test_configure_formatter_prefers_timestamp_variants_for_youtube_live(
     configure_formatter(site_default_chat, "formats/custom.txt", "youtube")
 
     assert default_chat.format({"message_type": "text_message"}) == "formatted"
-    assert (
-        site_default_chat.format({"message_type": "text_message"})
-        == "formatted"
-    )
+    assert site_default_chat.format({"message_type": "text_message"}) == "formatted"
     assert formatter_calls == [
         (
             "formats/custom.txt",
@@ -280,9 +277,7 @@ def test_build_output_writer_copies_request_output_settings() -> None:
         overwrite=False,
     )
 
-    writer = build_output_writer(
-        "chat.jsonl", request, writer_factory=_FakeWriter
-    )
+    writer = build_output_writer("chat.jsonl", request, writer_factory=_FakeWriter)
 
     assert writer.output_file == "chat.jsonl"
     assert writer.sort_keys is False

@@ -224,9 +224,7 @@ def test_advance_continuation_loop_updates_state_and_sleeps(
     assert _advance_continuation_loop(ctx, {"responseContext": {}}) is True
     assert ctx.loop_state is next_state
     assert sleep_calls == [0.5]
-    assert any(
-        "Sleeping for 500ms." in str(message) for _level, message in logs
-    )
+    assert any("Sleeping for 500ms." in str(message) for _level, message in logs)
 
 
 def test_advance_continuation_loop_applies_min_floor_for_live_stream(
@@ -345,9 +343,7 @@ def test_chat_iteration_rejects_missing_initial_continuation() -> None:
         )
 
 
-def test_build_continuation_params_includes_live_player_offset_when_available() -> (  # noqa: E501
-    None
-):
+def test_build_continuation_params_includes_live_player_offset_when_available() -> None:
     params = build_continuation_params(
         {"client": {"visitorData": "visitor"}},
         ContinuationLoopState(
@@ -381,9 +377,7 @@ def test_build_continuation_params_clamps_small_player_offset_to_zero() -> None:
     assert params["currentPlayerState"] == {"playerOffsetMs": 0}
 
 
-def test_build_continuation_params_omits_player_offset_when_unavailable() -> (
-    None
-):
+def test_build_continuation_params_omits_player_offset_when_unavailable() -> None:
     params = build_continuation_params(
         {"client": {"visitorData": "visitor"}},
         ContinuationLoopState(continuation="live-token"),
@@ -398,15 +392,10 @@ def test_build_continuation_params_omits_player_offset_when_unavailable() -> (
 
 def test_derive_live_offset_milliseconds_returns_non_negative_value() -> None:
     message = {"timestamp": 6_000_000}
-    assert (
-        derive_live_offset_milliseconds(message, live_start_time_ms=1000)
-        == 5000
-    )
+    assert derive_live_offset_milliseconds(message, live_start_time_ms=1000) == 5000
 
 
-def test_derive_live_offset_milliseconds_returns_none_without_timestamp() -> (
-    None
-):
+def test_derive_live_offset_milliseconds_returns_none_without_timestamp() -> None:
     assert derive_live_offset_milliseconds({}, live_start_time_ms=1000) is None
 
 
@@ -778,7 +767,7 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     ]
 
 
-def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailable(  # noqa: E501
+def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailable(
     monkeypatch,
 ) -> None:
     downloader = _DummyDownloader()
@@ -875,7 +864,7 @@ def test_chat_iteration_raises_when_live_chat_continuation_is_missing(
         )
 
 
-def test_chat_iteration_returns_immediately_when_action_processing_requests_stop(  # noqa: E501
+def test_chat_iteration_returns_immediately_when_action_processing_requests_stop(
     monkeypatch,
 ) -> None:
     downloader = _DummyDownloader()
@@ -900,9 +889,7 @@ def test_chat_iteration_returns_immediately_when_action_processing_requests_stop
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
         lambda *_args, **_kwargs: {
-            "continuationContents": {
-                "liveChatContinuation": {"actions": [{"id": 1}]}
-            }
+            "continuationContents": {"liveChatContinuation": {"actions": [{"id": 1}]}}
         },
     )
     monkeypatch.setattr(
@@ -1071,9 +1058,7 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
                 "responseContext": {},
             },
             {
-                "continuationContents": {
-                    "liveChatContinuation": {"actions": []}
-                },
+                "continuationContents": {"liveChatContinuation": {"actions": []}},
                 "responseContext": {},
             },
         ],
@@ -1149,9 +1134,9 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
             "client": {
                 "visitorData": "visitor",
                 "clientName": "WEB",
-                "clientVersion": REQUEST_PROFILE_INNERTUBE_CONTEXTS[
-                    "youtube_web"
-                ]["client"]["clientVersion"],
+                "clientVersion": REQUEST_PROFILE_INNERTUBE_CONTEXTS["youtube_web"][
+                    "client"
+                ]["clientVersion"],
                 "hl": "en",
                 "timeZone": "UTC",
                 "utcOffsetMinutes": 0,
@@ -1164,9 +1149,9 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
             "client": {
                 "visitorData": "visitor",
                 "clientName": "WEB",
-                "clientVersion": REQUEST_PROFILE_INNERTUBE_CONTEXTS[
-                    "youtube_web"
-                ]["client"]["clientVersion"],
+                "clientVersion": REQUEST_PROFILE_INNERTUBE_CONTEXTS["youtube_web"][
+                    "client"
+                ]["clientVersion"],
                 "hl": "en",
                 "timeZone": "UTC",
                 "utcOffsetMinutes": 0,
@@ -1199,9 +1184,7 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
                 "responseContext": {},
             },
             {
-                "continuationContents": {
-                    "liveChatContinuation": {"actions": []}
-                },
+                "continuationContents": {"liveChatContinuation": {"actions": []}},
                 "responseContext": {},
             },
         ],
@@ -1298,9 +1281,7 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
     assert end_page_calls == ["end"]
 
 
-def test_user_chat_lookup_skips_ignored_and_non_live_videos_before_yield() -> (
-    None
-):
+def test_user_chat_lookup_skips_ignored_and_non_live_videos_before_yield() -> None:
     class DummyChat:
         def __init__(self, video_id: str) -> None:
             self.chat = iter([{"message": "hello"}])
@@ -1344,9 +1325,7 @@ def test_user_chat_lookup_skips_ignored_and_non_live_videos_before_yield() -> (
     )
     downloader = DummyUsers()
 
-    chat_item = downloader._get_chat_by_user_args(
-        {"handle": "example"}, request
-    )
+    chat_item = downloader._get_chat_by_user_args({"handle": "example"}, request)
 
     assert next(chat_item.chat) == {"message": "hello"}
     assert chat_item.title == "Target"

@@ -95,9 +95,7 @@ def test_continuation_retries_on_rate_limit_fixture() -> None:
         {"max_attempts": 2},
         json={"continuation": "tok"},
     )
-    assert result == {
-        "continuationContents": {"liveChatContinuation": {"actions": []}}
-    }
+    assert result == {"continuationContents": {"liveChatContinuation": {"actions": []}}}
     assert calls["count"] == 2
 
 
@@ -153,9 +151,7 @@ def test_continuation_retries_on_forbidden_fixture() -> None:
         {"max_attempts": 2},
         json={"continuation": "tok"},
     )
-    assert result == {
-        "continuationContents": {"liveChatContinuation": {"actions": []}}
-    }
+    assert result == {"continuationContents": {"liveChatContinuation": {"actions": []}}}
     assert calls["count"] == 2
 
 
@@ -241,9 +237,7 @@ def test_recv_loop_handles_socket_timeout_silently() -> None:
 
     collected = []
     with pytest.raises(ConnectionError):
-        collected.extend(
-            get_chat_messages_by_stream_id(irc, "testchan", params)
-        )
+        collected.extend(get_chat_messages_by_stream_id(irc, "testchan", params))
 
     # No messages were parsed (the timeout buffer had no IRC content).
     assert collected == []

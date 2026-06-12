@@ -28,9 +28,7 @@ def test_builder_functions_return_expected_top_level_keys() -> None:
     assert build_game_remapping()["boxArtURL"] == "box_art_url"
     assert build_comment_remapping()["id"] == "message_id"
     assert build_clip_remapping()["viewCount"] == "views"
-    assert (
-        build_video_remapping()["resourceRestriction"] == "resource_restriction"
-    )
+    assert build_video_remapping()["resourceRestriction"] == "resource_restriction"
 
 
 def test_message_param_remapping_converts_selected_fields() -> None:
@@ -54,9 +52,7 @@ def test_message_param_remapping_converts_selected_fields() -> None:
     assert info["profile_image_url"] == "https://example.invalid/p.png"
 
 
-def test_irc_remapping_decodes_selected_boolean_numeric_and_text_fields() -> (
-    None
-):
+def test_irc_remapping_decodes_selected_boolean_numeric_and_text_fields() -> None:
     info = Remapper.remap_dict(
         {
             "ban-duration": "600",
@@ -77,9 +73,7 @@ def test_irc_remapping_decodes_selected_boolean_numeric_and_text_fields() -> (
     assert info["timestamp"] == 42000
 
 
-def test_irc_remapping_captures_badges_and_message_colors_and_notice_type() -> (
-    None
-):
+def test_irc_remapping_captures_badges_and_message_colors_and_notice_type() -> None:
     """Notice messages keep raw badge/color fields while decoding text."""
     info = Remapper.remap_dict(
         {

@@ -150,9 +150,7 @@ def test_get_user_videos_raises_user_not_found_on_empty_user_id() -> None:
         next(gen)
 
 
-def test_get_chat_messages_by_vod_id_uses_scalar_offset_for_first_page() -> (
-    None
-):
+def test_get_chat_messages_by_vod_id_uses_scalar_offset_for_first_page() -> None:
     calls = {}
 
     def download_gql_func(query):
@@ -192,7 +190,7 @@ def test_get_chat_messages_by_vod_id_prefers_cursor_over_offset() -> None:
     assert "contentOffsetSeconds" not in calls["query"][0]["variables"]
 
 
-def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric() -> (  # noqa: E501
+def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric() -> (
     None
 ):
     readbuffer = (
@@ -200,7 +198,7 @@ def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric
         "PONG :tmi.twitch.tv\r\n"
         ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n"  # noqa: E501
         ":tmi.twitch.tv 001 justinfan67420 :Welcome, GLHF!\r\n"
-        ":justinfan67420.tmi.twitch.tv 353 justinfan67420 = #idubbbz :foo bar baz\r\n"  # noqa: E501
+        ":justinfan67420.tmi.twitch.tv 353 justinfan67420 = #idubbbz :foo bar baz\r\n"
         ":user!user@user.tmi.twitch.tv JOIN #idubbbz\r\n"
         ":user!user@user.tmi.twitch.tv PART #idubbbz\r\n"
     )

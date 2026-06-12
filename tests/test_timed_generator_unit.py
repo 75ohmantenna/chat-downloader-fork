@@ -33,7 +33,7 @@ def test_timed_generator_keyboard_interrupt_no_timers_propagates() -> None:
         next(tg)
 
 
-def test_timed_generator_timeout_path_raises_stop_iteration_and_calls_callback() -> (  # noqa: E501
+def test_timed_generator_timeout_path_raises_stop_iteration_and_calls_callback() -> (
     None
 ):
     called = []
@@ -60,7 +60,7 @@ def test_timed_generator_timeout_path_raises_stop_iteration_and_calls_callback()
     assert tg.timer.cancelled is True
 
 
-def test_timed_generator_ignores_stale_timeout_thread_when_item_arrives_in_time() -> (  # noqa: E501
+def test_timed_generator_ignores_stale_timeout_thread_when_item_arrives_in_time() -> (
     None
 ):
     def gen():

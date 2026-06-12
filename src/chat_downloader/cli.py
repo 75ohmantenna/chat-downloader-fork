@@ -49,8 +49,7 @@ def _install_cli_signal_handlers() -> None:
         state["triggered"] = True
         log(
             "info",
-            f"Signal {signum} received; finalizing output "
-            "(send again to force exit).",
+            f"Signal {signum} received; finalizing output (send again to force exit).",
         )
         raise KeyboardInterrupt
 

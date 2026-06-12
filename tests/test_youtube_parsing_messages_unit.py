@@ -11,16 +11,14 @@ def test_get_source_image_url_strips_query_params() -> None:
         yt_messages._get_source_image_url("https://yt3.ggpht.com/abc=s32-c-k")
         == "https://yt3.ggpht.com/abc"
     )
-    assert yt_messages._get_source_image_url(
+    assert yt_messages._get_source_image_url("https://example.com/no_params") == (
         "https://example.com/no_params"
-    ) == ("https://example.com/no_params")
+    )
 
 
 def test_parse_youtube_link_variants() -> None:
     assert (
-        yt_messages._parse_youtube_link(
-            "/redirect?q=https%3A%2F%2Fexample.com%2Fhello"
-        )
+        yt_messages._parse_youtube_link("/redirect?q=https%3A%2F%2Fexample.com%2Fhello")
         == "https://example.com/hello"
     )
     assert (
@@ -96,9 +94,7 @@ def test_parse_runs_plain_text_links_and_emoji() -> None:
 
 def test_parse_thumbnails_list_dict_and_invalid_inputs() -> None:
     thumbs = {
-        "thumbnails": [
-            {"url": "https://img.example/x=s32", "width": 32, "height": 32}
-        ],
+        "thumbnails": [{"url": "https://img.example/x=s32", "width": 32, "height": 32}],
     }
     parsed = yt_messages._parse_thumbnails(thumbs)
     assert parsed[0]["id"] == "source"

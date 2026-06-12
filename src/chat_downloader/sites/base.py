@@ -190,9 +190,7 @@ class BaseChatDownloader:
             rest=rest,
         )
 
-    def get_cookie_value(
-        self, name: str, default: str | None = None
-    ) -> str | None:
+    def get_cookie_value(self, name: str, default: str | None = None) -> str | None:
         """Return the value of cookie ``name``, or ``default`` if absent."""
         return get_session_cookie_value(self, name, default)
 

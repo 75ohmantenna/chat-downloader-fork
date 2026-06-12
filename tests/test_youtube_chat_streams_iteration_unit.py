@@ -176,9 +176,7 @@ def test_attempt_profile_fallback_returns_false_when_no_next_profile(
         ".chat_streams_runtime_iteration.get_next_request_profile",
         lambda profile, site: None,
     )
-    self_ = SimpleNamespace(
-        _auto_profile_fallback=True, _request_profile="default"
-    )
+    self_ = SimpleNamespace(_auto_profile_fallback=True, _request_profile="default")
     assert _attempt_profile_fallback(self_) is False  # type: ignore[arg-type]
 
 

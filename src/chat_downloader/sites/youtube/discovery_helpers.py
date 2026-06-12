@@ -110,9 +110,7 @@ class YouTubeDiscoveryHelpersMixin:
             _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
 
-        tabs = yt_initial_data["contents"]["twoColumnBrowseResultsRenderer"][
-            "tabs"
-        ]
+        tabs = yt_initial_data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"]
         tab_content = tabs[0]["tabRenderer"]["content"]
 
         yielded_video_ids: set[str] = set()
@@ -140,9 +138,7 @@ class YouTubeDiscoveryHelpersMixin:
         if params is None:
             request = None
         else:
-            request = cast("YouTubeDownloaderProto", self)._coerce_chat_request(
-                params
-            )
+            request = cast("YouTubeDownloaderProto", self)._coerce_chat_request(params)
         yield from get_user_videos(
             self,
             channel_id=channel_id,

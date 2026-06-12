@@ -14,9 +14,7 @@ from chat_downloader.sites.youtube.message_pipeline import (
     process_pipeline_action,
 )
 
-_FIXTURE_DIR = (
-    Path(__file__).resolve().parent / "fixtures" / "youtube" / "live_events"
-)
+_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "youtube" / "live_events"
 
 
 def _load_fixture(name: str) -> list[dict]:
@@ -29,9 +27,7 @@ def _load_payload(name: str) -> dict:
     return json.loads((_FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
-def test_shu_live_event_fixture_covers_paid_membership_and_ticker_paths() -> (
-    None
-):
+def test_shu_live_event_fixture_covers_paid_membership_and_ticker_paths() -> None:
     items = _load_fixture("youtube-shu-pokopia-10m-events.json")
 
     message_types = {item["message_type"] for item in items}
@@ -44,17 +40,13 @@ def test_shu_live_event_fixture_covers_paid_membership_and_ticker_paths() -> (
         "viewer_engagement_message",
     }
 
-    paid = next(
-        item for item in items if item["message_type"] == "paid_message"
-    )
+    paid = next(item for item in items if item["message_type"] == "paid_message")
     assert paid["money"]["currency"] == "JPY"
     assert paid["money"]["text"] == "\u00a55,000"
     assert paid["time_text"] == "9:44"
 
     ticker_paid = next(
-        item
-        for item in items
-        if item["message_type"] == "ticker_paid_message_item"
+        item for item in items if item["message_type"] == "ticker_paid_message_item"
     )
     assert ticker_paid["ticker_duration"] == 1800
     assert ticker_paid["message_id"] == paid["message_id"]
@@ -73,9 +65,7 @@ def test_shu_live_event_fixture_covers_paid_membership_and_ticker_paths() -> (
     assert null_membership["header_secondary_text"] == "Welcome to Yaminions!"
 
 
-def test_crimson_live_event_fixture_covers_banner_moderation_and_engagement() -> (  # noqa: E501
-    None
-):
+def test_crimson_live_event_fixture_covers_banner_moderation_and_engagement() -> None:
     items = _load_fixture("youtube-shapy-crimson-desert-10m-events.json")
 
     assert [item["message_type"] for item in items] == [
@@ -99,9 +89,7 @@ def test_crimson_live_event_fixture_covers_banner_moderation_and_engagement() ->
     assert "community guidelines" in engagement["message"]
 
 
-def test_IzopCEgh2G8_first_live_poll_fixture_parses_text_and_summary_banner() -> (  # noqa: E501
-    None
-):
+def test_IzopCEgh2G8_first_live_poll_fixture_parses_text_and_summary_banner() -> None:
     payload = _load_payload("youtube-IzopCEgh2G8-live-chat-first.json")
     result = parse_continuation_response(payload)
     all_filter = MessageFilter(

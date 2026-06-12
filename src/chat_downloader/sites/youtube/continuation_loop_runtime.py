@@ -26,9 +26,7 @@ def build_continuation_params(
     context: dict[str, Any] = dict(innertube_context)
 
     if state.click_tracking_params:
-        context["clickTracking"] = {
-            "clickTrackingParams": state.click_tracking_params
-        }
+        context["clickTracking"] = {"clickTrackingParams": state.click_tracking_params}
 
     params: dict[str, Any] = {
         "context": context,
@@ -48,9 +46,7 @@ def build_continuation_params(
 
 def extract_visitor_data(yt_info: dict[str, Any]) -> str | None:
     """Extract the ``visitorData`` token from an API response."""
-    visitor_data: str | None = multi_get(
-        yt_info, "responseContext", "visitorData"
-    )
+    visitor_data: str | None = multi_get(yt_info, "responseContext", "visitorData")
     return visitor_data
 
 
@@ -101,9 +97,7 @@ def update_state_from_result(
     if cont_result.next_continuation is None:
         return state
 
-    cont_entry: dict[str, Any] = (
-        cont_result.debug_info.get("continuation_entry") or {}
-    )
+    cont_entry: dict[str, Any] = cont_result.debug_info.get("continuation_entry") or {}
     click_tracking = cont_entry.get("clickTrackingParams") or cont_entry.get(
         "trackingParams",
     )

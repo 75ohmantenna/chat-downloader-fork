@@ -26,9 +26,7 @@ def test_create_session_reuses_cached_session_and_copies_cookie_jar() -> None:
     owner = SimpleNamespace(
         config=SimpleNamespace(as_dict=dict),
         sessions={},
-        _cookie_jar=[
-            build_cookie(domain=".example.com", name="sid", value="abc")
-        ],
+        _cookie_jar=[build_cookie(domain=".example.com", name="sid", value="abc")],
     )
 
     class FakeSite(BaseChatDownloader):
@@ -114,16 +112,11 @@ def test_get_cookie_value_falls_back_to_existing_sessions() -> None:
         sessions={"Site": session},
     )
 
-    assert (
-        get_session_cookie_value(owner, "sid", default="missing")
-        == "from-session"
-    )
+    assert get_session_cookie_value(owner, "sid", default="missing") == "from-session"
     session.get_cookie_value.assert_called_once_with("sid", default=None)
 
 
-def test_clear_all_cookies_and_close_sessions_delegate_to_all_sessions() -> (
-    None
-):
+def test_clear_all_cookies_and_close_sessions_delegate_to_all_sessions() -> None:
     session = MagicMock()
     owner = SimpleNamespace(
         _cookie_jar=MagicMock(),
@@ -166,8 +159,7 @@ def test_close_sessions_continues_and_logs_if_a_close_fails() -> None:
     good_session.close.assert_called_once_with()
     failing_session.close.assert_called_once_with()
     assert any(
-        level == "warning" and "session failed" in message
-        for level, message in logs
+        level == "warning" and "session failed" in message for level, message in logs
     )
 
 
@@ -195,9 +187,7 @@ def test_create_session_rejects_base_session_class() -> None:
 
 def test_create_session_overwrite_replaces_existing_session() -> None:
     owner = SimpleNamespace(
-        config=SimpleNamespace(
-            as_dict=lambda: {"headers": {"User-Agent": "UA"}}
-        ),
+        config=SimpleNamespace(as_dict=lambda: {"headers": {"User-Agent": "UA"}}),
         sessions={},
         _cookie_jar=[],
     )
@@ -232,9 +222,7 @@ def test_create_session_overwrite_warns_and_replaces_when_existing_close_fails(
 ) -> None:
     logs: list[tuple[str, str]] = []
     owner = SimpleNamespace(
-        config=SimpleNamespace(
-            as_dict=lambda: {"headers": {"User-Agent": "UA"}}
-        ),
+        config=SimpleNamespace(as_dict=lambda: {"headers": {"User-Agent": "UA"}}),
         sessions={},
         _cookie_jar=[],
     )

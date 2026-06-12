@@ -14,14 +14,12 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch import live_service
 
 
-def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (  # noqa: E501
+def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (
     None
 ):
     first_irc = Mock()
     second_irc = Mock()
-    irc_factory = Mock(
-        side_effect=[OSError("temporary"), first_irc, second_irc]
-    )
+    irc_factory = Mock(side_effect=[OSError("temporary"), first_irc, second_irc])
     downloader = SimpleNamespace(
         badge_cache=SimpleNamespace(snapshot=dict),
         _update_badge_info=Mock(),
@@ -75,9 +73,7 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
     mock_debug_log.assert_called_once()
 
 
-def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> (  # noqa: E501
-    None
-):
+def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> None:
     irc = Mock()
     downloader = SimpleNamespace(
         badge_cache=SimpleNamespace(snapshot=dict),
@@ -114,7 +110,7 @@ def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -
     mock_log.assert_any_call("debug", "Total number of messages: 250")
 
 
-def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message() -> (  # noqa: E501
+def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message() -> (
     None
 ):
     first_irc = Mock()
@@ -156,9 +152,7 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
     )
 
 
-def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> (  # noqa: E501
-    None
-):
+def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> None:
     irc = Mock()
     downloader = SimpleNamespace(
         badge_cache=SimpleNamespace(snapshot=dict),
@@ -259,7 +253,7 @@ def test_live_service_get_chat_by_stream_id_rejects_zero_attempts() -> None:
         ChatRequest(url="https://www.twitch.tv/missing-channel", max_attempts=0)
 
 
-def test_live_service_get_chat_by_stream_id_retries_then_raises_user_not_found() -> (  # noqa: E501
+def test_live_service_get_chat_by_stream_id_retries_then_raises_user_not_found() -> (
     None
 ):
     downloader = SimpleNamespace(
@@ -278,9 +272,7 @@ def test_live_service_get_chat_by_stream_id_retries_then_raises_user_not_found()
         live_service.get_chat_by_stream_id(
             cast("Any", downloader),
             "missing-channel",
-            ChatRequest(
-                url="https://www.twitch.tv/missing-channel", max_attempts=2
-            ),
+            ChatRequest(url="https://www.twitch.tv/missing-channel", max_attempts=2),
         )
 
     downloader.retry.assert_called_once()
@@ -312,9 +304,7 @@ def test_live_service_get_chat_by_stream_id_marks_offline_stream_upcoming(
         chat = live_service.get_chat_by_stream_id(
             cast("Any", downloader),
             "offline-channel",
-            ChatRequest(
-                url="https://www.twitch.tv/offline-channel", max_attempts=1
-            ),
+            ChatRequest(url="https://www.twitch.tv/offline-channel", max_attempts=1),
         )
 
     assert chat.title == "offline-channel"
@@ -428,21 +418,14 @@ def test_is_duplicate_live_message_evicts_oldest_seen_message() -> None:
     oldest = "message-0"
     seen_message_cache = live_service._SeenMessageCache(limit=2)
 
-    assert (
-        live_service._is_duplicate_live_message(oldest, seen_message_cache)
-        is False
-    )
-    assert (
-        live_service._is_duplicate_live_message(oldest, seen_message_cache)
-        is True
-    )
+    assert live_service._is_duplicate_live_message(oldest, seen_message_cache) is False
+    assert live_service._is_duplicate_live_message(oldest, seen_message_cache) is True
     assert (
         live_service._is_duplicate_live_message("message-1", seen_message_cache)
         is False
     )
     assert (
-        live_service._is_duplicate_live_message("newest", seen_message_cache)
-        is False
+        live_service._is_duplicate_live_message("newest", seen_message_cache) is False
     )
     assert oldest not in seen_message_cache.message_ids
     assert "newest" in seen_message_cache.message_ids

@@ -21,11 +21,7 @@ _DEFAULT_FALLBACK_PROFILE = "youtube_web"
 
 
 def _fallback_profile(profile_name: object) -> str:
-    return (
-        profile_name
-        if isinstance(profile_name, str)
-        else _DEFAULT_FALLBACK_PROFILE
-    )
+    return profile_name if isinstance(profile_name, str) else _DEFAULT_FALLBACK_PROFILE
 
 
 def _fallback_context(profile_name: object) -> dict[str, Any]:

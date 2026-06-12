@@ -34,7 +34,7 @@ def test_replay_service_get_chat_by_vod_id_raises_when_video_missing() -> None:
     downloader._update_badge_info.assert_not_called()
 
 
-def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page() -> (  # noqa: E501
+def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page() -> (
     None
 ):
     downloader = SimpleNamespace(
@@ -78,7 +78,7 @@ def test_replay_service_iter_vod_chat_messages_rejects_zero_attempts() -> None:
         )
 
 
-def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_stop() -> (  # noqa: E501
+def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_stop() -> (
     None
 ):
     downloader = SimpleNamespace(
@@ -146,12 +146,8 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
         patch.object(
             _replay_vod_loop, "TimeRangeFilter", return_value=fake_time_filter
         ),
-        patch.object(
-            _replay_vod_loop, "MessageFilter", return_value=fake_msg_filter
-        ),
-        patch.object(
-            replay_service, "_parse_item", side_effect=parsed_messages
-        ),
+        patch.object(_replay_vod_loop, "MessageFilter", return_value=fake_msg_filter),
+        patch.object(replay_service, "_parse_item", side_effect=parsed_messages),
         patch.object(
             replay_service,
             "build_known_comment_keys",
@@ -173,9 +169,7 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
     mock_debug_log.assert_called_once()
 
 
-def test_replay_service_iter_vod_chat_messages_logs_count_on_completed_page() -> (  # noqa: E501
-    None
-):
+def test_replay_service_iter_vod_chat_messages_logs_count_on_completed_page() -> None:
     downloader = SimpleNamespace(
         _session_post=Mock(),
         _download_gql=Mock(),
@@ -269,9 +263,7 @@ def test_replay_service_get_chat_by_vod_id_rejects_zero_attempts() -> None:
         ChatRequest(url="https://www.twitch.tv/videos/123", max_attempts=0)
 
 
-def test_replay_service_get_chat_by_clip_id_raises_when_replay_missing() -> (
-    None
-):
+def test_replay_service_get_chat_by_clip_id_raises_when_replay_missing() -> None:
     downloader = SimpleNamespace(
         _download_base_gql=Mock(
             return_value={
@@ -292,9 +284,7 @@ def test_replay_service_get_chat_by_clip_id_raises_when_replay_missing() -> (
         replay_service.get_chat_by_clip_id(
             cast("Any", downloader),
             "expired-clip",
-            ChatRequest(
-                url="https://clips.twitch.tv/expired-clip", max_attempts=1
-            ),
+            ChatRequest(url="https://clips.twitch.tv/expired-clip", max_attempts=1),
         )
 
     downloader._update_badge_info.assert_not_called()

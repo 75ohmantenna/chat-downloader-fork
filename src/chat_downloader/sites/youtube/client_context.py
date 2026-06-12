@@ -34,9 +34,7 @@ def _generate_headers(
     """Generate headers for YouTube API requests."""
     headers = {
         "origin": yt_home,
-        "x-youtube-client-name": str(
-            ytcfg.get("INNERTUBE_CONTEXT_CLIENT_NAME")
-        ),
+        "x-youtube-client-name": str(ytcfg.get("INNERTUBE_CONTEXT_CLIENT_NAME")),
         "x-youtube-client-version": str(ytcfg.get("INNERTUBE_CLIENT_VERSION")),
         "x-origin": yt_home,
         "x-goog-authuser": "0",
@@ -54,9 +52,7 @@ def _generate_headers(
     if account_syncid or session_index:
         headers["x-goog-authuser"] = str(session_index or 0)
 
-    visitor_data = multi_get(
-        ytcfg, "INNERTUBE_CONTEXT", "client", "visitorData"
-    )
+    visitor_data = multi_get(ytcfg, "INNERTUBE_CONTEXT", "client", "visitorData")
     if visitor_data:
         headers["x-goog-visitor-id"] = visitor_data
 

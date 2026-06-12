@@ -31,9 +31,9 @@ def test_get_source_image_url_no_query_params() -> None:
 
 
 def test_parse_youtube_link_redirect_with_q_param() -> None:
-    assert _parse_youtube_link(
-        "/redirect?q=https://example.com&redir_token=xyz"
-    ) == ("https://example.com")
+    assert _parse_youtube_link("/redirect?q=https://example.com&redir_token=xyz") == (
+        "https://example.com"
+    )
 
 
 def test_parse_youtube_link_full_redirect_url() -> None:
@@ -43,9 +43,7 @@ def test_parse_youtube_link_full_redirect_url() -> None:
 
 
 def test_parse_youtube_link_protocol_relative() -> None:
-    assert (
-        _parse_youtube_link("//example.com/path") == "https://example.com/path"
-    )
+    assert _parse_youtube_link("//example.com/path") == "https://example.com/path"
 
 
 def test_parse_youtube_link_internal() -> None:
@@ -56,10 +54,7 @@ def test_parse_youtube_link_internal() -> None:
 
 
 def test_parse_youtube_link_normal() -> None:
-    assert (
-        _parse_youtube_link("https://example.com/page")
-        == "https://example.com/page"
-    )
+    assert _parse_youtube_link("https://example.com/page") == "https://example.com/page"
 
 
 def test_parse_navigation_endpoint_valid() -> None:

@@ -110,9 +110,7 @@ def test_str2bool_already_bool_false() -> None:
     assert not str2bool(False)
 
 
-@pytest.mark.parametrize(
-    "val", ["true", "yes", "t", "y", "1", "enable", "True", "YES"]
-)
+@pytest.mark.parametrize("val", ["true", "yes", "t", "y", "1", "enable", "True", "YES"])
 def test_str2bool_true_strings(val: str) -> None:
     assert str2bool(val)
 
@@ -346,9 +344,7 @@ def test_init_session_args_are_forwarded() -> None:
 
 
 def test_init_session_short_flags_are_forwarded() -> None:
-    d = _run_and_capture(
-        "-c", "/tmp/cookies.txt", "-p", "socks5://127.0.0.1:1080"
-    )
+    d = _run_and_capture("-c", "/tmp/cookies.txt", "-p", "socks5://127.0.0.1:1080")
     assert d.get("cookies") == "/tmp/cookies.txt"
     assert d.get("proxy") == "socks5://127.0.0.1:1080"
 
@@ -450,9 +446,7 @@ def test_all_cli_params_are_chat_request_fields() -> None:
 def test_all_chat_request_fields_are_in_cli() -> None:
     cr_fields = {f.name for f in dataclasses.fields(ChatRequest)}
     uncovered = cr_fields - _CLI_CHAT_PARAMS
-    assert uncovered == set(), (
-        f"ChatRequest fields missing from CLI: {uncovered}"
-    )
+    assert uncovered == set(), f"ChatRequest fields missing from CLI: {uncovered}"
 
 
 def test_cli_chat_params_match_expected_legacy_keys() -> None:
@@ -476,9 +470,7 @@ def test_cli_registration_fails_fast_without_dataclass_metadata(
         fake_build_field_info,
     )
 
-    with pytest.raises(
-        RuntimeError, match="no matching dataclass CLI metadata"
-    ):
+    with pytest.raises(RuntimeError, match="no matching dataclass CLI metadata"):
         main(["https://example.com/watch?v=fake"])
 
 

@@ -190,9 +190,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
         if first_iteration and info:
             creator_id = multi_get(info, "creator", "id")
             if creator_id == "":
-                msg = (
-                    f'Channel for VOD "{vod_id}" not found or has been deleted'
-                )
+                msg = f'Channel for VOD "{vod_id}" not found or has been deleted'
                 raise UserNotFound(
                     msg,
                 )
@@ -278,10 +276,7 @@ def get_chat_by_vod_id(
     )
 
     if not video:
-        msg = (
-            "Sorry. Unless you've got a time machine, that content is "
-            "unavailable."
-        )
+        msg = "Sorry. Unless you've got a time machine, that content is unavailable."
         raise VideoUnavailable(
             msg,
         )
@@ -344,9 +339,7 @@ def get_chat_by_clip_id(
     downloader._update_badge_info(multi_get(clip, "broadcaster", "login"))
 
     return Chat(
-        downloader._get_chat_messages_by_vod_id(
-            vod_id, request, duration, offset
-        ),
+        downloader._get_chat_messages_by_vod_id(vod_id, request, duration, offset),
         title=f"{clip.get('title')} ({clip_id})",
         duration=duration,
         status="past",

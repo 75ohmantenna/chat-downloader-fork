@@ -49,9 +49,7 @@ def test_writers() -> None:
                 assert os.stat(path).st_size > size
 
                 # Test file name formatting
-                formatting_path = os.path.join(
-                    tmp, f"{{id}}_{{title}}.{extension}"
-                )
+                formatting_path = os.path.join(tmp, f"{{id}}_{{title}}.{extension}")
                 chat = downloader.get_chat(
                     test_url,
                     max_messages=10,
@@ -59,6 +57,4 @@ def test_writers() -> None:
                 )
                 list(chat)  # Iterate over items
 
-                assert os.path.exists(
-                    chat._output_dispatcher.writers[0].file_name
-                )
+                assert os.path.exists(chat._output_dispatcher.writers[0].file_name)

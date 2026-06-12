@@ -29,9 +29,7 @@ from chat_downloader.utils.string_utils import (
         ("test123abc", r"\d+", {"group": 0}, "123"),
     ],
 )
-def test_regex_search(
-    text: str, pattern: str, kwargs: dict, expected: object
-) -> None:
+def test_regex_search(text: str, pattern: str, kwargs: dict, expected: object) -> None:
     assert regex_search(text, pattern, **kwargs) == expected
 
 

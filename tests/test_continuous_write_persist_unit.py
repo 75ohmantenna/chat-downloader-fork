@@ -86,9 +86,7 @@ def test_fsync_failure_is_swallowed(tmp_path: Path) -> None:
     path = tmp_path / "out.jsonl"
     writer = JsonLinesContinuousWriter(str(path))
     try:
-        writer._last_fsync_monotonic = (
-            time.monotonic() - _FSYNC_INTERVAL_SECONDS - 1
-        )
+        writer._last_fsync_monotonic = time.monotonic() - _FSYNC_INTERVAL_SECONDS - 1
         with patch.object(os, "fsync", side_effect=OSError("nope")):
             writer.write({"x": 1})  # must not raise
         # Subsequent writes still work.

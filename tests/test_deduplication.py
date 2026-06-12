@@ -66,16 +66,12 @@ def test_deduplication_in_formatted_output() -> None:
     chat.set_formatter(simple_format)
 
     # Create a temp file for output
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         temp_file = f.name
 
     try:
         # Attach a writer with lazy initialization
-        writer = ContinuousWriter(
-            temp_file, overwrite=True, lazy_initialise=True
-        )
+        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
         chat.attach_writer(writer)
 
         # Consume the chat
@@ -126,15 +122,11 @@ def test_no_deduplication_for_different_ids() -> None:
 
     chat.set_formatter(simple_format)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         temp_file = f.name
 
     try:
-        writer = ContinuousWriter(
-            temp_file, overwrite=True, lazy_initialise=True
-        )
+        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
         chat.attach_writer(writer)
 
         list(chat)  # Consume
@@ -178,15 +170,11 @@ def test_no_deduplication_for_non_superchat_types() -> None:
 
     chat.set_formatter(simple_format)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         temp_file = f.name
 
     try:
-        writer = ContinuousWriter(
-            temp_file, overwrite=True, lazy_initialise=True
-        )
+        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
         chat.attach_writer(writer)
 
         list(chat)  # Consume
@@ -230,15 +218,11 @@ def test_deduplication_with_membership_and_ticker() -> None:
 
     chat.set_formatter(simple_format)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         temp_file = f.name
 
     try:
-        writer = ContinuousWriter(
-            temp_file, overwrite=True, lazy_initialise=True
-        )
+        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
         chat.attach_writer(writer)
 
         list(chat)  # Consume
@@ -283,15 +267,11 @@ def test_messages_without_id_not_deduplicated() -> None:
 
     chat.set_formatter(simple_format)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         temp_file = f.name
 
     try:
-        writer = ContinuousWriter(
-            temp_file, overwrite=True, lazy_initialise=True
-        )
+        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
         chat.attach_writer(writer)
 
         list(chat)  # Consume
@@ -347,15 +327,11 @@ def test_superchat_dedup_cache_is_bounded() -> None:
 
     chat.set_formatter(simple_format)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         temp_file = f.name
 
     try:
-        writer = ContinuousWriter(
-            temp_file, overwrite=True, lazy_initialise=True
-        )
+        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
         chat.attach_writer(writer)
 
         list(chat)  # Consume
@@ -376,9 +352,7 @@ def test_superchat_dedup_cache_is_bounded() -> None:
 
 def test_superchat_dedup_cache_none_uses_default_limit() -> None:
     """Passing None should preserve default bounded-cache behavior."""
-    chat = Chat(
-        chat=iter(()), title="Test", id="test123", max_seen_message_ids=None
-    )
+    chat = Chat(chat=iter(()), title="Test", id="test123", max_seen_message_ids=None)
 
     assert chat._seen_message_cache.limit > 0
     assert chat._register_seen_message_id("msg1")

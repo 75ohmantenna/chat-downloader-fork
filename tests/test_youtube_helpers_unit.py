@@ -22,14 +22,10 @@ def test_safe_get_dict_returns_empty_dict_for_missing_or_falsy_values() -> None:
     assert _safe_get_dict({"value": {"ok": True}}, "value") == {"ok": True}
 
 
-def test_extract_browse_continuation_token_handles_invalid_and_missing_inputs() -> (  # noqa: E501
-    None
-):
+def test_extract_browse_continuation_token_handles_invalid_and_missing_inputs() -> None:
     assert _extract_browse_continuation_token(None) is None
     assert (
-        _extract_browse_continuation_token(
-            [{}, {"continuationItemRenderer": {}}]
-        )
+        _extract_browse_continuation_token([{}, {"continuationItemRenderer": {}}])
         is None
     )
     assert (
@@ -53,11 +49,7 @@ def test_extract_menu_continuation_token_supports_all_known_shapes() -> None:
     assert _extract_menu_continuation_token(None) is None
     assert (
         _extract_menu_continuation_token(
-            {
-                "continuation": {
-                    "reloadContinuationData": {"continuation": "reload"}
-                }
-            },
+            {"continuation": {"reloadContinuationData": {"continuation": "reload"}}},
         )
         == "reload"
     )
@@ -87,11 +79,7 @@ def test_extract_menu_continuation_token_supports_all_known_shapes() -> None:
     )
     assert (
         _extract_menu_continuation_token(
-            {
-                "continuationEndpoint": {
-                    "continuationCommand": {"token": "top-command"}
-                }
-            },
+            {"continuationEndpoint": {"continuationCommand": {"token": "top-command"}}},
         )
         == "top-command"
     )
@@ -121,9 +109,7 @@ def test_extract_chat_submenu_continuations_uses_fallback_labels_and_ignores_inv
                                     "skip-me",
                                     {
                                         "continuationEndpoint": {
-                                            "continuationCommand": {
-                                                "token": "top"
-                                            },
+                                            "continuationCommand": {"token": "top"},
                                         },
                                     },
                                     {
@@ -213,6 +199,4 @@ def test_require_innertube_api_key_raises_on_missing_or_empty() -> None:
         require_innertube_api_key({"INNERTUBE_API_KEY": ""})
     with pytest.raises(ParsingError):
         require_innertube_api_key({"INNERTUBE_API_KEY": None})
-    assert (
-        require_innertube_api_key({"INNERTUBE_API_KEY": "AIzaXYZ"}) == "AIzaXYZ"
-    )
+    assert require_innertube_api_key({"INNERTUBE_API_KEY": "AIzaXYZ"}) == "AIzaXYZ"

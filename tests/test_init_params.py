@@ -34,9 +34,7 @@ def test_proxy_with_cookies_raises() -> None:
     from chat_downloader.errors import InvalidParameter
 
     with pytest.raises(InvalidParameter, match="cookie"):
-        ChatDownloader(
-            proxy="http://proxy.example.com:8080", cookies="cookies.txt"
-        )
+        ChatDownloader(proxy="http://proxy.example.com:8080", cookies="cookies.txt")
 
 
 @pytest.mark.parametrize(
@@ -91,9 +89,7 @@ def test_loopback_proxy_with_cookies_emits_warning(
         "http://0.0.0.0:8080",
     ],
 )
-def test_spoofed_loopback_proxy_with_cookies_raises(
-    proxy: str, tmp_path
-) -> None:
+def test_spoofed_loopback_proxy_with_cookies_raises(proxy: str, tmp_path) -> None:
     """Hosts that merely look loopback must not enable cookies over a proxy."""
     from chat_downloader.errors import InvalidParameter
 

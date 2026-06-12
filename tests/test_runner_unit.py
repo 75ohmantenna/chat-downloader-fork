@@ -183,9 +183,7 @@ def test_create_message_callback_deduplicates_with_bounded_cache() -> None:
     assert chat.print_formatted.call_count == 3
 
 
-def test_create_message_callback_uses_default_cache_when_limit_disabled() -> (
-    None
-):
+def test_create_message_callback_uses_default_cache_when_limit_disabled() -> None:
     chat = MagicMock()
     callback = create_message_callback(False, chat, max_seen_message_ids=0)
 
@@ -235,9 +233,7 @@ def test_execute_run_processes_messages_and_closes_downloader() -> None:
         "max_messages": 1,
     }
     assert FakeDownloader.instance.closed is True
-    assert seen_messages == [
-        {"message_type": "text_message", "message_id": "1"}
-    ]
+    assert seen_messages == [{"message_type": "text_message", "message_id": "1"}]
 
 
 def test_execute_run_passes_dedup_cache_size_to_message_callback() -> None:
@@ -480,8 +476,7 @@ def test_execute_run_logs_cleanup_errors_when_primary_error_occurs(
         "Error closing downloader session(s): downloader cleanup failed",
     ) in logged
     assert any(
-        entry[0] == "error" and "generator failed" in entry[1]
-        for entry in logged
+        entry[0] == "error" and "generator failed" in entry[1] for entry in logged
     )
 
 

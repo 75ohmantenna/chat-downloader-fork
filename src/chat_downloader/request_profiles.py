@@ -79,10 +79,7 @@ REQUEST_PROFILE_INNERTUBE_CONTEXTS: Final[dict[str, dict[str, Any]]] = {
 
 def normalize_request_profile(profile_name: object) -> str | None:
     """Return a valid request-profile name or ``None``."""
-    if (
-        not isinstance(profile_name, str)
-        or profile_name not in REQUEST_PROFILES
-    ):
+    if not isinstance(profile_name, str) or profile_name not in REQUEST_PROFILES:
         return None
     return profile_name
 

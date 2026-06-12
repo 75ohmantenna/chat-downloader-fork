@@ -78,9 +78,7 @@ def test_discovery_get_user_clips_remaps_clip_fields() -> None:
     ]
 
 
-def test_discovery_get_user_clips_stops_for_zero_limit_and_empty_payload() -> (
-    None
-):
+def test_discovery_get_user_clips_stops_for_zero_limit_and_empty_payload() -> None:
     calls = []
 
     def download_gql_func(_session_post, _query):
@@ -114,7 +112,7 @@ def test_discovery_get_user_clips_stops_for_zero_limit_and_empty_payload() -> (
     assert calls == ["called"]
 
 
-def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes() -> (  # noqa: E501
+def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes() -> (
     None
 ):
     calls: list[list[dict[str, Any]]] = []
@@ -139,7 +137,7 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
                                             "lengthSeconds": 70,
                                             "owner": {"login": "streamer"},
                                             "previewThumbnailURL": "thumb-7",
-                                            "publishedAt": "2024-01-07T00:00:00Z",  # noqa: E501
+                                            "publishedAt": "2024-01-07T00:00:00Z",
                                             "title": "Video 7",
                                             "viewCount": 700,
                                             "resourceRestriction": None,
@@ -266,14 +264,11 @@ def test_discovery_get_top_livestreams_logs_warning_when_streams_missing(
 
     assert result == []
     assert any(
-        "Could not retrieve Twitch livestream data" in r.message
-        for r in caplog.records
+        "Could not retrieve Twitch livestream data" in r.message for r in caplog.records
     )
 
 
-def test_discovery_get_top_livestreams_stops_for_zero_limit_and_empty_edges() -> (  # noqa: E501
-    None
-):
+def test_discovery_get_top_livestreams_stops_for_zero_limit_and_empty_edges() -> None:
     calls = []
 
     def empty_edges_download(_session_post, query):
@@ -306,9 +301,7 @@ def test_discovery_get_top_livestreams_stops_for_zero_limit_and_empty_edges() ->
     assert calls[0][0]["variables"]["limit"] == 5
 
 
-def test_discovery_get_top_livestreams_paginates_and_remaps_none_nodes() -> (
-    None
-):
+def test_discovery_get_top_livestreams_paginates_and_remaps_none_nodes() -> None:
     calls: list[list[dict[str, Any]]] = []
 
     def download_gql_func(_session_post, query):
@@ -405,13 +398,9 @@ def test_url_generation_builds_stream_vod_and_clip_urls() -> None:
                 [{"url": "https://clips.twitch.tv/clip2"}],
             ],
         ) as mock_clips,
-        patch.object(
-            url_generation, "_parse_user", side_effect=lambda value: value
-        ),
+        patch.object(url_generation, "_parse_user", side_effect=lambda value: value),
     ):
-        result = list(
-            url_generation.generate_urls(cast("Any", downloader), 2, 3, 4)
-        )
+        result = list(url_generation.generate_urls(cast("Any", downloader), 2, 3, 4))
 
     assert result == [
         "https://www.twitch.tv/streamer1",
@@ -441,19 +430,11 @@ def test_url_generation_uses_raw_limits_when_livestream_limit_is_zero() -> None:
             "get_top_livestreams",
             return_value=[{"broadcaster": {"name": "streamer"}}],
         ),
-        patch.object(
-            url_generation, "get_user_videos", return_value=[]
-        ) as mock_videos,
-        patch.object(
-            url_generation, "get_user_clips", return_value=[]
-        ) as mock_clips,
-        patch.object(
-            url_generation, "_parse_user", side_effect=lambda value: value
-        ),
+        patch.object(url_generation, "get_user_videos", return_value=[]) as mock_videos,
+        patch.object(url_generation, "get_user_clips", return_value=[]) as mock_clips,
+        patch.object(url_generation, "_parse_user", side_effect=lambda value: value),
     ):
-        result = list(
-            url_generation.generate_urls(cast("Any", downloader), 0, 5, 7)
-        )
+        result = list(url_generation.generate_urls(cast("Any", downloader), 0, 5, 7))
 
     assert result == ["https://www.twitch.tv/streamer"]
     assert mock_videos.call_args.args[3] == 5
@@ -474,12 +455,8 @@ def test_url_generation_skips_livestreams_without_broadcaster_name() -> None:
         ),
         patch.object(url_generation, "get_user_videos", return_value=[]),
         patch.object(url_generation, "get_user_clips", return_value=[]),
-        patch.object(
-            url_generation, "_parse_user", side_effect=lambda value: value
-        ),
+        patch.object(url_generation, "_parse_user", side_effect=lambda value: value),
     ):
-        result = list(
-            url_generation.generate_urls(cast("Any", downloader), 2, 1, 1)
-        )
+        result = list(url_generation.generate_urls(cast("Any", downloader), 2, 1, 1))
 
     assert result == ["https://www.twitch.tv/kept"]

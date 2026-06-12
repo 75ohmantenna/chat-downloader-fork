@@ -62,9 +62,7 @@ def retry(
     elif not isinstance(text, (tuple, list)):
         text = [text]
 
-    sleep_text = policy.sleep_text(
-        attempt_number, interruptible=interruptible_retry
-    )
+    sleep_text = policy.sleep_text(attempt_number, interruptible=interruptible_retry)
 
     retry_text = f"Retry #{attempt_number}/{max_attempts} {sleep_text}."
 

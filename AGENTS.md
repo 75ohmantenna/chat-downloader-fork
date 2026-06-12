@@ -59,7 +59,9 @@ details.
 - Mccabe complexity gate is 8 (enforced by `make lint` / CI). Functions that are intrinsically branchy carry a `# noqa: C901` with a short rationale comment.
 
 ## Style
-- Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 80-char lines, double quotes.
+- Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 88-char lines, double quotes.
+- `git blame` noise: the X-series reformat commit is listed in `.git-blame-ignore-revs`.
+  Wire it locally with `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
 - Every source file must begin with `from __future__ import annotations` (enforced by ruff rule `I002`). Type-only imports go in `if TYPE_CHECKING:` blocks.
 - Types: `DownloaderConfig`/`ChatRequest`/`RunConfig`; the `models/` package
   is canonical and the source of truth for CLI and Python API shape. Add

@@ -54,7 +54,7 @@ def test_parse_irc_item_parses_announcement_usernotice() -> None:
         "subscriber=0;tmi-sent-ts=1771953482608;turbo=0;user-id=100135110;"
         "user-type=mod;msg-id=announcement;msg-param-color=PRIMARY;"
         "system-msg= :tmi.twitch.tv USERNOTICE #thebausffs "
-        ":DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR\r\n"  # noqa: E501
+        ":DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR\r\n"
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -78,7 +78,7 @@ def test_parse_irc_item_parses_shared_chat_privmsg_tags() -> None:
         "source-id=shared-message-1;source-room-id=456;source-badges=moderator/1;"
         "source-badge-info=subscriber/12;source-only=1;subscriber=0;"
         "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"  # noqa: E501
+        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -103,7 +103,7 @@ def test_parse_irc_item_applies_shared_chat_subscriber_badge_metadata() -> None:
         "source-id=shared-message-1;source-room-id=456;source-badges=subscriber/1;"
         "source-badge-info=subscriber/12;source-only=1;subscriber=0;"
         "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"  # noqa: E501
+        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -191,15 +191,13 @@ def test_parse_irc_item_preserves_sharedchatnotice_goal_params() -> None:
     assert parsed["msg_param_goal_contribution_type"] == "BITS"
 
 
-def test_parse_irc_item_sets_shared_chat_fields_for_same_channel_source() -> (
-    None
-):
+def test_parse_irc_item_sets_shared_chat_fields_for_same_channel_source() -> None:
     raw = (
         "@badge-info=;badges=vip/1;color=#1E90FF;display-name=GuestUser;emotes=;"
         "flags=;id=22fe4db9-1f83-4d8e-b4b9-d9f840d5f001;mod=0;room-id=123;"
         "source-id=shared-message-1;source-room-id=123;subscriber=0;"
         "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"  # noqa: E501
+        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -378,9 +376,7 @@ def test_set_message_type_and_add_text_for_emotes_handle_unknown_and_invalid(
 
     tw_irc_resolve._set_message_type(info, "mystery_type")
     assert "message_type" not in info
-    assert debug_calls == [
-        ("Unknown message type: mystery_type", "Parsed data: {}")
-    ]
+    assert debug_calls == [("Unknown message type: mystery_type", "Parsed data: {}")]
 
     emotes = [{"locations": ["bad-location"]}]
     tw_emotes._add_text_for_emotes("hello", emotes)
@@ -447,15 +443,13 @@ def test_parse_item_remaps_known_message_type(monkeypatch, request) -> None:
     assert parsed["message_type"] == "announcement"
 
 
-def test_parse_irc_item_parses_emotes_subscriber_months_and_reply_author() -> (
-    None
-):
+def test_parse_irc_item_parses_emotes_subscriber_months_and_reply_author() -> None:
     raw = (
         "@badge-info=subscriber/12;badges=subscriber/12;color=#00FF00;"
         "display-name=TestUser;emotes=25:0-4;flags=;id=abc123;mod=0;room-id=999;"
         "reply-parent-user-id=321;reply-parent-msg-id=parent-msg;"
         "reply-parent-display-name=OtherUser;reply-parent-user-login=otheruser;"
-        "subscriber=1;tmi-sent-ts=1700000000000;turbo=0;user-id=12345;user-type= "  # noqa: E501
+        "subscriber=1;tmi-sent-ts=1700000000000;turbo=0;user-id=12345;user-type= "
         ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG #channel :Kappa"
         "\r\n"
     )
@@ -577,15 +571,13 @@ def test_parse_irc_item_handles_unknown_action_roomstate_and_clearchat(
     )
     roomstate_raw = (
         "@badge-info=;badges=;display-name=TestUser;followers-only=10;room-id=999;"
-        "slow=5;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"  # noqa: E501
+        "slow=5;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"
     )
     clear_timeout_raw = (
         "@ban-duration=600;room-id=999;target-user-id=200;tmi-sent-ts=1 "
         ":tmi.twitch.tv CLEARCHAT #channel :banneduser\r\n"
     )
-    clear_chat_raw = (
-        "@room-id=999;tmi-sent-ts=1 :tmi.twitch.tv CLEARCHAT #channel\r\n"
-    )
+    clear_chat_raw = "@room-id=999;tmi-sent-ts=1 :tmi.twitch.tv CLEARCHAT #channel\r\n"
 
     unknown_match = MESSAGE_REGEX.search(unknown_raw)
     roomstate_match = MESSAGE_REGEX.search(roomstate_raw)
@@ -623,12 +615,10 @@ def test_parse_irc_item_handles_unknown_action_roomstate_and_clearchat(
     assert clear_chat["message_type"] == "clear_chat"
 
 
-def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> (
-    None
-):
+def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> None:
     raw = (
         "@vip;badge-info=;badges=;display-name=TestUser;followers-only=-1;room-id=999;"
-        "slow=0;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"  # noqa: E501
+        "slow=0;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"
     )
 
     match = MESSAGE_REGEX.search(raw)
@@ -642,9 +632,7 @@ def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> (
     assert parsed["slow_mode"] is False
 
 
-def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -> (  # noqa: E501
-    None
-):
+def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -> None:
     """A malformed emote id in a VOD fragment must not crash the parse."""
     message = {
         "userColor": "#abcdef",
@@ -667,9 +655,7 @@ def test_decode_pseudo_bnf_converts_backslash_escape() -> None:
     assert _decode_pseudo_bnf(r"a\\b") == r"a\b"
 
 
-def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() -> (  # noqa: E501
-    None
-):
+def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() -> None:
     """A negative follower_only other than -1 must not set it True."""
     raw = (
         "@badge-info=;badges=;display-name=TestUser;followers-only=-2;room-id=999;"
@@ -687,9 +673,7 @@ def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() 
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_irc_badges_sets_author_badges_and_applies_subscriber_months() -> (  # noqa: E501
-    None
-):
+def test_resolve_irc_badges_sets_author_badges_and_applies_subscriber_months() -> None:
     """_resolve_irc_badges parses main badges and applies badge-info."""
     from chat_downloader.sites.twitch.parsing.messages import (
         _resolve_irc_badges,
@@ -735,7 +719,7 @@ def test_resolve_irc_badges_shared_chat_badge_enrichment() -> None:
     assert "shared_chat_source_badge_info" not in info
 
 
-def test_resolve_irc_badges_absent_shared_chat_source_badges_leaves_key_absent() -> (  # noqa: E501
+def test_resolve_irc_badges_absent_shared_chat_source_badges_leaves_key_absent() -> (
     None
 ):
     """When shared_chat_source_badges is empty, the key is absent."""

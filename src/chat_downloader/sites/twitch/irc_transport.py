@@ -291,9 +291,7 @@ def get_chat_messages_by_stream_id(
     from chat_downloader.models import ChatRequest
 
     request = (
-        params
-        if isinstance(params, ChatRequest)
-        else ChatRequest.from_kwargs(**params)
+        params if isinstance(params, ChatRequest) else ChatRequest.from_kwargs(**params)
     )
     buffer_size = request.buffer_size
 
@@ -335,8 +333,7 @@ def get_chat_messages_by_stream_id(
                 if not _is_benign_unmatched_irc_buffer(unmatched_full_buffer):
                     log(
                         "debug",
-                        'No matches found in "\n'
-                        f'{unmatched_full_buffer.strip()}\n"',
+                        f'No matches found in "\n{unmatched_full_buffer.strip()}\n"',
                     )
 
             current_time = time.time()

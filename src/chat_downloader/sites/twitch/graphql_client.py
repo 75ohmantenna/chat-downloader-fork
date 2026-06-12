@@ -114,13 +114,10 @@ def _handle_gql_errors(
     if "unavailable" in message_lower or "deleted" in message_lower:
         raise VideoUnavailable(error_message)
     if "service error" in message_lower:
-        path_str = (
-            " -> ".join(str(p) for p in error_path) if error_path else "unknown"
-        )
+        path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
         log(
             "warning",
-            "Transient GraphQL field error at "
-            f"{path_str}: {error_message} (skipping)",
+            f"Transient GraphQL field error at {path_str}: {error_message} (skipping)",
         )
         return
     if (
@@ -136,12 +133,8 @@ def _handle_gql_errors(
             msg,
         )
 
-    path_str = (
-        " -> ".join(str(p) for p in error_path) if error_path else "unknown"
-    )
-    msg = (
-        f"GraphQL error at {path_str} during {operation_text}: {error_message}"
-    )
+    path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
+    msg = f"GraphQL error at {path_str} during {operation_text}: {error_message}"
     raise ParsingError(
         msg,
     )
@@ -191,9 +184,7 @@ def _download_gql(
         }
         for op in ops
     ]
-    result = _download_base_gql(
-        session_post, request_ops, auth_token, client_id
-    )
+    result = _download_base_gql(session_post, request_ops, auth_token, client_id)
 
     if isinstance(result, list):
         for item in result:
@@ -239,9 +230,7 @@ def update_badge_info(
             or {}
         )
 
-        badges = (channel_data.get("badges") or []) + (
-            global_data.get("badges") or []
-        )
+        badges = (channel_data.get("badges") or []) + (global_data.get("badges") or [])
         user = (multi_get(channel_data, "user", "broadcastBadges") or []) + (
             multi_get(global_data, "user", "broadcastBadges") or []
         )
@@ -254,8 +243,7 @@ def update_badge_info(
             except (ValueError, KeyError) as badge_error:
                 log(
                     "debug",
-                    "Skipping malformed badge "
-                    f"(id={badge.get('id')!r}): {badge_error}",
+                    f"Skipping malformed badge (id={badge.get('id')!r}): {badge_error}",
                 )
                 continue
 

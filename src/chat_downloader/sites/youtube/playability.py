@@ -142,9 +142,7 @@ def _raise_for_error_screen(
     """Raise for age-gated or status-based error-screen cases."""
     error_screen = get_dict(playability_status, "errorScreen")
 
-    _raise_for_early_playability(
-        playability_status, player_response_info, error_screen
-    )
+    _raise_for_early_playability(playability_status, player_response_info, error_screen)
 
     if not error_screen:
         return
@@ -180,9 +178,7 @@ def _raise_for_popup(yt_initial_data: JSONDict) -> None:
 
     error_message = multi_get(popup_info, "title", "simpleText") or ""
     dialog_messages = multi_get(popup_info, "dialogMessages") or []
-    error_message += ". " + " ".join(
-        x.get("simpleText") or "" for x in dialog_messages
-    )
+    error_message += ". " + " ".join(x.get("simpleText") or "" for x in dialog_messages)
     raise VideoUnavailable(error_message)
 
 

@@ -121,9 +121,7 @@ def propagate_cookie(
         )
 
 
-def get_cookie_value(
-    owner: ChatDownloaderProto, name: str, default: Any = None
-) -> Any:
+def get_cookie_value(owner: ChatDownloaderProto, name: str, default: Any = None) -> Any:
     """Return a cookie value from the local jar or existing site sessions."""
     cookies_dict = {cookie.name: cookie.value for cookie in owner._cookie_jar}
     if name in cookies_dict:

@@ -74,6 +74,4 @@ def coerce_chat_request(
 
 
 #: All field names belonging to :class:`RunConfig`.
-RUN_PARAM_NAMES: frozenset[str] = frozenset(
-    f.name for f in dc_fields(RunConfig)
-)
+RUN_PARAM_NAMES: frozenset[str] = frozenset(f.name for f in dc_fields(RunConfig))

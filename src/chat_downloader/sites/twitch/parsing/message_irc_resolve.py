@@ -44,9 +44,7 @@ def _apply_subscriber_badge_metadata(
     badge_metadata: list[dict[str, Any]],
 ) -> None:
     """Apply subscriber badge metadata, such as month count, onto badges."""
-    subscriber_badge = next(
-        (x for x in badges if x.get("name") == "subscriber"), None
-    )
+    subscriber_badge = next((x for x in badges if x.get("name") == "subscriber"), None)
     subscriber_badge_metadata = next(
         (x for x in badge_metadata if x.get("name") == "subscriber"),
         None,
@@ -98,20 +96,12 @@ def _resolve_irc_badges(
     author_badge_metadata: str = str(info.pop("author_badge_metadata", ""))
     author_badges: str = str(info.pop("author_badges", ""))
 
-    info["author_badges"] = _parse_irc_badges(
-        author_badges, channel_id, badge_set
-    )
-    badge_metadata = _parse_irc_badges(
-        author_badge_metadata, channel_id, badge_set
-    )
+    info["author_badges"] = _parse_irc_badges(author_badges, channel_id, badge_set)
+    badge_metadata = _parse_irc_badges(author_badge_metadata, channel_id, badge_set)
     _apply_subscriber_badge_metadata(info["author_badges"], badge_metadata)
 
-    shared_chat_source_channel_id = str(
-        info.get("shared_chat_source_channel_id", "")
-    )
-    shared_chat_source_badges: str = str(
-        info.pop("shared_chat_source_badges", "")
-    )
+    shared_chat_source_channel_id = str(info.get("shared_chat_source_channel_id", ""))
+    shared_chat_source_badges: str = str(info.pop("shared_chat_source_badges", ""))
     shared_chat_source_badge_info: str = str(
         info.pop("shared_chat_source_badge_info", ""),
     )
@@ -156,12 +146,8 @@ def _resolve_irc_shared_chat_metadata(
         info: Partially-built message dictionary, mutated in place.
         channel_id: Receiving channel ID (used to detect cross-channel origin).
     """
-    shared_chat_source_channel_id = str(
-        info.get("shared_chat_source_channel_id", "")
-    )
-    shared_chat_source_message_id = str(
-        info.get("shared_chat_source_message_id", "")
-    )
+    shared_chat_source_channel_id = str(info.get("shared_chat_source_channel_id", ""))
+    shared_chat_source_message_id = str(info.get("shared_chat_source_message_id", ""))
     shared_chat_source_msg_id = str(info.get("shared_chat_source_msg_id", ""))
     has_shared_chat_source = bool(
         shared_chat_source_channel_id
@@ -170,13 +156,9 @@ def _resolve_irc_shared_chat_metadata(
         or info.get("shared_chat_source_only")
     )
     if has_shared_chat_source:
-        effective_source_channel_id = (
-            shared_chat_source_channel_id or channel_id
-        )
+        effective_source_channel_id = shared_chat_source_channel_id or channel_id
         info["is_shared_chat_message"] = True
-        info["shared_chat_effective_source_channel_id"] = (
-            effective_source_channel_id
-        )
+        info["shared_chat_effective_source_channel_id"] = effective_source_channel_id
         info["shared_chat_is_cross_channel"] = (
             bool(shared_chat_source_channel_id)
             and bool(channel_id)
@@ -184,9 +166,7 @@ def _resolve_irc_shared_chat_metadata(
         )
 
 
-def _resolve_action_type(
-    info: dict[str, Any], original_action_type: str
-) -> None:
+def _resolve_action_type(info: dict[str, Any], original_action_type: str) -> None:
     """Map *original_action_type* through :data:`ACTION_TYPE_REMAPPING`.
 
     Stores the mapped name (or the raw value for unknowns) as
@@ -248,9 +228,7 @@ def _resolve_clearchat_ban(
     """
     if original_action_type == "CLEARCHAT" and message_match:
         info["message_type"] = "ban_user"
-        info["ban_type"] = (
-            "timeout" if info.get("ban_duration") else "permanent"
-        )
+        info["ban_type"] = "timeout" if info.get("ban_duration") else "permanent"
         info["banned_user"] = info.pop("message", "")
 
 

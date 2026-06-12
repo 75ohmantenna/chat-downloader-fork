@@ -125,9 +125,7 @@ def get_user_videos(
         if num_to_get <= 0:
             break
 
-        query = _build_user_videos_query(
-            username, num_to_get, video_type, sort, cursor
-        )
+        query = _build_user_videos_query(username, num_to_get, video_type, sort, cursor)
         info = download_gql_func(session_post, query)
         if not info:
             break
@@ -185,8 +183,7 @@ def get_top_livestreams(
         if not streams_info:
             log(
                 "warning",
-                "Could not retrieve Twitch livestream data from GraphQL "
-                "response.",
+                "Could not retrieve Twitch livestream data from GraphQL response.",
             )
             break
 

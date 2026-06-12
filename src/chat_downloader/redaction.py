@@ -74,8 +74,7 @@ def sanitize_for_log(value: Any) -> Any:
                 sanitized[key] = {
                     k: (
                         REDACTED
-                        if isinstance(k, str)
-                        and k.lower() in _SENSITIVE_LOG_KEYS
+                        if isinstance(k, str) and k.lower() in _SENSITIVE_LOG_KEYS
                         else v
                     )
                     for k, v in item.items()
@@ -102,8 +101,7 @@ def _debug_sample_capture_enabled() -> bool:
     """Return ``True`` when debug sample capture is explicitly enabled."""
     env_value = os.environ.get(_DEBUG_SAMPLE_CAPTURE_ENV, "")
     return (
-        logger.isEnabledFor(logging.DEBUG)
-        and env_value.lower() in _TRUTHY_ENV_VALUES
+        logger.isEnabledFor(logging.DEBUG) and env_value.lower() in _TRUTHY_ENV_VALUES
     )
 
 

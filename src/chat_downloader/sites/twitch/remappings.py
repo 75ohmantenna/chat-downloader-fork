@@ -102,9 +102,7 @@ def build_message_param_remapping() -> dict[str, Any]:
         "msg-param-gift-months": r("number_of_months_gifted", int_or_none),
         "msg-param-sender-login": "gifter_name",
         "msg-param-sender-name": "gifter_display_name",
-        "msg-param-should-share-streak": r(
-            "user_wants_to_share_streaks", _parse_bool
-        ),
+        "msg-param-should-share-streak": r("user_wants_to_share_streaks", _parse_bool),
         "msg-param-streak-months": r(
             "number_of_consecutive_months_subscribed",
             int_or_none,
@@ -113,12 +111,8 @@ def build_message_param_remapping() -> dict[str, Any]:
             "subscription_type",
             _parse_subscription_type,
         ),
-        "msg-param-sub-plan-name": r(
-            "subscription_plan_name", _decode_pseudo_bnf
-        ),
-        "msg-param-sub-benefit-end-month": r(
-            "sub_benefit_end_month", int_or_none
-        ),
+        "msg-param-sub-plan-name": r("subscription_plan_name", _decode_pseudo_bnf),
+        "msg-param-sub-benefit-end-month": r("sub_benefit_end_month", int_or_none),
         "msg-param-ritual-name": "ritual_name",
         "msg-param-threshold": "bits_badge_tier",
         "msg-param-multimonth-duration": r("multimonth_duration", int_or_none),
@@ -153,35 +147,23 @@ def build_message_param_remapping() -> dict[str, Any]:
         "msg-param-charity-name": "charity_name",
         "msg-param-charity-hashtag": "charity_hashtag",
         "msg-param-charity-learn-more": "charity_link",
-        "msg-param-charity-hours-remaining": r(
-            "charity_hours_remaining", int_or_none
-        ),
-        "msg-param-charity-days-remaining": r(
-            "charity_days_remaining", int_or_none
-        ),
+        "msg-param-charity-hours-remaining": r("charity_hours_remaining", int_or_none),
+        "msg-param-charity-days-remaining": r("charity_days_remaining", int_or_none),
         "msg-param-total": r("charity_total_raised", int_or_none),
         "msg-param-category": "milestone_category",
         "msg-param-value": r("milestone_value", int_or_none),
-        "msg-param-copoReward": r(
-            "milestone_channel_points_reward", int_or_none
-        ),
+        "msg-param-copoReward": r("milestone_channel_points_reward", int_or_none),
         "msg-param-id": "milestone_id",
         "msg-param-color": "announcement_colour",
         "msg-param-profileImageURL": "profile_image_url",
         "msg-param-gift-theme": "msg_param_gift_theme",
-        "msg-param-goal-target-contributions": (
-            "msg_param_goal_target_contributions"
-        ),
+        "msg-param-goal-target-contributions": ("msg_param_goal_target_contributions"),
         "msg-param-goal-current-contributions": (
             "msg_param_goal_current_contributions"
         ),
-        "msg-param-goal-user-contributions": (
-            "msg_param_goal_user_contributions"
-        ),
+        "msg-param-goal-user-contributions": ("msg_param_goal_user_contributions"),
         "msg-param-goal-description": "msg_param_goal_description",
-        "msg-param-goal-contribution-type": (
-            "msg_param_goal_contribution_type"
-        ),
+        "msg-param-goal-contribution-type": ("msg_param_goal_contribution_type"),
     }
 
 
@@ -223,9 +205,7 @@ def build_irc_remapping() -> dict[str, Any]:
         "reply-parent-display-name": "in_reply_to_author_display_name",
         "reply-parent-user-login": "in_reply_to_author_name",
         "reply-thread-parent-msg-id": "reply_thread_parent_msg_id",
-        "reply-thread-parent-user-id": r(
-            "reply_thread_parent_user_id", str_or_none
-        ),
+        "reply-thread-parent-user-id": r("reply_thread_parent_user_id", str_or_none),
         "reply-thread-parent-display-name": "reply_thread_parent_display_name",
         "reply-thread-parent-user-login": "reply_thread_parent_user_login",
         "crowd-chant-parent-msg-id": "crowd_chant_in_reply_to_message_id",

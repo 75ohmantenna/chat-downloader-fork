@@ -70,9 +70,7 @@ def _extract_menu_continuation_token(item: object) -> str | None:
         return None
 
     token_candidates: tuple[str | None, ...] = (
-        multi_get(
-            item, "continuation", "reloadContinuationData", "continuation"
-        ),
+        multi_get(item, "continuation", "reloadContinuationData", "continuation"),
         multi_get(
             item,
             "continuation",
@@ -88,9 +86,7 @@ def _extract_menu_continuation_token(item: object) -> str | None:
             "continuation",
         ),
         multi_get(item, "continuationEndpoint", "continuationCommand", "token"),
-        multi_get(
-            item, "continuationEndpoint", "getLiveChatEndpoint", "continuation"
-        ),
+        multi_get(item, "continuationEndpoint", "getLiveChatEndpoint", "continuation"),
     )
     for token in token_candidates:
         if token:
@@ -153,9 +149,7 @@ def extract_chat_submenu_continuations(
             unlabeled_tokens.append(token)
 
     if fallback_labels:
-        for label, token in zip(
-            fallback_labels, unlabeled_tokens, strict=False
-        ):
+        for label, token in zip(fallback_labels, unlabeled_tokens, strict=False):
             labeled.setdefault(label, token)
 
     return labeled
@@ -177,8 +171,7 @@ def _fetch_browse_continuation(
     if continuation in seen_continuations:
         log(
             "debug",
-            "Detected YouTube browse continuation loop; "
-            "assuming end of results.",
+            "Detected YouTube browse continuation loop; assuming end of results.",
         )
         return None, None
     if continuation:

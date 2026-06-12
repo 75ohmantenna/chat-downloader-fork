@@ -48,9 +48,7 @@ class TestIRCBufferDeduplication:
         assert hasattr(downloader, "_get_chat_messages_by_stream_id")
         assert callable(downloader._get_chat_messages_by_stream_id)
 
-    @patch(
-        "chat_downloader.sites.twitch.extractor.get_chat_messages_by_stream_id"
-    )
+    @patch("chat_downloader.sites.twitch.extractor.get_chat_messages_by_stream_id")
     @patch("chat_downloader.sites.twitch.extractor.TwitchChatIRC")
     def test_extractor_delegates_to_client(
         self, mock_irc_class, mock_client_generator
@@ -124,9 +122,7 @@ class TestTypenameValidation:
             "message_groups": ["messages"],
         }
 
-        result = list(
-            downloader._get_chat_messages_by_vod_id("vod123", params, 100)
-        )
+        result = list(downloader._get_chat_messages_by_vod_id("vod123", params, 100))
 
         # Should process the message
         assert len(result) == 1
@@ -147,9 +143,7 @@ class TestTypenameValidation:
                     "node": {
                         "__typename": "Comment",
                         "id": "msg1",
-                        "message": {
-                            "fragments": [{"text": "Should be skipped"}]
-                        },
+                        "message": {"fragments": [{"text": "Should be skipped"}]},
                     },
                 },
                 {
@@ -175,9 +169,7 @@ class TestTypenameValidation:
             "message_groups": ["messages"],
         }
 
-        result = list(
-            downloader._get_chat_messages_by_vod_id("vod123", params, 100)
-        )
+        result = list(downloader._get_chat_messages_by_vod_id("vod123", params, 100))
 
         # Should only get the valid edge
         assert len(result) == 1
@@ -204,9 +196,7 @@ class TestTypenameValidation:
                     "node": {
                         "__typename": "UnexpectedNodeType",  # Invalid!
                         "id": "msg1",
-                        "message": {
-                            "fragments": [{"text": "Should be skipped"}]
-                        },
+                        "message": {"fragments": [{"text": "Should be skipped"}]},
                     },
                 },
                 {
@@ -232,9 +222,7 @@ class TestTypenameValidation:
             "message_groups": ["messages"],
         }
 
-        result = list(
-            downloader._get_chat_messages_by_vod_id("vod123", params, 100)
-        )
+        result = list(downloader._get_chat_messages_by_vod_id("vod123", params, 100))
 
         # Should only get the valid node
         assert len(result) == 1
@@ -277,9 +265,7 @@ class TestTypenameValidation:
             "message_groups": ["messages"],
         }
 
-        result = list(
-            downloader._get_chat_messages_by_vod_id("vod123", params, 100)
-        )
+        result = list(downloader._get_chat_messages_by_vod_id("vod123", params, 100))
 
         # Should process the message (None is acceptable)
         assert len(result) == 1
@@ -583,9 +569,7 @@ def test_irc_buffer_overflow_truncation() -> None:
     # Second recv: empty → raises ConnectionError to stop the loop
     mock_irc.recv.side_effect = ["x" * (_READBUFFER_MAX_BYTES + 100), ""]
 
-    gen = get_chat_messages_by_stream_id(
-        mock_irc, "channel", {"max_attempts": 1}
-    )
+    gen = get_chat_messages_by_stream_id(mock_irc, "channel", {"max_attempts": 1})
     with pytest.raises(ConnectionError):
         for _ in gen:
             pass

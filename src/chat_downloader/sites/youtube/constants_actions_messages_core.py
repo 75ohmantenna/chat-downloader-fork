@@ -82,9 +82,7 @@ _KNOWN_REMOVE_BANNER_TYPES = {
     "removeBannerForLiveChatCommand": ["removeBanner"],  # targetActionId
 }
 
-_KNOWN_TOOLTIP_ACTION_TYPES = {
-    "showLiveChatTooltipCommand": ["tooltipRenderer"]
-}
+_KNOWN_TOOLTIP_ACTION_TYPES = {"showLiveChatTooltipCommand": ["tooltipRenderer"]}
 
 _KNOWN_POLL_ACTION_TYPES: dict[str, list[str]] = {
     "showLiveChatActionPanelAction": ["pollRenderer"],
