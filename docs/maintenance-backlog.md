@@ -106,11 +106,11 @@ parser changes. After each migration, lower the affected module's baseline in
 `tests/test_any_density_unit.py` (opportunistic tightening — not a scheduled
 round).
 
-### X-series typed-payload migration (X8–X10, 2026-06)
+### X-series typed-payload migration (X8–X11, 2026-06) — COMPLETE
 
-YouTube chat-streams (X8), parsing layer (X9), and discovery/initial-page
-layer (X10) migrated off `dict[str, Any]` payload boundaries to `json_types`
-aliases. Per-module before/after tables and residual rationale live in
-`maintenance-notes.md § X-series typed-payload migration`. Residuals in every
-migrated module are transport objects, callables, public-API params, or
-assembled-output accumulators — intentional, do not reopen.
+YouTube (X8–X10) and Twitch (X11) are both migrated off `dict[str, Any]`
+payload boundaries to `json_types` aliases. The typed-payload track is
+closed for both sites. Per-module before/after tables and residual rationale
+live in `maintenance-notes.md § X-series typed-payload migration`. Residuals
+in every migrated module are transport objects, callables, public-API params,
+or assembled-output accumulators — intentional, do not reopen.

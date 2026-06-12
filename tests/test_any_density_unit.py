@@ -37,19 +37,24 @@ BASELINE: dict[str, int] = {
     "sites/remap.py": 10,
     "sites/filters.py": 3,
     # Twitch site-specific accumulators and remapping tables.
-    "sites/twitch/replay_service.py": 18,
+    # X11 migrated discovery/graphql_client/replay_service/replay_transport/
+    # live_service off dict[str,Any] JSON boundaries to json_types aliases.
+    # Residuals per X-series taxonomy: Callable[...,Any] transport params,
+    # badge accumulators (types.py containers), IRC-tag accumulators (V3-
+    # declined), frozen public params, assembled-output dicts.
+    "sites/twitch/replay_service.py": 3,
     "sites/twitch/extractor.py": 18,
-    "sites/twitch/discovery.py": 15,
+    "sites/twitch/discovery.py": 10,
     "sites/twitch/parsing/message_irc_resolve.py": 14,
     "sites/twitch/parsing/messages.py": 14,
-    "sites/twitch/graphql_client.py": 12,
+    "sites/twitch/graphql_client.py": 7,
     "sites/twitch/remappings.py": 11,
     "sites/twitch/parsing/badges.py": 9,
     "sites/twitch/irc_transport.py": 6,
-    "sites/twitch/replay_transport.py": 6,
+    "sites/twitch/replay_transport.py": 3,
     "sites/twitch/types.py": 5,
     "sites/twitch/parsing/message_emotes.py": 5,
-    "sites/twitch/live_service.py": 5,
+    "sites/twitch/live_service.py": 4,
     # YouTube site-specific accumulators and remapping tables.
     "sites/youtube/_protocols.py": 18,
     "sites/youtube/client_requests_bootstrap.py": 3,

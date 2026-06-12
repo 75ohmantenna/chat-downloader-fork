@@ -9,6 +9,8 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from chat_downloader.utils.json_types import JSONDict
+
 
 def get_chat_messages_by_vod_id(
     session_post: Callable[..., Any],  # noqa: ARG001 — uniform transport callable signature; live transport uses this
@@ -16,9 +18,9 @@ def get_chat_messages_by_vod_id(
     vod_id: str,
     cursor: str | None,
     content_offset_seconds: float | None,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[JSONDict | None, JSONDict | None]:
     """Get chat replay messages for a VOD by ID."""
-    variables: dict[str, Any] = {
+    variables: JSONDict = {
         "videoID": vod_id,
     }
 

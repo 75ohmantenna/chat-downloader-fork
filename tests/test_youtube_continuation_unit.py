@@ -218,6 +218,15 @@ def test_extract_next_continuation_skips_empty_dict_entry() -> None:
     assert result == (None, None, None, {})
 
 
+def test_extract_next_continuation_skips_non_dict_entry() -> None:
+    from chat_downloader.sites.youtube.continuations import (
+        _extract_next_continuation,
+    )
+
+    result = _extract_next_continuation({"continuations": ["not-a-dict"]})
+    assert result == (None, None, None, {})
+
+
 def test_extract_next_continuation_skips_non_dict_value() -> None:
     from chat_downloader.sites.youtube.continuations import (
         _extract_next_continuation,

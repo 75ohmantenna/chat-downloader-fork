@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import base64
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.sites.remap import (
@@ -17,9 +17,12 @@ from chat_downloader.sites.twitch.remappings import (
     build_video_remapping,
 )
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_dict, get_list, get_str
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+
+    from chat_downloader.utils.json_types import JSONDict, JSONList
 
 
 def get_user_clips(
@@ -74,35 +77,34 @@ def _build_user_videos_query(
     video_type: str | None,
     sort: str,
     cursor: str | None,
-) -> list[dict[str, Any]]:
+) -> JSONList:
     """Build the FilterableVideoTower_Videos GQL query payload."""
-    query: list[dict[str, Any]] = [
-        {
-            "operationName": "FilterableVideoTower_Videos",
-            "variables": {
-                "limit": num_to_get,
-                "channelOwnerLogin": username,
-                "broadcastType": video_type,
-                "videoSort": sort,
-            },
-        },
-    ]
+    variables: JSONDict = {
+        "limit": num_to_get,
+        "channelOwnerLogin": username,
+        "broadcastType": video_type,
+        "videoSort": sort,
+    }
     if cursor is not None:
-        query[0]["variables"]["cursor"] = cursor
-    return query
+        variables["cursor"] = cursor
+    query_item: JSONDict = {
+        "operationName": "FilterableVideoTower_Videos",
+        "variables": variables,
+    }
+    return cast("JSONList", [query_item])
 
 
 def _extract_user_videos(
-    info: list[dict[str, Any]],
+    info: JSONList,
     username: str,
-) -> dict[str, Any] | None:
+) -> JSONDict | None:
     """Validate user existence and return the videos dict, or None to break."""
     if multi_get(info, 0, "data", "user", "id") == "":
         from chat_downloader.errors import UserNotFound
 
         msg = f'Channel "{username}" not found'
         raise UserNotFound(msg)
-    videos: dict[str, Any] | None = multi_get(info, 0, "data", "user", "videos")
+    videos: JSONDict | None = multi_get(info, 0, "data", "user", "videos")
     return videos
 
 
@@ -134,12 +136,14 @@ def get_user_videos(
         if not videos:
             break
 
-        edges = videos.get("edges") or []
+        edges = get_list(videos, "edges")
         remaining_count -= len(edges)
 
         for edge in edges:
-            cursor = edge.get("cursor")
-            node = edge.get("node")
+            if not isinstance(edge, dict):
+                continue
+            cursor = get_str(edge, "cursor") or None
+            node = get_dict(edge, "node")
             if not node:
                 continue
             yield r.remap_dict(node, video_remapping)

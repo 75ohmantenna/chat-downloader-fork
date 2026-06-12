@@ -166,7 +166,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             self._session_post, ops, auth_token, **self._client_id_kwargs()
         )
 
-    def _download_gql(self, ops: list[dict[str, Any]]) -> Any:
+    def _download_gql(self, ops: Any) -> Any:
         """Download GraphQL data using persisted query hashes.
 
         Args:

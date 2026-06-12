@@ -595,3 +595,70 @@ every call site.  Recorded as intentional (same stop condition as X8's skip).
 | `sites/youtube/discovery_helpers.py` | 9 | 6 |
 | `sites/youtube/client_context.py` | 9 | 6 |
 | `sites/youtube/client_auth.py` | 8 | 6 |
+
+### X11 — Twitch typed-payload migration (2026-06)
+
+Closed the Twitch side of the typed-payload track (X8–X10 covered YouTube
+only; Twitch had zero `json_types` adoption).  Five modules migrated off
+raw `dict[str, Any]` JSON boundaries onto `JSONDict`/`JSONList`/`JSONAny`
+aliases and `get_dict`/`get_list`/`get_str`/`get_float` accessors.
+
+**`discovery.py`:** `_build_user_videos_query` returns `JSONList`
+(`variables: JSONDict` built separately; `cast` for list-invariant return);
+`_extract_user_videos` param/return narrowed to `JSONList` / `JSONDict | None`;
+`get_user_videos` body uses `get_list`/`get_dict`/`get_str` with an
+`isinstance` guard per edge item (same pattern as X10 list traversals).
+Generator yields stay `dict[str, Any]` — assembled remap output, not a JSON
+boundary.
+
+**`graphql_client.py`:** `_download_base_gql` / `_download_gql` return
+`JSONAny` (`response.json()` can be list or dict; `cast` at the return site);
+`ops` params `JSONList`; `_handle_gql_errors` errors param `JSONList` with
+`isinstance` guard before `get_str`/`get_list` on the first error element.
+`extractor._download_gql` wrapper widened from `list[dict[str,Any]]` to
+`Any` — same token count, resolves the list-invariant mismatch at the
+allowlisted call site.
+
+**`replay_service.py`:** JSON boundary + W2-style real-type tighten.  Raw
+GraphQL: `_fetch_vod_page` return `tuple[JSONDict|None, JSONDict|None]`;
+`video`/`clip` locals cast to `JSONDict|None`; `get_list`/`get_str`/`get_float`
+replace `.get()` calls in bodies; `isinstance` edge guard in main loop.
+Real types: `_process_vod_edge` params tightened — `edge: JSONDict`,
+`badge_set: BadgeSet`, `time_filter: TimeRangeFilter`, `msg_filter: MessageFilter`,
+`logger_obj: Logger` — all confirmed from call sites.  `_parse_item` result
+`cast("JSONDict", ...)` inside `_process_vod_edge` threads `JSONDict` through
+the generator yield, enabling `Generator[JSONDict, None, None]`.
+
+**`replay_transport.py`:** return `tuple[JSONDict|None, JSONDict|None]`;
+`variables: JSONDict`.  `info`/`comments` remain `Any` (fed by
+`Callable[...,Any]` `download_gql_func`).
+
+**`live_service.py`:** `stream_info: JSONDict|None` (raw GraphQL user node;
+multi_get calls downstream unaffected).
+
+**Not migrated (intentional):**
+- `irc_transport.py` — `_parse_irc_matches` return `list[dict[str,Any]]` feeds
+  from `_parse_irc_item` (V3-declined IRC accumulator); changing to `JSONList`
+  would require a cast cascade.  Any stays at 6.
+- `parsing/messages.py`, `parsing/message_irc_resolve.py` — V3-declined IRC-tag
+  accumulators (14 each).
+- `remappings.py`, `types.py`, `parsing/badges.py`, `parsing/message_emotes.py`,
+  `extractor.py` — data tables, canonical badge containers, assembled output,
+  or allowlisted-whole.
+
+**Residual taxonomy** (do not reopen):
+- Transport callables (`Callable[..., Any]`) — `session_post`, `download_gql_func`,
+  `fetch_fn`, `irc_factory`, `message_generator`.
+- Badge accumulators — `badge_info`/`subscriber_badge_info` in
+  `graphql_client.update_badge_info` (these ARE the `types.py` containers).
+- IRC-tag accumulators — V3-declined; `messages.py` + `message_irc_resolve.py`.
+- Frozen public params — `params: ChatRequest | dict[str, Any]` in `irc_transport`.
+- Assembled-output dicts — generator yields from remapping / IRC parsing.
+
+| Module | Any before | Any after |
+|---|---|---|
+| `sites/twitch/discovery.py` | 15 | 10 |
+| `sites/twitch/graphql_client.py` | 12 | 7 |
+| `sites/twitch/replay_service.py` | 18 | 3 |
+| `sites/twitch/replay_transport.py` | 6 | 3 |
+| `sites/twitch/live_service.py` | 5 | 4 |

@@ -253,6 +253,32 @@ def test_next_item_after_expiry_uses_timeout_callback() -> None:
     assert tg._closed is True
 
 
+def test_next_item_after_timeout_deadline_uses_callback_without_timer_flag() -> None:
+    called = []
+
+    def fake_start_timer(self) -> None:
+        self.timer = _FakeTimer(alive=True)
+        self._timeout_deadline = 10.0
+
+    with patch.object(TimedGenerator, "start_timer", fake_start_timer):
+        tg = TimedGenerator(
+            iter(()),
+            timeout=1,
+            on_timeout=lambda: called.append("timeout"),
+        )
+
+    tg._timeout_expired.clear()
+    tg._timeout_deadline = 1.0
+    tg._result_queue = _FakeQueue(value=("item", "late-item", 2.0))
+
+    with pytest.raises(StopIteration):
+        next(tg)
+
+    assert called == ["timeout"]
+    assert tg._closed is True
+    assert tg.timer.cancelled is True
+
+
 def test_start_timer_raises_without_configured_timeout() -> None:
     tg = TimedGenerator(iter(()))
     with pytest.raises(RuntimeError, match="start_timer\\(\\) called without"):

@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
     from .extractor import TwitchChatDownloader
 
@@ -155,7 +156,7 @@ def get_chat_by_stream_id(
         },
     ]
 
-    stream_info: Any = None
+    stream_info: JSONDict | None = None
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
             stream_info = downloader._download_gql(query)[0]["data"]["user"]

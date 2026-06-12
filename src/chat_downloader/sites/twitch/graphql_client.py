@@ -6,19 +6,22 @@ from __future__ import annotations
 
 import base64
 from json import JSONDecodeError
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import CaptchaChallengeRequired
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_list, get_str
 from chat_downloader.utils.string_utils import contains_any_hint
 
 from .constants import CLIENT_ID, GQL_API_URL, OPERATION_HASHES
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+    from chat_downloader.utils.json_types import JSONAny, JSONList
 
 GQL_AUTH_COOKIE_NAME: str = "auth-token"
 
@@ -38,10 +41,10 @@ def _contains_challenge_text(text: object) -> bool:
 
 def _download_base_gql(
     session_post: Callable[..., Any],
-    ops: list[dict[str, Any]],
+    ops: JSONList,
     auth_token: str | None = None,
     client_id: str | None = None,
-) -> Any:
+) -> JSONAny:
     """Download GraphQL data using base query payloads."""
     headers: dict[str, str] = {
         "Content-Type": "text/plain;charset=UTF-8",
@@ -67,7 +70,7 @@ def _download_base_gql(
         )
     if status_code >= 400:
         response.raise_for_status()
-    return response.json()
+    return cast("JSONAny", response.json())
 
 
 def _describe_operation_names(operation_names: list[str] | None) -> str:
@@ -80,7 +83,7 @@ def _describe_operation_names(operation_names: list[str] | None) -> str:
 
 
 def _handle_gql_errors(
-    errors: list[dict[str, Any]],
+    errors: JSONList,
     operation_names: list[str] | None = None,
 ) -> None:
     """Handle GraphQL errors by mapping them to downloader exceptions."""
@@ -96,8 +99,10 @@ def _handle_gql_errors(
         return
 
     error = errors[0]
-    error_message = error.get("message", "Unknown GraphQL error")
-    error_path = error.get("path", [])
+    if not isinstance(error, dict):
+        return
+    error_message = get_str(error, "message", "Unknown GraphQL error")
+    error_path = get_list(error, "path")
     message_lower = error_message.lower()
     operation_text = _describe_operation_names(operation_names)
 
@@ -142,12 +147,14 @@ def _handle_gql_errors(
 
 def _download_gql(
     session_post: Callable[..., Any],
-    ops: list[dict[str, Any]],
+    ops: JSONList,
     auth_token: str | None = None,
     client_id: str | None = None,
-) -> Any:
+) -> JSONAny:
     """Download GraphQL data using persisted query hashes."""
-    operation_names = [str(op.get("operationName", "")) for op in ops]
+    operation_names = [
+        str(op.get("operationName", "")) if isinstance(op, dict) else "" for op in ops
+    ]
     missing_operation_names = [
         operation_name
         for operation_name in operation_names
@@ -172,26 +179,29 @@ def _download_gql(
             msg,
         )
 
-    request_ops = [
+    request_ops: list[dict[str, object]] = [
         {
             **op,
             "extensions": {
                 "persistedQuery": {
                     "version": 1,
-                    "sha256Hash": OPERATION_HASHES[op["operationName"]],
+                    "sha256Hash": OPERATION_HASHES[str(op.get("operationName", ""))],
                 },
             },
         }
         for op in ops
+        if isinstance(op, dict)
     ]
-    result = _download_base_gql(session_post, request_ops, auth_token, client_id)
+    result = _download_base_gql(
+        session_post, cast("JSONList", request_ops), auth_token, client_id
+    )
 
     if isinstance(result, list):
         for item in result:
             if isinstance(item, dict) and "errors" in item:
-                _handle_gql_errors(item["errors"], operation_names)
+                _handle_gql_errors(cast("JSONList", item["errors"]), operation_names)
     elif isinstance(result, dict) and "errors" in result:
-        _handle_gql_errors(result["errors"], operation_names)
+        _handle_gql_errors(cast("JSONList", result["errors"]), operation_names)
 
     return result
 

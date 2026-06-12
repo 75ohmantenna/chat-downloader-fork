@@ -41,6 +41,10 @@ def test_handle_gql_errors_maps_known_messages(message, expected_exception) -> N
         graphql_client._handle_gql_errors([{"message": message, "path": ["root"]}])
 
 
+def test_handle_gql_errors_ignores_malformed_error_item() -> None:
+    graphql_client._handle_gql_errors(["not-a-dict"])
+
+
 def test_handle_gql_errors_raises_parsing_error_with_path() -> None:
     with pytest.raises(ParsingError) as excinfo:
         graphql_client._handle_gql_errors(

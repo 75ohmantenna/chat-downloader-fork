@@ -20,6 +20,7 @@ from chat_downloader.errors import (
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_dict, get_float, get_list, get_str
 
 from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
 from .constants import build_known_comment_keys
@@ -29,21 +30,25 @@ from .replay_transport import get_chat_messages_by_vod_id
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+    from logging import Logger
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
+    from chat_downloader.utils.json_types import JSONDict
 
     from .extractor import TwitchChatDownloader
+    from .types import BadgeSet
 
 
 def _process_vod_edge(
-    edge: dict[str, Any],
+    edge: JSONDict,
     offset: float,
     creator_channel_id: str | None,
-    badge_set: Any,
-    time_filter: Any,
-    msg_filter: Any,
-    logger_obj: Any,
-) -> tuple[dict[str, Any] | None, str]:
+    badge_set: BadgeSet,
+    time_filter: TimeRangeFilter,
+    msg_filter: MessageFilter,
+    logger_obj: Logger,
+) -> tuple[JSONDict | None, str]:
     """Process a single VOD comment edge from a GraphQL response page.
 
     Validates the edge and node typename, applies time and message filters, and
@@ -71,7 +76,7 @@ def _process_vod_edge(
         logger_obj.debug("Skipping unexpected edge type: %s", edge_typename)
         return None, "skip"
 
-    node = edge.get("node")
+    node = get_dict(edge, "node")
     if not node:
         return None, "skip"
 
@@ -80,7 +85,9 @@ def _process_vod_edge(
         logger_obj.debug("Skipping unexpected node type: %s", node_typename)
         return None, "skip"
 
-    data = _parse_item(node, offset, creator_channel_id, badge_set)
+    data: JSONDict = cast(
+        "JSONDict", _parse_item(node, offset, creator_channel_id, badge_set)
+    )
     unexpected_keys = data.keys() - build_known_comment_keys()
     if unexpected_keys:
         debug_log(
@@ -133,7 +140,7 @@ def _fetch_vod_page(
     cursor: str,
     content_offset: float,
     request: ChatRequest,
-) -> tuple[Any, Any]:
+) -> tuple[JSONDict | None, JSONDict | None]:
     """Fetch one page of VOD comments with retry handling.
 
     Returns ``(comments, info)`` on success; raises on exhausted retries.
@@ -141,7 +148,7 @@ def _fetch_vod_page(
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
             return cast(
-                "tuple[Any, Any]",
+                "tuple[JSONDict | None, JSONDict | None]",
                 fetch_fn(
                     downloader._session_post,
                     downloader._download_gql,
@@ -162,11 +169,11 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
     max_duration: float | None,
     offset: float | None = None,
     fetch_messages: Callable[..., Any] | None = None,
-    logger_obj: Any = None,
-) -> Generator[dict[str, Any], None, None]:
+    logger_obj: Logger | None = None,
+) -> Generator[JSONDict, None, None]:
     """Yield replay chat messages for a VOD or clip."""
     fetch_messages = fetch_messages or get_chat_messages_by_vod_id
-    logger_obj = logger_obj or logger
+    effective_logger: Logger = logger_obj or logger
 
     plan = _init_vod_loop(request, max_duration, offset)
 
@@ -199,7 +206,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
         if not comments:
             break
 
-        edges = comments.get("edges") or []
+        edges = get_list(comments, "edges")
         has_next_page = bool(multi_get(comments, "pageInfo", "hasNextPage"))
 
         if not edges:
@@ -217,18 +224,20 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
         consecutive_empty_pages = 0
         creator_channel_id = multi_get(info or {}, "creator", "channel", "id")
         previous_cursor = cursor
-        for edge in edges:
-            new_cursor = edge.get("cursor")
+        for edge_item in edges:
+            if not isinstance(edge_item, dict):
+                continue
+            new_cursor = get_str(edge_item, "cursor")
             if new_cursor:
                 cursor = new_cursor
             data, edge_action = _process_vod_edge(
-                edge,
+                edge_item,
                 plan.offset,
                 creator_channel_id,
                 badge_set,
                 plan.time_filter,
                 plan.msg_filter,
-                logger_obj,
+                effective_logger,
             )
             if edge_action == "stop":
                 return
@@ -269,11 +278,11 @@ def get_chat_by_vod_id(
         },
     ]
 
-    video: Any = _fetch_gql_one(
-        downloader,
-        lambda: downloader._download_gql(query)[0]["data"]["video"],
-        request,
-    )
+    def _fetch_video() -> JSONDict | None:
+        raw = downloader._download_gql(query)
+        return cast("JSONDict | None", raw[0]["data"]["video"])
+
+    video: JSONDict | None = _fetch_gql_one(downloader, _fetch_video, request)
 
     if not video:
         msg = "Sorry. Unless you've got a time machine, that content is unavailable."
@@ -281,8 +290,8 @@ def get_chat_by_vod_id(
             msg,
         )
 
-    title = video.get("title")
-    duration = video.get("lengthSeconds")
+    title: str | None = get_str(video, "title") or None
+    duration: float | None = get_float(video, "lengthSeconds") or None
     channel_login = multi_get(video, "owner", "login")
     if channel_login:
         downloader._update_badge_info(channel_login)
@@ -312,13 +321,13 @@ def get_chat_by_clip_id(
         "variables": {"slug": clip_id},
     }
 
-    def _fetch_clip() -> Any:
+    def _fetch_clip() -> JSONDict | None:
         response = downloader._download_base_gql(query)
         if isinstance(response, dict) and "errors" in response:
             _handle_gql_errors(response["errors"], ["clip"])
-        return multi_get(response, "data", "clip")
+        return cast("JSONDict | None", multi_get(response, "data", "clip"))
 
-    clip: Any = _fetch_gql_one(downloader, _fetch_clip, request)
+    clip: JSONDict | None = _fetch_gql_one(downloader, _fetch_clip, request)
 
     if clip is None:
         msg = f'Unable to retrieve clip data for "{clip_id}"'
@@ -334,13 +343,13 @@ def get_chat_by_clip_id(
             msg,
         )
 
-    offset = clip.get("videoOffsetSeconds")
-    duration = clip.get("durationSeconds")
+    offset: float | None = get_float(clip, "videoOffsetSeconds") or None
+    duration: float | None = get_float(clip, "durationSeconds") or None
     downloader._update_badge_info(multi_get(clip, "broadcaster", "login"))
 
     return Chat(
         downloader._get_chat_messages_by_vod_id(vod_id, request, duration, offset),
-        title=f"{clip.get('title')} ({clip_id})",
+        title=f"{get_str(clip, 'title')} ({clip_id})",
         duration=duration,
         status="past",
         video_type="clip",
