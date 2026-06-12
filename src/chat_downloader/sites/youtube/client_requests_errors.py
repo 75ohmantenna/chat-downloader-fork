@@ -19,6 +19,7 @@ from chat_downloader.utils.string_utils import contains_any_hint
 from .continuations import summarize_continuation_payload
 
 if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
     from chat_downloader.utils.retry_utils import RetryPolicy
 
 _RETRYABLE_HTTP_STATUS_CODES: frozenset[int] = frozenset({403, 429})
@@ -188,7 +189,7 @@ def _handle_http_error(
 
 
 def _handle_json_api_error(
-    error: dict[str, Any],
+    error: JSONDict,
     continuation_url: str,
     attempt_number: int,
     max_attempts: int,
@@ -214,7 +215,12 @@ def _handle_json_api_error(
         RetriesExceeded: If a retryable error code exhausts the retry budget.
         IncompleteContinuationError: If an "unknown error" exhausts retries.
     """
-    error_code = error.get("code")
+    _raw_code = error.get("code")
+    error_code: int | None = (
+        _raw_code
+        if isinstance(_raw_code, int) and not isinstance(_raw_code, bool)
+        else None
+    )
     error_message = error.get("message")
     detail = f"YouTube API error ({error_code}): {error_message}"
     if _contains_challenge_text(error_message):
@@ -243,7 +249,7 @@ def _handle_json_api_error(
 
 
 def _handle_missing_live_chat_continuation(
-    json_response: dict[str, Any],
+    json_response: JSONDict,
     *,
     require_live_chat_continuation: bool,
     error: object,

@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.time_utils import seconds_to_time
@@ -13,23 +13,25 @@ from chat_downloader.utils.time_utils import seconds_to_time
 from .continuation_loop_state import ContinuationLoopState
 
 if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
+
     from .continuations import ContinuationParseResult
 
 
 def build_continuation_params(
-    innertube_context: dict[str, Any],
+    innertube_context: JSONDict,
     state: ContinuationLoopState,
     *,
     is_replay: bool,  # noqa: ARG001 — reserved; continuation body is the same for live and replay
-) -> dict[str, Any]:
+) -> JSONDict:
     """Build the JSON POST body for the next live-chat continuation request."""
     # Shallow-copy context so callers' dict is never mutated between calls.
-    context: dict[str, Any] = dict(innertube_context)
+    context: JSONDict = dict(innertube_context)
 
     if state.click_tracking_params:
         context["clickTracking"] = {"clickTrackingParams": state.click_tracking_params}
 
-    params: dict[str, Any] = {
+    params: JSONDict = {
         "context": context,
         "continuation": state.continuation,
     }
@@ -45,7 +47,7 @@ def build_continuation_params(
     return params
 
 
-def extract_visitor_data(yt_info: dict[str, Any]) -> str | None:
+def extract_visitor_data(yt_info: JSONDict) -> str | None:
     """Extract the ``visitorData`` token from an API response."""
     visitor_data: str | None = multi_get(yt_info, "responseContext", "visitorData")
     return visitor_data
@@ -57,7 +59,7 @@ def get_live_start_time_ms() -> int:
 
 
 def derive_live_offset_milliseconds(
-    message: dict[str, Any],
+    message: JSONDict,
     live_start_time_ms: int,
 ) -> int | None:
     """Derive a rolling live offset from a message timestamp.
@@ -76,7 +78,7 @@ def derive_live_offset_milliseconds(
 
 
 def enrich_live_message_timing(
-    message: dict[str, Any],
+    message: JSONDict,
     live_offset_milliseconds: int | None,
 ) -> None:
     """Populate time_in_seconds/time_text for live messages when absent."""
@@ -98,7 +100,10 @@ def update_state_from_result(
     if cont_result.next_continuation is None:
         return state
 
-    cont_entry: dict[str, Any] = cont_result.debug_info.get("continuation_entry") or {}
+    raw_entry = cont_result.debug_info.get("continuation_entry")
+    # pragma: no cover — when next_continuation is set, debug_info always has
+    # continuation_entry; the else-branch is unreachable in normal operation.
+    cont_entry = raw_entry if isinstance(raw_entry, dict) else {}  # pragma: no cover
     click_tracking = cont_entry.get("clickTrackingParams") or cont_entry.get(
         "trackingParams",
     )

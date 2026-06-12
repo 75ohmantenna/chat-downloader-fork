@@ -7,8 +7,13 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, urlencode
+
+from chat_downloader.utils.json_types import get_str
+
+if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
 
 from .constants_patterns import (
     _YT_DOMAIN,
@@ -111,11 +116,11 @@ def _ensure_primary_sapisid(
     return sapisid_value
 
 
-def _session_id_parts(ytcfg: dict[str, Any] | None) -> dict[str, str] | None:
+def _session_id_parts(ytcfg: JSONDict | None) -> dict[str, str] | None:
     """Return session-id additional_parts from ytcfg, or None."""
     if not ytcfg:
         return None
-    datasync_id = ytcfg.get("DATASYNC_ID")
+    datasync_id = get_str(ytcfg, "DATASYNC_ID")
     if not datasync_id:
         return None
     _, user_session_id = _parse_data_sync_id(datasync_id)
@@ -125,7 +130,7 @@ def _session_id_parts(ytcfg: dict[str, Any] | None) -> dict[str, str] | None:
 def _generate_sapisidhash_header(
     session: Any,
     yt_home: str,
-    ytcfg: dict[str, Any] | None = None,
+    ytcfg: JSONDict | None = None,
 ) -> str | None:
     """Generate SAPISIDHASH authorization header for API requests."""
     sids = _get_sid_cookies(session)

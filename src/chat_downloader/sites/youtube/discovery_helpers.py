@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import dig
 
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
@@ -22,21 +23,17 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONAny, JSONDict
 
     from ._protocols import YouTubeDownloaderProto
 
 
-def _iter_playlist_urls(content: Any) -> Iterator[str]:
+def _iter_playlist_urls(content: JSONAny) -> Iterator[str]:
     """Yield playlist URLs from a rendered discovery tab content tree."""
     if isinstance(content, dict):
         shelf = content.get("shelfRenderer")
         if isinstance(shelf, dict):
-            url = (
-                shelf.get("endpoint", {})
-                .get("commandMetadata", {})
-                .get("webCommandMetadata", {})
-                .get("url")
-            )
+            url = dig(shelf, "endpoint", "commandMetadata", "webCommandMetadata", "url")
             if isinstance(url, str) and url.startswith("/playlist?"):
                 yield _YT_HOME + url
 
@@ -49,7 +46,7 @@ def _iter_playlist_urls(content: Any) -> Iterator[str]:
             yield from _iter_playlist_urls(item)
 
 
-def _iter_video_ids(content: Any) -> Iterator[str]:
+def _iter_video_ids(content: JSONAny) -> Iterator[str]:
     """Yield video IDs from a rendered discovery tab content tree."""
     if isinstance(content, dict):
         video = content.get("videoRenderer")
@@ -67,7 +64,7 @@ def _iter_video_ids(content: Any) -> Iterator[str]:
             yield from _iter_video_ids(item)
 
 
-def _get_rendered_content(yt_info: dict[str, Any], tab_index: int = 0) -> Any:
+def _get_rendered_content(yt_info: JSONDict, tab_index: int = 0) -> Any:
     """Extract rendered content from YouTube info."""
     return multi_get(
         yt_info,
@@ -110,8 +107,11 @@ class YouTubeDiscoveryHelpersMixin:
             _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
 
-        tabs = yt_initial_data["contents"]["twoColumnBrowseResultsRenderer"]["tabs"]
-        tab_content = tabs[0]["tabRenderer"]["content"]
+        _two_col = multi_get(
+            yt_initial_data, "contents", "twoColumnBrowseResultsRenderer"
+        )
+        tabs = multi_get(_two_col or {}, "tabs") or []
+        tab_content = multi_get(tabs[0] if tabs else {}, "tabRenderer", "content") or {}
 
         yielded_video_ids: set[str] = set()
         for video_id in _iter_video_ids(tab_content):

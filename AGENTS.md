@@ -10,9 +10,9 @@ For deeper context see [`docs/development-workflow-guide.md`](docs/development-w
 - `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `output_dispatch`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).  Twitch `parsing/` contains `messages` (entry points), `message_emotes` (emote/image helpers), `message_irc_resolve` (IRC type/action/room-state resolution), `badges`, and `tag_decoding`.
 - `src/chat_downloader/output/`: `continuous_write.py` (`ContinuousWriter` factory + re-exports); `writers.py` (concrete writer types: CSV, JSONL, text).
 - `src/chat_downloader/formatting/`: `ItemFormatter` and bundled `custom_formats.json`.
-- `src/chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `string_utils`, `retry_utils`, `timed_utils`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`).
+- `src/chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `json_types`, `string_utils`, `retry_utils`, `timed_input`, `timed_generator`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`, `filename_utils`).
 - `tests/`: pytest suite with curated fixtures under `tests/fixtures/`; network tests gated by `@pytest.mark.network`.
-- `docs/`: `architecture.md` (layer diagram + module inventory), `cli-usage.md`, `development-workflow-guide.md`, `python-api-reference.md`, and the YouTube/Twitch integration guides.
+- `docs/`: `architecture.md` (layer diagram + module inventory), `cli-usage.md`, `development-workflow-guide.md`, `python-api-reference.md`, the YouTube/Twitch integration guides, `maintenance-backlog.md` (live deferrals + X-series migration tracker), and `maintenance-notes.md` (design-decision record).
 
 ## Architecture
 See [`docs/architecture.md`](docs/architecture.md) for the full layer diagram, module inventory, and guardrail table.

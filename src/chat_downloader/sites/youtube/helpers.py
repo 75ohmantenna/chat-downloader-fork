@@ -18,9 +18,10 @@ from .client_requests_continuation import _get_continuation_info
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict, JSONList
 
 
-def require_innertube_api_key(ytcfg: dict[str, Any]) -> str:
+def require_innertube_api_key(ytcfg: JSONDict) -> str:
     """Return the INNERTUBE_API_KEY from ytcfg or raise ParsingError."""
     api_key = ytcfg.get("INNERTUBE_API_KEY")
     if not isinstance(api_key, str) or not api_key:
@@ -32,17 +33,7 @@ def require_innertube_api_key(ytcfg: dict[str, Any]) -> str:
     return api_key
 
 
-def _safe_get_dict(obj: dict[str, Any], key: str) -> dict[str, Any]:
-    """Get dict value with empty dict default if missing or falsy.
-
-    :param obj: Dictionary to get value from
-    :param key: Key to look up
-    :return: Value at key or empty dict if missing/falsy
-    """
-    return obj.get(key) or {}
-
-
-def _extract_browse_continuation_token(items: Any) -> str | None:
+def _extract_browse_continuation_token(items: object) -> str | None:
     """Extract continuation token from a list of browse continuation items."""
     if not isinstance(items, list):
         return None
@@ -95,7 +86,7 @@ def _extract_menu_continuation_token(item: object) -> str | None:
 
 
 def extract_chat_submenu_continuations(
-    yt_data: dict[str, Any],
+    yt_data: JSONDict,
     fallback_labels: list[str] | None = None,
 ) -> dict[str, str]:
     """Extract chat-menu continuation tokens from a YouTube live-chat payload.
@@ -159,10 +150,10 @@ def _fetch_browse_continuation(
     self: Any,
     continuation: str | None,
     continuation_url: str,
-    continuation_params: dict[str, Any],
+    continuation_params: JSONDict,
     request: ChatRequest,
     seen_continuations: set[str],
-) -> tuple[list[Any] | None, dict[str, Any] | None]:
+) -> tuple[JSONList | None, JSONDict | None]:
     """Fetch the next page via browse continuation.
 
     Returns ``(items, yt_info)``.  Returns ``(None, None)`` when the caller
@@ -201,7 +192,7 @@ def _fetch_browse_continuation(
 
 
 def _extract_browse_continuation_token_from_response(
-    yt_info: dict[str, Any],
+    yt_info: JSONDict,
 ) -> str | None:
     """Extract a continuation token even when page has no video items.
 

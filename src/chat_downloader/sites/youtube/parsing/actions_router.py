@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from chat_downloader.debugging import debug_log
 from chat_downloader.redaction import capture_debug_sample
@@ -22,6 +22,7 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_TOOLTIP_ACTION_TYPES,
 )
 from chat_downloader.utils.dict_utils import try_get_first_key
+from chat_downloader.utils.json_types import JSONDict, get_dict, get_list, get_str
 from chat_downloader.utils.string_utils import camel_case_split, remove_suffixes
 
 from .actions_handlers import (
@@ -41,7 +42,7 @@ _KNOWN_ITEM_ACTION_TYPES = {
 }
 
 _ActionHandler = Callable[
-    [dict[str, Any], str, dict[str, Any], float],
+    [JSONDict, str, dict[str, Any], float],
     tuple[dict[str, Any], dict[str, Any], str | None, str],
 ]
 
@@ -79,7 +80,7 @@ def _make_processed_action(
 
 
 def process_action(
-    action: dict[str, Any],
+    action: JSONDict,
     offset: float = 0,
 ) -> ProcessedAction | None:
     """Process a YouTube chat action and return parsed message data.
@@ -94,12 +95,13 @@ def process_action(
     data: dict[str, Any] = {}
 
     # Handle replay chat item actions (need to re-base time)
-    replay_chat_item_action = action.get("replayChatItemAction")
+    replay_chat_item_action = get_dict(action, "replayChatItemAction")
     if replay_chat_item_action:
-        offset_time = replay_chat_item_action.get("videoOffsetTimeMsec")
+        offset_time = get_str(replay_chat_item_action, "videoOffsetTimeMsec")
         if offset_time:
             data["time_in_seconds"] = float(offset_time) / 1000
-        action = replay_chat_item_action["actions"][0]
+        actions_list = get_list(replay_chat_item_action, "actions")
+        action = cast("JSONDict", actions_list[0]) if actions_list else action
 
     # Remove tracking params and get action type
     action.pop("clickTrackingParams", None)

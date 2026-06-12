@@ -10,9 +10,10 @@ from chat_downloader.sites.remap import (
     Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
 )
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import JSONDict, get_str
 
 
-def _parse_lockup_badge_style(lockup: dict[str, Any]) -> str | None:
+def _parse_lockup_badge_style(lockup: JSONDict) -> str | None:
     """Return a video type style from a modern lockup thumbnail badge."""
     overlays = multi_get(
         lockup,
@@ -44,8 +45,8 @@ def _parse_lockup_badge_style(lockup: dict[str, Any]) -> str | None:
 
 
 def _lockup_view_model_to_video_renderer(
-    lockup: dict[str, Any],
-) -> dict[str, Any]:
+    lockup: JSONDict,
+) -> JSONDict:
     """Convert YouTube's modern lockup view model into videoRenderer shape."""
     metadata = multi_get(lockup, "metadata", "lockupMetadataViewModel") or {}
     metadata_rows = multi_get(
@@ -57,8 +58,8 @@ def _lockup_view_model_to_video_renderer(
     metadata_parts = multi_get(metadata_rows or [], 0, "metadataParts") or []
     view_count = multi_get(metadata_parts, 0, "text")
 
-    video_renderer: dict[str, Any] = {
-        "videoId": lockup.get("contentId")
+    video_renderer: JSONDict = {
+        "videoId": get_str(lockup, "contentId")
         or multi_get(
             lockup,
             "rendererContext",
@@ -87,7 +88,7 @@ def _lockup_view_model_to_video_renderer(
     return video_renderer
 
 
-def _parse_video(video_renderer: dict[str, Any]) -> dict[str, Any]:
+def _parse_video(video_renderer: JSONDict) -> dict[str, Any]:
     """Parse video information from a YouTube video renderer."""
     from chat_downloader.sites.youtube.constants_message import (
         build_video_remapping,
@@ -95,7 +96,7 @@ def _parse_video(video_renderer: dict[str, Any]) -> dict[str, Any]:
 
     if "lockupViewModel" in video_renderer:
         video_renderer = _lockup_view_model_to_video_renderer(
-            video_renderer["lockupViewModel"]
+            video_renderer["lockupViewModel"]  # type: ignore[arg-type]
         )
 
     # Get video type:

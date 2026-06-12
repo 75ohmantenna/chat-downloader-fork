@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from chat_downloader.debugging import debug_log, log
 from chat_downloader.errors import ChatDownloaderError, NoChatReplay
@@ -17,9 +17,11 @@ from .continuation_loop import extract_visitor_data
 
 if TYPE_CHECKING:
     from chat_downloader.sites.youtube._protocols import YouTubeDownloaderProto
+    from chat_downloader.sites.youtube.continuations import ContinuationParseResult
+    from chat_downloader.utils.json_types import JSONDict
 
 
-def _raise_if_api_error(yt_info: dict[str, Any]) -> None:
+def _raise_if_api_error(yt_info: JSONDict) -> None:
     """Raise a typed exception when the YouTube API returns an error payload."""
     if "error" not in yt_info:
         return
@@ -42,7 +44,7 @@ def _raise_if_api_error(yt_info: dict[str, Any]) -> None:
     raise ChatDownloaderError(msg)
 
 
-def _log_continuation_debug_info(cont_result: Any) -> None:
+def _log_continuation_debug_info(cont_result: ContinuationParseResult) -> None:
     """Log parsed continuation details without cluttering the main loop."""
     if not cont_result.debug_info:
         return
@@ -73,7 +75,7 @@ def _log_continuation_debug_info(cont_result: Any) -> None:
     )
 
 
-def _update_visitor_data(self: YouTubeDownloaderProto, yt_info: dict[str, Any]) -> None:
+def _update_visitor_data(self: YouTubeDownloaderProto, yt_info: JSONDict) -> None:
     """Propagate visitor-data from the response into session headers."""
     visitor_data = extract_visitor_data(yt_info)
     if visitor_data:
@@ -83,7 +85,7 @@ def _update_visitor_data(self: YouTubeDownloaderProto, yt_info: dict[str, Any]) 
 
 def _apply_response_state_updates(
     self: YouTubeDownloaderProto,
-    yt_info: dict[str, Any],
+    yt_info: JSONDict,
     auth: str | None = None,
 ) -> None:
     """Apply response-driven session/header state updates in one place."""
@@ -94,8 +96,8 @@ def _apply_response_state_updates(
 
 def _log_request_context(
     self: YouTubeDownloaderProto,
-    yt_info: dict[str, Any],
-    continuation_params: dict[str, Any],
+    yt_info: JSONDict,
+    continuation_params: JSONDict,
 ) -> None:
     """Log continuation parameters, session headers, and login state."""
     debug_info = {
@@ -127,9 +129,9 @@ def _log_request_context(
 
 def _handle_continuation_response(
     self: YouTubeDownloaderProto,
-    yt_info: dict[str, Any],
-    ytcfg: dict[str, Any],
-    continuation_params: dict[str, Any],
+    yt_info: JSONDict,
+    ytcfg: JSONDict,
+    continuation_params: JSONDict,
 ) -> None:
     """Apply response-driven state, log request context, and raise errors."""
     auth = _generate_sapisidhash_header(self, _YT_HOME, ytcfg)

@@ -9,17 +9,9 @@ from chat_downloader.sites.youtube.helpers import (
     _extract_browse_continuation_token,
     _extract_browse_continuation_token_from_response,
     _extract_menu_continuation_token,
-    _safe_get_dict,
     extract_chat_submenu_continuations,
     require_innertube_api_key,
 )
-
-
-def test_safe_get_dict_returns_empty_dict_for_missing_or_falsy_values() -> None:
-    assert _safe_get_dict({}, "missing") == {}
-    assert _safe_get_dict({"value": None}, "value") == {}
-    assert _safe_get_dict({"value": 0}, "value") == {}
-    assert _safe_get_dict({"value": {"ok": True}}, "value") == {"ok": True}
 
 
 def test_extract_browse_continuation_token_handles_invalid_and_missing_inputs() -> None:

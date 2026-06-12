@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from requests.exceptions import RequestException
 
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
 
 _CHALLENGE_HINTS: tuple[str, ...] = (
@@ -72,7 +73,7 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
     yt_initial_data_re: str,
     yt_cfg_re: str,
     yt_initial_player_response_re: str,
-) -> tuple[Any, Any, Any]:
+) -> tuple[JSONDict, JSONDict, JSONDict]:
     """Get initial YouTube page data with retry handling."""
     if params is None:
         max_attempts = 1
@@ -142,9 +143,9 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                         msg,
                     )
 
-            yt_initial_data = try_parse_json(
-                regex_search(html, yt_initial_data_re),
-                None,
+            yt_initial_data = cast(
+                "JSONDict",
+                try_parse_json(regex_search(html, yt_initial_data_re), None),
             )
 
             if not yt_initial_data:
@@ -155,12 +156,12 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                 raise ParsingError(msg)
 
             cfg = regex_search(html, yt_cfg_re)
-            ytcfg = try_parse_json(cfg, {})
+            ytcfg = cast("JSONDict", try_parse_json(cfg, {}))
             player_response = regex_search(
                 html,
                 yt_initial_player_response_re,
             )
-            player_response_info = try_parse_json(player_response, {})
+            player_response_info = cast("JSONDict", try_parse_json(player_response, {}))
 
         except (RequestException, OSError) as e:
             log(

@@ -13,8 +13,10 @@ from .chat_streams_runtime_iteration import _get_chat_messages
 
 if TYPE_CHECKING:
     import re
+    from collections.abc import Generator
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
     from ._protocols import YouTubeDownloaderProto
 
@@ -25,9 +27,9 @@ class YouTubeChatStreamsMixin:
     def _get_chat_messages(
         self,
         initial_info: dict[str, Any],
-        ytcfg: dict[str, Any],
+        ytcfg: JSONDict,
         params: ChatRequest,
-    ) -> Any:
+    ) -> Generator[JSONDict, None, None]:
         """Yield chat messages from a YouTube continuation endpoint."""
         return _get_chat_messages(
             cast("YouTubeDownloaderProto", self), initial_info, ytcfg, params

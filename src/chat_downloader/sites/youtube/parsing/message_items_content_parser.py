@@ -12,6 +12,7 @@ from chat_downloader.sites.remap import (
 from chat_downloader.utils.color_utils import argb_int_to_rgba, rgba_to_hex
 from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
+from chat_downloader.utils.json_types import JSONDict, get_dict
 from chat_downloader.utils.string_utils import camel_case_split
 from chat_downloader.utils.time_utils import seconds_to_time, time_to_seconds
 
@@ -95,13 +96,13 @@ def _reconcile_time_fields(info: dict[str, Any], offset: float) -> None:
 
 def _apply_colour_keys(
     info: dict[str, Any],
-    item_info: dict[str, Any],
+    item_info: JSONDict,
     colour_keys: list[str],
 ) -> None:
     """Convert ARGB colour fields to hex and store under normalised keys."""
     for colour_key in colour_keys:
         if colour_key in item_info:
-            rgba_colour = argb_int_to_rgba(item_info[colour_key])
+            rgba_colour = argb_int_to_rgba(item_info[colour_key])  # type: ignore[arg-type]
             hex_colour = rgba_to_hex(rgba_colour)
             new_key = camel_case_split(colour_key.replace("Color", "Colour"))
             info[new_key] = hex_colour
@@ -109,23 +110,23 @@ def _apply_colour_keys(
 
 def _merge_nested_renderers(
     info: dict[str, Any],
-    item_info: dict[str, Any],
+    item_info: JSONDict,
     offset: float,
 ) -> None:
     """Recursively merge showItemEndpoint and header renderers into *info*."""
-    item_endpoint = item_info.get("showItemEndpoint")
+    item_endpoint = get_dict(item_info, "showItemEndpoint")
     if item_endpoint:
         renderer = multi_get(item_endpoint, "showLiveChatItemEndpoint", "renderer")
         if renderer:
             info.update(_parse_item(renderer, offset=offset))
 
-    header = item_info.get("header")
+    header = get_dict(item_info, "header")
     if header:
         info.update(_parse_item(header, offset=offset))
 
 
 def _parse_item(
-    item: dict[str, Any],
+    item: JSONDict,
     info: dict[str, Any] | None = None,
     offset: float = 0,
 ) -> dict[str, Any]:
@@ -134,7 +135,7 @@ def _parse_item(
         info = {}
 
     item_index = try_get_first_key(item)
-    item_info = item.get(item_index)
+    item_info = get_dict(item, item_index) if item_index else {}
     if not item_info:
         return info
 

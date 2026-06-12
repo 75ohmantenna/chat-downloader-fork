@@ -5,28 +5,32 @@
 from __future__ import annotations
 
 import copy
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.request_profiles import (
     get_request_profile_innertube_context,
 )
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_str
+
+if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
 
 from .client_auth import _parse_data_sync_id
 
 
-def _extract_account_syncid(ytcfg: dict[str, Any]) -> str | None:
+def _extract_account_syncid(ytcfg: JSONDict) -> str | None:
     """Extract account sync ID from YouTube config."""
-    datasync_id = ytcfg.get("DATASYNC_ID")
+    datasync_id = get_str(ytcfg, "DATASYNC_ID")
     if datasync_id:
         delegated_session_id, _ = _parse_data_sync_id(datasync_id)
         if delegated_session_id:
             return delegated_session_id
-    return ytcfg.get("DELEGATED_SESSION_ID")
+    return get_str(ytcfg, "DELEGATED_SESSION_ID") or None
 
 
 def _generate_headers(
-    ytcfg: dict[str, Any],
+    ytcfg: JSONDict,
     session: Any,
     yt_home: str,
     sapisidhash_generator: Any,
@@ -40,7 +44,7 @@ def _generate_headers(
         "x-goog-authuser": "0",
     }
 
-    identity_token = ytcfg.get("ID_TOKEN")
+    identity_token = get_str(ytcfg, "ID_TOKEN")
     if identity_token:
         headers["x-youtube-identity-token"] = identity_token
 
@@ -70,7 +74,7 @@ def _generate_headers(
     return headers
 
 
-def _get_innertube_context(ytcfg: dict[str, Any]) -> dict[str, Any]:
+def _get_innertube_context(ytcfg: JSONDict) -> dict[str, Any]:
     """Return normalized InTube context."""
     context = copy.deepcopy(ytcfg.get("INNERTUBE_CONTEXT") or {})
     if not isinstance(context, dict):

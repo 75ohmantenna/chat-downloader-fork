@@ -17,6 +17,7 @@ from chat_downloader.sites.youtube.constants_actions_messages_list import (
 from chat_downloader.sites.youtube.constants_message import (
     known_keys,
 )
+from chat_downloader.utils.json_types import JSONDict, get_dict
 from chat_downloader.utils.string_utils import (
     camel_case_split,
     remove_prefixes,
@@ -33,7 +34,7 @@ _MODE_ICON_TO_TYPE: dict[str, str] = {
 
 def _emit_parse_diagnostics(
     data: dict[str, Any],
-    original_item: dict[str, Any],
+    original_item: JSONDict,
     original_action_type: str,
     original_message_type: str,
     missing_keys: set[str],
@@ -89,7 +90,7 @@ def _derive_message_type(
 
 def validate_and_finalize_message(
     data: dict[str, Any],
-    original_item: dict[str, Any],
+    original_item: JSONDict,
     original_message_type: str | None,
     original_action_type: str,
 ) -> dict[str, Any] | None:
@@ -98,7 +99,7 @@ def validate_and_finalize_message(
         debug_log("No message type", f"Action type: {original_action_type}")
         return None
 
-    missing_keys = original_item.get(original_message_type, {}).keys() - known_keys()
+    missing_keys = get_dict(original_item, original_message_type).keys() - known_keys()
     _emit_parse_diagnostics(
         data,
         original_item,

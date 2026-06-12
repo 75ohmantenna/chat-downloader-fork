@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
 
 def _build_channel_url(
@@ -55,7 +56,7 @@ def _build_channel_url(
     return user_url, f"{user_url}/{vid_type}"
 
 
-def _select_videos_tab(yt_info: dict[str, Any], user_url: str, video_type: str) -> Any:
+def _select_videos_tab(yt_info: JSONDict, user_url: str, video_type: str) -> Any:
     """Return the page_contents for the requested tab, or raise."""
     tabs = multi_get(yt_info, "contents", "twoColumnBrowseResultsRenderer", "tabs")
     if not tabs:
@@ -153,7 +154,7 @@ def get_user_videos(
 
     seen_continuations: set[str] = set()
     while continuation:
-        items, yt_info = _fetch_browse_continuation(
+        items, cont_yt_info = _fetch_browse_continuation(
             self,
             continuation,
             continuation_url,
@@ -161,12 +162,12 @@ def get_user_videos(
             request,
             seen_continuations,
         )
-        if items is None and yt_info is None:
+        if items is None and cont_yt_info is None:
             break
         if not items:
             continuation = (
-                _extract_browse_continuation_token_from_response(yt_info)
-                if yt_info
+                _extract_browse_continuation_token_from_response(cont_yt_info)
+                if cont_yt_info
                 else None
             )
             continue

@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
+
+if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
 
 from chat_downloader.request_profiles import (
     REQUEST_PROFILE_INNERTUBE_CONTEXTS,
@@ -24,7 +27,7 @@ def _fallback_profile(profile_name: object) -> str:
     return profile_name if isinstance(profile_name, str) else _DEFAULT_FALLBACK_PROFILE
 
 
-def _fallback_context(profile_name: object) -> dict[str, Any]:
+def _fallback_context(profile_name: object) -> JSONDict:
     profile = _fallback_profile(profile_name)
     base_context = REQUEST_PROFILE_INNERTUBE_CONTEXTS.get(
         _DEFAULT_FALLBACK_PROFILE,
@@ -36,8 +39,8 @@ def _fallback_context(profile_name: object) -> dict[str, Any]:
 def _post_innertube_json(
     session_post: Any,
     endpoint: str,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
+    payload: JSONDict,
+) -> JSONDict:
     response = session_post(
         f"{_YT_HOME}/youtubei/v1/{endpoint}?key={_DEFAULT_INNERTUBE_API_KEY}",
         json=payload,
@@ -47,7 +50,7 @@ def _post_innertube_json(
 
 
 def _extract_primary_live_continuation(
-    yt_next_data: dict[str, Any],
+    yt_next_data: JSONDict,
 ) -> str | None:
     continuation = multi_get(
         yt_next_data,
@@ -64,10 +67,10 @@ def _extract_primary_live_continuation(
 
 
 def _build_fallback_ytcfg(
-    context: dict[str, Any],
-    player_response: dict[str, Any],
-    next_response: dict[str, Any],
-) -> dict[str, Any]:
+    context: JSONDict,
+    player_response: JSONDict,
+    next_response: JSONDict,
+) -> JSONDict:
     client = context.get("client") if isinstance(context, dict) else {}
     if not isinstance(client, dict):
         client = {}
@@ -88,8 +91,8 @@ def _build_fallback_ytcfg(
 
 
 def _build_fallback_initial_data(
-    yt_next_data: dict[str, Any],
-) -> dict[str, Any]:
+    yt_next_data: JSONDict,
+) -> JSONDict:
     initial_data = dict(yt_next_data)
     continuation_info = extract_chat_submenu_continuations(initial_data)
     primary_continuation = _extract_primary_live_continuation(initial_data)
@@ -100,7 +103,9 @@ def _build_fallback_initial_data(
         continuation_info["Live chat"] = primary_continuation
         continuation_info.setdefault("Top chat", primary_continuation)
     if continuation_info:
-        initial_data["_chat_downloader_continuation_info"] = continuation_info
+        initial_data["_chat_downloader_continuation_info"] = cast(
+            "JSONDict", continuation_info
+        )
     return initial_data
 
 
@@ -108,10 +113,10 @@ def get_innertube_video_bootstrap(
     video_id: str,
     session_post: Any,
     request_profile: object,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+) -> tuple[JSONDict, JSONDict, JSONDict]:
     """Return initial data, config, and player response from InnerTube."""
     context = _fallback_context(request_profile)
-    payload = {"context": context, "videoId": video_id}
+    payload: JSONDict = {"context": context, "videoId": video_id}
 
     player_response = _post_innertube_json(session_post, "player", payload)
     next_response = _post_innertube_json(session_post, "next", payload)

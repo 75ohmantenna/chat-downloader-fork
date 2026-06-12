@@ -23,6 +23,7 @@ from .video_status import parse_video_details, video_details_to_dict
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
     from ._protocols import YouTubeDownloaderProto
 
@@ -31,12 +32,12 @@ class YouTubeVideoMetadataCoreMixin:
     """Methods for parsing and exposing base YouTube video metadata."""
 
     @staticmethod
-    def _is_age_gated(player_response_info: dict[str, Any]) -> bool:
+    def _is_age_gated(player_response_info: JSONDict) -> bool:
         """Check if video is age-gated based on yt-dlp implementation."""
         return _mapper_is_age_gated(player_response_info)
 
     @staticmethod
-    def _is_unplayable(player_response_info: dict[str, Any]) -> bool:
+    def _is_unplayable(player_response_info: JSONDict) -> bool:
         """Check if video is marked as unplayable based on yt-dlp mapping."""
         return _mapper_is_unplayable(player_response_info)
 
@@ -45,7 +46,7 @@ class YouTubeVideoMetadataCoreMixin:
         video_id: str,
         params: ChatRequest | None = None,
         video_type: str = "video",
-    ) -> tuple[dict[str, Any], Any, Any, Any]:
+    ) -> tuple[dict[str, Any], JSONDict, JSONDict, JSONDict]:
         """Parse video metadata from YouTube by initial page fetch."""
         if video_type == "clip":
             original_url = f"{_YT_HOME}/clip/{video_id}"

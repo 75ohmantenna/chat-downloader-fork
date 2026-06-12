@@ -5,11 +5,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import IncompleteContinuationError
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
+from chat_downloader.utils.json_types import (
+    JSONAny,
+    JSONDict,
+    JSONList,
+    get_list,
+    get_str,
+)
 
 from .constants_actions_continuations import (
     _KNOWN_CHAT_CONTINUATIONS,
@@ -40,16 +46,16 @@ class ContinuationParseResult:
     :type debug_info: dict
     """
 
-    actions: list[Any] = field(default_factory=list)
+    actions: list[JSONAny] = field(default_factory=list)
     next_continuation: str | None = None
     timeout_ms: int | None = None
     is_end: bool = False
-    debug_info: dict[str, Any] = field(default_factory=dict)
+    debug_info: dict[str, object] = field(default_factory=dict)
 
 
-def summarize_continuation_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def summarize_continuation_payload(payload: JSONDict) -> dict[str, object]:
     """Return a compact, fixture-friendly summary of a continuation payload."""
-    summary: dict[str, Any] = {
+    summary: dict[str, object] = {
         "top_level_keys": list(payload.keys()),
     }
 
@@ -82,9 +88,9 @@ def summarize_continuation_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-def _extract_actions(info: dict[str, Any]) -> list[Any]:
+def _extract_actions(info: JSONDict) -> JSONList:
     """Return the ``actions`` list from a ``liveChatContinuation`` dict."""
-    return info.get("actions") or []
+    return get_list(info, "actions")
 
 
 _POLL_DELAY_FIELDS = (
@@ -96,14 +102,16 @@ _POLL_DELAY_FIELDS = (
 
 
 def _extract_next_continuation(
-    info: dict[str, Any],
-) -> tuple[str | None, str | None, Any, dict[str, Any]]:
+    info: JSONDict,
+) -> tuple[str | None, JSONAny, object, dict[str, object]]:
     """Scan continuations and return the first chat continuation entry.
 
     Seek-only continuations are intentionally skipped.
     """
-    for cont in info.get("continuations") or []:
-        continuation_key = try_get_first_key(cont)
+    for cont in get_list(info, "continuations"):
+        if not isinstance(cont, dict):
+            continue
+        continuation_key = next(iter(cont), None)
         if continuation_key is None:
             continue
         continuation_info = cont[continuation_key]
@@ -111,12 +119,12 @@ def _extract_next_continuation(
             continue
 
         if continuation_key in _KNOWN_CHAT_CONTINUATIONS:
-            token = continuation_info.get("continuation")
+            token = get_str(continuation_info, "continuation") or None
             click_tracking = continuation_info.get(
                 "clickTrackingParams",
             ) or continuation_info.get("trackingParams")
             raw_poll_delay_ms = _extract_raw_poll_delay_ms(continuation_info)
-            debug: dict[str, Any] = {
+            debug: dict[str, object] = {
                 "continuation_key": continuation_key,
                 "continuation_entry": continuation_info,
             }
@@ -142,8 +150,8 @@ def _extract_next_continuation(
 
 
 def _extract_raw_poll_delay_ms(
-    continuation_info: dict[str, Any],
-) -> Any:
+    continuation_info: JSONDict,
+) -> object:
     """Return YouTube's raw poll-delay hint from known field names."""
     for delay_field in _POLL_DELAY_FIELDS:
         if delay_field in continuation_info:
@@ -151,11 +159,14 @@ def _extract_raw_poll_delay_ms(
     return None
 
 
-def _extract_timeout_ms(raw_timeout: Any) -> int | None:
+def _extract_timeout_ms(raw_timeout: object) -> int | None:
     """Return YouTube's raw continuation timeout hint in milliseconds."""
     if raw_timeout is None:
         return None
     if isinstance(raw_timeout, bool):
+        log("debug", f"Ignoring invalid continuation timeout: {raw_timeout}")
+        return None
+    if not isinstance(raw_timeout, (str, int, float)):
         log("debug", f"Ignoring invalid continuation timeout: {raw_timeout}")
         return None
     try:
@@ -171,7 +182,7 @@ def _detect_end(next_continuation: str | None) -> bool:
 
 
 def parse_continuation_response(
-    payload: dict[str, Any],
+    payload: JSONDict,
 ) -> ContinuationParseResult:
     """Parse a raw YouTube live-chat continuation API response."""
     if "error" in payload:

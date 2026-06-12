@@ -8,18 +8,19 @@ import re
 from typing import Any
 
 from chat_downloader.sites.models import Image
+from chat_downloader.utils.json_types import JSONDict, get_str
 
 from .message_links import _get_source_image_url
 
 
 def _parse_badge_icons(
-    badge_icons: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
+    badge_icons: list[JSONDict],
+) -> list[JSONDict]:
     """Build the icons list from raw badge icon entries."""
-    icons: list[dict[str, Any]] = []
+    icons: list[JSONDict] = []
     last_url: str | None = None
     for icon in badge_icons:
-        url = icon.get("url")
+        url = get_str(icon, "url")
         if url:
             matches = re.search(r"=s(\d+)", url)
             if matches:
@@ -34,7 +35,7 @@ def _parse_badge_icons(
     return icons
 
 
-def _parse_badges(badge_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _parse_badges(badge_items: list[JSONDict]) -> list[dict[str, Any]]:
     """Parse badge information for chat authors."""
     from .message_items_content_parser import _parse_item
 
@@ -49,7 +50,7 @@ def _parse_badges(badge_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
         icon = parsed_badge.pop("icon", None)
         if icon:
-            to_add["icon_name"] = icon.lower()
+            to_add["icon_name"] = str(icon).lower()
 
         badge_icons = parsed_badge.pop("badge_icons", None)
         if badge_icons:
@@ -66,13 +67,13 @@ def _safe_float(text: str) -> float | None:
         return None
 
 
-def _parse_currency(item: dict[str, Any]) -> dict[str, Any]:
+def _parse_currency(item: JSONDict) -> JSONDict:
     """Parse currency/monetary information from YouTube data."""
     from chat_downloader.sites.youtube.constants_message import (
         _CURRENCY_SYMBOLS,
     )
 
-    mixed_text = item.get("simpleText") or str(item)
+    mixed_text = get_str(item, "simpleText") or str(item)
 
     info = re.split(r"([\d,\.]+)", mixed_text)
     if len(info) >= 2:  # Correct parse

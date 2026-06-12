@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
     from chat_downloader.sites.youtube._protocols import YouTubeDownloaderProto
+    from chat_downloader.utils.json_types import JSONDict
 
 _MS_PER_SECOND = 1000
 _YOUTUBE_POLL_DELAY_FALLBACK_MS = 5000
@@ -100,7 +101,7 @@ def _attempt_profile_fallback(self: YouTubeDownloaderProto) -> bool:
 
 
 def _process_actions(
-    actions: list[dict[str, Any]],
+    actions: list[JSONDict],
     offset: float | None,
     msg_filter: MessageFilter,
     time_filter: TimeRangeFilter | None,
@@ -108,7 +109,7 @@ def _process_actions(
     live_start_time_ms: int,
     *,
     is_replay: bool,
-) -> Generator[dict[str, Any], None, bool]:
+) -> Generator[JSONDict, None, bool]:
     """Walk *actions*, apply filters, and yield accepted messages.
 
     Updates *loop_state.offset_milliseconds* in-place when a live message
@@ -171,7 +172,7 @@ def _resolve_poll_delay_ms(timeout_ms: _PollDelayHint) -> int:
 
 def _advance_continuation_loop(
     ctx: _ChatContext,
-    yt_info: dict[str, Any],
+    yt_info: JSONDict,
 ) -> bool:
     """Advance continuation state and return True when iteration should stop."""
     cont_result = parse_continuation_response(yt_info)
@@ -190,7 +191,7 @@ def _advance_continuation_loop(
 def _recover_incomplete_continuation(
     self: YouTubeDownloaderProto,
     ctx: _ChatContext,
-    ytcfg: dict[str, Any],
+    ytcfg: JSONDict,
     progress: _ContinuationProgress,
 ) -> bool:
     """Try profile fallback after an incomplete continuation.
@@ -217,9 +218,9 @@ def _recover_incomplete_continuation(
 def _get_chat_messages(  # noqa: C901 — live/replay branching, no-progress guard, and end-message injection are intrinsic to the continuation loop
     self: YouTubeDownloaderProto,
     initial_info: dict[str, Any],
-    ytcfg: dict[str, Any],
+    ytcfg: JSONDict,
     params: ChatRequest,
-) -> Generator[dict[str, Any], None, None]:
+) -> Generator[JSONDict, None, None]:
     """Yield chat messages from a YouTube continuation endpoint."""
     ctx = _build_chat_context(self, initial_info, ytcfg, params)
     progress = _ContinuationProgress(
@@ -294,7 +295,7 @@ def _get_chat_messages(  # noqa: C901 — live/replay branching, no-progress gua
             raise NoContinuation(msg)
 
     if ended_cleanly:
-        end_msg: dict[str, Any] = {
+        end_msg: JSONDict = {
             "message_type": "chat_ended",
             "action_type": "chat_ended",
             "message": None,

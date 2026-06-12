@@ -323,3 +323,22 @@ class TestEdgeCases:
             "top_level_keys": ["error"],
             "error": {"code": 429, "message": "Rate limited"},
         }
+
+    def test_extract_actions_non_list_returns_empty(self) -> None:
+        """Non-list ``actions`` value (malformed payload) yields empty list."""
+        from chat_downloader.sites.youtube.continuations import _extract_actions
+
+        assert _extract_actions({"actions": {"not": "a list"}}) == []
+        assert _extract_actions({"actions": "string"}) == []
+
+    def test_extract_timeout_ms_non_numeric_type_returns_none(self) -> None:
+        """A list/dict timeout value (unexpected JSON type) returns None."""
+        from chat_downloader.sites.youtube.continuations import _extract_timeout_ms
+
+        assert _extract_timeout_ms([]) is None
+        assert _extract_timeout_ms({}) is None
+
+    def test_extract_timeout_ms_none_returns_none(self) -> None:
+        from chat_downloader.sites.youtube.continuations import _extract_timeout_ms
+
+        assert _extract_timeout_ms(None) is None

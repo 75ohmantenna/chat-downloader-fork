@@ -23,17 +23,20 @@ from .client_requests_errors import (
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    import requests
+
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
 
 def _get_continuation_info(
     continuation_url: str,
-    session_post: Callable[..., Any],
+    session_post: Callable[..., requests.Response],
     program_params: ChatRequest | dict[str, Any],
     *,
     require_live_chat_continuation: bool = True,
-    **post_kwargs: Any,
-) -> dict[str, Any]:
+    **post_kwargs: object,
+) -> JSONDict:
     """Get continuation information from YouTube API with retry handling."""
     from chat_downloader.models import ChatRequest
 
@@ -65,10 +68,10 @@ def _get_continuation_info(
             ):
                 continue
 
-            json_response: dict[str, Any] = response.json()
+            json_response: JSONDict = response.json()
 
             error = json_response.get("error")
-            if error and _handle_json_api_error(
+            if isinstance(error, dict) and _handle_json_api_error(
                 error,
                 continuation_url,
                 attempt_number,

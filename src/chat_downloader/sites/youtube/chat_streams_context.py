@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from chat_downloader.debugging import log
 from chat_downloader.errors import NoContinuation
 from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
+from chat_downloader.utils.json_types import get_dict
 from chat_downloader.utils.time_utils import ensure_seconds
 
 from .client_auth import _generate_sapisidhash_header
@@ -26,12 +27,13 @@ from .continuation_loop import (
     enrich_live_message_timing,
     get_live_start_time_ms,
 )
-from .helpers import _safe_get_dict, require_innertube_api_key
+from .helpers import require_innertube_api_key
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.youtube._protocols import YouTubeDownloaderProto
+    from chat_downloader.utils.json_types import JSONDict
 
 _MS_PER_SECOND = 1000
 
@@ -41,7 +43,7 @@ class _ChatContext:
     """Pre-loop state assembled once before the continuation loop begins."""
 
     continuation_url: str
-    innertube_context: dict[str, Any]
+    innertube_context: JSONDict
     msg_filter: MessageFilter
     time_filter: TimeRangeFilter | None
     loop_state: ContinuationLoopState
@@ -51,7 +53,7 @@ class _ChatContext:
 
 
 def _select_initial_continuation(
-    initial_continuation_info: dict[str, str],
+    initial_continuation_info: JSONDict,
     *,
     chat_type: str,
     is_replay: bool,
@@ -64,7 +66,7 @@ def _select_initial_continuation(
 
     for label in labels:
         token = initial_continuation_info.get(label)
-        if token:
+        if isinstance(token, str) and token:
             return label, token
 
     available = ", ".join(initial_continuation_info) or "none"
@@ -76,16 +78,16 @@ def _select_initial_continuation(
 
 
 def _profiled_innertube_context(
-    ytcfg: dict[str, Any],
+    ytcfg: JSONDict,
     profile_name: object,
-) -> dict[str, Any]:
+) -> JSONDict:
     """Return an Innertube context adjusted for the active request profile."""
     context = _get_innertube_context(ytcfg)
     return apply_request_profile_to_innertube_context(context, profile_name)
 
 
 def _apply_live_timing(
-    message: dict[str, Any],
+    message: JSONDict,
     loop_state: ContinuationLoopState,
     live_start_time_ms: int,
 ) -> None:
@@ -144,7 +146,7 @@ def _build_message_filters(
 
 def _apply_session_headers(
     self: YouTubeDownloaderProto,
-    ytcfg: dict[str, Any],
+    ytcfg: JSONDict,
     init_page: str,
 ) -> None:
     """Install the InnerTube auth and content-type headers on the session."""
@@ -159,7 +161,7 @@ def _apply_session_headers(
 def _build_chat_context(
     self: YouTubeDownloaderProto,
     initial_info: dict[str, Any],
-    ytcfg: dict[str, Any],
+    ytcfg: JSONDict,
     params: ChatRequest,
 ) -> _ChatContext:
     """Assemble all pre-loop state from *initial_info*, *ytcfg*, and *params*.
@@ -172,7 +174,7 @@ def _build_chat_context(
         NoContinuation: When the requested chat type index is absent.
         InvalidParameter: When an unknown message group is requested.
     """
-    initial_continuation_info = _safe_get_dict(initial_info, "continuation_info")
+    initial_continuation_info = get_dict(initial_info, "continuation_info")
 
     status = initial_info.get("status")
     offset = initial_info.get("offset")  # Clips

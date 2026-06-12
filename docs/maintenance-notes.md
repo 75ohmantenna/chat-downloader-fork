@@ -492,3 +492,106 @@ cross-site abstraction, or a seam that does not exist today:
 - FBT / SLF ruff families (V1d).
 - `chat_downloader.py` / `extractor.py` / `cli_args.py` size ceilings.
 - `_get_initial_info` (113 LOC, `# noqa: C901` intrinsic).
+
+---
+
+## X-series typed-payload migration (X8–X10, 2026-06)
+
+Migrated YouTube payload-parsing modules off `dict[str, Any]` boundaries to
+`JSONDict` (and related `json_types` aliases/accessors).  One commit per
+module.  All residual `Any` in migrated modules falls into one of these
+intentional categories — do not reopen:
+
+- **Transport/callable objects** — `session: Any`, `response: Any`,
+  `session_get: Callable[..., Any]`, `sapisidhash_generator: Any`.
+- **Public-API params** — `params: ChatRequest | dict[str, Any] | None`
+  (user-facing, frozen signature).
+- **Assembled-output accumulators** — dicts built by assigning heterogeneous
+  parsed values (`info`, `data`, `details`, `continuation_params`, `context`,
+  yielded item dicts).  These are not raw API payloads and cannot be typed with
+  `JSONDict` without full TypedDict coverage of each message shape.
+
+### X8 — YouTube chat-streams pipeline (2026-06)
+
+Migrated 7 modules in `sites/youtube/` off raw `dict[str, Any]` payload
+boundaries.
+
+**Dedup:** deleted `_safe_get_dict` from `helpers.py` (verbatim reimplementation
+of `json_types.get_dict`); repointed callers.  Test covering the deleted helper
+removed from `tests/test_youtube_helpers_unit.py`.
+
+`client_requests_bootstrap.py` needed `cast("JSONDict", continuation_info)` at
+one assignment site (`dict[str, str]` is narrower than `JSONDict`) and an
+explicit `payload: JSONDict = {...}` annotation to prevent mypy widening the
+dict literal to `dict[str, Collection[str]]`.
+
+Skipped: `client_requests_initial.py` — its `-> tuple[Any, Any, Any]` return
+cascades into 4 discovery consumers.  Resolved in X10.
+
+| Module | Any before | Any after |
+|---|---|---|
+| `sites/youtube/helpers.py` | 11 | 2 |
+| `sites/youtube/continuation_loop_runtime.py` | 9 | 0 (entry deleted) |
+| `sites/youtube/chat_streams_context.py` | 8 | 2 |
+| `sites/youtube/client_requests_errors.py` | 4 | 2 |
+| `sites/youtube/chat_streams.py` | 6 | 4 |
+| `sites/youtube/chat_streams_runtime_iteration.py` | 9 | 2 |
+| `sites/youtube/client_requests_bootstrap.py` | 16 | 3 |
+
+### X9 — YouTube parsing layer (2026-06)
+
+Migrated 6 modules in `sites/youtube/parsing/`.
+
+**Residual taxonomy:** assembled message output accumulators (`info`, `data`,
+`message_info`, `message_emotes`) and handler/writer contracts
+(`_append_run`'s params, `_parse_runs`/`_parse_thumbnails` returns) carry
+`dict[str, Any]` by design — output of the parsing pipeline consumed by the
+broader message-assembly layer which is itself `Any`-typed.  The frozen
+boundary-table entries for `message_items_content_parser.py` and
+`actions_router.py` (V3-declined accumulator pattern) reflect this.
+
+| Module | Any before | Any after |
+|---|---|---|
+| `sites/youtube/parsing/message_content_badges.py` | 9 | 3 |
+| `sites/youtube/parsing/message_items_video.py` | 7 | 2 (entry deleted) |
+| `sites/youtube/parsing/actions_handlers_validation.py` | 7 | 5 |
+| `sites/youtube/parsing/message_content_text_parser.py` | 14 | 7 |
+| `sites/youtube/parsing/actions_router.py` | 11 | 9 |
+| `sites/youtube/parsing/message_items_content_parser.py` | 13 | 10 |
+
+### X10 — Discovery and initial-page layer (2026-06)
+
+Closed the X8-skipped `client_requests_initial.py` and narrowed the raw-JSON
+boundaries it feeds.  Aligns `_get_initial_info`'s return type with the
+already-typed sibling `get_innertube_video_bootstrap` in
+`client_requests_bootstrap.py` (both now return
+`tuple[JSONDict, JSONDict, JSONDict]`).
+
+**`discovery_channels_runtime_iteration.py`:** renamed the while-loop
+`yt_info` binding to `cont_yt_info` to avoid a mypy type-narrowing conflict
+(`_get_initial_info` infers `JSONDict`; the continuation result is
+`JSONDict | None`).
+
+**`discovery_helpers.py`:** replaced chained `.get()` calls in
+`_iter_playlist_urls` with `dig()` to avoid calling `.get()` on a
+`JSONAny` intermediate; replaced direct `[]`-subscript chains in
+`_get_testing_items` with `multi_get` traversal (consistent with
+`_get_rendered_content`'s own pattern).
+
+**`client_context.py` / `client_auth.py`:** used `get_str(ytcfg, key)` in
+place of `ytcfg.get(key)` where the result is passed to string-typed callers
+(`_parse_data_sync_id`, `headers[...]`).
+
+Item-list `list[Any]` parameters (`_extract_playlist_items`, `_process_page_items`)
+are residuals: `_fetch_browse_continuation` returns `JSONList = list[JSONAny]`
+and lists are invariant — changing to `list[JSONDict]` would require a cast at
+every call site.  Recorded as intentional (same stop condition as X8's skip).
+
+| Module | Any before | Any after |
+|---|---|---|
+| `sites/youtube/client_requests_initial.py` | 7 | 4 |
+| `sites/youtube/video_metadata.py` | 9 | 4 |
+| `sites/youtube/discovery_channels_runtime_iteration.py` | 10 | 9 |
+| `sites/youtube/discovery_helpers.py` | 9 | 6 |
+| `sites/youtube/client_context.py` | 9 | 6 |
+| `sites/youtube/client_auth.py` | 8 | 6 |
