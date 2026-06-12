@@ -57,7 +57,7 @@ All items below have explicit rationale in
 ### Intrinsic complexity (noqa: C901)
 **Status: closed** — reopen only if a future edit raises the McCabe score above 10.
 
-The four functions below exceed the McCabe-8 gate for legitimate structural
+The four functions below exceed the McCabe-10 gate for legitimate structural
 reasons; their `# noqa: C901` annotations carry inline justifications:
 - `sites/twitch/live_service.py:iter_stream_chat_messages` — live IRC reconnect
   loop

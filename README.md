@@ -60,6 +60,8 @@ in [`docs/cli-usage.md`](docs/cli-usage.md).
   formats, troubleshooting
 - [`docs/python-api-reference.md`](docs/python-api-reference.md) — embeddable
   Python API and typed dataclass reference
+- [`docs/capability-inventory.md`](docs/capability-inventory.md) — behavior
+  preservation checklist for refactors
 - [`docs/youtube-integration-guide.md`](docs/youtube-integration-guide.md) —
   YouTube capture flow and module map
 - [`docs/twitch-integration-guide.md`](docs/twitch-integration-guide.md) —

@@ -2,7 +2,7 @@
 
 The stable Python surface exposed by `chat-downloader-fork`. The authoritative
 sources are `src/chat_downloader/__init__.py`, `src/chat_downloader/chat_downloader.py`,
-and `src/chat_downloader/models.py`; this document reflects them.
+and `src/chat_downloader/models/`; this document reflects them.
 
 ## Quick Start
 
@@ -12,9 +12,9 @@ Most integrations need only three objects:
 - `DownloaderConfig`
 - `ChatRequest`
 
-`RunConfig` is also part of the typed internal/public model layer for
-CLI-style execution through `run()`. Import it from `chat_downloader.models`;
-it is not re-exported from the top-level package.
+`RunConfig` and `SiteDefault` are also part of the typed model layer for
+CLI-style execution and site-default markers. Import them from
+`chat_downloader.models`; they are not re-exported from the top-level package.
 
 Minimal example:
 
@@ -216,6 +216,14 @@ Helpers:
 
 The CLI exposes `quiet`, `exit_on_debug`, and `pause_on_debug`. The `--testing`
 flag is a CLI convenience that enables debug logging and `pause_on_debug`.
+
+### `SiteDefault`
+
+`SiteDefault(name)` is the marker used by `ChatRequest.message_groups` and
+`ChatRequest.format` to request a concrete site default during URL dispatch.
+The canonical import path is `chat_downloader.models.SiteDefault`.
+`chat_downloader.sites.models.SiteDefault` remains a compatibility alias to
+the same class.
 
 ## `Chat` Objects
 

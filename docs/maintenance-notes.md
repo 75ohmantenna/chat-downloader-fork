@@ -288,8 +288,8 @@ the ~2-over-360 soft line is accepted, per Round-2 note above).
 Extraction of the missing-continuation guard into a `_handle_missing_live_chat_continuation`
 helper was attempted.  The helper's `json_response: dict[str, Any]` parameter would
 raise the module `Any`-density baseline from 8 → 9, violating the ratchet.  The function
-currently passes the McCabe-8 gate exactly; ruff's RUF100 rule also rejects a
-pre-emptive `# noqa: C901` when the check passes.  Recorded in
+passed the then-current McCabe-8 gate exactly; ruff's RUF100 rule also rejected
+a pre-emptive `# noqa: C901` when the check passed.  Recorded in
 `maintenance-backlog.md` (T2 entry): next edit adding a complexity branch must address
 the extraction at that time, accepting the one-unit Any-baseline rise or finding a
 zero-Any approach.

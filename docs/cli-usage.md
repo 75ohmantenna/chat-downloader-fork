@@ -76,7 +76,7 @@ captures survive process crashes and power loss with minimal data loss.
 
 Run `chat_downloader --help` for the complete argument list. The CLI is
 generated from metadata on `DownloaderConfig`, `ChatRequest`, and `RunConfig`
-in `src/chat_downloader/models.py`.
+in `src/chat_downloader/models/`.
 
 Filtering and output:
 

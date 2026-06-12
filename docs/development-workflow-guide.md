@@ -107,7 +107,7 @@ The project `Makefile` wraps the commands above into convenient targets:
 
 | Target | Equivalent to |
 | --- | --- |
-| `make setup` | `uv sync` |
+| `make setup` | install Git hooks, then `uv sync` |
 | `make lock` | `uv lock` (update the lockfile) |
 | `make lock-check` | `uv lock --check` (verify the lockfile is current) |
 | `make test` | pytest offline suite |
@@ -182,6 +182,7 @@ When behavior changes, update the focused document in the same change.
 Common doc targets:
 
 - `README.md`: user-facing overview, install, quick-start, docs map
+- `docs/capability-inventory.md`: capability-preservation checklist
 - `docs/python-api-reference.md`: public Python API and dataclass reference
 - `docs/youtube-integration-guide.md`: YouTube capture flow and module guide
 - `docs/twitch-integration-guide.md`: Twitch capture flow and module guide

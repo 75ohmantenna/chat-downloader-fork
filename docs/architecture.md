@@ -4,6 +4,8 @@ High-level guide to `chat_downloader`'s module layout and layer contracts.
 For day-to-day development conventions see [`AGENTS.md`](../AGENTS.md);
 for deferred refactor decisions see
 [`docs/maintenance-notes.md`](maintenance-notes.md).
+For behavior-preservation coverage see
+[`docs/capability-inventory.md`](capability-inventory.md).
 
 ---
 
@@ -43,11 +45,7 @@ for deferred refactor decisions see
 |----------|------|
 | `youtube` ⊥ `twitch` | Independence — neither site package imports the other |
 | `utils` is a leaf | No imports from `sites`, `runtime`, `output`, `formatting`, or `models` |
-| `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, `sites.youtube`, or `sites.twitch` |
-
-**Permitted exception:** `models/_request.py` imports `SiteDefault` from
-`sites.models` — a shared leaf type that is not a site package.  The contract
-explicitly does not forbid `models → sites.models`.
+| `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, or `sites` |
 
 ---
 
@@ -72,6 +70,7 @@ explicitly does not forbid `models → sites.models`.
 | `_config.py` | `DownloaderConfig` (init-time settings) |
 | `_request.py` | `ChatRequest` (per-request options) |
 | `_runconfig.py` | `RunConfig`, `coerce_chat_request` |
+| `_site_default.py` | `SiteDefault` marker for site-specific defaults |
 | `__init__.py` | Single public surface for `from chat_downloader.models import …` |
 
 ### `runtime/`
@@ -98,7 +97,7 @@ explicitly does not forbid `models → sites.models`.
 | `session.py` | `ChatDownloaderSession`: HTTP session, proxy config, auth |
 | `retry.py` | `ChatDownloaderRetry`: retry policy with back-off |
 | `filters.py` | Message-group validation and per-message filter application |
-| `models.py` | `Chat`, `Image`, `SiteDefault` |
+| `models.py` | `Chat`, `Image`; compatibility re-export of `models.SiteDefault` |
 | `output_dispatch.py` | `ChatOutputWriter` Protocol, `_ChatOutputDispatcher`, `SUPERCHAT_DEDUP_TYPES` |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded LRU dedup cache |
@@ -142,7 +141,7 @@ explicitly does not forbid `models → sites.models`.
 | Import-layering contracts | `pyproject.toml [tool.importlinter]`; enforced by `uv run lint-imports` (wired into `make lint`) |
 | Public-API snapshot | `tests/test_public_api_unit.py` — frozen `__all__` sets for `chat_downloader` and `chat_downloader.models`; any intentional surface change must update the snapshot in the same commit |
 | Module-size gate | `tests/test_module_size_unit.py` — 400-line ceiling on all source modules (allowlist for intentional data tables and cohesive modules); fails on future bloat |
-| McCabe complexity | `ruff C9` rule, gate = 8; intrinsically branchy transport loops carry `# noqa: C901` with rationale |
+| McCabe complexity | `ruff C9` rule, gate = 10; intrinsically branchy transport loops carry `# noqa: C901` with rationale |
 | 100% branch coverage | `pyproject.toml [tool.coverage.report]`; enforced by `make coverage` / `make ci` |
 | Any-density ratchet | `tests/test_any_density_unit.py` — per-module baseline; lower as typing debt is paid; never raise |
 

@@ -341,7 +341,7 @@ def test_config_stores_init_kwargs() -> None:
     session.close()
 
 
-def test_init_params_property_returns_dict() -> None:
+def test_removed_init_params_property_raises_attribute_error() -> None:
     """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader(proxy="socks5://127.0.0.1:1080")
     try:
@@ -351,7 +351,7 @@ def test_init_params_property_returns_dict() -> None:
         session.close()
 
 
-def test_init_params_property_matches_config_as_dict() -> None:
+def test_removed_init_params_property_does_not_expose_config() -> None:
     """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader(headers={"X-Custom": "val"}, cookies=None)
     try:
@@ -361,7 +361,7 @@ def test_init_params_property_matches_config_as_dict() -> None:
         session.close()
 
 
-def test_init_params_property_mutation_does_not_affect_config() -> None:
+def test_removed_init_params_property_cannot_be_mutated() -> None:
     """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader(proxy="http://p:8080")
     try:
@@ -371,7 +371,7 @@ def test_init_params_property_mutation_does_not_affect_config() -> None:
         session.close()
 
 
-def test_init_params_emits_deprecation_warning() -> None:
+def test_removed_init_params_property_emits_no_deprecation_warning() -> None:
     """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
     session = ChatDownloader()
     try:
