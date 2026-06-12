@@ -115,14 +115,14 @@ The project `Makefile` wraps the commands above into convenient targets:
 | `make fmt` | ruff format (apply) |
 | `make fmt-check` | ruff format --check |
 | `make typecheck` | mypy |
-| `make coverage` | coverage erase + run + report, **enforced at 100%** |
+| `make coverage` | coverage erase + run + report, **enforced at 100% line coverage** |
 | `make build` | clean `dist/` then build wheel and sdist |
 | `make smoke` | build, then install the wheel in an isolated env and run `chat_downloader --version` |
 | `make check` | lint + fmt-check + typecheck + test (fast local loop) |
 | `make ci` | **canonical validation** — used locally and in GitHub Actions |
 `make ci` is the single source of truth for validation. It runs the full
 deterministic offline path: `lock-check` → `lint` → `fmt-check` → `typecheck`
-→ `coverage` (enforced at 100%) → `smoke` (which builds first). GitHub Actions
+→ `coverage` (enforced at 100% line coverage) → `smoke` (which builds first). GitHub Actions
 runs this exact target after `uv sync --locked`, so local and hosted CI cannot
 drift.
 
@@ -131,7 +131,7 @@ The canonical `make ci` path runs validation tools through `uv run --locked`
 The convenience targets `make test`, `make fmt`, and `make lock` intentionally
 remain unlocked for fast local iteration.
 
-Coverage is enforced at 100% via `fail_under = 100` in
+Line coverage is enforced at 100% via `fail_under = 100` in
 `[tool.coverage.report]` in `pyproject.toml`; `make coverage` (and therefore
 `make ci`) fails if total coverage drops below 100%.
 

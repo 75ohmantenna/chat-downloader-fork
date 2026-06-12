@@ -132,6 +132,36 @@ For behavior-preservation coverage see
 | `chat_streams_response.py` | Continuation response handling (`_handle_continuation_response`, `_raise_if_api_error`, `_update_visitor_data`, `_log_*` helpers) |
 | `chat_streams_runtime_iteration.py` | The continuation loop itself (`_get_chat_messages`, `_process_actions`, `_advance_continuation_loop`, `_attempt_profile_fallback`) |
 
+#### Other YouTube modules
+| Module | Purpose |
+|--------|---------|
+| `_protocols.py` | YouTube-specific Protocol definitions |
+| `chat_users_retrieval.py`, `chat_users_router.py` | Chat participant retrieval and routing |
+| `continuation_loop.py`, `continuation_loop_runtime.py`, `continuation_loop_state.py`, `continuations.py` | Continuation state, token parsing, loop helpers |
+| `discovery_channels_runtime_iteration.py`, `discovery_helpers.py`, `discovery_playlists.py` | Channel and playlist discovery helpers |
+| `extractor.py` | YouTube site extractor class wiring mixins together |
+| `helpers.py` | YouTube payload/navigation helpers |
+| `message_pipeline.py` | Message filtering/remapping pipeline |
+| `parsing/` | Action routing and message content parsers |
+| `playability.py` | YouTube playability status classification |
+| `video_initialization.py`, `video_metadata.py`, `video_status.py`, `video_status_helpers.py`, `video_status_models.py` | Video bootstrap metadata and status models |
+
+### `sites/twitch/`
+| Module | Purpose |
+|--------|---------|
+| `constants.py` | Client-ID and GraphQL operation hashes |
+| `discovery.py` | Twitch URL discovery and GraphQL query construction |
+| `extractor.py` | Twitch site extractor class |
+| `graphql_client.py` | Persisted-query GraphQL client and error handling |
+| `irc_transport.py` | Low-level IRC socket connection and message stream |
+| `live_service.py` | Live IRC chat orchestration |
+| `parsing/` | IRC message, tag, badge, and emote parsing |
+| `remappings.py` | Twitch field remapping tables |
+| `replay_service.py`, `_replay_vod_loop.py`, `replay_transport.py` | VOD/clip replay pagination and transport |
+| `types.py` | Typed Twitch support containers |
+| `url_generation.py` | Twitch URL builders |
+| `validation_keys.py` | Known IRC tag/key validation lists |
+
 ---
 
 ## Guardrails (added round 2, 2026-06)
@@ -142,7 +172,7 @@ For behavior-preservation coverage see
 | Public-API snapshot | `tests/test_public_api_unit.py` — frozen `__all__` sets for `chat_downloader` and `chat_downloader.models`; any intentional surface change must update the snapshot in the same commit |
 | Module-size gate | `tests/test_module_size_unit.py` — 400-line ceiling on all source modules (allowlist for intentional data tables and cohesive modules); fails on future bloat |
 | McCabe complexity | `ruff C9` rule, gate = 10; intrinsically branchy transport loops carry `# noqa: C901` with rationale |
-| 100% branch coverage | `pyproject.toml [tool.coverage.report]`; enforced by `make coverage` / `make ci` |
+| 100% line coverage | `pyproject.toml [tool.coverage.report]`; enforced by `make coverage` / `make ci` |
 | Any-density ratchet | `tests/test_any_density_unit.py` — per-module baseline; lower as typing debt is paid; never raise |
 
 Remaining targets and deferred decisions: [`docs/maintenance-backlog.md`](maintenance-backlog.md).

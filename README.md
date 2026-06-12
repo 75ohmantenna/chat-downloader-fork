@@ -23,8 +23,8 @@ being said:
 This fork has been developed mostly with Anthropic's Claude and OpenAI's
 Codex. Hosted CI runs the canonical `make ci` quality gate on pushes and pull
 requests: `ruff check`, `ruff format`, `mypy`, and `pytest` must all pass and
-coverage is enforced at 100%. These checks do not constitute a security audit
-and do not replace your own review. **Use at your own risk.**
+line coverage is enforced at 100%. These checks do not constitute a security
+audit and do not replace your own review. **Use at your own risk.**
 
 ## Supported Platforms
 

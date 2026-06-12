@@ -56,7 +56,7 @@ For deeper context use:
 - `uv run ruff format --check src/chat_downloader tests` — format check
 - `uv run mypy .` — type check
 - `make ci` — canonical validation: lock-check, lint, fmt-check, typecheck,
-  100% offline coverage, build, smoke
+  100% offline line coverage, build, smoke
 
 ## Testing
 
@@ -76,6 +76,7 @@ Key ratchets:
 | `tests/test_any_density_unit.py` | Per-module `Any` counts do not regress |
 | `tests/test_module_size_unit.py` | Non-allowlisted modules stay under 400 lines |
 | `tests/test_public_api_unit.py` | Public import surfaces stay intentional |
+| `tests/test_cli_surface_unit.py` | Observable CLI option strings, defaults, and groups stay intentional |
 | `tests/test_makefile_contract_unit.py` | Canonical Makefile validation target stays pinned |
 
 ## Style
@@ -87,6 +88,15 @@ Key ratchets:
   `# noqa: C901` only with a short rationale comment.
 - Prefer focused modules over broad compatibility helpers.
 - Test files are named `test_<behavior>.py` or `test_<area>_unit.py`.
+- The X-series reformat commit is listed in `.git-blame-ignore-revs`; use
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs` locally when blame
+  noise matters.
+
+## Debugging
+
+- Use `--logging debug` or `--verbose` for parser and transport issues.
+- `--testing` means debug logging plus pause-on-debug.
+- `debug_log()` is for unexpected data-quality conditions only.
 
 ## Done Means
 
