@@ -67,6 +67,7 @@ EXPECTED_MODELS: frozenset[str] = frozenset(
         "ChatRequest",
         "DownloaderConfig",
         "RunConfig",
+        "SiteDefault",
         "coerce_chat_request",
         "get_field_default",
     }

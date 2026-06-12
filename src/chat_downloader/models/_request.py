@@ -15,7 +15,7 @@ from chat_downloader.models._base import (
     DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
     _cli,
 )
-from chat_downloader.sites.models import SiteDefault
+from chat_downloader.models._site_default import SiteDefault
 
 
 class _SiteValueResolver(Protocol):

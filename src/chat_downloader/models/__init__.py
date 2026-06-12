@@ -9,6 +9,7 @@ Public surface
 --------------
 - :class:`DownloaderConfig` — session-level options (headers/cookies/proxy).
 - :class:`ChatRequest`       — a single chat retrieval request.
+- :class:`SiteDefault`       — marker for site-specific default values.
 
 Both dataclasses expose an ``as_dict()`` bridge so that existing internal
 helpers that still expect plain dicts continue to work unchanged during the
@@ -48,6 +49,7 @@ from chat_downloader.models._runconfig import (
     RunConfig,
     coerce_chat_request,
 )
+from chat_downloader.models._site_default import SiteDefault
 
 __all__ = [
     "CHAT_PARAM_NAMES",
@@ -62,6 +64,7 @@ __all__ = [
     "ChatRequest",
     "DownloaderConfig",
     "RunConfig",
+    "SiteDefault",
     "coerce_chat_request",
     "get_field_default",
 ]

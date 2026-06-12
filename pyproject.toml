@@ -201,11 +201,8 @@ forbidden_modules = [
     "chat_downloader.output",
     "chat_downloader.cli",
     "chat_downloader.cli_args",
-    "chat_downloader.sites.youtube",
-    "chat_downloader.sites.twitch",
+    "chat_downloader.sites",
 ]
-# NOTE: chat_downloader.sites.models is deliberately NOT forbidden —
-# models/_request.py imports SiteDefault from it (shared leaf type).
 
 [tool.pytest.ini_options]
 markers = [

@@ -24,10 +24,11 @@ from chat_downloader.models import (
     ChatRequest,
     DownloaderConfig,
     RunConfig,
+    SiteDefault,
     coerce_chat_request,
     get_field_default,
 )
-from chat_downloader.sites.models import SiteDefault
+from chat_downloader.sites.models import SiteDefault as CompatSiteDefault
 
 # ---------------------------------------------------------------------------
 # Expected legacy-kwargs keys (must match get_chat() parameter list exactly)
@@ -213,6 +214,10 @@ def test_default_message_groups_is_site_default(
 def test_default_format_is_site_default(sample_request: ChatRequest) -> None:
     assert isinstance(sample_request.format, SiteDefault)
     assert sample_request.format.name == "format"
+
+
+def test_site_default_compat_import_shares_identity() -> None:
+    assert SiteDefault is CompatSiteDefault
 
 
 @pytest.mark.parametrize(

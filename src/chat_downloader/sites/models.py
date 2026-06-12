@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
+from chat_downloader.models import SiteDefault
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 from chat_downloader.utils.console_utils import safe_print
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
 
     from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.sites.output_dispatch import ChatOutputWriter
+
+
+__all__ = ["Chat", "Image", "SiteDefault"]
 
 
 @dataclass(slots=True)
@@ -47,13 +51,6 @@ class Image:
             for k in ("url", "width", "height", "id")
             if (v := getattr(self, k)) is not None
         }
-
-
-@dataclass(frozen=True)
-class SiteDefault:
-    """Marker object used to ask a site for its default value."""
-
-    name: str
 
 
 class Chat:

@@ -24,6 +24,7 @@ from .models import (
     DEFAULT_READ_TIMEOUT,
     ChatRequest,
     DownloaderConfig,
+    SiteDefault,
 )
 from .redaction import sanitize_for_log
 from .runtime import (
@@ -42,7 +43,6 @@ from .runtime import (
 from .runtime import (
     get_cookie_value as get_runtime_cookie_value,
 )
-from .sites.models import Chat, SiteDefault
 
 # Module-level sentinel defaults for get_chat() keyword arguments.
 # Using module-level singletons avoids the B008 lint warning about
@@ -52,6 +52,7 @@ _DEFAULT_FORMAT = SiteDefault("format")
 
 if TYPE_CHECKING:
     from .sites.base import BaseChatDownloader
+    from .sites.models import Chat
 
 
 def _is_loopback_host(host: str) -> bool:

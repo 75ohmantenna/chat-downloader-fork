@@ -13,8 +13,8 @@ from chat_downloader.errors import (
     SiteNotSupported,
     URLNotProvided,
 )
+from chat_downloader.models import SiteDefault
 
-from .models import SiteDefault
 from .remap import Remapper
 from .retry import retry as perform_retry
 from .session import (

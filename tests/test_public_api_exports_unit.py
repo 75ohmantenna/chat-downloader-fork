@@ -52,6 +52,7 @@ def test_errors_module_declares_explicit_public_surface() -> None:
 def test_models_module_declares_explicit_public_surface() -> None:
     assert "ChatRequest" in model_exports
     assert "DownloaderConfig" in model_exports
+    assert "SiteDefault" in model_exports
     assert "coerce_chat_request" in model_exports
     assert "RUN_PARAM_NAMES" in model_exports
     assert "INIT_PARAM_NAMES" in model_exports

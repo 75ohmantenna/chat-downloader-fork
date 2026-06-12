@@ -2,11 +2,9 @@
 
 """Default HTTP timeout constants shared by models and session helpers.
 
-Kept in a separate leaf module to avoid circular imports:
-``models.py`` imports from ``sites.models``, which triggers ``sites.base``,
-which imports ``session.py`` — so neither ``session.py`` nor ``models.py`` can
-import the other at module level.  Both can safely import this module because
-it has no project-level dependencies.
+Kept in a separate leaf module so model defaults and session code can share
+the same values without creating runtime/session dependencies from
+``chat_downloader.models``.
 """
 
 #: TCP connect timeout in seconds (passed as the first element of the

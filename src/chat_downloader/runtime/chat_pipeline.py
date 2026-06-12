@@ -15,9 +15,9 @@ from chat_downloader.sites.youtube.video_status_models import REPLAY_STATUSES
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
-    from chat_downloader.models import ChatRequest
+    from chat_downloader.models import ChatRequest, SiteDefault
     from chat_downloader.sites.base import BaseChatDownloader
-    from chat_downloader.sites.models import Chat, SiteDefault
+    from chat_downloader.sites.models import Chat
 
 # Statuses that indicate an ongoing or recently-ended live broadcast.
 # post_live = DVR available but stream not yet fully processed.
