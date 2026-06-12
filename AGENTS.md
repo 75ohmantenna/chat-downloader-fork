@@ -1,150 +1,119 @@
 # Repository Guidelines
 
-YouTube and Twitch livestream chat CLI plus typed Python API. Python 3.12+; CI validates 3.12, 3.13, and 3.14.
-Personal fork of `xenova/chat-downloader`; no upstream support. See README.
-For deeper context see [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md).
+YouTube and Twitch livestream chat CLI plus typed Python API. Python 3.12+;
+CI validates 3.12, 3.13, and 3.14. This is a personal fork of
+`xenova/chat-downloader`; no upstream support is offered. Do not file issues or
+PRs against upstream for fork-originating problems.
 
-## Structure
-- `src/chat_downloader/`: package. Thin facade `chat_downloader.py`; CLI entry in `cli.py`; CLI argument machinery in `cli_args.py`; typed shapes in `models/` package.
-- `src/chat_downloader/runtime/`: `cli_bridge`, `site_dispatch`, `chat_pipeline`, `runner`, `session_lifecycle`, `testing`.
-- `src/chat_downloader/sites/`: shared `base`, `session`, `retry`, `filters`, `models`, `output_dispatch`, `remap`; per-site packages `youtube/` and `twitch/` (each with `parsing/`).  Twitch `parsing/` contains `messages` (entry points), `message_emotes` (emote/image helpers), `message_irc_resolve` (IRC type/action/room-state resolution), `badges`, and `tag_decoding`.
-- `src/chat_downloader/output/`: `continuous_write.py` (`ContinuousWriter` factory + re-exports); `writers.py` (concrete writer types: CSV, JSONL, text).
-- `src/chat_downloader/formatting/`: `ItemFormatter` and bundled `custom_formats.json`.
-- `src/chat_downloader/utils/`: focused helpers (`time_utils`, `json_utils`, `json_types`, `string_utils`, `retry_utils`, `timed_input`, `timed_generator`, `dict_utils`, `conversion_utils`, `color_utils`, `console_utils`, `filename_utils`).
-- `tests/`: pytest suite with curated fixtures under `tests/fixtures/`; network tests gated by `@pytest.mark.network`.
-- `docs/`: `architecture.md` (layer diagram + module inventory), `cli-usage.md`, `development-workflow-guide.md`, `python-api-reference.md`, the YouTube/Twitch integration guides, `maintenance-backlog.md` (live deferrals + X-series migration tracker), and `maintenance-notes.md` (design-decision record).
+For deeper context use:
 
-## Architecture
-See [`docs/architecture.md`](docs/architecture.md) for the full layer diagram, module inventory, and guardrail table.
+- [`docs/architecture.md`](docs/architecture.md) — layer diagram, module
+  inventory, guardrails
+- [`docs/capability-inventory.md`](docs/capability-inventory.md) — behavior
+  preservation checklist
+- [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md) —
+  local workflow and validation
+- [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md) and
+  [`docs/maintenance-notes.md`](docs/maintenance-notes.md) — live deferrals and
+  design-decision record
 
-Key points:
-- `models/`: `DownloaderConfig` (`_config.py`), `ChatRequest` (`_request.py`), `RunConfig` + `coerce_chat_request` (`_runconfig.py`); shared helpers in `_base.py`; `__init__.py` is the single public import surface — `from chat_downloader.models import ...` is unchanged
-- `runtime/`: `cli_bridge.py` (strict `run()` param categorization), `site_dispatch.py` (URL→site + site defaults), `chat_pipeline.py` (limits/timeouts/format/output), `runner.py` (run loop + cleanup), `session_lifecycle.py` (cookies/sessions/cookie-domain validation), `testing.py`
-- `sites/`: `base.py`, `session.py` (proxy URL validation), `retry.py`, `filters.py` (message group validation), `models.py` (Chat, Image, SiteDefault), `output_dispatch.py` (ChatOutputWriter Protocol, _ChatOutputDispatcher, SUPERCHAT_DEDUP_TYPES), `remap.py`
-- `output/`: `ContinuousWriter` (factory in `continuous_write.py`); `ContinuousFileWriter` ABC and writer subclasses in `writers.py`
-- `formatting/`: `ItemFormatter` and bundled `custom_formats.json`
-- `debugging.py`: logging setup, testing modes, colour detection; `redaction.py`: token redaction, `sanitize_for_log`, opt-in debug-sample capture; `debug_sample_utils.py`: fixture naming hints
-- `tests/fixtures/`: curated parser, error, and live-event fixtures
-- **Layering**: import-linter contracts enforce that `utils` is a leaf, `models` is isolated from runtime/output/cli, and `youtube`/`twitch` are mutually independent (see `pyproject.toml [tool.importlinter]`).
+## Branch Safety
 
-## Platforms
-- YouTube: watch-page bootstrap + chat-page continuation recovery + InnerTube polling; auth via cookies and SAPISIDHASH; profile fallback in continuation loop.
-- Twitch: live = IRC; VOD, clips, metadata = GraphQL persisted queries; badge state is instance-owned. Hash rotation breaks `graphql_client.py` and `constants.py` first.
+- Check `git status --short --branch` before editing.
+- Work on the requested branch; if the task names a branch, create or switch to
+  it before changing files.
+- Preserve user changes. Do not revert unrelated dirty files.
+- Do not weaken guardrail thresholds or reopen closed deferrals without
+  documented evidence.
 
-## Output formats
-- `jsonl` / `csv` / `txt`. JSON-array `.json` output is not supported.
+## Architecture Rules
 
-## Environment setup
-```
-uv sync
-```
-
-Run `make setup` after cloning to also install Git hooks (`pre-commit` runs
-ruff on commit, `mypy` on push). See `docs/development-workflow-guide.md` for
-details.
+- `src/chat_downloader/chat_downloader.py` is a thin public facade; runtime
+  orchestration belongs in `src/chat_downloader/runtime/`.
+- `src/chat_downloader/models/` is the canonical typed shape for init, request,
+  and run parameters. Add user-facing request/init/runtime fields there first
+  so CLI help and the typed API stay aligned.
+- CLI help is generated from dataclass metadata; change dataclasses before
+  parser wiring.
+- Keep YouTube and Twitch behavior inside their site packages. Do not add
+  cross-site abstractions for remapping, badges, retry, or parser logic unless
+  a real third-site or maintenance-pressure case exists.
+- Use `utils/json_types` accessors (`get_str`, `get_int`, `get_dict`,
+  `get_list`, `dig`) for incoming platform JSON. Avoid annotating raw payloads
+  as `Any`; reserve `dict[str, Any]` for heterogeneous accumulator dicts.
+- Output formats are `jsonl`, `csv`, and `txt`. JSON-array `.json` output is
+  not supported.
 
 ## Commands
-- `uv run pytest -q -p no:rerunfailures -m "not network"` — offline test suite (default loop)
+
+- `uv sync` — install dependencies
+- `make setup` — install Git hooks, then `uv sync`
+- `uv run pytest -q -p no:rerunfailures -m "not network"` — offline suite
 - `uv run pytest tests/FILE.py -q` — single file
 - `uv run pytest tests/FILE.py::test_name -q` — single test
 - `uv run pytest -v -m network --run-network` — opt-in network tests
 - `uv run ruff check src/chat_downloader tests` — lint
 - `uv run ruff format --check src/chat_downloader tests` — format check
-- `uv run ruff format src/chat_downloader tests` — apply formatting
-- `uv run mypy .` — type check (config in `mypy.ini`)
-- Coverage: `make coverage` — deterministic offline suite with the 100% threshold enforced from `pyproject.toml`.
-- Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (fast local loop).
-- `make ci` — canonical validation (lock-check, lint, fmt-check, typecheck, coverage at 100%, build, smoke); the same target GitHub Actions runs.
-- `make lock-check` (`uv lock --check`) and `make smoke` (install built wheel in an isolated env, run `chat_downloader --version`).
-- Mccabe complexity gate is 10 (enforced by `make lint` / CI). Functions that are intrinsically branchy carry a `# noqa: C901` with a short rationale comment.
-
-## Style
-- Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 88-char lines, double quotes.
-- `git blame` noise: the X-series reformat commit is listed in `.git-blame-ignore-revs`.
-  Wire it locally with `git config blame.ignoreRevsFile .git-blame-ignore-revs`.
-- Every source file must begin with `from __future__ import annotations` (enforced by ruff rule `I002`). Type-only imports go in `if TYPE_CHECKING:` blocks.
-- Types: `DownloaderConfig`/`ChatRequest`/`RunConfig`; the `models/` package
-  is canonical and the source of truth for CLI and Python API shape. Add
-  user-facing request, init, or runtime fields there first so CLI help and
-  the typed API stay aligned.
-- `src/chat_downloader/chat_downloader.py` is a thin facade — keep it that way;
-  runtime orchestration lives in `runtime/`.
-- Site logic lives in `sites/youtube/` and `sites/twitch/`.
-- CLI help is generated from dataclass metadata; change the dataclass first.
-- Prefer focused modules over broad utility or compatibility-style imports.
-- Test file naming: `test_<behavior>.py` or `test_<area>_unit.py`.
-- Parse upstream JSON via `utils/json_types` accessors (`get_str`, `get_int`,
-  `get_dict`, `get_list`, `dig`); avoid annotating payload locals as `Any`.
-  Reserve `dict[str, Any]` only for accumulator dicts that are built by
-  assigning heterogeneous parsed values, not for incoming API payloads.
+- `uv run mypy .` — type check
+- `make ci` — canonical validation: lock-check, lint, fmt-check, typecheck,
+  100% offline coverage, build, smoke
 
 ## Testing
-Default to the offline suite (`-m "not network"`). Mark live-network tests
-`@pytest.mark.network`. Add regression tests for any parser, retry, output,
-or runtime change. Keep curated fixtures under `tests/fixtures/`.
 
-Coverage pragma policy: `# pragma: no cover` is permitted **only** on
-defensive/unreachable branches (platform-specific paths, `if TYPE_CHECKING`,
-debug-only logging helpers, truly-unhittable guards) and **must** carry a
-one-line reason comment. Do not use it to avoid testing real behavior.
+- Default to offline tests. Mark live-network tests with `@pytest.mark.network`.
+- Add regression tests for parser, retry, output, runtime, public API, or
+  tooling changes.
+- Add or promote a fixture before reshaping parser behavior.
+- Keep curated fixtures under `tests/fixtures/`.
+- Coverage pragmas are only for defensive or unreachable branches and must
+  include a one-line reason.
 
-Three ratchet guardrails prevent regressions (fail closed — verify by
-temporarily violating each and seeing it go red):
+Key ratchets:
 
 | Test file | What it guards |
-|-----------|---------------|
-| `tests/test_facade_param_sync_unit.py` | `get_chat()` param names and defaults stay in sync with `ChatRequest` |
-| `tests/test_any_density_unit.py` | Per-module `Any` occurrence count stays at or below the round-3 baseline; lower baselines as debt is paid off |
-| `tests/test_module_size_unit.py` | Non-allowlisted modules stay under `MAX_LINES = 400` |
+| --- | --- |
+| `tests/test_facade_param_sync_unit.py` | `get_chat()` params stay in sync with `ChatRequest` |
+| `tests/test_any_density_unit.py` | Per-module `Any` counts do not regress |
+| `tests/test_module_size_unit.py` | Non-allowlisted modules stay under 400 lines |
+| `tests/test_public_api_unit.py` | Public import surfaces stay intentional |
+| `tests/test_makefile_contract_unit.py` | Canonical Makefile validation target stays pinned |
 
-Active ratchet targets, deferred items, and candidate splits: [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md).
+## Style
 
-## Done means
-A behavior, runtime, or tooling change is not done until:
-- regression test added or updated under `tests/` (curated fixture if parser)
+- Every source file starts with `from __future__ import annotations`.
+- Ruff formatter, 88-character lines, double quotes.
+- Type-only imports go in `if TYPE_CHECKING:` blocks.
+- Mccabe complexity gate is 10. Intrinsically branchy functions may carry
+  `# noqa: C901` only with a short rationale comment.
+- Prefer focused modules over broad compatibility helpers.
+- Test files are named `test_<behavior>.py` or `test_<area>_unit.py`.
+
+## Done Means
+
+A behavior, runtime, parser, or tooling change is not done until:
+
+- Regression test added or updated under `tests/`
 - `uv run ruff check src/chat_downloader tests` clean
 - `uv run ruff format --check src/chat_downloader tests` clean
 - `uv run mypy .` clean
 - `uv run pytest -q -p no:rerunfailures -m "not network"` green
-- docs touched in the same commit when user-facing behavior, tooling, or
-  project structure changed
-- every version bump updates `CHANGELOG.md` in the same commit; the topmost
-  numbered release heading must match `src/chat_downloader/metadata.py::__version__`
-
-## Debug
-- `--logging debug` or `--verbose` for parser and transport issues
-- `--testing` means debug logging plus pause-on-debug
-- `debug_log()` in `debugging.py` is for unexpected data-quality conditions only
-
-## Commits
-- Subject: `[topic] short imperative summary`. Topic is one of `build`,
-  `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`,
-  `style`, or `test`. Aim for ~50 chars; 72 max. No trailing period.
-- Body (when needed): `- ` bullets, one per logical change, no prose
-  paragraphs, wrap at 72 columns.
+- Docs updated in the same commit for user-facing behavior, tooling, project
+  structure, or public API changes
+- Version bumps also update `CHANGELOG.md`, and the topmost release heading
+  matches `src/chat_downloader/metadata.py::__version__`
 
 ## CI
 
-GitHub Actions is the only supported hosted CI platform. Workflow file:
-`.github/workflows/ci.yml`. Preserve:
+GitHub Actions is the only supported hosted CI platform. Preserve push
+coverage for all branches, pull-request coverage targeting `master`,
+`workflow_dispatch`, Python matrix `["3.12", "3.13", "3.14"]`, `uv sync
+--locked`, canonical `make ci`, read-only `contents` permission, concurrency
+cancellation, and job timeout. Do not add Gitea, Forgejo, Codeberg, or
+Woodpecker CI configuration.
 
-- Push coverage for all branches
-- Pull-request coverage targeting `master`
-- `workflow_dispatch` for manual runs
-- Python matrix: `["3.12", "3.13", "3.14"]`
-- uv-based install (`uv sync --locked`), then the canonical `make ci` target
-- Read-only `contents` permission, `concurrency` cancellation, and a job
-  `timeout-minutes`
-- Network tests opt-in only (`-m "not network"` is the default)
+## Commits
 
-Do not add Gitea, Forgejo, Codeberg, or Woodpecker CI configuration.
-
-## Agent Notes
-- Prefer current module boundaries over broad legacy-style helpers.
-- Behavior, tooling, and structural changes ship with their doc updates in the same commit.
-- README edits are limited to user-facing summaries.
-- `CHANGELOG.md` entries summarize user-visible, tooling, compatibility, and
-  structural changes; do not rewrite historical release entries.
-- This is a personal fork with no upstream support. Do not file issues or
-  PRs against [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader)
-  for problems originating in this fork.
+Subject format: `[topic] short imperative summary`. Topic is one of `build`,
+`chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`,
+or `test`. Aim for about 50 characters; 72 max; no trailing period. Bodies use
+`- ` bullets, one per logical change, wrapped at 72 columns.
