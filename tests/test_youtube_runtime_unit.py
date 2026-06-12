@@ -1207,7 +1207,7 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         lambda *args, **kwargs: FakeTimeFilter(),
     )
 
-    def fake_build_continuation_params(_context, state, _is_replay):
+    def fake_build_continuation_params(_context, state, *, is_replay):
         continuation_requests.append(state.continuation)
         return {"continuation": state.continuation}
 

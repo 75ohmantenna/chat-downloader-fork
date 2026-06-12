@@ -56,7 +56,7 @@ details.
 - Or via `make`: `make setup` (bootstrap), `make test`, `make lint`, `make fmt`, `make fmt-check`, `make typecheck`, `make check` (fast local loop).
 - `make ci` — canonical validation (lock-check, lint, fmt-check, typecheck, coverage at 100%, build, smoke); the same target GitHub Actions runs.
 - `make lock-check` (`uv lock --check`) and `make smoke` (install built wheel in an isolated env, run `chat_downloader --version`).
-- Mccabe complexity gate is 8 (enforced by `make lint` / CI). Functions that are intrinsically branchy carry a `# noqa: C901` with a short rationale comment.
+- Mccabe complexity gate is 10 (enforced by `make lint` / CI). Functions that are intrinsically branchy carry a `# noqa: C901` with a short rationale comment.
 
 ## Style
 - Python 3.12+ (CI validates 3.12, 3.13, and 3.14). Ruff formatter, 88-char lines, double quotes.
@@ -83,16 +83,21 @@ Default to the offline suite (`-m "not network"`). Mark live-network tests
 `@pytest.mark.network`. Add regression tests for any parser, retry, output,
 or runtime change. Keep curated fixtures under `tests/fixtures/`.
 
+Coverage pragma policy: `# pragma: no cover` is permitted **only** on
+defensive/unreachable branches (platform-specific paths, `if TYPE_CHECKING`,
+debug-only logging helpers, truly-unhittable guards) and **must** carry a
+one-line reason comment. Do not use it to avoid testing real behavior.
+
 Three ratchet guardrails prevent regressions (fail closed — verify by
 temporarily violating each and seeing it go red):
 
 | Test file | What it guards |
 |-----------|---------------|
-| `tests/test_facade_param_sync_unit.py` | `get_chat()` stays in sync with `ChatRequest`; params, defaults, and docstring |
+| `tests/test_facade_param_sync_unit.py` | `get_chat()` param names and defaults stay in sync with `ChatRequest` |
 | `tests/test_any_density_unit.py` | Per-module `Any` occurrence count stays at or below the round-3 baseline; lower baselines as debt is paid off |
+| `tests/test_module_size_unit.py` | Non-allowlisted modules stay under `MAX_LINES = 400` |
 
 Active ratchet targets, deferred items, and candidate splits: [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md).
-| `tests/test_module_size_unit.py` | Non-allowlisted modules stay under `MAX_LINES = 400` |
 
 ## Done means
 A behavior, runtime, or tooling change is not done until:

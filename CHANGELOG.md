@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.2.0 — 2026-06-12
+
+### API changes (minor, backward-compatible for keyword callers)
+
+- `ChatDownloader.__init__`, `ChatDownloader.get_chat`,
+  `ChatDownloader.set_cookie_value`, `ChatDownloader.create_session`,
+  `ChatDownloader.run`: boolean and option params are now keyword-only.
+  `url` in `get_chat` remains positional; all other params require keyword
+  syntax. Positional-boolean callers must add argument names (X5).
+- `BaseChatDownloader.set_cookie_value`, `BaseChatDownloader.retry`:
+  keyword-only for optional params following the last required arg.
+- `ContinuousWriter`, `ContinuousFileWriter` and subclasses: `overwrite`,
+  `sort_keys`, `flush`, `flatten` params keyword-only.
+- `Remapper.__init__`: `to_unpack` keyword-only.
+- Internal helpers across `debugging`, `sites/retry`, `sites/remap`,
+  `utils/time_utils`, `utils/timed_input`, `utils/console_utils`,
+  `utils/json_types`, `utils/retry_utils`: boolean params keyword-only.
+
+### Tooling
+
+- Line length widened 80 → 88 (ruff default); `.git-blame-ignore-revs` added
+  for the reformat commit so `git blame` skips it (X1)
+- McCabe complexity gate raised 8 → 10 (forward-friction reduction; no
+  existing noqa removed) (X2)
+- Coverage pragma policy formalized; `_log_player_response_shape` (debug-only
+  logging helper) marked `# pragma: no cover`; 4 branch-coverage-only tests
+  removed (X3)
+- Any-density ratchet retired as a scheduled activity; baselines frozen as a
+  non-regression floor (X4)
+- `FBT` (flake8-boolean-trap) enabled in ruff select; suppressed in tests via
+  per-file-ignores; one `# noqa: FBT001` in `cli_args.str2bool` (argparse
+  converter) (X5)
+
 ## 1.1.0 — 2026-06-11
 
 ### Internal / structural

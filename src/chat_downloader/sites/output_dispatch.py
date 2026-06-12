@@ -41,7 +41,7 @@ class ChatOutputWriter(Protocol):
         """Initialize the writer, creating files and resources as needed."""
         ...
 
-    def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+    def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
         """Write a chat item to the output target."""
         ...
 

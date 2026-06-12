@@ -106,6 +106,7 @@ def _process_actions(
     time_filter: TimeRangeFilter | None,
     loop_state: ContinuationLoopState,
     live_start_time_ms: int,
+    *,
     is_replay: bool,
 ) -> Generator[dict[str, Any], None, bool]:
     """Walk *actions*, apply filters, and yield accepted messages.
@@ -230,7 +231,7 @@ def _get_chat_messages(  # noqa: C901 — live/replay branching, no-progress gua
         continuation_params = build_continuation_params(
             ctx.innertube_context,
             ctx.loop_state,
-            ctx.is_replay,
+            is_replay=ctx.is_replay,
         )
         token_before_request = ctx.loop_state.continuation
 
@@ -267,7 +268,7 @@ def _get_chat_messages(  # noqa: C901 — live/replay branching, no-progress gua
                 ctx.time_filter,
                 ctx.loop_state,
                 ctx.live_start_time_ms,
-                ctx.is_replay,
+                is_replay=ctx.is_replay,
             )
             if stop_requested:
                 return

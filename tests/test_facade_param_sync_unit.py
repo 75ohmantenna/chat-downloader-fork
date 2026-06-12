@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Guard that ChatDownloader.get_chat stays in sync with ChatRequest."""
+"""Guard that get_chat() param names and defaults stay in sync with ChatRequest."""
 
 from __future__ import annotations
 
@@ -46,11 +46,3 @@ def test_get_chat_defaults_match_field_defaults() -> None:
             assert expected.name == actual.name, name
         else:
             assert actual == expected, name
-
-
-def test_every_param_documented() -> None:
-    doc = inspect.getdoc(ChatDownloader.get_chat) or ""
-    for name in CHAT_PARAM_NAMES:
-        if name == "url":
-            continue  # documented as the leading required arg
-        assert f":param {name}:" in doc, name

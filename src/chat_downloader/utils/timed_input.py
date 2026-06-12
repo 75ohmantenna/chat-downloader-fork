@@ -34,7 +34,7 @@ def echo(text: str) -> None:
 try:
     import msvcrt
 
-    def win_timed_input(timeout: float, prompt: str, newline: bool) -> str:
+    def win_timed_input(timeout: float, prompt: str, *, newline: bool) -> str:
         """Read a line from the Windows console within ``timeout`` seconds.
 
         Args:
@@ -84,7 +84,7 @@ except ImportError:
     import selectors
     import termios
 
-    def posix_timed_input(timeout: float, prompt: str, newline: bool) -> str:
+    def posix_timed_input(timeout: float, prompt: str, *, newline: bool) -> str:
         """Read a line from stdin within ``timeout`` seconds on POSIX systems.
 
         Args:
@@ -134,6 +134,7 @@ except ImportError:
 def timed_input(
     timeout: float | None = None,
     prompt: str = "",
+    *,
     newline: bool = False,
     default: Any = None,
 ) -> str | Any:
@@ -151,6 +152,6 @@ def timed_input(
     if timeout is None:
         return input(prompt)
     try:
-        return _timed_input(timeout, prompt, newline)
+        return _timed_input(timeout, prompt, newline=newline)
     except TimeoutOccurred:
         return default

@@ -65,7 +65,7 @@ def _build_error_message(
         text = get_dict(error_info, error_reason)
         error_reasons[error_reason] = (
             text.get("simpleText")
-            or _parse_runs(text, False)["message"]
+            or _parse_runs(text, parse_links=False)["message"]
             or error_info.pop("itemTitle", "")
             or error_info.pop("offerDescription", "")
             or playability_status.get(error_reason)
@@ -199,7 +199,7 @@ def _raise_for_replay_unavailable(yt_initial_data: JSONDict) -> None:
         "text",
     )
     error_message = (
-        _parse_runs(error_runs, False)["message"]
+        _parse_runs(error_runs, parse_links=False)["message"]
         if error_runs
         else "Video does not have a chat replay."
     )

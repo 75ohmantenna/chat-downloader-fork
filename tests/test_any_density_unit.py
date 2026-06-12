@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""Ratchet: no module may exceed its post-round-3 baseline count of `Any`."""
+"""Non-regression floor: no module may exceed its Any-density baseline.
+
+The per-round lowering ritual is retired (X4). These baselines are now a
+frozen floor — do not raise them. Opportunistic tightening is welcome when
+a typing migration happens alongside feature work, but there is no
+scheduled lowering cadence.
+"""
 
 from __future__ import annotations
 
@@ -11,11 +17,11 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"
 _ANY = re.compile(r"\bAny\b")
 DEFAULT_CAP = 2
 
-# Baseline captured after round-3 Step G5 migrations (2026-06).
+# Baseline captured after round-3 Step G5 migrations (2026-06); frozen at X4.
 # Counts are total occurrences of `Any` in each file (not line count).
 # Files at DEFAULT_CAP or below are omitted — they are implicitly capped.
 # Every entry above DEFAULT_CAP is a genuine payload/accumulator boundary;
-# do not raise these values; tighten them as further migrations happen.
+# do not raise these values. Tighten opportunistically alongside typing work.
 # See docs/maintenance-notes.md "Round-3 typing pass" for context.
 BASELINE: dict[str, int] = {
     # Format spec objects loaded from JSON config files (dict[str,Any] is the

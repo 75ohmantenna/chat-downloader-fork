@@ -107,6 +107,7 @@ def time_to_seconds(time: str) -> int:
 
 def seconds_to_time(
     seconds: float,
+    *,
     format: str = "{}:{:02}:{:02}",  # noqa: A002 — public API parameter; callers pass format= by name
     remove_leading_zeroes: bool = True,
 ) -> str:

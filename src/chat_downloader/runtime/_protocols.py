@@ -29,6 +29,7 @@ class ChatDownloaderProto(Protocol):
     def create_session(
         self,
         chat_downloader_class: type[BaseChatDownloader],
+        *,
         overwrite: bool = ...,
     ) -> BaseChatDownloader: ...
 

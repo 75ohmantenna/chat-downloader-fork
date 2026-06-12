@@ -83,7 +83,7 @@ def parse_header(value: str) -> tuple[str, str]:
     return key.title(), header_value
 
 
-def str2bool(value: str | bool) -> bool:
+def str2bool(value: str | bool) -> bool:  # noqa: FBT001 — argparse converter; bool input is intentional
     """Convert a CLI boolean string to a Python bool.
 
     Args:

@@ -223,11 +223,13 @@ def test_debugging_import_uses_colorlog_when_colour_supported(
 def test_debug_log_delegates_to_log(monkeypatch) -> None:
     calls = []
 
-    monkeypatch.setattr(dbg, "log", lambda *args: calls.append(args))
+    monkeypatch.setattr(dbg, "log", lambda *args, **kw: calls.append((args, kw)))
 
     dbg.debug_log("first", "second")
 
-    assert calls == [("debug", ("first", "second"), True, True)]
+    assert calls == [
+        (("debug", ("first", "second")), {"to_pause": True, "to_exit": True})
+    ]
 
 
 def test_set_log_level_updates_all_configured_loggers() -> None:

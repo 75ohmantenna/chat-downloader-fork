@@ -221,7 +221,7 @@ def build_remapping() -> Mapping[str, Any]:
             "authorExternalChannelId": "author_id",
             "authorName": r("author_name", _get_simple_text),
             "purchaseAmountText": r("money", _parse_currency),
-            "message": r(None, _parse_runs, True),
+            "message": r(None, _parse_runs, to_unpack=True),
             "timestampText": r("time_text", _get_simple_text),
             "timestampUsec": r("timestamp", int_or_none),
             "authorPhoto": r("author_images", _parse_thumbnails),
@@ -234,7 +234,7 @@ def build_remapping() -> Mapping[str, Any]:
             "fullDurationSec": r("ticker_duration", int_or_none),
             "amount": r("money", _parse_currency),
             # ticker_sponsor_item
-            "detailText": r(None, _parse_runs, True),
+            "detailText": r(None, _parse_runs, to_unpack=True),
             "detailIcon": r("detail_icon", lambda x: x.get("iconType")),
             "customThumbnail": r("badge_icons", _parse_thumbnails),
             # membership_item
@@ -244,15 +244,15 @@ def build_remapping() -> Mapping[str, Any]:
             # ticker_paid_sticker_item
             "tickerThumbnails": r("ticker_icons", _parse_thumbnails),
             # deleted messages
-            "deletedStateMessage": r(None, _parse_runs, True),
+            "deletedStateMessage": r(None, _parse_runs, to_unpack=True),
             "targetItemId": "target_message_id",
             "externalChannelId": "author_id",
             # action buttons
             "actionButton": r("action", _parse_action_button),
             # addBannerToLiveChatCommand
             "liveChatSummaryId": "summary_id",
-            "chatSummary": r(None, _parse_runs, True),
-            "text": r(None, _parse_runs, True),
+            "chatSummary": r(None, _parse_runs, to_unpack=True),
+            "text": r(None, _parse_runs, to_unpack=True),
             "viewerIsCreator": "viewer_is_creator",
             "targetId": "target_message_id",
             "isStackable": "is_stackable",
@@ -260,9 +260,9 @@ def build_remapping() -> Mapping[str, Any]:
             # removeBannerForLiveChatCommand
             "targetActionId": "target_message_id",
             # donation_announcement
-            "subtext": r(None, _parse_runs, True),
+            "subtext": r(None, _parse_runs, to_unpack=True),
             # tooltip
-            "detailsText": r(None, _parse_runs, True),
+            "detailsText": r(None, _parse_runs, to_unpack=True),
             # gifts
             "primaryText": r("message", _parse_text),
             "bannerType": "banner_type",

@@ -69,7 +69,7 @@ def build_comment_remapping() -> dict[str, Any]:
         "createdAt": r("timestamp", timestamp_to_microseconds),
         "commenter": r("author", _parse_user),
         "contentOffsetSeconds": "time_in_seconds",
-        "message": r(None, _parse_message_info, True),
+        "message": r(None, _parse_message_info, to_unpack=True),
     }
 
 

@@ -6,10 +6,11 @@ the full rationale behind deferred items.
 
 ## How to use
 
-- **Any-density ratchet**: lower a baseline only after a concrete migration;
-  never raise it. After migrating a module, run
-  `rg -c "\bAny\b" src/chat_downloader/<path>` to get the new count, then
-  update `BASELINE` in `tests/test_any_density_unit.py`.
+- **Any-density floor** (frozen at X4): the per-round lowering ritual is
+  retired. Do not raise baselines. Tighten opportunistically alongside typing
+  work; after migrating a module run
+  `rg -c "\bAny\b" src/chat_downloader/<path>` and update `BASELINE` in
+  `tests/test_any_density_unit.py`.
 - **Gate commands** (run after every change):
   ```
   uv run pytest -q -p no:rerunfailures -m "not network"
@@ -22,19 +23,9 @@ the full rationale behind deferred items.
 
 ---
 
-## Active ratchet targets (Any-density)
+## Any-density stable boundaries
 
-Modules below their documented stable boundary — next candidates for typing
-migration. Technique matched to each module: the accessor pattern
-(`get_str`/`get_int`/`get_dict`/`dig` from `utils/json_types.py`) for JSON reads;
-concrete `requests.Response` / return-type annotations for HTTP boundaries.
-
-| Module | Current baseline | Priority | Technique |
-|--------|-----------------|----------|-----------|
-| ~~`sites/base.py`~~ | ~~23~~ → **14** | done (L3c) | concrete HTTP return types; `str\|None` cookie; `re.Match[str]` tuple; `Iterator[str]` generate_urls |
-| ~~`sites/session.py`~~ | ~~17~~ → **7** | done (L3a) | `-> requests.Response`/`JSONAny`/`str\|None`; `dict[str,str]` cookie spec |
-**Out of scope** — documented stable boundaries; do not lower without re-reading
-`maintenance-notes.md`:
+These baselines are frozen. Do not lower without re-reading `maintenance-notes.md`.
 
 | Module | Baseline | Reason |
 |--------|----------|--------|
@@ -190,10 +181,10 @@ PLE, DTZ, PT families to `pyproject.toml [tool.ruff.lint] select`.  Fixed ~80
 violations across src and tests; added per-file-ignores for test-incompatible
 rules (S101, ARG, BLE001, EM, N802, N806).  Two families evaluated and
 declined with documented rationale:
-- **FBT** (109 violations): boolean positional-argument rule fights frozen
-  public signatures that the project deliberately cannot rename.
-- **SLF** (53 violations): cross-module `_`-prefixed helper access is the
-  deliberate pattern created by rounds 5–7 extractions.
+- **~~FBT~~** (109→0 violations): resolved in X5 — keyword-only migration across
+  all src boolean params; FBT added to `select`. Tests suppressed via per-file-ignores.
+- **SLF** (376 violations as of X5): cross-module `_`-prefixed helper access is the
+  deliberate pattern created by rounds 5–7 extractions; keep declined.
 
 #### ~~Seam unit tests for extracted modules~~ → done (V2)
 Added `test_youtube_client_requests_errors_unit.py` (HTTP/JSON error handlers)
@@ -242,6 +233,24 @@ Appended to `tests/test_youtube_chat_context_unit.py`: 2
 is the next candidate; HTTP-status dispatch could be extracted à la U1.
 Deferred: the function's complexity is documented intrinsic (status-code
 dispatch + retry loop) and the file is well under the 400-LOC ceiling.
-Revisit only if a future edit raises its McCabe score above 8 again.
+Revisit only if a future edit raises its McCabe score above 10 again.
 All other candidates in the 340–400 LOC range were declined in U3 (Round-7)
 and remain closed.
+
+---
+
+## Extraction round cadence — RETIRED (X-series)
+
+The S→W extraction-round program is closed. Nine rounds of structural work
+are complete; the mechanical decomposition seam is exhausted.
+
+**New rule:** extract a module only when it organically crosses the 400-LOC
+cap or McCabe-10 gate during feature work — never as a standalone round.
+
+**Ongoing high-value track:** typed-payload migration (accessor pattern over
+incoming YouTube/Twitch JSON via `utils/json_types` — `get_str`, `get_int`,
+`get_dict`, `get_list`, `dig`). This reduces future bug surface when platforms
+rotate their schemas. No scheduled cadence; do it opportunistically alongside
+parser changes. After each migration, lower the affected module's baseline in
+`tests/test_any_density_unit.py` (opportunistic tightening — not a scheduled
+round).

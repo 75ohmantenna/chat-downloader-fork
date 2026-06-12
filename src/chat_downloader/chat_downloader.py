@@ -88,6 +88,7 @@ class ChatDownloader:
 
     def __init__(
         self,
+        *,
         headers: dict[str, str] | None = None,
         cookies: str | None = None,
         proxy: str | None = None,
@@ -179,6 +180,7 @@ class ChatDownloader:
         domain: str,
         name: str,
         value: str,
+        *,
         expire_time: int | None = None,
         port: str | None = None,
         path: str = "/",
@@ -215,6 +217,7 @@ class ChatDownloader:
     def get_chat(
         self,
         url: str | None = None,
+        *,
         start_time: float | str | None = None,
         end_time: float | str | None = None,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
@@ -348,6 +351,7 @@ class ChatDownloader:
     def create_session(
         self,
         chat_downloader_class: type[BaseChatDownloader],
+        *,
         overwrite: bool = False,
     ) -> BaseChatDownloader:
         """Create or retrieve a session for a chat downloader class.
@@ -358,7 +362,7 @@ class ChatDownloader:
         :return: The session instance
         :raises TypeError: if class is invalid
         """
-        return create_runtime_session(self, chat_downloader_class, overwrite)
+        return create_runtime_session(self, chat_downloader_class, overwrite=overwrite)
 
     def get_session(
         self,
@@ -379,7 +383,7 @@ class ChatDownloader:
 # ===== Module-Level Functions =====
 
 
-def run(propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
+def run(*, propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
     """Execute a complete chat download session with error handling.
 
     This is a convenience function that creates a ChatDownloader

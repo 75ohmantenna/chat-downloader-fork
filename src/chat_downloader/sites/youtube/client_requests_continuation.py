@@ -30,6 +30,7 @@ def _get_continuation_info(
     continuation_url: str,
     session_post: Callable[..., Any],
     program_params: ChatRequest | dict[str, Any],
+    *,
     require_live_chat_continuation: bool = True,
     **post_kwargs: Any,
 ) -> dict[str, Any]:

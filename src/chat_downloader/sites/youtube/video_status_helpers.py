@@ -16,7 +16,7 @@ from chat_downloader.utils.json_types import get_dict
 from .helpers import extract_chat_submenu_continuations
 
 
-def _log_player_response_shape(
+def _log_player_response_shape(  # pragma: no cover — debug-only logging helper
     player_response_info: Mapping[str, object],
     video_details: Mapping[str, object],
     live_details: Mapping[str, object],

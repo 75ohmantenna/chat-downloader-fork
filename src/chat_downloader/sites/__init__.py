@@ -28,6 +28,7 @@ _SITE_CLASSES: tuple[type[BaseChatDownloader], ...] = (
 
 
 def get_all_sites(
+    *,
     include_parent: bool = False,
 ) -> list[type[BaseChatDownloader]]:
     """Get all supported sites.

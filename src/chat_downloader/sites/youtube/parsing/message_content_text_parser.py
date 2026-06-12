@@ -26,6 +26,7 @@ def _append_run(
     message_info: dict[str, Any],
     run: dict[str, Any],
     message_emotes: dict[str, dict[str, Any]],
+    *,
     parse_links: bool,
 ) -> None:
     """Append one run's contribution to *message_info* and *message_emotes*."""
@@ -55,7 +56,7 @@ def _append_run(
         message_info["message"] += str(run)
 
 
-def _parse_runs(run_info: Any, parse_links: bool = True) -> dict[str, Any]:
+def _parse_runs(run_info: Any, *, parse_links: bool = True) -> dict[str, Any]:
     """Parse YouTube formatted messages (runs) with text, links, and emojis."""
     message_info: dict[str, Any] = {"message": ""}
 
@@ -68,7 +69,7 @@ def _parse_runs(run_info: Any, parse_links: bool = True) -> dict[str, Any]:
 
     message_emotes: dict[str, dict[str, Any]] = {}
     for run in run_info.get("runs") or []:
-        _append_run(message_info, run, message_emotes, parse_links)
+        _append_run(message_info, run, message_emotes, parse_links=parse_links)
 
     if message_emotes:
         message_info["emotes"] = list(message_emotes.values())

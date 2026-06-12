@@ -95,9 +95,9 @@ class RunResult:
 
 
 def create_message_callback(
+    *,
     quiet: bool,
     chat: Chat,
-    *,
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
 ) -> Callable[[dict[str, Any]], None]:
     """Create a callback function for processing retrieved messages."""
@@ -122,6 +122,7 @@ def create_message_callback(
 
 def execute_run(
     downloader_cls: type,
+    *,
     propagate_interrupt: bool = False,
     **kwargs: Any,
 ) -> RunResult:
@@ -148,8 +149,8 @@ def execute_run(
         downloader = downloader_cls(**init_params)
         chat = downloader.get_chat(**chat_params)
         callback = create_message_callback(
-            run_config.quiet,
-            chat,
+            quiet=run_config.quiet,
+            chat=chat,
             max_seen_message_ids=run_config.max_seen_message_ids,
         )
 

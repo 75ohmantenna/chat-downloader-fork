@@ -49,7 +49,7 @@ def get_float(d: Mapping[str, object], key: str, default: float = 0.0) -> float:
     return float(v) if isinstance(v, (int, float)) else default
 
 
-def get_bool(d: Mapping[str, object], key: str, default: bool = False) -> bool:
+def get_bool(d: Mapping[str, object], key: str, *, default: bool = False) -> bool:
     """Return ``d[key]`` as ``bool``, or *default* if absent or wrong type."""
     v = d.get(key, default)
     return v if isinstance(v, bool) else default

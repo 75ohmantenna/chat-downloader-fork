@@ -31,6 +31,7 @@ def _attempt_numbers(max_attempts: int) -> range:
 
 def retry(
     attempt_number: int,
+    *,
     max_attempts: int = 1,
     error: Exception | None = None,
     retry_timeout: float | None = None,

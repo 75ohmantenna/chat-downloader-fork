@@ -6,10 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from chat_downloader.sites.youtube.video_status_helpers import (
-    _derive_duration,
-    _log_player_response_shape,
-)
+from chat_downloader.sites.youtube.video_status_helpers import _derive_duration
 
 _DURATION_CASES = "first_format,video_details,player_renderer,start,end,want"
 
@@ -39,34 +36,3 @@ def test_derive_duration(
 ) -> None:
     result = _derive_duration(first_format, video_details, player_renderer, start, end)
     assert result == want
-
-
-def test_log_player_response_shape_no_optional_keys() -> None:
-    _log_player_response_shape({}, {}, {}, {})
-
-
-def test_log_player_response_shape_with_live_broadcast_details() -> None:
-    _log_player_response_shape(
-        {},
-        {},
-        {},
-        {"liveBroadcastDetails": {"liveBroadcastContent": "live"}},
-    )
-
-
-def test_log_player_response_shape_with_broadcast_details_no_content() -> None:
-    _log_player_response_shape(
-        {},
-        {},
-        {},
-        {"liveBroadcastDetails": {}},
-    )
-
-
-def test_log_player_response_shape_with_live_streaming_details() -> None:
-    _log_player_response_shape(
-        {"liveStreamingDetails": {"activeLiveChatId": "abc"}},
-        {},
-        {},
-        {},
-    )

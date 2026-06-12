@@ -17,6 +17,7 @@ class Remapper:
         self,
         new_key: str | None = None,
         remap_function: Callable[[Any], Any] | None = None,
+        *,
         to_unpack: bool = False,
     ) -> None:
         """Configure how one source key is transformed during remapping."""
@@ -59,6 +60,7 @@ class Remapper:
         remapping_dict: Mapping[str, Any],
         remap_key: str,
         remap_input: object,
+        *,
         keep_unknown_keys: bool = False,
         replace_char_with_underscores: str | None = None,
     ) -> None:
@@ -82,6 +84,7 @@ class Remapper:
     def remap_dict(
         input_dictionary: dict[str, Any],
         remapping_dict: Mapping[str, Any],
+        *,
         keep_unknown_keys: bool = False,
         replace_char_with_underscores: str | None = None,
     ) -> dict[str, Any]:

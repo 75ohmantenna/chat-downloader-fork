@@ -19,7 +19,7 @@ _SITE_TESTS: dict = {
 
 _ALL_SITE_TESTS = [
     (site, test)
-    for site in get_all_sites(True)
+    for site in get_all_sites(include_parent=True)
     for test in _SITE_TESTS.get(site, getattr(site, "_TESTS", []))
 ]
 

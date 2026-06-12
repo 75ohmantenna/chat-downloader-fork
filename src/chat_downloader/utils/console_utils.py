@@ -114,7 +114,9 @@ def _find_next_nonbmp_position(s: str) -> int:
         return len(s)
 
 
-def _write_to_windows_console(handle: Any, text: str, skip_errors: bool = True) -> bool:
+def _write_to_windows_console(
+    handle: Any, text: str, *, skip_errors: bool = True
+) -> bool:
     """Write text to Windows console using WriteConsoleW API.
 
     :param handle: Windows console handle
@@ -176,7 +178,7 @@ def _write_to_windows_console(handle: Any, text: str, skip_errors: bool = True) 
     return True
 
 
-def _windows_write_string(s: str, out: Any, skip_errors: bool = True) -> bool:
+def _windows_write_string(s: str, out: Any, *, skip_errors: bool = True) -> bool:
     """Write a string to a Windows console using special API methods.
 
     Returns True if the string was written using the Windows console API, False
@@ -191,7 +193,7 @@ def _windows_write_string(s: str, out: Any, skip_errors: bool = True) -> bool:
     if not _is_valid_console(handle):
         return False
 
-    return _write_to_windows_console(handle, s, skip_errors)
+    return _write_to_windows_console(handle, s, skip_errors=skip_errors)
 
 
 def safe_print(

@@ -162,6 +162,6 @@ class Chat:
         else:
             return item
 
-    def print_formatted(self, item: dict[str, Any], flush: bool = True) -> None:
+    def print_formatted(self, item: dict[str, Any], *, flush: bool = True) -> None:
         """Safely print the formatted message."""
         safe_print(self.format(item), flush=flush)

@@ -63,6 +63,7 @@ class ContinuousFileWriter(ABC):
     def __init__(
         self,
         file_name: str,
+        *,
         overwrite: bool = True,
         **kwargs: Any,  # noqa: ARG002 — base class contract; subclasses consume kwargs
     ) -> None:
@@ -87,7 +88,7 @@ class ContinuousFileWriter(ABC):
                 self.file = None
 
     @abstractmethod
-    def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+    def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
         """Write a chat item to the file."""
 
     def flush(self) -> None:
@@ -133,6 +134,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
     def __init__(
         self,
         file_name: str,
+        *,
         sort_keys: bool = True,
         **kwargs: Any,
     ) -> None:
@@ -178,6 +180,7 @@ class CsvContinuousWriter(ContinuousFileWriter):
     def write(
         self,
         item: dict[str, Any] | str,
+        *,
         flush: bool = False,
         flatten: bool = True,
     ) -> None:
@@ -235,6 +238,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
     def __init__(
         self,
         file_name: str,
+        *,
         sort_keys: bool = True,
         **kwargs: Any,
     ) -> None:
@@ -244,7 +248,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
         self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
 
-    def write(self, item: Any, flush: bool = False) -> None:
+    def write(self, item: Any, *, flush: bool = False) -> None:
         """Write *item* as a single JSON line."""
         if self.file is None:
             msg = "File must be initialized before use"
@@ -265,7 +269,7 @@ class TextContinuousWriter(ContinuousFileWriter):
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
         self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
 
-    def write(self, item: Any, flush: bool = False) -> None:
+    def write(self, item: Any, *, flush: bool = False) -> None:
         """Write *item* as a string line."""
         if self.file is None:
             msg = "File must be initialized before use"

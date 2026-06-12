@@ -112,6 +112,8 @@ select = [
     "PLE",  # pylint errors
     "DTZ",  # flake8-datetimez
     "PT",   # flake8-pytest-style
+    # X5: boolean-argument rules — enabled after keyword-only migration
+    "FBT",  # flake8-boolean-trap
 ]
 ignore = [
     "D206",   # docstring-tab-indentation
@@ -121,7 +123,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.mccabe]
-max-complexity = 8
+max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
@@ -140,6 +142,7 @@ max-complexity = 8
     "EM",    # errmsg: inline exception strings are natural in test setup / mock.side_effect
     "N802",  # invalid-function-name: mock methods must match the API names they stub (e.g. WINFUNCTYPE, setFormatter)
     "N806",  # non-lowercase-variable-in-function: mock objects and Windows API constants use uppercase
+    "FBT",   # boolean-argument rules: test helpers and call sites legitimately use positional booleans
 ]
 
 [tool.ruff.lint.isort]

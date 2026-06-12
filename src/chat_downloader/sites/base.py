@@ -157,6 +157,7 @@ class BaseChatDownloader:
         domain: str,
         name: str,
         value: str,
+        *,
         expire_time: int | None = None,
         port: str | None = None,
         path: str = "/",
@@ -259,6 +260,7 @@ class BaseChatDownloader:
     @staticmethod
     def retry(
         attempt_number: int,
+        *,
         max_attempts: int = 1,
         error: Exception | None = None,
         retry_timeout: float | None = None,

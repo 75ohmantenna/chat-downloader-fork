@@ -292,8 +292,8 @@ class ItemFormatter:
             )
             return seconds_to_time(
                 time_to_seconds(value),
-                format_string,
-                collapse_leading_zeroes,
+                format=format_string,
+                remove_leading_zeroes=collapse_leading_zeroes,
             )
 
         return value

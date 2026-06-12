@@ -36,22 +36,22 @@ def build_cookie(
     _validate_cookie_domain(domain)
     cookie_rest = {} if rest is None else rest
     return Cookie(
-        0,
-        name,
-        value,
-        port,
-        port is not None,
-        domain,
-        True,
-        domain.startswith("."),
-        path,
-        True,
-        secure,
-        expire_time,
-        discard,
-        None,
-        None,
-        cookie_rest,
+        version=0,
+        name=name,
+        value=value,
+        port=port,
+        port_specified=port is not None,
+        domain=domain,
+        domain_specified=True,
+        domain_initial_dot=domain.startswith("."),
+        path=path,
+        path_specified=True,
+        secure=secure,
+        expires=expire_time,
+        discard=discard,
+        comment=None,
+        comment_url=None,
+        rest=cookie_rest,
     )
 
 
@@ -138,6 +138,7 @@ def get_cookie_value(owner: ChatDownloaderProto, name: str, default: Any = None)
 def create_session(
     owner: ChatDownloaderProto,
     chat_downloader_class: type[BaseChatDownloader],
+    *,
     overwrite: bool = False,
 ) -> BaseChatDownloader:
     """Create or retrieve a site downloader session."""

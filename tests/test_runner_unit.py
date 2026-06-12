@@ -153,7 +153,7 @@ def test_finalize_run_reraises_cleanup_errors_without_primary_error() -> None:
 
 def test_create_message_callback_quiet_returns_noop() -> None:
     chat = MagicMock()
-    callback = create_message_callback(True, chat)
+    callback = create_message_callback(quiet=True, chat=chat)
 
     callback({"message_type": "text_message"})
     chat.print_formatted.assert_not_called()
@@ -161,7 +161,7 @@ def test_create_message_callback_quiet_returns_noop() -> None:
 
 def test_create_message_callback_deduplicates_superchat_stdout() -> None:
     chat = MagicMock()
-    callback = create_message_callback(False, chat)
+    callback = create_message_callback(quiet=False, chat=chat)
 
     callback({"message_type": "paid_message", "message_id": "abc"})
     callback({"message_type": "ticker_paid_message_item", "message_id": "abc"})
@@ -172,7 +172,7 @@ def test_create_message_callback_deduplicates_superchat_stdout() -> None:
 
 def test_create_message_callback_deduplicates_with_bounded_cache() -> None:
     chat = MagicMock()
-    callback = create_message_callback(False, chat, max_seen_message_ids=1)
+    callback = create_message_callback(quiet=False, chat=chat, max_seen_message_ids=1)
 
     callback({"message_type": "paid_message", "message_id": "one"})
     callback({"message_type": "ticker_paid_message_item", "message_id": "one"})
@@ -185,7 +185,7 @@ def test_create_message_callback_deduplicates_with_bounded_cache() -> None:
 
 def test_create_message_callback_uses_default_cache_when_limit_disabled() -> None:
     chat = MagicMock()
-    callback = create_message_callback(False, chat, max_seen_message_ids=0)
+    callback = create_message_callback(quiet=False, chat=chat, max_seen_message_ids=0)
 
     callback({"message_type": "paid_message", "message_id": "dup"})
     callback({"message_type": "text_message", "message_id": "dup"})

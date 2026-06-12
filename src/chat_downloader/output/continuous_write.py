@@ -44,6 +44,7 @@ class ContinuousWriter:
     def __init__(
         self,
         file_name: str | None = None,
+        *,
         overwrite: bool = True,
         format: str | None = None,  # noqa: A002 — public ContinuousWriter API; renaming would break callers
         lazy_initialise: bool = False,
@@ -138,7 +139,7 @@ class ContinuousWriter:
             **self._writer_kwargs,
         )
 
-    def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+    def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
         """Write *item* using the underlying writer."""
         if self._writer is None:
             self._initialize_if_needed()
@@ -147,7 +148,7 @@ class ContinuousWriter:
         if writer is None:
             msg = "Writer was not initialized"
             raise RuntimeError(msg)
-        writer.write(item, flush)
+        writer.write(item, flush=flush)
 
     def __enter__(self) -> Self:
         """Enter the context manager, returning self."""

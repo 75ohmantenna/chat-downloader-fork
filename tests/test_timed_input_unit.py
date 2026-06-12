@@ -47,7 +47,7 @@ def test_timed_input_returns_default_on_timeout(monkeypatch) -> None:
     monkeypatch.setattr(
         timed_utils,
         "_timed_input",
-        lambda *_args: (_ for _ in ()).throw(TimeoutOccurred()),
+        lambda *_args, **_kw: (_ for _ in ()).throw(TimeoutOccurred()),
     )
 
     assert timed_utils.timed_input(timeout=0.5, default="fallback") == "fallback"

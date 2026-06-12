@@ -131,7 +131,7 @@ def test_text_helpers_parse_simple_text_runs_links_and_emotes() -> None:
 
     assert _parse_runs(
         {"runs": [{"text": "plain", "navigationEndpoint": {}}]},
-        False,
+        parse_links=False,
     ) == {"message": "plain"}
     assert _parse_runs("not-a-dict") == {"message": ""}
 
