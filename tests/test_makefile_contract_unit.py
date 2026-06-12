@@ -20,3 +20,13 @@ def test_make_lint_includes_import_linter_contracts() -> None:
 
     assert "$(UV_RUN) ruff check src/chat_downloader tests" in makefile
     assert "$(UV_RUN) lint-imports" in makefile
+
+
+def test_make_test_paths_exclude_network_tests() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert '$(UV) run pytest -q -p no:rerunfailures -m "not network"' in makefile
+    assert (
+        '$(UV_RUN) coverage run -m pytest -q -p no:rerunfailures -m "not network"'
+        in makefile
+    )
