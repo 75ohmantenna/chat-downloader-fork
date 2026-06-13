@@ -662,3 +662,18 @@ multi_get calls downstream unaffected).
 | `sites/twitch/replay_service.py` | 18 | 3 |
 | `sites/twitch/replay_transport.py` | 6 | 3 |
 | `sites/twitch/live_service.py` | 5 | 4 |
+
+### X12 — Branch coverage triage pass (2026-06)
+
+Measured branch coverage with `PYTHONHASHSEED=0 uv run coverage run --branch
+-m pytest -q -p no:rerunfailures -m "not network"`.  Meaningful parser,
+runtime, output, and discovery alternate paths were covered with focused unit
+tests.  The branch report moved from 41 partial branches / 99.38% branch
+coverage to 14 partial branches / 99.79% branch coverage, with 0 line misses.
+
+`branch = true` remains disabled in `[tool.coverage.run]`.  The remaining gaps
+are low-value structural or defensive/platform-specific arcs (for example
+current-directory output setup, absent optional debug snapshot state, Windows
+console fallback, and timed-input/thread shutdown races).  Reaching a
+trustworthy 100% branch gate from here would require artificial tests or broad
+branch exclusions, so line coverage remains the enforced 100% gate.
