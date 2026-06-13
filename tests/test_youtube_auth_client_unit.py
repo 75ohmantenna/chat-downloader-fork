@@ -98,6 +98,13 @@ def test_generate_sapisidhash_header_returns_none_without_sid_cookies() -> None:
     assert session.set_calls == []
 
 
+def test_ensure_primary_sapisid_returns_none_without_promotable_cookie() -> None:
+    session = _FakeSession()
+
+    assert _yt_auth._ensure_primary_sapisid(session, (None, None, None), 1234) is None
+    assert session.set_calls == []
+
+
 def test_generate_sapisidhash_header_promotes_cookie_and_uses_datasync_id(
     monkeypatch,
 ) -> None:

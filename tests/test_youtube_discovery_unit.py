@@ -197,6 +197,62 @@ def test_get_user_videos_raises_no_videos_when_selected_tab_mismatch(
         list(get_user_videos(DummyDownloader(), channel_id="abc", video_type="videos"))
 
 
+def test_channel_page_item_processing_ignores_continuation_without_token(
+    monkeypatch,
+) -> None:
+    from chat_downloader.sites.youtube import discovery_channels_runtime_iteration
+    from chat_downloader.sites.youtube.discovery_channels_runtime_iteration import (
+        _process_page_items,
+    )
+
+    monkeypatch.setattr(
+        discovery_channels_runtime_iteration,
+        "_parse_video",
+        lambda video: {"video_id": video["videoId"]},
+    )
+
+    videos, token = _process_page_items(
+        [
+            {"continuationItemRenderer": {"continuationEndpoint": {}}},
+            {
+                "richItemRenderer": {
+                    "content": {"videoRenderer": {"videoId": "after-empty-token"}},
+                },
+            },
+        ],
+    )
+
+    assert videos == [{"video_id": "after-empty-token"}]
+    assert token is None
+
+
+def test_channel_page_item_processing_skips_unknown_items(monkeypatch) -> None:
+    from chat_downloader.sites.youtube import discovery_channels_runtime_iteration
+    from chat_downloader.sites.youtube.discovery_channels_runtime_iteration import (
+        _process_page_items,
+    )
+
+    monkeypatch.setattr(
+        discovery_channels_runtime_iteration,
+        "_parse_video",
+        lambda video: {"video_id": video["videoId"]},
+    )
+
+    videos, token = _process_page_items(
+        [
+            {"unknownRenderer": {}},
+            {
+                "richItemRenderer": {
+                    "content": {"videoRenderer": {"videoId": "after-unknown"}},
+                },
+            },
+        ],
+    )
+
+    assert videos == [{"video_id": "after-unknown"}]
+    assert token is None
+
+
 def test_get_user_videos_returns_empty_when_no_selected_tab_has_content(
     monkeypatch,
 ) -> None:
@@ -1041,3 +1097,127 @@ def test_generate_urls_yields_watch_urls() -> None:
         f"{_YT_HOME}/watch?v=abc123",
         f"{_YT_HOME}/watch?v=def456",
     ]
+
+
+def test_playlist_item_processing_ignores_continuation_without_token(
+    monkeypatch,
+) -> None:
+    from chat_downloader.sites.youtube import discovery_playlists
+    from chat_downloader.sites.youtube.discovery_playlists import (
+        _extract_playlist_items,
+    )
+
+    monkeypatch.setattr(
+        discovery_playlists,
+        "_parse_video",
+        lambda video: {"video_id": video["videoId"]},
+    )
+
+    videos, token = _extract_playlist_items(
+        [
+            {"continuationItemRenderer": {"continuationEndpoint": {}}},
+            {"playlistVideoRenderer": {"videoId": "after-empty-token"}},
+        ],
+    )
+
+    assert videos == [{"video_id": "after-empty-token"}]
+    assert token is None
+
+
+def test_playlist_item_processing_skips_unknown_items(monkeypatch) -> None:
+    from chat_downloader.sites.youtube import discovery_playlists
+    from chat_downloader.sites.youtube.discovery_playlists import (
+        _extract_playlist_items,
+    )
+
+    monkeypatch.setattr(
+        discovery_playlists,
+        "_parse_video",
+        lambda video: {"video_id": video["videoId"]},
+    )
+
+    videos, token = _extract_playlist_items(
+        [
+            {"unknownRenderer": {}},
+            {"playlistVideoRenderer": {"videoId": "after-unknown"}},
+        ],
+    )
+
+    assert videos == [{"video_id": "after-unknown"}]
+    assert token is None
+
+
+def test_discovery_helpers_recurse_past_non_matching_entries() -> None:
+    from chat_downloader.sites.youtube.discovery_helpers import (
+        _iter_playlist_urls,
+        _iter_video_ids,
+    )
+
+    content = {
+        "shelfRenderer": {
+            "endpoint": {
+                "commandMetadata": {
+                    "webCommandMetadata": {"url": "/watch?v=not-playlist"},
+                },
+            },
+        },
+        "nested": [
+            {"videoRenderer": {"videoId": ""}},
+            {
+                "shelfRenderer": {
+                    "endpoint": {
+                        "commandMetadata": {
+                            "webCommandMetadata": {"url": "/playlist?list=PL123"},
+                        },
+                    },
+                },
+            },
+            {"videoRenderer": {"videoId": "abc123"}},
+        ],
+    }
+
+    assert list(_iter_playlist_urls(content)) == [
+        "https://www.youtube.com/playlist?list=PL123",
+    ]
+    assert list(_iter_video_ids(content)) == ["abc123"]
+
+
+def test_fetch_browse_continuation_passes_empty_token_without_marking_seen(
+    monkeypatch,
+) -> None:
+    from chat_downloader.sites.youtube import helpers
+    from chat_downloader.sites.youtube.helpers import _fetch_browse_continuation
+
+    calls = []
+
+    def fake_get_continuation_info(*_args, **kwargs):
+        calls.append(kwargs["json"])
+        return {
+            "onResponseReceivedActions": [
+                {
+                    "appendContinuationItemsAction": {
+                        "continuationItems": [
+                            {"richItemRenderer": {"content": {}}},
+                        ],
+                    },
+                },
+            ],
+        }
+
+    monkeypatch.setattr(helpers, "_get_continuation_info", fake_get_continuation_info)
+    seen: set[str] = set()
+    params = {}
+
+    items, yt_info = _fetch_browse_continuation(
+        type("Downloader", (), {"_session_post": object()})(),
+        "",
+        "https://www.youtube.com/youtubei/v1/browse?key=key",
+        params,
+        ChatRequest(url="https://www.youtube.com/@example/videos"),
+        seen,
+    )
+
+    assert items == [{"richItemRenderer": {"content": {}}}]
+    assert yt_info is not None
+    assert calls == [{"continuation": ""}]
+    assert seen == set()

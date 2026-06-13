@@ -34,6 +34,39 @@ def test_replay_service_get_chat_by_vod_id_raises_when_video_missing() -> None:
     downloader._update_badge_info.assert_not_called()
 
 
+def test_replay_service_get_chat_by_vod_id_allows_missing_owner_login() -> None:
+    downloader = SimpleNamespace(
+        _download_gql=Mock(
+            return_value=[
+                {
+                    "data": {
+                        "video": {
+                            "title": "Replay",
+                            "lengthSeconds": 12.5,
+                            "owner": {},
+                        },
+                    },
+                },
+            ],
+        ),
+        _update_badge_info=Mock(),
+        _get_chat_messages_by_vod_id=Mock(return_value=iter(())),
+        retry=Mock(),
+    )
+    request = ChatRequest(url="https://www.twitch.tv/videos/123", max_attempts=1)
+
+    chat = replay_service.get_chat_by_vod_id(cast("Any", downloader), "123", request)
+
+    assert chat.title == "Replay"
+    assert chat.duration == 12.5
+    downloader._update_badge_info.assert_not_called()
+    downloader._get_chat_messages_by_vod_id.assert_called_once_with(
+        "123",
+        request,
+        12.5,
+    )
+
+
 def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page() -> (
     None
 ):

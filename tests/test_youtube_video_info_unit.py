@@ -343,6 +343,33 @@ def test_initial_video_info_adds_live_chat_continuations(monkeypatch) -> None:
     assert raise_calls == []
 
 
+def test_initial_video_info_skips_bootstrap_when_continuations_exist(
+    monkeypatch,
+) -> None:
+    from chat_downloader.sites.youtube import video_initialization
+
+    details = {"status": "live", "continuation_info": {"Live chat": "token"}}
+    player_response = {"playabilityStatus": {"status": "OK"}}
+    yt_initial_data = {"_chat_downloader_continuation_info": {"Live chat": "token"}}
+    dummy = _InitializationDummy(
+        (details, player_response, yt_initial_data, {"cfg": True}),
+    )
+    raise_calls = []
+
+    monkeypatch.setattr(
+        video_initialization,
+        "raise_if_playability_error",
+        lambda *args: raise_calls.append(args),
+    )
+
+    returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
+
+    assert returned_details is details
+    assert ytcfg == {"cfg": True}
+    assert dummy.session_calls == []
+    assert raise_calls == []
+
+
 def test_initial_video_info_maps_reordered_labeled_chat_submenus(
     monkeypatch,
 ) -> None:

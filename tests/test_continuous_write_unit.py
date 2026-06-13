@@ -609,6 +609,18 @@ def test_continuous_file_writer_closed_file_branch() -> None:
     assert writer.file is None
 
 
+def test_continuous_writer_preserves_existing_file_without_overwrite(
+    tmp_path,
+) -> None:
+    path = tmp_path / "existing.txt"
+    path.write_text("kept", encoding="utf-8")
+
+    writer = ContinuousWriter(str(path), overwrite=False)
+    writer.close()
+
+    assert path.read_text(encoding="utf-8") == "kept"
+
+
 def test_csv_jsonl_text_and_continuous_writer_edge_paths(tmp_path) -> None:
     csv_writer = ContinuousWriter(str(tmp_path / "sample.csv"), lazy_initialise=True)
     csv_writer.initialize()

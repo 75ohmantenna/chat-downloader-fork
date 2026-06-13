@@ -257,6 +257,36 @@ def test_parse_message_info_fragments_and_emotes() -> None:
     assert parsed["emotes"][0]["locations"] == "0-4"
 
 
+def test_parse_message_info_merges_duplicate_emote_locations() -> None:
+    message = {
+        "userColor": "#fff",
+        "userBadges": [],
+        "fragments": [
+            {
+                "text": "Kappa",
+                "emote": {"emoteID": "25", "id": "emote;0;4"},
+            },
+            {"text": " "},
+            {
+                "text": "Kappa",
+                "emote": {"emoteID": "25", "id": "emote;6;10"},
+            },
+        ],
+    }
+
+    parsed = tw_messages._parse_message_info(message)
+
+    assert parsed["message"] == "Kappa Kappa"
+    assert parsed["emotes"] == [
+        {
+            "id": "25",
+            "images": tw_messages._generate_emote_image_list("25"),
+            "name": "Kappa",
+            "locations": "0-4,6-10",
+        },
+    ]
+
+
 def test_parse_badge_info_prefers_subscriber_over_global() -> None:
     badge_set = BadgeSet(
         global_badges={

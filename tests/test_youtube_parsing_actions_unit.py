@@ -98,6 +98,30 @@ def test_process_action_replay_chat_item_action_rebases_time_and_action() -> Non
     assert finalized["timestamp"] == 1234567890
 
 
+def test_process_action_replay_chat_item_action_without_offset_uses_nested_action() -> (
+    None
+):
+    action = {
+        "replayChatItemAction": {
+            "actions": [
+                {
+                    "addChatItemAction": {
+                        "item": {
+                            "liveChatTextMessageRenderer": _renderer_with_timestamp(),
+                        },
+                    },
+                },
+            ],
+        },
+    }
+
+    finalized = _finalize(process_action(action))
+
+    assert finalized["action_type"] == "add_chat_item"
+    assert finalized["message_type"] == "text_message"
+    assert "time_in_seconds" not in finalized
+
+
 def test_process_action_add_chat_item_action() -> None:
     action = {
         "addChatItemAction": {
@@ -600,6 +624,38 @@ def test_process_action_show_live_chat_action_panel_poll() -> None:
         {"text": "Red", "vote_ratio": 0.6, "selected": False},
         {"text": "Blue", "vote_ratio": 0.4, "selected": False},
     ]
+
+
+def test_process_action_show_live_chat_action_panel_without_panel_is_empty_poll() -> (
+    None
+):
+    finalized = _finalize(process_action({"showLiveChatActionPanelAction": {}}))
+
+    assert finalized["action_type"] == "show_live_chat_action_panel"
+    assert finalized["message_type"] == "poll"
+    assert finalized["poll_choices"] == []
+    assert "poll_id" not in finalized
+
+
+def test_process_action_show_live_chat_action_panel_uses_panel_id_without_poll_id() -> (
+    None
+):
+    action = {
+        "showLiveChatActionPanelAction": {
+            "panelToShow": {
+                "liveChatActionPanelRenderer": {
+                    "id": "panel-123",
+                    "contents": {"pollRenderer": {"choices": []}},
+                },
+            },
+        },
+    }
+
+    finalized = _finalize(process_action(action))
+
+    assert finalized["message_type"] == "poll"
+    assert finalized["poll_id"] == "panel-123"
+    assert finalized["poll_choices"] == []
 
 
 def test_process_action_update_live_chat_poll() -> None:

@@ -136,3 +136,50 @@ def test_build_fallback_ytcfg_handles_non_dict_client() -> None:
         next_response={},
     )
     assert isinstance(result, dict)
+
+
+def test_build_fallback_initial_data_keeps_submenus_without_primary_continuation() -> (
+    None
+):
+    from chat_downloader.sites.youtube.client_requests_bootstrap import (
+        _build_fallback_initial_data,
+    )
+
+    initial_data = _build_fallback_initial_data(
+        {
+            "continuationContents": {
+                "liveChatContinuation": {
+                    "header": {
+                        "liveChatHeaderRenderer": {
+                            "viewSelector": {
+                                "sortFilterSubMenuRenderer": {
+                                    "subMenuItems": [
+                                        {
+                                            "title": "Top chat",
+                                            "continuation": {
+                                                "reloadContinuationData": {
+                                                    "continuation": "top-token",
+                                                },
+                                            },
+                                        },
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+    )
+
+    assert initial_data["_chat_downloader_continuation_info"] == {
+        "Top chat": "top-token",
+    }
+
+
+def test_build_fallback_initial_data_omits_empty_continuation_metadata() -> None:
+    from chat_downloader.sites.youtube.client_requests_bootstrap import (
+        _build_fallback_initial_data,
+    )
+
+    assert _build_fallback_initial_data({"contents": {}}) == {"contents": {}}

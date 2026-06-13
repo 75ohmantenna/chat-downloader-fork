@@ -140,6 +140,47 @@ def test_process_actions_skip_disposition_does_not_yield() -> None:
     assert result == [{"text": "kept"}]
 
 
+def test_process_actions_counts_non_message_action_without_yielding() -> None:
+    from chat_downloader.sites.filters import MessageFilter
+
+    msg_filter = MessageFilter({})
+    pipeline_results = iter(
+        [
+            SimpleNamespace(disposition="yield", message=None),
+        ]
+    )
+
+    def fake_pipeline(action, offset, mf, tf):
+        return next(pipeline_results)
+
+    import chat_downloader.sites.youtube.chat_streams_runtime_iteration as mod
+
+    original = mod.process_pipeline_action
+    mod.process_pipeline_action = fake_pipeline
+    try:
+        gen = _process_actions(
+            [{"id": 1}],
+            offset=None,
+            msg_filter=msg_filter,
+            time_filter=None,
+            loop_state=_make_loop_state(),
+            live_start_time_ms=0,
+            is_replay=True,
+        )
+        messages = []
+        stop_requested = False
+        try:
+            while True:
+                messages.append(next(gen))
+        except StopIteration as exc:
+            stop_requested = exc.value
+    finally:
+        mod.process_pipeline_action = original
+
+    assert messages == []
+    assert stop_requested is False
+
+
 def test_enrich_live_message_timing_skips_when_time_in_seconds_present() -> None:
     from chat_downloader.sites.youtube.continuation_loop_runtime import (
         enrich_live_message_timing,

@@ -116,6 +116,21 @@ def test_get_cookie_value_falls_back_to_existing_sessions() -> None:
     session.get_cookie_value.assert_called_once_with("sid", default=None)
 
 
+def test_get_cookie_value_checks_later_sessions_after_miss() -> None:
+    first_session = MagicMock()
+    first_session.get_cookie_value.return_value = None
+    second_session = MagicMock()
+    second_session.get_cookie_value.return_value = "from-second"
+    owner = SimpleNamespace(
+        _cookie_jar=[],
+        sessions={"First": first_session, "Second": second_session},
+    )
+
+    assert get_session_cookie_value(owner, "sid", default="missing") == "from-second"
+    first_session.get_cookie_value.assert_called_once_with("sid", default=None)
+    second_session.get_cookie_value.assert_called_once_with("sid", default=None)
+
+
 def test_clear_all_cookies_and_close_sessions_delegate_to_all_sessions() -> None:
     session = MagicMock()
     owner = SimpleNamespace(

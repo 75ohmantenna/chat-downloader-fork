@@ -256,6 +256,28 @@ def test_parse_badges_and_currency_cover_icon_and_fallback_paths(
     }
 
 
+def test_parse_badges_ignores_malformed_icons_and_missing_title(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.message_items_content_parser._parse_item",
+        lambda _badge: {
+            "icon": "SPONSOR",
+            "badge_icons": [
+                {},
+                {"url": ""},
+            ],
+        },
+    )
+
+    assert _parse_badges([{"liveChatAuthorBadgeRenderer": {}}]) == [
+        {
+            "icon_name": "sponsor",
+            "icons": [],
+        },
+    ]
+
+
 def test_parse_currency_uses_numeric_fallback_when_split_fails(
     monkeypatch,
 ) -> None:
@@ -323,6 +345,59 @@ def test_parse_item_recurses_moves_author_and_normalizes_time(
     assert result["author"] == {"images": {"thumb": "img"}, "name": ""}
     assert result["time_in_seconds"] == 58
     assert result["time_text"] == "0:58"
+    assert result["message"] is None
+
+
+def test_apply_author_roles_marks_badged_author_as_sponsor() -> None:
+    from chat_downloader.sites.youtube.parsing import (
+        message_items_content_parser as _mcp,
+    )
+
+    author = {"badges": [{"icon_name": "custom", "icons": [{"url": "badge"}]}]}
+    _mcp._apply_author_roles(author)
+
+    assert author["is_sponsor"] is True
+
+
+def test_apply_author_roles_ignores_unknown_badge_without_icons() -> None:
+    from chat_downloader.sites.youtube.parsing import (
+        message_items_content_parser as _mcp,
+    )
+
+    author = {"badges": [{"icon_name": "custom"}]}
+    _mcp._apply_author_roles(author)
+
+    assert author == {"badges": [{"icon_name": "custom"}]}
+
+
+def test_parse_item_merges_header_when_show_item_endpoint_has_no_renderer(
+    monkeypatch,
+) -> None:
+    from chat_downloader.sites.youtube.parsing import (
+        message_items_content_parser as _mcp,
+    )
+
+    monkeypatch.setattr(_mcp, "_REMAPPING", None)
+    monkeypatch.setattr(_mcp, "_COLOUR_KEYS", None)
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message.build_remapping",
+        lambda: {"timeText": "time_text"},
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
+        [],
+    )
+
+    result = _parse_item(
+        {
+            "outerRenderer": {
+                "showItemEndpoint": {"showLiveChatItemEndpoint": {}},
+                "header": {"headerRenderer": {"timeText": "0:09"}},
+            },
+        },
+    )
+
+    assert result["time_in_seconds"] == 9
     assert result["message"] is None
 
 
@@ -438,6 +513,41 @@ def test_parse_video_accepts_lockup_view_model() -> None:
         "view_count": "1 watching",
         "short_view_count": "1 watching",
     }
+
+
+def test_parse_video_accepts_lockup_without_view_count_or_badge() -> None:
+    video = _parse_video(
+        {
+            "lockupViewModel": {
+                "contentId": "plain123",
+                "metadata": {
+                    "lockupMetadataViewModel": {
+                        "title": {"content": "Plain upload"},
+                    },
+                },
+            },
+        },
+    )
+
+    assert video["video_id"] == "plain123"
+    assert video["title"] == "Plain upload"
+    assert video["video_type"] == "DEFAULT"
+    assert "view_count" not in video
+
+
+def test_parse_video_uses_later_overlay_when_first_style_is_empty() -> None:
+    video = _parse_video(
+        {
+            "videoId": "abc123",
+            "title": {"runs": [{"text": "Example"}]},
+            "thumbnailOverlays": [
+                {"thumbnailOverlayTimeStatusRenderer": {"style": ""}},
+                {"thumbnailOverlayTimeStatusRenderer": {"style": "UPCOMING"}},
+            ],
+        },
+    )
+
+    assert video["video_type"] == "UPCOMING"
 
 
 def _make_lockup_with_badge(text: str) -> dict[str, Any]:

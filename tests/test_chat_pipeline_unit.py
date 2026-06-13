@@ -111,6 +111,41 @@ def test_configure_timeouts_chat_none() -> None:
     assert chat.chat is None  # Returns early — no TimedGenerator wrapping
 
 
+@pytest.mark.parametrize(
+    ("timeout", "inactivity_timeout", "timeout_callback", "inactivity_callback"),
+    [
+        (None, 7, False, True),
+        (5, None, True, False),
+    ],
+)
+def test_configure_timeouts_installs_only_numeric_timeout_callbacks(
+    monkeypatch,
+    timeout,
+    inactivity_timeout,
+    timeout_callback,
+    inactivity_callback,
+) -> None:
+    class FakeTimedGenerator:
+        def __init__(self, generator, timeout, inactivity_timeout) -> None:
+            self.source = generator
+            self.timeout = timeout
+            self.inactivity_timeout = inactivity_timeout
+            self.on_timeout = None
+            self.on_inactivity_timeout = None
+
+    chat = SimpleNamespace(chat=iter([1, 2, 3]))
+    monkeypatch.setattr(
+        "chat_downloader.runtime.chat_pipeline.TimedGenerator",
+        FakeTimedGenerator,
+    )
+
+    configure_timeouts(chat, timeout=timeout, inactivity_timeout=inactivity_timeout)
+
+    assert isinstance(chat.chat, FakeTimedGenerator)
+    assert (chat.chat.on_timeout is not None) is timeout_callback
+    assert (chat.chat.on_inactivity_timeout is not None) is inactivity_callback
+
+
 def test_configure_formatter_installs_item_formatter_wrapper(
     monkeypatch,
 ) -> None:
