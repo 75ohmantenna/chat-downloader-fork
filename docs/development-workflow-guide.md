@@ -12,7 +12,8 @@ disclosures that apply to all changes in this repository.
 - Python support: 3.12+; CI validates 3.12, 3.13, and 3.14
 - Packaging source of truth: `pyproject.toml`
 - Test framework: `pytest`
-- Formatter and primary linter: `ruff`
+- Formatter and primary linter: `ruff`, configured for an 88-character line
+  length (source of truth: `pyproject.toml`)
 - Type checker: `mypy` with configuration in `mypy.ini`
 - CLI/API parameter source of truth: `src/chat_downloader/models/` package
 
