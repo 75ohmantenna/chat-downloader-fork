@@ -1,5 +1,5 @@
 # Commits that are mechanical reformats and should be skipped by git blame.
 # Wire locally: git config blame.ignoreRevsFile .git-blame-ignore-revs
 
-# X1: reformat to 88-char line length
-b0672d3d78fa30c9de4cfe9c26e3b8bc4a8ed90a
+# Round-10.1: reformat to 88-character line length
+03b6c4978e1a8a65c5d4bc8351a2d61670972b0f

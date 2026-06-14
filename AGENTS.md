@@ -88,7 +88,8 @@ Key ratchets:
   `# noqa: C901` only with a short rationale comment.
 - Prefer focused modules over broad compatibility helpers.
 - Test files are named `test_<behavior>.py` or `test_<area>_unit.py`.
-- The X-series reformat commit is listed in `.git-blame-ignore-revs`; use
+- The 88-column reformat commit (Round-10.1) is listed in
+  `.git-blame-ignore-revs`; use
   `git config blame.ignoreRevsFile .git-blame-ignore-revs` locally when blame
   noise matters.
 
