@@ -45,6 +45,46 @@ Or with pipx:
 pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git
 ```
 
+## Updating
+
+Reinstall the latest version from GitHub (works whether you first installed with
+`uv tool install` or `pipx install`):
+
+```bash
+uv tool install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git
+```
+
+Or with pipx:
+
+```bash
+pipx install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git
+```
+
+**From a local checkout** — pull first, then reinstall:
+
+```bash
+cd /path/to/chat-downloader-fork
+git checkout master
+git pull --ff-only
+uv tool install --force --editable .
+```
+
+**Day-to-day development** (no global tool reinstall needed):
+
+```bash
+cd /path/to/chat-downloader-fork
+git pull --ff-only
+uv sync
+uv run chat_downloader --version
+```
+
+**Verify the installed command:**
+
+```bash
+chat_downloader --version
+which chat_downloader
+```
+
 ## First Run
 
 ```bash
