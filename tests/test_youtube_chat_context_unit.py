@@ -280,7 +280,7 @@ def test_build_chat_context_message_types_override_default_groups(
 
 
 # ---------------------------------------------------------------------------
-# W2 seam tests: _build_continuation_urls
+# Round-09.2 seam tests: _build_continuation_urls
 # ---------------------------------------------------------------------------
 
 
@@ -300,7 +300,7 @@ def test_build_continuation_urls_replay() -> None:
 
 
 # ---------------------------------------------------------------------------
-# W2 seam tests: _build_message_filters
+# Round-09.2 seam tests: _build_message_filters
 # ---------------------------------------------------------------------------
 
 
@@ -366,7 +366,7 @@ def test_build_message_filters_groups_non_list_yields_empty() -> None:
 
 
 # ---------------------------------------------------------------------------
-# W2 seam tests: _apply_session_headers
+# Round-09.2 seam tests: _apply_session_headers
 # ---------------------------------------------------------------------------
 
 

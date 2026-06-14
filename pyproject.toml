@@ -90,20 +90,20 @@ select = [
     "TID",  # flake8-tidy-imports
     "UP",   # pyupgrade
     "W605", # pycodestyle warnings
-    # V1d: naming conventions (N818 excluded — frozen public API exception names)
+    # Round-08.1d: naming conventions (N818 excluded — frozen public API exception names)
     "N",    # pep8-naming
-    # V1c: error-message & exception discipline
+    # Round-08.1c: error-message & exception discipline
     "EM",   # flake8-errmsg: hoist exception strings to locals
     "S",    # flake8-bandit: security checks
     "TRY",  # flake8-tryceratops
-    # V1b: low-count mechanical fixes
+    # Round-08.1b: low-count mechanical fixes
     "PERF", # perflint
     "G",    # flake8-logging-format
     "BLE",  # flake8-blind-except
     "PLW",  # pylint warnings
     "ARG",  # flake8-unused-arguments
     "A",    # flake8-builtins
-    # V1a: zero-violation correctness families
+    # Round-08.1a: zero-violation correctness families
     "RSE",  # flake8-raise: unnecessary-paren-on-raise-exception
     "PGH",  # pygrep-hooks: blanket noqa/type-ignore must cite a code
     "ISC",  # flake8-implicit-str-concat
@@ -112,7 +112,7 @@ select = [
     "PLE",  # pylint errors
     "DTZ",  # flake8-datetimez
     "PT",   # flake8-pytest-style
-    # X5: boolean-argument rules — enabled after keyword-only migration
+    # Round-10.5: boolean-argument rules — enabled after keyword-only migration
     "FBT",  # flake8-boolean-trap
 ]
 ignore = [

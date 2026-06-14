@@ -8,7 +8,7 @@
   `ChatDownloader.set_cookie_value`, `ChatDownloader.create_session`,
   `ChatDownloader.run`: boolean and option params are now keyword-only.
   `url` in `get_chat` remains positional; all other params require keyword
-  syntax. Positional-boolean callers must add argument names (X5).
+  syntax. Positional-boolean callers must add argument names (Round-10.5).
 - `BaseChatDownloader.set_cookie_value`, `BaseChatDownloader.retry`:
   keyword-only for optional params following the last required arg.
 - `ContinuousWriter`, `ContinuousFileWriter` and subclasses: `overwrite`,
@@ -21,17 +21,17 @@
 ### Tooling
 
 - Line length widened 80 → 88 (ruff default); `.git-blame-ignore-revs` added
-  for the reformat commit so `git blame` skips it (X1)
+  for the reformat commit so `git blame` skips it (Round-10.1)
 - McCabe complexity gate raised 8 → 10 (forward-friction reduction; no
-  existing noqa removed) (X2)
+  existing noqa removed) (Round-10.2)
 - Coverage pragma policy formalized; `_log_player_response_shape` (debug-only
   logging helper) marked `# pragma: no cover`; 4 branch-coverage-only tests
-  removed (X3)
+  removed (Round-10.3)
 - Any-density ratchet retired as a scheduled activity; baselines frozen as a
-  non-regression floor (X4)
+  non-regression floor (Round-10.4)
 - `FBT` (flake8-boolean-trap) enabled in ruff select; suppressed in tests via
   per-file-ignores; one `# noqa: FBT001` in `cli_args.str2bool` (argparse
-  converter) (X5)
+  converter) (Round-10.5)
 
 ## 1.1.0 — 2026-06-11
 
@@ -40,40 +40,41 @@
 - Extract `_ChatOutputDispatcher`, `ChatOutputWriter` Protocol, and
   `SUPERCHAT_DEDUP_TYPES` from `sites/models.py` into new
   `sites/output_dispatch.py`; forward-ref cycle eliminated via `_ChatHost`
-  structural Protocol; no public API change (M1)
+  structural Protocol; no public API change (Round-04.1)
 - Extract token redaction and debug-sample capture (`REDACTED`,
   `sanitize_for_log`, `capture_debug_sample`) from `debugging.py` into new
   `redaction.py`; `supports_colour` stays with the handler it serves;
-  no public API change (M2)
+  no public API change (Round-04.2)
 - Lower `Any`-density baselines: `sites/models.py` 20→13, `debugging.py` 8→3;
   new modules (`sites/output_dispatch.py`, `redaction.py`) inherit moved
   boundaries
 - Split `utils/timed_utils.py` (422 LOC) into `utils/timed_input.py`
   (console-input concern) and `utils/timed_generator.py` (generator-timeout
-  concern); both under 400 LOC; removed from module-size ALLOWLIST (S1)
+  concern); both under 400 LOC; removed from module-size ALLOWLIST (Round-05.1)
 - Extract `_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page` from
   `sites/twitch/replay_service.py` into new `sites/twitch/_replay_vod_loop.py`;
-  `replay_service.py` drops from 377 → 353 LOC (S2)
+  `replay_service.py` drops from 377 → 353 LOC (Round-05.2)
 - Extract `_recover_incomplete_continuation` from `_get_chat_messages` in
   `sites/youtube/chat_streams_runtime_iteration.py`; reduces the
-  `IncompleteContinuationError` recovery arm from ~8 lines to one call (S3)
+  `IncompleteContinuationError` recovery arm from ~8 lines to one call (Round-05.3)
 - Extract error/retry helper cluster from
   `sites/youtube/client_requests_continuation.py` (367 LOC) into new
   `sites/youtube/client_requests_errors.py` (~245 LOC);
   `client_requests_continuation.py` drops to ~120 LOC (orchestration only);
-  no public API change (U1)
-- Land deferred T2 extraction: `_handle_missing_live_chat_continuation` moves
+  no public API change (Round-07.1)
+- Land the deferred Round-06.2 extraction: `_handle_missing_live_chat_continuation` moves
   the missing-continuation guard out of `_get_continuation_info`
-  (McCabe 8 → ~6); `dict[str,Any]` param paid in the new errors module (U1/T2)
+  (McCabe 8 → ~6); `dict[str,Any]` param paid in the new errors module
+  (Round-07.1, lands the Round-06.2 deferral)
 - Lower `Any`-density baseline `client_requests_continuation.py` 8 → 6;
-  new `client_requests_errors.py: 4` (U1)
-- Expand ruff lint rule set (V1): add N, EM, S, TRY (TRY003 ignored), PERF, G,
+  new `client_requests_errors.py: 4` (Round-07.1)
+- Expand ruff lint rule set (Round-08.1): add N, EM, S, TRY (TRY003 ignored), PERF, G,
   BLE, PLW, ARG, A, RSE, PGH, ISC, FLY, INT, PLE, DTZ, PT families; fix ~80
   violations across src and tests; decline FBT (109) and SLF (53) with
   documented rationale; PGH now enforces code-specific `# noqa` annotations
-- Add seam unit tests (V2): `test_youtube_client_requests_errors_unit.py`
+- Add seam unit tests (Round-08.2): `test_youtube_client_requests_errors_unit.py`
   (HTTP/JSON error-handler cluster) and `test_twitch_replay_vod_loop_unit.py`
-  (`_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page`); pin the Round-5/7
+  (`_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page`); pin the Round-05/07
   extraction surfaces with direct unit tests
 
 ---

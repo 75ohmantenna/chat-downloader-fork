@@ -2,7 +2,7 @@
 
 """Non-regression floor: no module may exceed its Any-density baseline.
 
-The per-round lowering ritual is retired (X4). These baselines are now a
+The per-round lowering ritual is retired (Round-10.4). These baselines are now a
 frozen floor — do not raise them. Opportunistic tightening is welcome when
 a typing migration happens alongside feature work, but there is no
 scheduled lowering cadence.
@@ -17,12 +17,12 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"
 _ANY = re.compile(r"\bAny\b")
 DEFAULT_CAP = 2
 
-# Baseline captured after round-3 Step G5 migrations (2026-06); frozen at X4.
+# Baseline captured after Round-03 typing migrations; frozen at Round-10.4 (2026-06).
 # Counts are total occurrences of `Any` in each file (not line count).
 # Files at DEFAULT_CAP or below are omitted — they are implicitly capped.
 # Every entry above DEFAULT_CAP is a genuine payload/accumulator boundary;
 # do not raise these values. Tighten opportunistically alongside typing work.
-# See docs/maintenance-notes.md "Round-3 typing pass" for context.
+# See docs/maintenance-notes.md "Round-03 — Typing pass" for context.
 BASELINE: dict[str, int] = {
     # Format spec objects loaded from JSON config files (dict[str,Any] is the
     # stable boundary between the JSON loader and the formatter internals).
@@ -31,16 +31,16 @@ BASELINE: dict[str, int] = {
     "sites/base.py": 14,
     "sites/models.py": 13,
     # Dispatcher callbacks/writer protocol — dict[str,Any] is the chat-item
-    # boundary (moved from sites/models.py in M1).
+    # boundary (moved from sites/models.py in Round-04.1).
     "sites/output_dispatch.py": 9,
     "sites/session.py": 7,
     "sites/remap.py": 10,
     "sites/filters.py": 3,
     # Twitch site-specific accumulators and remapping tables.
-    # X11 migrated discovery/graphql_client/replay_service/replay_transport/
+    # Round-11.5 migrated discovery/graphql_client/replay_service/replay_transport/
     # live_service off dict[str,Any] JSON boundaries to json_types aliases.
-    # Residuals per X-series taxonomy: Callable[...,Any] transport params,
-    # badge accumulators (types.py containers), IRC-tag accumulators (V3-
+    # Residuals per the Round-11 taxonomy: Callable[...,Any] transport params,
+    # badge accumulators (types.py containers), IRC-tag accumulators (Round-08.3-
     # declined), frozen public params, assembled-output dicts.
     "sites/twitch/replay_service.py": 3,
     "sites/twitch/extractor.py": 18,
@@ -69,8 +69,8 @@ BASELINE: dict[str, int] = {
     "sites/youtube/client_context.py": 6,
     "sites/youtube/video_status.py": 8,
     "sites/youtube/discovery_playlists.py": 8,
-    # Error/retry helpers extracted from client_requests_continuation (U1).
-    # T2 helper adds dict[str,Any] param; Any import duplicated across split.
+    # Error/retry helpers extracted from client_requests_continuation (Round-07.1).
+    # Round-06.2 helper adds dict[str,Any] param; Any import duplicated across split.
     "sites/youtube/client_requests_errors.py": 2,
     "sites/youtube/client_auth.py": 6,
     "sites/youtube/chat_streams_runtime_iteration.py": 2,

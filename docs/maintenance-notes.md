@@ -3,6 +3,32 @@
 Design decisions, deferred refactors, and non-obvious architectural choices
 that are not obvious from the code or git history.
 
+## History remaster and round naming (2026-06)
+
+The fork-owned history on `maintainability-pass` was curated into a sequence of
+focused, signed commits. Context a future contributor needs:
+
+- **Curated history is canonical.** `maintainability-pass` carries the curated,
+  signed commit series. The earlier high-volume working history (the original
+  per-step microcommits) is preserved unchanged on the
+  `backup/maintainability-pass-before-remaster` branch and in the signed
+  `archive/pre-remaster-2026-06` tag, so nothing was lost.
+- **Upstream ancestry is intact.** The fork descends from upstream
+  `xenova/chat-downloader` at tag `v0.2.8` (commit `94ed3fe`); that boundary and
+  every commit at or below it are inherited verbatim and were not rewritten.
+- **Round naming.** Maintenance work is grouped into descriptive `Round-NN`
+  milestones (`Round-02` … `Round-12`, with sub-steps such as `Round-08.1a`).
+  The earlier opaque single-letter labels (`S1`, `T2`, `V1a`, `X8`, …) are
+  retired from the docs; the full old→new legend lives with the remaster
+  artifacts. Use descriptive round references in new notes — not letter codes.
+- **Branch coverage is informational.** 100% offline *line* coverage is the
+  enforced gate (`make ci`). Branch coverage was measured during the Round-12
+  triage and left disabled by design; see that section.
+- **Cadence.** The structural extraction campaign (Round-05 … Round-09) and the
+  typed-payload migration (Round-11) are closed. Ongoing work is normal,
+  opportunistic maintenance — extract or retype only when feature work crosses a
+  gate, never as a standalone round.
+
 ## Deferred cross-site deduplication
 
 Three clusters of duplicated logic were flagged during the maintainability
@@ -90,10 +116,10 @@ plausible as a pure-data object if the number of retry-carrying call sites grows
 
 ---
 
-## Round-2 structural changes (2026-06)
+## Round-02 — Structural changes (2026-06)
 
 The following splits and guardrails landed on the `maintainability-pass` branch
-in June 2026 (commits E1–E3, F1–F3):
+in June 2026 (Round-02 — module splits and durable guardrails):
 
 ### Module splits
 
@@ -113,26 +139,26 @@ blocked the `X as X` re-export idiom.
 |-----------|-----------|
 | Import-layering contracts | `uv run lint-imports` (wired into `make lint`); config in `pyproject.toml [tool.importlinter]` |
 | Public-API snapshot | `tests/test_public_api_unit.py` — update the frozen sets when intentionally changing `__all__` |
-| Module-size gate | `tests/test_module_size_unit.py` — ceiling tightened to 400 (round-3); `chat_downloader.py` allowlisted (docstring-dominated facade); `utils/timed_utils.py` split into two sub-400-LOC modules in S1 and removed from allowlist |
+| Module-size gate | `tests/test_module_size_unit.py` — ceiling tightened to 400 (Round-03); `chat_downloader.py` allowlisted (docstring-dominated facade); `utils/timed_utils.py` split into two sub-400-LOC modules in Round-05.1 and removed from allowlist |
 
-### Modules still over 360 LOC (intentional, E4-optional)
+### Modules still over 360 LOC (intentional)
 
 | Module | LOC | Reason |
 |--------|-----|--------|
-| ~~`utils/timed_utils.py`~~ | ~~422~~ | Split into `timed_input.py` + `timed_generator.py` (S1); removed from allowlist |
+| ~~`utils/timed_utils.py`~~ | ~~422~~ | Split into `timed_input.py` + `timed_generator.py` (Round-05.1); removed from allowlist |
 | `chat_downloader.py` | 416 | Docstring-dominated thin facade; `get_chat` docstring alone is ~90 lines. No split — harms single public entry point |
 | `sites/twitch/extractor.py` | 394 | Single-class extractor; split only if a seam emerges |
-| `sites/twitch/replay_service.py` | 353 | Reduced from 377 LOC (S2 extracted helpers to `_replay_vod_loop.py`) |
+| `sites/twitch/replay_service.py` | 353 | Reduced from 377 LOC (Round-05.2 extracted helpers to `_replay_vod_loop.py`) |
 | `sites/youtube/client_requests_continuation.py` | 367 | Cohesive HTTP-layer module |
 | `cli_args.py` | 362 | Newly extracted argument machinery; just above budget |
-| ~~`utils/console_utils.py`~~ | ~~316~~ | Split out `utils/filename_utils.py` (T1); console output and encoding detection remain cohesive (Windows fast-path + POSIX fallback share the `out` stream); filename sanitization is independent. `console_utils.py` drops to ~245 LOC. |
+| ~~`utils/console_utils.py`~~ | ~~316~~ | Split out `utils/filename_utils.py` (Round-06.1); console output and encoding detection remain cohesive (Windows fast-path + POSIX fallback share the `out` stream); filename sanitization is independent. `console_utils.py` drops to ~245 LOC. |
 
 ---
 
-## Round-3 typing pass (2026-06)
+## Round-03 — Typing pass (2026-06)
 
 The following typing improvements and guardrails landed on the
-`maintainability-pass` branch in June 2026 (commits G1–G7).
+`maintainability-pass` branch in June 2026 (Round-03).
 
 ### Typed JSON foundation (`utils/json_types`)
 
@@ -159,7 +185,7 @@ boundaries and cannot be typed with `JSONDict` without cascading TypedDicts.
 
 ### Modules with large `Any` baselines (genuine boundaries, not debt)
 
-Files with the highest post-round-3 `Any` counts were classified and
+Files with the highest post-Round-03 `Any` counts were classified and
 commented in `tests/test_any_density_unit.py`.  The main categories:
 
 - **Formatter internals** (`formatting/format.py: 33`): format-spec dicts are
@@ -172,29 +198,29 @@ commented in `tests/test_any_density_unit.py`.  The main categories:
 
 ---
 
-## Round-4 cohesion splits (2026-06)
+## Round-04 — Cohesion splits (2026-06)
 
 The following module extractions landed on the `maintainability-pass` branch
-in June 2026 (commits M1–M2).  Both are cohesion fixes, not size-driven
+in June 2026 (Round-04).  Both are cohesion fixes, not size-driven
 (the host files were already under the 400-line ceiling).
 
 ### Module splits
 
-| Before | After | Commit |
-|--------|-------|--------|
-| `sites/models.py` — contained `_ChatOutputDispatcher`, `ChatOutputWriter`, `SUPERCHAT_DEDUP_TYPES` | Moved to new `sites/output_dispatch.py` | M1 |
-| `debugging.py` — contained `REDACTED`, `sanitize_for_log`, `capture_debug_sample`, and helpers | Moved to new `redaction.py` | M2 |
+| Before | After | Round |
+|--------|-------|-------|
+| `sites/models.py` — contained `_ChatOutputDispatcher`, `ChatOutputWriter`, `SUPERCHAT_DEDUP_TYPES` | Moved to new `sites/output_dispatch.py` | Round-04.1 |
+| `debugging.py` — contained `REDACTED`, `sanitize_for_log`, `capture_debug_sample`, and helpers | Moved to new `redaction.py` | Round-04.2 |
 
 ### Design decisions
 
-**`_ChatHost` Protocol (M1):** `_ChatOutputDispatcher.__init__` originally took
+**`_ChatHost` Protocol (Round-04.1):** `_ChatOutputDispatcher.__init__` originally took
 `Chat` directly, which would have required a `TYPE_CHECKING` forward-reference
 cycle after extraction.  Instead, a narrow structural Protocol `_ChatHost`
 was defined in `sites/output_dispatch.py` exposing only the four members the
 dispatcher actually uses (`title`, `id`, `format`, `_register_seen_message_id`).
 `Chat` satisfies it structurally — no import of `Chat` needed in the new module.
 
-**`supports_colour` stays in `debugging.py` (M2):** `supports_colour()` exists
+**`supports_colour` stays in `debugging.py` (Round-04.2):** `supports_colour()` exists
 solely to choose between `colorlog.StreamHandler` and `logging.StreamHandler`
 at module load time.  It is not an independent concern — moving it would add a
 cross-module import for a function with no other callers.  Colour detection
@@ -205,7 +231,7 @@ configured logger instance); `debugging.py` does not import from `redaction`.
 This keeps the cycle free and ensures `redaction.py` is a leaf-like module with
 no upward dependency on the logging setup it uses.
 
-### `Any`-density baseline changes (M1+M2)
+### `Any`-density baseline changes (Round-04)
 
 | Module | Before | After | Reason |
 |--------|--------|-------|--------|
@@ -216,18 +242,18 @@ no upward dependency on the logging setup it uses.
 
 ---
 
-## Round-5 cohesion / complexity pass (2026-06)
+## Round-05 — Cohesion / complexity pass (2026-06)
 
-Commits S1–S3 on the `maintainability-pass` branch.
+Round-05 work on the `maintainability-pass` branch.
 
-### Module splits (S1, S2)
+### Module splits (Round-05.1, Round-05.2)
 
-| Before | After | Commit |
-|--------|-------|--------|
-| `utils/timed_utils.py` (422 LOC) — mixed console-input and generator-timeout concerns | `utils/timed_input.py` (~135 LOC) + `utils/timed_generator.py` (~255 LOC); import-independent (local poll constant in `timed_input`) | S1 |
-| `sites/twitch/replay_service.py` — `_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page` inline | New `sites/twitch/_replay_vod_loop.py` (~70 LOC); `replay_service.py` 377→353 LOC | S2 |
+| Before | After | Round |
+|--------|-------|-------|
+| `utils/timed_utils.py` (422 LOC) — mixed console-input and generator-timeout concerns | `utils/timed_input.py` (~135 LOC) + `utils/timed_generator.py` (~255 LOC); import-independent (local poll constant in `timed_input`) | Round-05.1 |
+| `sites/twitch/replay_service.py` — `_VodLoopPlan`, `_init_vod_loop`, `_classify_empty_page` inline | New `sites/twitch/_replay_vod_loop.py` (~70 LOC); `replay_service.py` 377→353 LOC | Round-05.2 |
 
-### Complexity extractions (S2, S3)
+### Complexity extractions (Round-05.2, Round-05.3)
 
 | Function | Extracted helper | Result |
 |----------|-----------------|--------|
@@ -242,12 +268,12 @@ is ~90 lines; the implementation is a thin dispatch facade with no independent
 logic to extract.  Splitting would fragment the single public entry point without
 reducing cognitive complexity.
 
-**Import independence (S1):** `timed_input.py` uses a local `_INPUT_POLL_SECONDS
+**Import independence (Round-05.1):** `timed_input.py` uses a local `_INPUT_POLL_SECONDS
 = 0.1` constant rather than importing `POLLING_TIME` from `timed_generator.py`.
 This keeps the `utils` package a leaf in the import graph (import-linter
 contract) and means the two modules have zero cross-dependency.
 
-### `Any`-density baseline changes (S1, S3)
+### `Any`-density baseline changes (Round-05.1, Round-05.3)
 
 | Module | Before | After | Reason |
 |--------|--------|-------|--------|
@@ -258,43 +284,43 @@ contract) and means the two modules have zero cross-dependency.
 
 ---
 
-## Round-6 cohesion / complexity pass (2026-06)
+## Round-06 — Cohesion / complexity pass (2026-06)
 
-Commits T1–T2 on the `maintainability-pass` branch.
+Round-06 work on the `maintainability-pass` branch.
 
-### Module splits (T1)
+### Module split (Round-06.1)
 
-| Before | After | Commit |
-|--------|-------|--------|
-| `utils/console_utils.py` (316 LOC) — mixed console I/O and filename sanitization | `utils/filename_utils.py` (~80 LOC); `console_utils.py` drops to ~245 LOC | T1 |
+| Before | After | Round |
+|--------|-------|-------|
+| `utils/console_utils.py` (316 LOC) — mixed console I/O and filename sanitization | `utils/filename_utils.py` (~80 LOC); `console_utils.py` drops to ~245 LOC | Round-06.1 |
 
 ### Design decisions
 
-**Console I/O cohesion boundary (T1):** The Windows fast-path (`_windows_write_string`
+**Console I/O cohesion boundary (Round-06.1):** The Windows fast-path (`_windows_write_string`
 and its four helpers) and the POSIX/buffer fallback are both branches of `safe_print`
 and share the `out` stream and encoding logic.  They are one cohesive concern.
 Filename sanitization (`sanitize_filename_component`, `_RESERVED_WINDOWS_NAMES_RE`,
 `_MAX_FILENAME_BYTES`) has zero shared state with console I/O, uses a separate
 `import re`, and has zero `Any`.  The split is clean.
 
-**`cli_args.py` kept whole (T-series DECLINE):** `parse_header`, `str2bool`, and
+**`cli_args.py` kept whole (Round-06 DECLINE):** `parse_header`, `str2bool`, and
 `splitter` are argparse `type=` converters that import `argparse` for
 `ArgumentTypeError` and are consumed only by parser-builder code in the same file.
 Extraction would carry the argparse coupling to a new module and require a back-import
 — adding indirection without removing any.  File is 362 LOC (below the 400 ceiling;
-the ~2-over-360 soft line is accepted, per Round-2 note above).
+the ~2-over-360 soft line is accepted, per Round-02 note above).
 
-**`_get_continuation_info` complexity (T2, Option A failed → documented):**
+**`_get_continuation_info` complexity (Round-06.2, Option A failed → documented):**
 Extraction of the missing-continuation guard into a `_handle_missing_live_chat_continuation`
 helper was attempted.  The helper's `json_response: dict[str, Any]` parameter would
 raise the module `Any`-density baseline from 8 → 9, violating the ratchet.  The function
 passed the then-current McCabe-8 gate exactly; ruff's RUF100 rule also rejected
 a pre-emptive `# noqa: C901` when the check passed.  Recorded in
-`maintenance-backlog.md` (T2 entry): next edit adding a complexity branch must address
+`maintenance-backlog.md` (Round-06.2 entry): next edit adding a complexity branch must address
 the extraction at that time, accepting the one-unit Any-baseline rise or finding a
 zero-Any approach.
 
-### `Any`-density baseline changes (T1)
+### `Any`-density baseline changes (Round-06.1)
 
 | Module | Before | After | Reason |
 |--------|--------|-------|--------|
@@ -303,37 +329,37 @@ zero-Any approach.
 
 ---
 
-## Round-7 cohesion / complexity pass (2026-06)
+## Round-07 — Cohesion / complexity pass (2026-06)
 
-Commits U1 on the `maintainability-pass` branch.
+Round-07 work on the `maintainability-pass` branch.
 
-### Module split (U1)
+### Module split (Round-07.1)
 
-| Before | After | Commit |
-|--------|-------|--------|
-| `sites/youtube/client_requests_continuation.py` (367 LOC) — mixed error/retry helpers and continuation orchestration | `sites/youtube/client_requests_errors.py` (~245 LOC, error/retry layer) + `client_requests_continuation.py` (~120 LOC, orchestration only) | U1 |
+| Before | After | Round |
+|--------|-------|-------|
+| `sites/youtube/client_requests_continuation.py` (367 LOC) — mixed error/retry helpers and continuation orchestration | `sites/youtube/client_requests_errors.py` (~245 LOC, error/retry layer) + `client_requests_continuation.py` (~120 LOC, orchestration only) | Round-07.1 |
 
-### T2 resolution (U1)
+### Round-06.2 resolution (Round-07.1)
 
-The T2 deferral from Round-6 is resolved in U1.  The
-`_handle_missing_live_chat_continuation` helper (Option A from T2) now lives in
+The Round-06.2 deferral is resolved in Round-07.1.  The
+`_handle_missing_live_chat_continuation` helper (Option A from Round-06.2) now lives in
 `client_requests_errors.py` rather than in `client_requests_continuation.py`.
 The `json_response: dict[str, Any]` parameter that blocked the extraction in
-Round-6 (it would have pushed `continuation.py` baseline from 8 → 9) now lands
+Round-06 (it would have pushed `continuation.py` baseline from 8 → 9) now lands
 in the *new* module instead, leaving `continuation.py` at 6.  `_get_continuation_info`
 McCabe drops from the gate-exact 8 to ~6, restoring complexity headroom for
 future edits.
 
 ### Design decisions
 
-**Import direction (U1):** `continuation.py → client_requests_errors.py →
-continuations.py`.  One-directional; no Protocol shim needed (unlike M1's
+**Import direction (Round-07.1):** `continuation.py → client_requests_errors.py →
+continuations.py`.  One-directional; no Protocol shim needed (unlike Round-04.1's
 `_ChatHost`).  `continuations.py` has no back-import of either module.
 `RetryPolicy` is never instantiated in the errors module — only received as a
 parameter — so it goes under `TYPE_CHECKING`, keeping the errors module import-
 lean.
 
-**`sites/twitch/extractor.py` kept whole (U2 DECLINE):** `TwitchChatDownloader`
+**`sites/twitch/extractor.py` kept whole (Round-07 DECLINE):** `TwitchChatDownloader`
 is a single class already maximally delegated to extracted services
 (`graphql_client.py`, `replay_service.py`, `live_service.py`, `irc_transport.py`).
 The GraphQL plumbing (`_client_id_kwargs`, `_download_base_gql`, `_download_gql`,
@@ -341,66 +367,66 @@ The GraphQL plumbing (`_client_id_kwargs`, `_download_base_gql`, `_download_gql`
 live in `graphql_client.py`; relocating it would require passing `self` back in
 — adding indirection without removing any.  The file is 394 LOC (6 under the
 ceiling); much of the size is the static `_TESTS` table (~58 lines) and
-docstrings.  Mirrors the T-series `cli_args.py` decline.  Pre-approved escape
+docstrings.  Mirrors the Round-06 `cli_args.py` decline.  Pre-approved escape
 hatch if a future edit crosses 400: relocate the `_TESTS` table to a zero-`Any`,
 zero-logic `_test_cases.py` data module rather than fracturing the class.
 
-**Round-7 scan: no further clean seam (U3 STOP):** The other near-ceiling files
+**Round-07 scan: no further clean seam (STOP):** The other near-ceiling files
 (`parsing/message_irc_resolve.py` 352 LOC / 14 Any, `irc_transport.py` 349 LOC,
 `replay_service.py` 353 LOC, `cli_args.py` 362 LOC) have no high-value/low-risk
 seam.  All are 40–50 lines under the ceiling and stable; a forced split would
 add a module, import, and baseline churn to shave lines off files that are not
 growing.  These files are monitored but deferred by design.
 
-### `Any`-density baseline changes (U1)
+### `Any`-density baseline changes (Round-07.1)
 
 | Module | Before | After | Reason |
 |--------|--------|-------|--------|
 | `sites/youtube/client_requests_continuation.py` | 8 | 6 | error/retry helpers moved out |
-| `sites/youtube/client_requests_errors.py` | — | 4 | new module; moved helpers + T2 param + duplicated `Any` import |
+| `sites/youtube/client_requests_errors.py` | — | 4 | new module; moved helpers + Round-06.2 param + duplicated `Any` import |
 
 ---
 
-## Round-8 lint-floor / seam-tests pass (2026-06)
+## Round-08 — Lint-floor / seam-tests pass (2026-06)
 
-Commits V1a–V1d, V2 on the `maintainability-pass` branch.
+Round-08 work on the `maintainability-pass` branch.
 
-### V1 — Ruff rule expansion
+### Round-08.1 — Ruff rule expansion
 
 Added eleven new rule families to `pyproject.toml [tool.ruff.lint] select` in
-four graduated commits:
+four graduated steps:
 
-**V1a (zero-cost):** `RSE`, `PGH`, `ISC`, `FLY`, `INT`, `PLE`, `DTZ`, `PT` —
+**Round-08.1a (zero-cost):** `RSE`, `PGH`, `ISC`, `FLY`, `INT`, `PLE`, `DTZ`, `PT` —
 no source changes; zero violations in src at adoption.  PGH additionally
 enforces code-specific `# noqa` annotations going forward (bare `# noqa` is
 now a lint error).
 
-**V1b (mechanical fixes):** `PERF`, `G`, `BLE`, `PLW`, `ARG`, `A` — ~20
+**Round-08.1b (mechanical fixes):** `PERF`, `G`, `BLE`, `PLW`, `ARG`, `A` — ~20
 violations.  Notable: PERF102 → `.values()` in `base.py`; G004 → `%`-args
 logging in `twitch/replay_service.py`; A002 → rename or `# noqa` for public
 `format`/`id` params.
 
-**V1c (exception discipline):** `EM`, `S`, `TRY` — EM101/EM102 auto-fixed via
+**Round-08.1c (exception discipline):** `EM`, `S`, `TRY` — EM101/EM102 auto-fixed via
 `--unsafe-fixes` in ~10 files; S101 asserts converted to `if … raise` in src;
 S105 noqa for IRC anonymous-password constant; TRY301 noqa ×2 for intentional
 re-raise-into-outer-handler patterns; TRY003 globally ignored (inline
 exception messages are more readable; EM already governs message hygiene).
 
-**V1d (naming subset + declines):** `N` — N818 globally ignored (exception
+**Round-08.1d (naming subset + declines):** `N` — N818 globally ignored (exception
 names are in the frozen public API snapshot; renaming breaks
 `test_public_api_unit.py`); N813 (12) noqa with reason; N806 (6) noqa for
 Windows API names; N802 and N811 fixed.
 
-**Declined families (V1 evaluation):**
+**Declined families (Round-08.1 evaluation):**
 
 | Family | Violations | Decision | Reason |
 |--------|-----------|----------|--------|
 | `FBT` | 109 | DECLINE | Positional-bool rule fights frozen public signatures (`ChatRequest`, `Chat`, `BaseChatDownloader`) |
-| `SLF` | 53 | DECLINE | Cross-module `_`-prefixed helper access is the deliberate pattern created by rounds 5–7 extractions |
+| `SLF` | 53 | DECLINE | Cross-module `_`-prefixed helper access is the deliberate pattern created by the Round-05–07 extractions |
 
-### V2 — Seam unit tests
+### Round-08.2 — Seam unit tests
 
-Added direct unit tests for modules extracted in rounds 5–7 that were
+Added direct unit tests for modules extracted in Round-05–07 that were
 previously covered only indirectly:
 
 - `tests/test_youtube_client_requests_errors_unit.py`: 20 tests covering
@@ -412,9 +438,9 @@ previously covered only indirectly:
 
 Also added `# pragma: no cover` to the unreachable defensive guard in
 `message_items_content_parser.py` (lines set then immediately checked) to
-restore 100% coverage after the V1c assert→if-raise conversion.
+restore 100% coverage after the Round-08.1c assert→if-raise conversion.
 
-### V3 — TypedDict investigation (DECLINE)
+### Round-08.3 — TypedDict investigation (DECLINE)
 
 `sites/twitch/parsing/messages.py` (14 Any) and `message_irc_resolve.py`
 (14 Any) use `info: dict[str, Any]` as a mutable IRC-tag accumulator built
@@ -429,9 +455,9 @@ Any-density baselines (14 each) are stable and must not be raised.
 
 ---
 
-## Round-9 cohesion / complexity pass (2026-06)
+## Round-09 — Cohesion / complexity pass (2026-06)
 
-Commits W1–W4 on the `maintainability-pass` branch.
+Round-09 work on the `maintainability-pass` branch.
 
 ### Function decompositions
 
@@ -442,38 +468,38 @@ Commits W1–W4 on the `maintainability-pass` branch.
 
 ### Design decisions
 
-**Helpers home (W1):** `_log_player_response_shape` and `_derive_duration`
+**Helpers home (Round-09.1):** `_log_player_response_shape` and `_derive_duration`
 join `_determine_*`/`_extract_*` in `video_status_helpers.py` — the
 established home for `parse_video_details`' sub-steps.  Both use
 `Mapping[str, object]` params (from `collections.abc`, under `TYPE_CHECKING`)
 so no new `Any` is introduced; `logger` and `float_or_none` imports are
 removed from `video_status.py` as they are no longer needed there.
 
-**Redundant local collapsed (W1):** `player_response_info["microformat"]
+**Redundant local collapsed (Round-09.1):** `player_response_info["microformat"]
 ["playerMicroformatRenderer"]` was computed twice — once as `player_renderer`
 (via `multi_get`) and again as `player_microformat` (via two `.get()` calls).
 The two locals are semantically identical; `player_microformat` is removed and
 `player_renderer` is passed to `_log_player_response_shape`.
 
-**`loop_state` type tightened (W2):** `_apply_live_timing`'s `loop_state`
+**`loop_state` type tightened (Round-09.2):** `_apply_live_timing`'s `loop_state`
 parameter was typed `Any`; tightened to `ContinuationLoopState` (the only
 type ever passed by the single call site in
 `chat_streams_runtime_iteration.py`).  This frees one `Any` slot to
 accommodate the new `_apply_session_headers(ytcfg: dict[str, Any])` helper
 without raising the module baseline.
 
-**`_apply_session_headers` SLF pattern (W2):** takes `self:
+**`_apply_session_headers` SLF pattern (Round-09.2):** takes `self:
 YouTubeDownloaderProto` directly — the deliberate cross-module `_`-helper
-pattern blessed by the V1d SLF decline.  No Protocol shim needed;
+pattern blessed by the Round-08.1d SLF decline.  No Protocol shim needed;
 `YouTubeDownloaderProto` already exists in `_protocols.py`.
 
-**Dead `skip_mode="none"` branch removed (W2):** the original
+**Dead `skip_mode="none"` branch removed (Round-09.2):** the original
 `TimeRangeFilter(skip_mode="first_page" if is_replay else "none")` inside
 `if is_replay` was dead: the `"none"` branch could never be reached because
 the `else None` at the enclosing ternary already handles the non-replay case.
 `_build_message_filters` unconditionally uses `skip_mode="first_page"`.
 
-### `Any`-density baseline changes (W1, W2)
+### `Any`-density baseline changes (Round-09.1, Round-09.2)
 
 All three files hold their existing baselines; no ratchet update required.
 
@@ -483,19 +509,19 @@ All three files hold their existing baselines; no ratchet update required.
 | `sites/youtube/video_status_helpers.py` | 6 | 6 | new helpers use `Mapping[str, object]` — no new `Any` |
 | `sites/youtube/chat_streams_context.py` | 8 | 8 | `loop_state: Any→ContinuationLoopState` offsets new helper param |
 
-### Deferred declines reaffirmed (W-series STOP)
+### Deferred declines reaffirmed (Round-09 STOP)
 
 The following items remain closed; do not reopen without a third site, a new
 cross-site abstraction, or a seam that does not exist today:
 - Cross-site remapping/badge/retry dedup (§1–3 above).
 - YouTube mixin consolidation.
-- FBT / SLF ruff families (V1d).
+- FBT / SLF ruff families (Round-08.1d).
 - `chat_downloader.py` / `extractor.py` / `cli_args.py` size ceilings.
 - `_get_initial_info` (113 LOC, `# noqa: C901` intrinsic).
 
 ---
 
-## X-series typed-payload migration (X8–X10, 2026-06)
+## Round-11 — Typed-payload migration (2026-06)
 
 Migrated YouTube payload-parsing modules off `dict[str, Any]` boundaries to
 `JSONDict` (and related `json_types` aliases/accessors).  One commit per
@@ -511,7 +537,7 @@ intentional categories — do not reopen:
   yielded item dicts).  These are not raw API payloads and cannot be typed with
   `JSONDict` without full TypedDict coverage of each message shape.
 
-### X8 — YouTube chat-streams pipeline (2026-06)
+### Round-11.2 — YouTube chat-streams pipeline (2026-06)
 
 Migrated 7 modules in `sites/youtube/` off raw `dict[str, Any]` payload
 boundaries.
@@ -526,7 +552,7 @@ explicit `payload: JSONDict = {...}` annotation to prevent mypy widening the
 dict literal to `dict[str, Collection[str]]`.
 
 Skipped: `client_requests_initial.py` — its `-> tuple[Any, Any, Any]` return
-cascades into 4 discovery consumers.  Resolved in X10.
+cascades into 4 discovery consumers.  Resolved in Round-11.4.
 
 | Module | Any before | Any after |
 |---|---|---|
@@ -538,7 +564,7 @@ cascades into 4 discovery consumers.  Resolved in X10.
 | `sites/youtube/chat_streams_runtime_iteration.py` | 9 | 2 |
 | `sites/youtube/client_requests_bootstrap.py` | 16 | 3 |
 
-### X9 — YouTube parsing layer (2026-06)
+### Round-11.3 — YouTube parsing layer (2026-06)
 
 Migrated 6 modules in `sites/youtube/parsing/`.
 
@@ -548,7 +574,7 @@ Migrated 6 modules in `sites/youtube/parsing/`.
 `dict[str, Any]` by design — output of the parsing pipeline consumed by the
 broader message-assembly layer which is itself `Any`-typed.  The frozen
 boundary-table entries for `message_items_content_parser.py` and
-`actions_router.py` (V3-declined accumulator pattern) reflect this.
+`actions_router.py` (Round-08.3-declined accumulator pattern) reflect this.
 
 | Module | Any before | Any after |
 |---|---|---|
@@ -559,9 +585,9 @@ boundary-table entries for `message_items_content_parser.py` and
 | `sites/youtube/parsing/actions_router.py` | 11 | 9 |
 | `sites/youtube/parsing/message_items_content_parser.py` | 13 | 10 |
 
-### X10 — Discovery and initial-page layer (2026-06)
+### Round-11.4 — Discovery and initial-page layer (2026-06)
 
-Closed the X8-skipped `client_requests_initial.py` and narrowed the raw-JSON
+Closed the Round-11.2-skipped `client_requests_initial.py` and narrowed the raw-JSON
 boundaries it feeds.  Aligns `_get_initial_info`'s return type with the
 already-typed sibling `get_innertube_video_bootstrap` in
 `client_requests_bootstrap.py` (both now return
@@ -585,7 +611,7 @@ place of `ytcfg.get(key)` where the result is passed to string-typed callers
 Item-list `list[Any]` parameters (`_extract_playlist_items`, `_process_page_items`)
 are residuals: `_fetch_browse_continuation` returns `JSONList = list[JSONAny]`
 and lists are invariant — changing to `list[JSONDict]` would require a cast at
-every call site.  Recorded as intentional (same stop condition as X8's skip).
+every call site.  Recorded as intentional (same stop condition as the Round-11.2 skip).
 
 | Module | Any before | Any after |
 |---|---|---|
@@ -596,10 +622,10 @@ every call site.  Recorded as intentional (same stop condition as X8's skip).
 | `sites/youtube/client_context.py` | 9 | 6 |
 | `sites/youtube/client_auth.py` | 8 | 6 |
 
-### X11 — Twitch typed-payload migration (2026-06)
+### Round-11.5 — Twitch typed-payload migration (2026-06)
 
-Closed the Twitch side of the typed-payload track (X8–X10 covered YouTube
-only; Twitch had zero `json_types` adoption).  Five modules migrated off
+Closed the Twitch side of the typed-payload track (Round-11.1–11.4 covered
+YouTube only; Twitch had zero `json_types` adoption).  Five modules migrated off
 raw `dict[str, Any]` JSON boundaries onto `JSONDict`/`JSONList`/`JSONAny`
 aliases and `get_dict`/`get_list`/`get_str`/`get_float` accessors.
 
@@ -607,7 +633,7 @@ aliases and `get_dict`/`get_list`/`get_str`/`get_float` accessors.
 (`variables: JSONDict` built separately; `cast` for list-invariant return);
 `_extract_user_videos` param/return narrowed to `JSONList` / `JSONDict | None`;
 `get_user_videos` body uses `get_list`/`get_dict`/`get_str` with an
-`isinstance` guard per edge item (same pattern as X10 list traversals).
+`isinstance` guard per edge item (same pattern as the Round-11.4 list traversals).
 Generator yields stay `dict[str, Any]` — assembled remap output, not a JSON
 boundary.
 
@@ -619,7 +645,7 @@ boundary.
 `Any` — same token count, resolves the list-invariant mismatch at the
 allowlisted call site.
 
-**`replay_service.py`:** JSON boundary + W2-style real-type tighten.  Raw
+**`replay_service.py`:** JSON boundary + Round-09.2-style real-type tighten.  Raw
 GraphQL: `_fetch_vod_page` return `tuple[JSONDict|None, JSONDict|None]`;
 `video`/`clip` locals cast to `JSONDict|None`; `get_list`/`get_str`/`get_float`
 replace `.get()` calls in bodies; `isinstance` edge guard in main loop.
@@ -638,9 +664,9 @@ multi_get calls downstream unaffected).
 
 **Not migrated (intentional):**
 - `irc_transport.py` — `_parse_irc_matches` return `list[dict[str,Any]]` feeds
-  from `_parse_irc_item` (V3-declined IRC accumulator); changing to `JSONList`
+  from `_parse_irc_item` (Round-08.3-declined IRC accumulator); changing to `JSONList`
   would require a cast cascade.  Any stays at 6.
-- `parsing/messages.py`, `parsing/message_irc_resolve.py` — V3-declined IRC-tag
+- `parsing/messages.py`, `parsing/message_irc_resolve.py` — Round-08.3-declined IRC-tag
   accumulators (14 each).
 - `remappings.py`, `types.py`, `parsing/badges.py`, `parsing/message_emotes.py`,
   `extractor.py` — data tables, canonical badge containers, assembled output,
@@ -651,7 +677,7 @@ multi_get calls downstream unaffected).
   `fetch_fn`, `irc_factory`, `message_generator`.
 - Badge accumulators — `badge_info`/`subscriber_badge_info` in
   `graphql_client.update_badge_info` (these ARE the `types.py` containers).
-- IRC-tag accumulators — V3-declined; `messages.py` + `message_irc_resolve.py`.
+- IRC-tag accumulators — Round-08.3-declined; `messages.py` + `message_irc_resolve.py`.
 - Frozen public params — `params: ChatRequest | dict[str, Any]` in `irc_transport`.
 - Assembled-output dicts — generator yields from remapping / IRC parsing.
 
@@ -663,7 +689,7 @@ multi_get calls downstream unaffected).
 | `sites/twitch/replay_transport.py` | 6 | 3 |
 | `sites/twitch/live_service.py` | 5 | 4 |
 
-### X12 — Branch coverage triage pass (2026-06)
+### Round-12 — Branch-coverage triage (2026-06)
 
 Measured branch coverage with `PYTHONHASHSEED=0 uv run coverage run --branch
 -m pytest -q -p no:rerunfailures -m "not network"`.  Meaningful parser,

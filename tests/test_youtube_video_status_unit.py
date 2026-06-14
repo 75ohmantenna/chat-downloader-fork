@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Seam tests for helpers extracted from video_status in W1."""
+"""Seam tests for helpers extracted from video_status in Round-09.1."""
 
 from __future__ import annotations
 

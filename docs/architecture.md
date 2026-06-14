@@ -121,10 +121,10 @@ For behavior-preservation coverage see
 | `client_context.py` | InnerTube context dict construction and request-profile application |
 | `client_requests_bootstrap.py` | Fallback InnerTube bootstrap requests (initial video data) |
 | `client_requests_continuation.py` | HTTP continuation polling: request dispatch, retry, error surfacing |
-| `client_requests_errors.py` | HTTP/JSON error classification, captcha detection, retry helpers (U1) |
+| `client_requests_errors.py` | HTTP/JSON error classification, captcha detection, retry helpers (Round-07) |
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |
 
-#### Chat-streams split (post-round-2)
+#### Chat-streams split (post-Round-02)
 | Module | Purpose |
 |--------|---------|
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |

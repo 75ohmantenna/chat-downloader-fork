@@ -6,7 +6,7 @@ the full rationale behind deferred items.
 
 ## How to use
 
-- **Any-density floor** (frozen at X4): the per-round lowering ritual is
+- **Any-density floor** (frozen at Round-10.4): the per-round lowering ritual is
   retired. Do not raise baselines. Tighten opportunistically alongside typing
   work; after migrating a module run
   `rg -c "\bAny\b" src/chat_downloader/<path>` and update `BASELINE` in
@@ -32,10 +32,10 @@ These baselines are frozen. Do not lower without re-reading `maintenance-notes.m
 | `formatting/format.py` | 33 | stable JSON-config ↔ formatter boundary |
 | `sites/twitch/remappings.py` | 11 | remapping-table data; see cross-site dedup note |
 | `sites/youtube/constants_message.py` | 3 | remapping-table data |
-| `sites/twitch/parsing/messages.py` | 14 | accumulator `info: dict[str,Any]` fed by ~40+ remapping-table writes; TypedDict investigated (V3) and declined — see `maintenance-notes.md § Round-8` |
-| `sites/twitch/parsing/message_irc_resolve.py` | 14 | same pattern; V3 declined — do not reopen without a third site or a zero-boilerplate TypedDict solution |
-| `sites/youtube/parsing/message_items_content_parser.py` | 10 | same remap-accumulator pattern as Twitch IRC parsers above — `info: dict[str,Any]` mutated by `r.remap` across 5 helper functions; X9 narrowed the incoming `item`/`item_info` payloads but the accumulator boundary remains; TypedDict declined (V3); do not reopen |
-| `sites/youtube/parsing/actions_router.py` | 9 | `_ActionHandler` Callable alias + `ProcessedAction` fields carry assembled message output (`dict[str,Any]`), not raw API payloads; narrowed `action` param to `JSONDict` in X9 but contract/output boundary stays |
+| `sites/twitch/parsing/messages.py` | 14 | accumulator `info: dict[str,Any]` fed by ~40+ remapping-table writes; TypedDict investigated (Round-08.3) and declined — see `maintenance-notes.md § Round-08` |
+| `sites/twitch/parsing/message_irc_resolve.py` | 14 | same pattern; Round-08.3 declined — do not reopen without a third site or a zero-boilerplate TypedDict solution |
+| `sites/youtube/parsing/message_items_content_parser.py` | 10 | same remap-accumulator pattern as Twitch IRC parsers above — `info: dict[str,Any]` mutated by `r.remap` across 5 helper functions; Round-11.3 narrowed the incoming `item`/`item_info` payloads but the accumulator boundary remains; TypedDict declined (Round-08.3); do not reopen |
+| `sites/youtube/parsing/actions_router.py` | 9 | `_ActionHandler` Callable alias + `ProcessedAction` fields carry assembled message output (`dict[str,Any]`), not raw API payloads; narrowed `action` param to `JSONDict` in Round-11.3 but contract/output boundary stays |
 
 ---
 
@@ -78,7 +78,7 @@ reasons; their `# noqa: C901` annotations carry inline justifications:
   single public entry point and there is no independent logic to move.
 - `sites/twitch/extractor.py` (394 LOC) — single-class site extractor,
   maximally delegated; GraphQL glue is `self`-bound. 6 lines under ceiling;
-  stable. See `maintenance-notes.md § Round-7`.
+  stable. See `maintenance-notes.md § Round-07`.
 
 ### Near-ceiling modules (monitored, not split)
 **Status: closed** — reopen only if a module organically crosses the 400-LOC cap.
@@ -90,10 +90,10 @@ parser where split cost ≈ benefit. See `maintenance-notes.md`.
 
 ---
 
-## Extraction round cadence — RETIRED (X-series)
+## Extraction round cadence — RETIRED (Rounds 05–09)
 
-The S→W extraction-round program is closed. Nine rounds of structural work
-are complete; the mechanical decomposition seam is exhausted.
+The Round-05 through Round-09 extraction program is closed. Nine rounds of
+structural work are complete; the mechanical decomposition seam is exhausted.
 
 **New rule:** extract a module only when it organically crosses the 400-LOC
 cap or McCabe-10 gate during feature work — never as a standalone round.
@@ -106,11 +106,12 @@ parser changes. After each migration, lower the affected module's baseline in
 `tests/test_any_density_unit.py` (opportunistic tightening — not a scheduled
 round).
 
-### X-series typed-payload migration (X8–X11, 2026-06) — COMPLETE
+### Typed-payload migration (Round-11, 2026-06) — COMPLETE
 
-YouTube (X8–X10) and Twitch (X11) are both migrated off `dict[str, Any]`
-payload boundaries to `json_types` aliases. The typed-payload track is
-closed for both sites. Per-module before/after tables and residual rationale
-live in `maintenance-notes.md § X-series typed-payload migration`. Residuals
+YouTube (Round-11.1–11.4) and Twitch (Round-11.5) are both migrated off
+`dict[str, Any]` payload boundaries to `json_types` aliases. The typed-payload
+track is closed for both sites. Per-module before/after tables and residual
+rationale live in `maintenance-notes.md § Round-11 — Typed-payload migration`.
+Residuals
 in every migrated module are transport objects, callables, public-API params,
 or assembled-output accumulators — intentional, do not reopen.
