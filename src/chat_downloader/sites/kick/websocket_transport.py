@@ -30,7 +30,7 @@ from .constants import (
     PUSHER_PING,
     PUSHER_PONG,
     PUSHER_SUBSCRIBE,
-    PUSHER_WS_URL,
+    get_pusher_ws_url,
 )
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ class KickPusherTransport:
         self,
         *,
         connector: Callable[[str, float | None], Any] | None = None,
-        url: str = PUSHER_WS_URL,
+        url: str | None = None,
     ) -> None:
         """Initialize the transport.
 
@@ -65,10 +65,11 @@ class KickPusherTransport:
             connector: Callable that opens a websocket given ``(url, timeout)``.
                 Defaults to a real ``websocket-client`` connection; tests inject
                 a fake.
-            url: Pusher websocket URL to connect to.
+            url: Pusher websocket URL to connect to. Defaults to the auto-
+                discovered Pusher URL from Kick's JS bundle.
         """
         self._connector = connector or _default_connector
-        self._url = url
+        self._url = url if url is not None else get_pusher_ws_url()
         self._ws: Any = None
 
     def connect(self, timeout: float | None) -> None:

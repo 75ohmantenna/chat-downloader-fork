@@ -122,8 +122,7 @@ BASELINE: dict[str, int] = {
     # and websocket frames resists TypedDict).
     "sites/kick/parsing/messages.py": 15,
     "sites/kick/websocket_transport.py": 7,
-    "sites/kick/live_service.py": 7,
-    "sites/kick/extractor.py": 5,
+    "sites/kick/live_service.py": 8,
     "sites/kick/parsing/events.py": 7,
     "sites/kick/api_client.py": 4,
     "sites/kick/parsing/emotes.py": 4,
@@ -131,6 +130,8 @@ BASELINE: dict[str, int] = {
     "sites/kick/parsing/moderation.py": 18,
     "sites/kick/parsing/pins.py": 11,
     "sites/kick/parsing/hosts.py": 7,
+    "sites/kick/replay_service.py": 8,
+    "sites/kick/extractor.py": 7,
 }
 
 

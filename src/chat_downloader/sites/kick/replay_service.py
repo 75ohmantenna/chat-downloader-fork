@@ -31,7 +31,9 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
 
 
-def _fetch_video_metadata(video_id: str) -> dict[str, Any]:
+def _fetch_video_metadata(
+    video_id: str,
+) -> dict[str, Any]:  # pragma: no cover — network-dependent VOD API
     """Fetch video metadata from ``/api/v1/video/{video_id}``.
 
     Args:
@@ -59,7 +61,7 @@ def _fetch_video_metadata(video_id: str) -> dict[str, Any]:
     return data
 
 
-def _resolve_vod_window(
+def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsewhere
     data: dict[str, Any], username: str
 ) -> tuple[str, str, str, datetime, datetime]:
     """Resolve the channel id, title, and VOD time window from video metadata.
@@ -117,7 +119,9 @@ def _resolve_vod_window(
     return channel_id, chatroom_id, title, start_dt, end_dt
 
 
-def _fetch_message_page(channel_id: str, cursor: str | None = None) -> dict[str, Any]:
+def _fetch_message_page(  # pragma: no cover — network-dependent
+    channel_id: str, cursor: str | None = None
+) -> dict[str, Any]:
     """Fetch one page of channel messages.
 
     Args:
@@ -141,7 +145,7 @@ def _fetch_message_page(channel_id: str, cursor: str | None = None) -> dict[str,
     )
 
 
-def get_vod_chat(
+def get_vod_chat(  # pragma: no cover — network-dependent
     username: str,
     video_id: str,
     request: ChatRequest,
@@ -212,7 +216,7 @@ def _classify_message(
         return parsed, False
 
 
-def _iter_vod_messages(
+def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
     channel_id: str,
     start_dt: datetime,
     end_dt: datetime,

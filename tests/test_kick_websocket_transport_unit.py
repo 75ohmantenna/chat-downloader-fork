@@ -26,7 +26,10 @@ from tests.kick_helpers import FakeWebSocket
 
 
 def _connected(ws: FakeWebSocket) -> KickPusherTransport:
-    transport = KickPusherTransport(connector=lambda _url, _timeout: ws)
+    transport = KickPusherTransport(
+        connector=lambda _url, _timeout: ws,
+        url="wss://fake.test/",
+    )
     transport.connect(5.0)
     return transport
 

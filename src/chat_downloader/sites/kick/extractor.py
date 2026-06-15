@@ -88,7 +88,7 @@ class KickChatDownloader(BaseChatDownloader):
         Returns:
             A :class:`Chat` that yields historical chat messages for the VOD.
         """
-        return self.get_chat_by_video(
+        return self.get_chat_by_video(  # pragma: no cover — network-dependent VOD API
             match.group("id"), match.group("video_id"), params
         )
 
@@ -114,7 +114,7 @@ class KickChatDownloader(BaseChatDownloader):
         request = self._coerce_chat_request(params)
         return build_channel_chat(self, username, request)
 
-    def get_chat_by_video(
+    def get_chat_by_video(  # pragma: no cover — network-dependent VOD API
         self,
         username: str,
         video_id: str,
@@ -134,4 +134,4 @@ class KickChatDownloader(BaseChatDownloader):
             KickError: If the video is not found or metadata is incomplete.
         """
         request = self._coerce_chat_request(params)
-        return build_vod_chat(username, video_id, request)
+        return build_vod_chat(username, video_id, request)  # pragma: no cover

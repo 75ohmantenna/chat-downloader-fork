@@ -28,10 +28,84 @@ MESSAGES_API_TEMPLATE = "https://kick.com/api/v2/channels/{channel_id}/messages"
 
 # ── Pusher websocket ──────────────────────────────────────────────────────────
 
-#: Public Pusher application key used by Kick's web client. This is not a
-#: secret; it is shipped in Kick's public JavaScript bundle and grants only
-#: anonymous, read-only subscription to public chatroom channels.
-PUSHER_APP_KEY = "32cbd69e4b950bf97679"
+#: Default Pusher application key compiled into Kick's JS bundle.
+#: This is not a secret; it is shipped in Kick's public JavaScript bundle and
+#: grants only anonymous, read-only subscription to public chatroom channels.
+_PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
+
+#: Cached dynamically-discovered Pusher key (None = not yet discovered).
+_PUSHER_DISCOVERED_KEY: str | None = None
+
+
+def resolve_pusher_key(
+    *, force_discover: bool = False
+) -> str:  # pragma: no cover — network-dependent; tested at integration level
+    """Return the current Pusher application key, discovering it if needed.
+
+    The key lives in Kick's Next.js JS bundle as ``NEXT_PUBLIC_PUSHER_KEY``.
+    It is stable across page loads but can change when Kick rebuilds their
+    frontend. This function fetches the homepage on first call to extract the
+    current value, falling back to the compiled-in default if discovery fails.
+
+    Args:
+        force_discover: If True, skip the cache and re-discover from the live
+            page. Useful when a ``pusher:error`` suggests the key has rotated.
+
+    Returns:
+        The Pusher app key string.
+    """
+    global _PUSHER_DISCOVERED_KEY  # noqa: PLW0603 — lazy-init cache
+
+    if _PUSHER_DISCOVERED_KEY is not None and not force_discover:  # pragma: no cover
+        return _PUSHER_DISCOVERED_KEY  # pragma: no cover
+
+    import re  # pragma: no cover
+
+    import requests  # pragma: no cover
+
+    try:  # pragma: no cover
+        session = requests.Session()
+        session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "text/html",
+            }
+        )
+        resp = session.get("https://kick.com/", timeout=10)
+        if resp.ok:
+            # Find all JS chunk URLs in the page
+            script_urls = re.findall(r'<script[^>]*src="([^"]+\.js)"[^>]*>', resp.text)
+            for url in script_urls[:30]:
+                abs_url = url if url.startswith("http") else "https://kick.com" + url
+                try:
+                    js_resp = session.get(abs_url, timeout=10)
+                    if js_resp.ok:
+                        try:
+                            match = re.search(
+                                r"NEXT_PUBLIC_PUSHER_KEY[^}]*?"
+                                r'default\("([a-f0-9]+)"\)',
+                                js_resp.text,
+                            )
+                            if match:
+                                key = match.group(1)
+                                _PUSHER_DISCOVERED_KEY = key
+                                return key
+                        except re.error:
+                            continue
+                except requests.RequestException:
+                    continue
+    except requests.RequestException:  # pragma: no cover
+        pass  # pragma: no cover
+
+    _PUSHER_DISCOVERED_KEY = _PUSHER_DEFAULT_KEY
+    return _PUSHER_DEFAULT_KEY
+
+
+PUSHER_APP_KEY: str = _PUSHER_DEFAULT_KEY
 
 #: Pusher websocket endpoint. ``protocol``/``client``/``version`` mirror the
 #: values used by Kick's web client for compatibility.
@@ -40,6 +114,25 @@ PUSHER_WS_URL = (
     f"{PUSHER_APP_KEY}"
     "?protocol=7&client=js&version=7.6.0&flash=false"
 )
+
+_PUSHER_WS_TEMPLATE = (
+    "wss://ws-us2.pusher.com/app/{key}?protocol=7&client=js&version=7.6.0&flash=false"
+)
+
+
+def get_pusher_ws_url(*, force_discover: bool = False) -> str:
+    """Return the Pusher websocket URL with the current app key.
+
+    Args:
+        force_discover: If True, force re-discovery of the app key from
+            Kick's live JS bundle before building the URL.
+
+    Returns:
+        The full Pusher WebSocket URL.
+    """
+    key = resolve_pusher_key(force_discover=force_discover)
+    return _PUSHER_WS_TEMPLATE.format(key=key)
+
 
 #: Template for the public chatroom channel name to subscribe to.
 CHATROOM_CHANNEL_TEMPLATE = "chatrooms.{chatroom_id}.v2"
