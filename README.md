@@ -61,24 +61,6 @@ Or with pipx:
 pipx install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git
 ```
 
-**From a local checkout** — pull first, then reinstall:
-
-```bash
-cd /path/to/chat-downloader-fork
-git checkout master
-git pull --ff-only
-uv tool install --force --editable .
-```
-
-**Day-to-day development** (no global tool reinstall needed):
-
-```bash
-cd /path/to/chat-downloader-fork
-git pull --ff-only
-uv sync
-uv run chat_downloader --version
-```
-
 **Verify the installed command:**
 
 ```bash
