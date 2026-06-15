@@ -25,10 +25,12 @@ _SENSITIVE_LOG_KEYS = frozenset(
         "authorization",
         "cookie",
         "cookies",
+        "id_token",
         "proxy",
         "proxy-authorization",
         "set-cookie",
         "x-api-key",
+        "x-youtube-identity-token",
     },
 )
 

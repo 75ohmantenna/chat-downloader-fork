@@ -134,11 +134,16 @@ def _extract_next_continuation(
             # Seek-only continuation — not a chat token; keep searching.
             continue
 
-        # Unknown continuation key preserved for debug logging.
+        # Unknown continuation key — extract token generically if available.
+        token = get_str(continuation_info, "continuation") or None
+        click_tracking = continuation_info.get(
+            "clickTrackingParams",
+        ) or continuation_info.get("trackingParams")
+        raw_poll_delay_ms = _extract_raw_poll_delay_ms(continuation_info)
         return (
-            None,
-            None,
-            None,
+            token,
+            click_tracking,
+            raw_poll_delay_ms,
             {
                 "continuation_key": continuation_key,
                 "continuation_entry": continuation_info,

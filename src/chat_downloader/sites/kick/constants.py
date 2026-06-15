@@ -47,6 +47,9 @@ def resolve_pusher_key(
     frontend. This function fetches the homepage on first call to extract the
     current value, falling back to the compiled-in default if discovery fails.
 
+    Discovery scans at most 15 JS bundles with a per-bundle 10s timeout.
+    Once resolved the key is cached for the process lifetime.
+
     Args:
         force_discover: If True, skip the cache and re-discover from the live
             page. Useful when a ``pusher:error`` suggests the key has rotated.
@@ -58,8 +61,6 @@ def resolve_pusher_key(
 
     if _PUSHER_DISCOVERED_KEY is not None and not force_discover:  # pragma: no cover
         return _PUSHER_DISCOVERED_KEY  # pragma: no cover
-
-    import re  # pragma: no cover
 
     import requests  # pragma: no cover
 
@@ -77,9 +78,9 @@ def resolve_pusher_key(
         )
         resp = session.get("https://kick.com/", timeout=10)
         if resp.ok:
-            # Find all JS chunk URLs in the page
+            # Find all JS chunk URLs in the page (scan at most 15 chunks)
             script_urls = re.findall(r'<script[^>]*src="([^"]+\.js)"[^>]*>', resp.text)
-            for url in script_urls[:30]:
+            for url in script_urls[:15]:
                 abs_url = url if url.startswith("http") else "https://kick.com" + url
                 try:
                     js_resp = session.get(abs_url, timeout=10)
@@ -104,16 +105,6 @@ def resolve_pusher_key(
     _PUSHER_DISCOVERED_KEY = _PUSHER_DEFAULT_KEY
     return _PUSHER_DEFAULT_KEY
 
-
-PUSHER_APP_KEY: str = _PUSHER_DEFAULT_KEY
-
-#: Pusher websocket endpoint. ``protocol``/``client``/``version`` mirror the
-#: values used by Kick's web client for compatibility.
-PUSHER_WS_URL = (
-    "wss://ws-us2.pusher.com/app/"
-    f"{PUSHER_APP_KEY}"
-    "?protocol=7&client=js&version=7.6.0&flash=false"
-)
 
 _PUSHER_WS_TEMPLATE = (
     "wss://ws-us2.pusher.com/app/{key}?protocol=7&client=js&version=7.6.0&flash=false"
@@ -181,9 +172,6 @@ STREAM_HOST_EVENT = "App\\Events\\StreamHostEvent"
 #: Pusher event name for a chat clear event.
 CHAT_CLEAR_EVENT = "App\\Events\\ChatClearMessagesEvent"
 
-#: Pusher event name for a reward redemption event.
-REWARD_REDEEMED_EVENT = "App\\Events\\RewardRedeemedEvent"
-
 # ── Event-to-message-type mapping ─────────────────────────────────────────────
 
 #: Maps raw Pusher event names to normalized message types.
@@ -198,7 +186,6 @@ EVENT_NAME_MAP: dict[str, str] = {
     GIFTED_SUBSCRIPTIONS_EVENT: "gifted_subscriptions",
     STREAM_HOST_EVENT: "stream_host",
     CHAT_CLEAR_EVENT: "chat_clear",
-    REWARD_REDEEMED_EVENT: "reward_redeemed",
 }
 
 # ── Message types and groups ──────────────────────────────────────────────────
@@ -216,7 +203,6 @@ MESSAGE_TYPE_REMAPPING = {
     "pinned_message_deleted": "pinned_message_deleted",
     "stream_host": "stream_host",
     "chat_clear": "chat_clear",
-    "reward_redeemed": "reward_redeemed",
 }
 
 #: Default normalized message type for a Kick chat message.
@@ -229,7 +215,6 @@ MESSAGE_GROUPS = {
     "moderation": ["user_banned", "user_unbanned", "message_deleted", "chat_clear"],
     "pins": ["pinned_message", "pinned_message_deleted"],
     "hosts": ["stream_host"],
-    "rewards": ["reward_redeemed"],
 }
 
 # ── Emotes ────────────────────────────────────────────────────────────────────

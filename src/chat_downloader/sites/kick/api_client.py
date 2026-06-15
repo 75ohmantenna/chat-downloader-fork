@@ -29,14 +29,24 @@ from .errors import KickError, KickServerError
 _KICK_SESSION: requests.Session | None = None
 
 
-def _get_kick_session() -> (
-    requests.Session
-):  # pragma: no cover — replaced by FakeKickSession in tests
+def _get_kick_session(
+    *,
+    proxy: dict[str, str] | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> requests.Session:  # pragma: no cover — replaced by FakeKickSession in tests
     """Create an HTTP session with Cloudflare bypass for Kick.com API.
 
     Uses ``cloudscraper`` when available for automatic Cloudflare challenge
     handling. Falls back to a plain ``requests.Session`` with Kick-specific
     headers (User-Agent, Accept, Referer).
+
+    Args:
+        proxy: Optional proxy mapping (e.g. ``{"http": "...", "https": "..."}``)
+            applied to the session. Only takes effect on fresh sessions; the
+            singleton returned on subsequent calls retains its original config.
+        extra_headers: Optional headers dict merged into the session's default
+            headers. Only takes effect on fresh sessions; the cached singleton
+            retains its original config.
 
     Returns:
         A configured ``requests.Session`` (or ``cloudscraper`` session).
@@ -62,6 +72,10 @@ def _get_kick_session() -> (
                 }
             )
             _KICK_SESSION = session
+    if proxy:
+        _KICK_SESSION.proxies.update(proxy)
+    if extra_headers:
+        _KICK_SESSION.headers.update(extra_headers)
     return _KICK_SESSION
 
 
@@ -82,10 +96,10 @@ def _body_looks_like_challenge(response: requests.Response) -> bool:
     if any(marker in response.text for marker in CLOUDFLARE_MARKERS):
         return True
     content_type = response.headers.get("Content-Type", "").lower()
+    if not isinstance(content_type, str) or "text/html" not in content_type:
+        return False
     body_start = response.text.lstrip()[:64].lower()
-    return "text/html" in content_type or body_start.startswith(
-        ("<!doctype html", "<html")
-    )
+    return body_start.startswith(("<!doctype html", "<html"))
 
 
 def _raise_for_challenge(response: requests.Response, username: str) -> NoReturn:
@@ -168,7 +182,12 @@ def _check_status(response: requests.Response, username: str) -> None:
         raise KickError(msg)
 
 
-def fetch_channel(username: str) -> dict[str, Any]:
+def fetch_channel(
+    username: str,
+    *,
+    proxy: dict[str, str] | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Fetch channel metadata from ``/api/v2/channels/{username}``.
 
     Uses a dedicated HTTP session (with ``cloudscraper`` Cloudflare bypass
@@ -176,6 +195,8 @@ def fetch_channel(username: str) -> dict[str, Any]:
 
     Args:
         username: Channel username/slug.
+        proxy: Optional proxy mapping for the HTTP session.
+        extra_headers: Optional headers to merge into the session.
 
     Returns:
         The decoded channel metadata object.
@@ -186,7 +207,9 @@ def fetch_channel(username: str) -> dict[str, Any]:
         KickServerError: On transient (429/5xx/malformed) responses.
     """
     url = CHANNEL_API_TEMPLATE.format(username=username)
-    response = _get_kick_session().get(url, timeout=(10, 30))
+    response = _get_kick_session(proxy=proxy, extra_headers=extra_headers).get(
+        url, timeout=(10, 30)
+    )
     _check_status(response, username)
     data = _decode_json(response, username)
     if not isinstance(data, dict):
@@ -198,6 +221,9 @@ def fetch_channel(username: str) -> dict[str, Any]:
 def fetch_preloaded_messages(
     channel_id: str,
     username: str,
+    *,
+    proxy: dict[str, str] | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch recent preloaded messages from ``/channels/{id}/messages``.
 
@@ -207,6 +233,8 @@ def fetch_preloaded_messages(
     Args:
         channel_id: Numeric channel id.
         username: Channel username/slug, used only for error context.
+        proxy: Optional proxy mapping for the HTTP session.
+        extra_headers: Optional headers to merge into the session.
 
     Returns:
         A list of raw preloaded message objects (possibly empty). Failures to
@@ -215,7 +243,9 @@ def fetch_preloaded_messages(
     """
     url = MESSAGES_API_TEMPLATE.format(channel_id=channel_id)
     try:
-        response = _get_kick_session().get(url, timeout=(10, 30))
+        response = _get_kick_session(proxy=proxy, extra_headers=extra_headers).get(
+            url, timeout=(10, 30)
+        )
         _check_status(response, username)
         data = _decode_json(response, username)
     except KickServerError as error:

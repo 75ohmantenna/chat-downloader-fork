@@ -27,7 +27,7 @@ from tests.kick_helpers import FakeWebSocket
 
 def _connected(ws: FakeWebSocket) -> KickPusherTransport:
     transport = KickPusherTransport(
-        connector=lambda _url, _timeout: ws,
+        connector=lambda _url, _timeout, **_kwargs: ws,
         url="wss://fake.test/",
     )
     transport.connect(5.0)
@@ -37,7 +37,7 @@ def _connected(ws: FakeWebSocket) -> KickPusherTransport:
 def test_default_connector_invokes_create_connection(monkeypatch: Any) -> None:
     captured: dict[str, Any] = {}
 
-    def fake_create(url: str, timeout: float | None) -> str:
+    def fake_create(url: str, timeout: float | None, **kwargs: Any) -> str:
         captured["url"] = url
         captured["timeout"] = timeout
         return "connection"
@@ -49,7 +49,7 @@ def test_default_connector_invokes_create_connection(monkeypatch: Any) -> None:
 
 
 def test_connect_failure_raises_connection_error() -> None:
-    def boom(_url: str, _timeout: float | None) -> Any:
+    def boom(_url: str, _timeout: float | None, **_kwargs: Any) -> Any:
         raise WebSocketException
 
     transport = KickPusherTransport(connector=boom)
@@ -58,7 +58,7 @@ def test_connect_failure_raises_connection_error() -> None:
 
 
 def test_set_timeout_noop_before_connect() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t: FakeWebSocket())
+    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
     # No connection yet: must not raise.
     transport.set_timeout(2.0)
 
@@ -87,7 +87,7 @@ def test_send_pong_frame() -> None:
 
 
 def test_send_before_connect_raises() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t: FakeWebSocket())
+    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
     with pytest.raises(ConnectionError):
         transport.send_pong()
 
@@ -100,7 +100,7 @@ def test_send_failure_raises_connection_error() -> None:
 
 
 def test_recv_before_connect_raises() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t: FakeWebSocket())
+    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
     with pytest.raises(ConnectionError):
         transport.recv()
 
@@ -143,7 +143,7 @@ def test_recv_valid_frame_returns_dict() -> None:
 
 
 def test_close_before_connect_is_noop() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t: FakeWebSocket())
+    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
     transport.close()  # must not raise
 
 

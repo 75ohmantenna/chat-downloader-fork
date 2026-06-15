@@ -149,7 +149,7 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
             )
 
             if not yt_initial_data:
-                log("debug", html)
+                log("debug", f"HTML ({len(html)} chars): {html[:500]}")
                 from chat_downloader.errors import ParsingError
 
                 msg = "Unable to parse initial video data"

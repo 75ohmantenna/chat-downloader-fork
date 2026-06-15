@@ -74,6 +74,12 @@ def _finalize_run(
             else:
                 raise
 
+    if chat is not None and not primary_error:
+        write_error_count = getattr(chat, "write_error_count", 0)
+        if write_error_count > 0:
+            msg = f"{write_error_count} output writer(s) reported errors during close"
+            raise ChatDownloaderError(msg)
+
     if downloader is not None:
         try:
             downloader.close()
@@ -174,6 +180,13 @@ def execute_run(
         log("error", result.error_message)
 
     finally:
-        _finalize_run(chat, downloader, primary_error=primary_error)
+        try:
+            _finalize_run(chat, downloader, primary_error=primary_error)
+        except ChatDownloaderError:
+            primary_error = True
+            result.success = False
+            result.error_message = (
+                "One or more output writers reported errors during close"
+            )
 
     return result

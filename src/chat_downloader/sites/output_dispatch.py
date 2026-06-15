@@ -73,6 +73,7 @@ class _ChatOutputDispatcher:
         self.writers: list[ChatOutputWriter] = []
         self.callbacks: list[Callable[[dict[str, Any]], None]] = []
         self._writers_with_callbacks: set[int] = set()
+        self._write_error_count: int = 0
         self.closed = False
 
     def _build_formatted_callback(
@@ -155,8 +156,14 @@ class _ChatOutputDispatcher:
             try:
                 writer.close()
             except (OSError, RuntimeError, csv.Error) as error:
+                self._write_error_count += 1
                 log(
                     "warning",
                     "Suppressed close() error while finalizing output writer "
                     f"for {self._chat.title!r}: {error}",
                 )
+
+    @property
+    def write_error_count(self) -> int:
+        """Return the number of writer close errors encountered."""
+        return self._write_error_count

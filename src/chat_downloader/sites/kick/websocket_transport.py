@@ -37,17 +37,30 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
 
-def _default_connector(url: str, timeout: float | None) -> Any:
+def _default_connector(
+    url: str,
+    timeout: float | None,
+    *,
+    http_proxy_host: str | None = None,
+    http_proxy_port: int | None = None,
+) -> Any:
     """Open a real Pusher websocket connection.
 
     Args:
         url: The websocket URL to connect to.
         timeout: Socket timeout in seconds, or ``None`` to block.
+        http_proxy_host: Optional HTTP proxy hostname for the connection.
+        http_proxy_port: Optional HTTP proxy port for the connection.
 
     Returns:
         A connected ``websocket.WebSocket`` instance.
     """
-    return create_connection(url, timeout=timeout)
+    return create_connection(
+        url,
+        timeout=timeout,
+        http_proxy_host=http_proxy_host,
+        http_proxy_port=http_proxy_port,
+    )
 
 
 class KickPusherTransport:
@@ -56,20 +69,27 @@ class KickPusherTransport:
     def __init__(
         self,
         *,
-        connector: Callable[[str, float | None], Any] | None = None,
+        connector: Callable[..., Any] | None = None,
         url: str | None = None,
+        http_proxy_host: str | None = None,
+        http_proxy_port: int | None = None,
     ) -> None:
         """Initialize the transport.
 
         Args:
-            connector: Callable that opens a websocket given ``(url, timeout)``.
+            connector: Callable that opens a websocket given ``(url, timeout)``
+                and optional ``http_proxy_host``/``http_proxy_port`` kwargs.
                 Defaults to a real ``websocket-client`` connection; tests inject
                 a fake.
             url: Pusher websocket URL to connect to. Defaults to the auto-
                 discovered Pusher URL from Kick's JS bundle.
+            http_proxy_host: Optional HTTP proxy hostname for the connection.
+            http_proxy_port: Optional HTTP proxy port for the connection.
         """
         self._connector = connector or _default_connector
         self._url = url if url is not None else get_pusher_ws_url()
+        self._http_proxy_host = http_proxy_host
+        self._http_proxy_port = http_proxy_port
         self._ws: Any = None
 
     def connect(self, timeout: float | None) -> None:
@@ -82,7 +102,12 @@ class KickPusherTransport:
             ConnectionError: If the underlying connection attempt fails.
         """
         try:
-            self._ws = self._connector(self._url, timeout)
+            self._ws = self._connector(
+                self._url,
+                timeout,
+                http_proxy_host=self._http_proxy_host,
+                http_proxy_port=self._http_proxy_port,
+            )
         except (WebSocketException, OSError) as error:
             msg = "Unable to open Kick websocket connection."
             raise ConnectionError(msg) from error

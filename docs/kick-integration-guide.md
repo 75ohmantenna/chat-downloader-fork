@@ -214,17 +214,10 @@ message types:
 | `moderation` | `user_banned`, `user_unbanned`, `message_deleted`, `chat_clear` |
 | `pins` | `pinned_message`, `pinned_message_deleted` |
 | `hosts` | `stream_host` |
-| `rewards` | `reward_redeemed` |
 
 The default message group surfaces only `messages`. Use, for example,
 `--message_groups messages subscriptions moderation` to capture non-text
 events.
-
-`RewardRedeemedEvent` is wired into `EVENT_NAME_MAP` and the `rewards` group,
-but has **no** registered parser in `events.py::_PARSER_DISPATCH` yet, so reward
-redemptions are currently skipped rather than emitted. Implementing
-`parse_reward_redeemed_event` and registering it is the natural next step if
-reward capture is needed.
 
 ## Cloudflare Dependency
 

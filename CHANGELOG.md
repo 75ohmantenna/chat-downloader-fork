@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.4.0 — 2026-06-15
+
+### Fixes
+
+- **[critical] Kick HTTP + WebSocket now honor user transport config (proxy, cookies, headers, timeouts).** `_get_kick_session()` accepts optional `proxy` and `extra_headers` kwargs; `KickPusherTransport` threads `http_proxy_host`/`http_proxy_port` through its connector to `create_connection()`. Proxy/config flows from the downloader's configured session through Kick's API calls and websocket transport. Previously `--proxy`, `--cookies`, `--headers`, and timeouts were silently ignored for Kick — the challenge error message advised proxy changes that had no effect.
+- **[critical] YouTube unknown continuation types now extract generic tokens instead of silently truncating chat.** `_extract_next_continuation()` in `continuations.py` previously returned `(None, ..., {unknown: True})` for unrecognized continuation wrappers, causing `parse_continuation_response()` to set `is_end=True` and exit normally — silently discarding any further messages behind the new wrapper. Now the generic `continuation` field is extracted from unknown entries, keeping the stream alive. The `unknown: True` flag in `debug_info` preserves observability.
+- **[critical] Output write/close errors no longer silently reported as success.** `_ChatOutputDispatcher` tracks write-close errors via `_write_error_count`; `_finalize_run` in `runner.py` checks this after close and raises `ChatDownloaderError` when any writer failed and no primary error existed; `execute_run` catches this and sets `result.success = False` with an informative error message.
+- **[high] Kick VOD `max_messages` now returns oldest N messages (first N of the VOD) instead of newest N.** Removed the premature `max_messages` early-break during pagination — the loop now paginates fully through the time window before reversing to chronological order and slicing. The old behavior broke out after collecting N newest messages, yielding the most recent N instead of the first N from the stream start.
+- **[high] Kick VOD message timestamp normalization.** `_classify_message()` now normalizes naive `msg_dt` to UTC-aware before comparing with the VOD window, preventing a `TypeError` crash if Kick returns timestamps without timezone info.
+- **[medium] Removed unreachable `rewards`/`reward_redeemed` message group.** `REWARD_REDEEMED_EVENT` and its mappings in `EVENT_NAME_MAP`, `MESSAGE_GROUPS`, and `MESSAGE_TYPE_REMAPPING` are removed. No parser existed for `reward_redeemed`, so selecting `--message_groups rewards` silently returned nothing. Re-add with a proper parser when needed.
+- **[medium] Removed unused `nodriver` dependency** from `pyproject.toml`. It was never imported in any source or test file.
+- **[low] Kick VOD pagination cursor now passed as a query parameter** via `session.get(url, params={...})` instead of string interpolation, fixing potential encoding issues with reserved characters.
+- **[low] Cloudflare body detection tightened** — the secondary check now requires both `text/html` content-type AND an HTML-looking body document, reducing false positives on plain HTML error pages returned by the API.
+- **[low] Pusher-key discovery scan limit reduced** from 30 to 15 JS bundles for faster startup.
+- **[low] Debug logging no longer dumps full HTML pages.** `client_requests_initial.py` now logs a bounded 500-char summary plus length on parse failure, instead of the full HTML body.
+- **[low] Extended redaction coverage.** `_SENSITIVE_LOG_KEYS` now includes `id_token` and `x-youtube-identity-token` so these YouTube auth headers are redacted from debug samples.
+- **[low] Removed stale dead names `PUSHER_WS_URL` and `PUSHER_APP_KEY`** from Kick constants. These were computed at import time with the static default key and never imported by any consumer — `get_pusher_ws_url()`/`resolve_pusher_key()` are the canonical paths.
+- **[low] Removed duplicate inner `import re`** inside `resolve_pusher_key()` (already at module scope).
+- **[low] VOD replay docstring updated** to clarify that messages are collected into memory before yielding (bounded by 500-page ceiling), with `max_messages` returning oldest N.
+
 ## 1.3.0 — 2026-06-15
 
 ### Kick integration

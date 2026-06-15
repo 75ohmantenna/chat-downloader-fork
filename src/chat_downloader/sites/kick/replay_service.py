@@ -13,7 +13,7 @@ chronological order.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log, logger
@@ -33,11 +33,14 @@ if TYPE_CHECKING:
 
 def _fetch_video_metadata(
     video_id: str,
+    *,
+    proxy: dict[str, str] | None = None,
 ) -> dict[str, Any]:  # pragma: no cover — network-dependent VOD API
     """Fetch video metadata from ``/api/v1/video/{video_id}``.
 
     Args:
         video_id: The VOD UUID.
+        proxy: Optional proxy mapping for the HTTP session.
 
     Returns:
         The decoded video metadata object.
@@ -45,7 +48,7 @@ def _fetch_video_metadata(
     Raises:
         KickError: If the video is not found or metadata is incomplete.
     """
-    session = _get_kick_session()
+    session = _get_kick_session(proxy=proxy)
     url = VIDEO_API_TEMPLATE.format(video_id=video_id)
     resp = session.get(url, timeout=(10, 30))
     if resp.status_code == 404:
@@ -120,22 +123,22 @@ def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsew
 
 
 def _fetch_message_page(  # pragma: no cover — network-dependent
-    channel_id: str, cursor: str | None = None
+    channel_id: str, cursor: str | None = None, *, proxy: dict[str, str] | None = None
 ) -> dict[str, Any]:
     """Fetch one page of channel messages.
 
     Args:
         channel_id: Numeric channel id.
         cursor: Optional pagination cursor (timestamp).
+        proxy: Optional proxy mapping for the HTTP session.
 
     Returns:
         The API response dict with ``data.messages`` and ``data.cursor``.
     """
-    session = _get_kick_session()
+    session = _get_kick_session(proxy=proxy)
     url = CHANNEL_MESSAGES_API.format(channel_id=channel_id)
-    if cursor:
-        url = f"{url}?cursor={cursor}"
-    resp = session.get(url, timeout=(10, 30))
+    params = {"cursor": cursor} if cursor else None
+    resp = session.get(url, params=params, timeout=(10, 30))
     if not resp.ok:
         logger.debug("Kick messages API returned HTTP %s", resp.status_code)
         return {"data": {"messages": [], "cursor": None}}
@@ -149,6 +152,8 @@ def get_vod_chat(  # pragma: no cover — network-dependent
     username: str,
     video_id: str,
     request: ChatRequest,
+    *,
+    proxy: dict[str, str] | None = None,
 ) -> Chat:
     """Build a :class:`Chat` for VOD chat replay.
 
@@ -160,11 +165,12 @@ def get_vod_chat(  # pragma: no cover — network-dependent
         username: Channel username/slug.
         video_id: VOD UUID.
         request: The active chat request.
+        proxy: Optional proxy mapping for the HTTP session.
 
     Returns:
         A configured :class:`Chat` whose generator yields message dicts.
     """
-    video_data = _fetch_video_metadata(video_id)
+    video_data = _fetch_video_metadata(video_id, proxy=proxy)
     channel_id, _chatroom_id, title, start_dt, end_dt = _resolve_vod_window(
         video_data, username
     )
@@ -172,7 +178,7 @@ def get_vod_chat(  # pragma: no cover — network-dependent
     log("info", f"VOD time window: {start_dt} to {end_dt}")
 
     return Chat(
-        _iter_vod_messages(channel_id, start_dt, end_dt, request),
+        _iter_vod_messages(channel_id, start_dt, end_dt, request, proxy=proxy),
         title=title,
         status="completed",
         video_type="video",
@@ -203,6 +209,9 @@ def _classify_message(
     except (ValueError, TypeError):
         return None, False
 
+    if msg_dt.tzinfo is None:
+        msg_dt = msg_dt.replace(tzinfo=UTC)
+
     if msg_dt < start_dt:
         return None, True
     if msg_dt > end_dt:
@@ -221,20 +230,17 @@ def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
     start_dt: datetime,
     end_dt: datetime,
     request: ChatRequest,
+    *,
+    proxy: dict[str, str] | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized VOD chat messages within the time window.
 
     Paginates through channel messages (newest first) and yields those
-    whose ``created_at`` falls within the VOD's time window.
-
-    Args:
-        channel_id: Numeric channel id.
-        start_dt: VOD start time.
-        end_dt: VOD end time.
-        request: The active chat request (for ``max_messages`` limit).
-
-    Yields:
-        Normalized message dicts in chronological order.
+    whose ``created_at`` falls within the VOD's time window. Unlike live
+    chat which streams messages as they arrive, VOD replay accumulates
+    all pages (up to a 500-page ceiling), reverses to chronological
+    order, and yields the result. With ``max_messages`` set, the oldest
+    *N* messages (i.e. the first *N* from the stream start) are returned.
     """
     cursor: str | None = None
     all_messages: list[dict[str, Any]] = []
@@ -242,7 +248,7 @@ def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
     pages = 0
 
     while not done and pages < 500:
-        page = _fetch_message_page(channel_id, cursor)
+        page = _fetch_message_page(channel_id, cursor, proxy=proxy)
         data = page.get("data", {})
         raw_messages = data.get("messages", [])
         cursor = data.get("cursor")
@@ -265,12 +271,9 @@ def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
         if not cursor or done:
             break
 
-        if request.max_messages and len(all_messages) >= request.max_messages:
-            break
-
-    # Messages arrive newest-first; reverse to chronological
+    # Messages arrive newest-first; reverse to chronological.
+    # max_messages means the oldest N (first N of the VOD).
     all_messages.reverse()
-
     if request.max_messages:
         all_messages = all_messages[: request.max_messages]
 

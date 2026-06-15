@@ -134,6 +134,11 @@ class Chat:
         """Close all attached writers once."""
         self._output_dispatcher.close()
 
+    @property
+    def write_error_count(self) -> int:
+        """Return the number of writer close errors encountered."""
+        return self._output_dispatcher.write_error_count
+
     def __next__(self) -> dict[str, Any]:
         """Get the next chat message from the generator."""
         if self.chat is None:

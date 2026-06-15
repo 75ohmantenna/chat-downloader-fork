@@ -42,6 +42,28 @@ if TYPE_CHECKING:
 _KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
 
 
+def _resolve_proxy(
+    downloader: object,
+) -> dict[str, str] | None:
+    """Extract proxy mapping from a downloader's session if configured.
+
+    Args:
+        downloader: A downloader instance with an optional ``session`` attribute
+            carrying a ``proxies`` dict.
+
+    Returns:
+        A proxy dict for requests/cloudscraper, or ``None`` when no non-empty
+        proxy config is available.
+    """
+    session = getattr(downloader, "session", None)
+    proxies: dict[str, str] | None = (
+        getattr(session, "proxies", None) if session else None
+    )
+    if proxies and any(proxies.values()):
+        return dict(proxies)
+    return None
+
+
 def _fetch_channel_with_retry(
     downloader: KickChatDownloader,
     username: str,
@@ -62,7 +84,8 @@ def _fetch_channel_with_retry(
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            return fetch_channel(username)
+            proxy = _resolve_proxy(downloader)
+            return fetch_channel(username, proxy=proxy)
         except (KickServerError, RequestException, JSONDecodeError) as error:
             downloader.retry(attempt_number, error=error, request=request)
     msg = "unreachable: retry should have raised RetriesExceeded"
@@ -163,11 +186,37 @@ def get_chat_by_channel(
     )
 
 
+def _resolve_ws_proxy(downloader: object) -> tuple[str | None, int | None]:
+    """Extract websocket proxy host/port from a downloader's session.
+
+    Parses the first non-empty proxy URL (preferring https) into host and
+    port. Returns ``(None, None)`` when no proxy is configured.
+    """
+    session = getattr(downloader, "session", None)
+    proxies: dict[str, str] | None = (
+        getattr(session, "proxies", None) if session else None
+    )
+    if not proxies:
+        return None, None
+    proxy_url = proxies.get("https") or proxies.get("http")
+    if not proxy_url:
+        return None, None
+    from urllib.parse import urlparse
+
+    parsed = urlparse(proxy_url)
+    host = parsed.hostname
+    port = parsed.port
+    return host, port
+
+
 def _open_subscribed_transport(
     downloader: KickChatDownloader,
     chatroom_id: str,
     request: ChatRequest,
     transport_factory: Callable[[], KickPusherTransport],
+    *,
+    http_proxy_host: str | None = None,
+    http_proxy_port: int | None = None,
 ) -> KickPusherTransport:
     """Open a transport and subscribe to the chatroom, retrying failures.
 
@@ -176,12 +225,16 @@ def _open_subscribed_transport(
         chatroom_id: Chatroom id to subscribe to.
         request: The active chat request (retry policy and recv timeout).
         transport_factory: Factory producing a fresh transport.
+        http_proxy_host: Optional HTTP proxy hostname for the WS connection.
+        http_proxy_port: Optional HTTP proxy port for the WS connection.
 
     Returns:
         A connected, subscribed transport.
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         transport = transport_factory()
+        transport._http_proxy_host = http_proxy_host
+        transport._http_proxy_port = http_proxy_port
         try:
             transport.connect(request.message_receive_timeout)
             transport.subscribe(chatroom_id)
@@ -224,14 +277,21 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
         return msg_filter.should_add(message)
 
     # 1. Preloaded history (best-effort; non-fatal on failure).
-    preloaded = fetch_preloaded_messages(channel_id, username)
+    proxy = _resolve_proxy(downloader)
+    preloaded = fetch_preloaded_messages(channel_id, username, proxy=proxy)
     for message in parse_preloaded_messages(preloaded):
         if emit(message):
             yield message
 
     # 2. Live websocket feed with reconnect.
+    ws_host, ws_port = _resolve_ws_proxy(downloader)
     transport = _open_subscribed_transport(
-        downloader, chatroom_id, request, transport_factory
+        downloader,
+        chatroom_id,
+        request,
+        transport_factory,
+        http_proxy_host=ws_host,
+        http_proxy_port=ws_port,
     )
     try:
         while True:
@@ -244,7 +304,12 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
                 logger.debug("Kick websocket disconnected; reconnecting: %s", error)
                 transport.close()
                 transport = _open_subscribed_transport(
-                    downloader, chatroom_id, request, transport_factory
+                    downloader,
+                    chatroom_id,
+                    request,
+                    transport_factory,
+                    http_proxy_host=ws_host,
+                    http_proxy_port=ws_port,
                 )
             else:
                 break

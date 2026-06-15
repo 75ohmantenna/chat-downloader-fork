@@ -306,7 +306,7 @@ class TestEdgeCases:
             },
         }
         result = parse_continuation_response(payload)
-        assert result.is_end is True
+        assert result.is_end is False
         assert result.debug_info["unknown"] is True
         assert result.debug_info["payload_summary"] == {
             "top_level_keys": ["continuationContents"],

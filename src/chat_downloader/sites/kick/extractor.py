@@ -134,4 +134,9 @@ class KickChatDownloader(BaseChatDownloader):
             KickError: If the video is not found or metadata is incomplete.
         """
         request = self._coerce_chat_request(params)
-        return build_vod_chat(username, video_id, request)  # pragma: no cover
+        from .live_service import _resolve_proxy
+
+        proxy = _resolve_proxy(self)
+        return build_vod_chat(
+            username, video_id, request, proxy=proxy
+        )  # pragma: no cover
