@@ -319,6 +319,8 @@ from chat_downloader import (
     ItemFormatter,
     InvalidParameter,
     InvalidURL,
+    KickChatDownloader,
+    KickError,
     LoginRequired,
     NoChatReplay,
     NoContinuation,
@@ -348,3 +350,21 @@ Additional typed model helpers are available from `chat_downloader.models`,
 including `RunConfig`, `coerce_chat_request` (converts a kwargs dict to a
 `ChatRequest` with `strict=True`, rejecting unknown keys), and the default
 constants used by the facade.
+
+## Site Classes
+
+In normal usage you do not touch site classes directly — `get_chat()` resolves
+the site from the URL. When you need a concrete class (custom dispatch, type
+checks), `TwitchChatDownloader`, `YouTubeChatDownloader`, `KickChatDownloader`,
+and `KickError` are all re-exported at the top level:
+
+```python
+from chat_downloader import KickChatDownloader, KickError
+```
+
+`get_all_sites()` returns every registered site class, including
+`KickChatDownloader`.
+
+Kick URLs (`kick.com/{username}` for live chat, `kick.com/{username}/videos/
+{uuid}` for VOD replay) work through the standard `get_chat()` /
+`get_chat_request()` entry points like any other site.

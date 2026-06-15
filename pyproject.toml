@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chat-downloader"
 dynamic = ["version"]
-description = "Enhanced YouTube and Twitch livestream chat logging and retrieval tool"
+description = "Enhanced YouTube, Twitch, and Kick livestream chat logging and retrieval tool"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -13,7 +13,7 @@ authors = [
     { name = "75ohmantenna", email = "75ohmantenna@proton.me" },
 ]
 requires-python = ">=3.12"
-keywords = ["youtube", "twitch", "chat", "livestream", "downloader"]
+keywords = ["youtube", "twitch", "kick", "chat", "livestream", "downloader"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",

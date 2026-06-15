@@ -32,6 +32,21 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
   --output chat.txt
 ```
 
+Capture a Kick live channel, including subscription and moderation events:
+
+```bash
+chat_downloader "https://kick.com/xqc" \
+  --message_groups messages subscriptions moderation \
+  --output kick-chat.jsonl
+```
+
+Capture Kick VOD chat replay:
+
+```bash
+chat_downloader "https://kick.com/xqc/videos/<uuid>" \
+  --output kick-vod.jsonl
+```
+
 Use cookies and custom headers:
 
 ```bash
@@ -107,8 +122,11 @@ Debug and automation:
 
 - `403`, `429`, or `LoginRequired` errors usually mean the platform wants
   cookies, a slower request pace, or both.
-- `CaptchaChallengeRequired` means Twitch or YouTube returned an explicit
-  challenge response that the library cannot solve automatically.
+- `CaptchaChallengeRequired` means a platform returned an explicit challenge
+  response that the library cannot solve automatically. On Kick this is a
+  Cloudflare bot-protection page; installing `cloudscraper` (a dependency) lets
+  the REST client clear most JS challenges, but endpoint/VPN reputation can
+  still trigger one.
 - Use `jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `src/chat_downloader/sites/`.
@@ -119,5 +137,6 @@ Debug and automation:
   output writers flush before exit. Sending a second signal restores the
   default handler and exits immediately.
 - For deeper platform behavior, see
-  [`youtube-integration-guide.md`](youtube-integration-guide.md) and
-  [`twitch-integration-guide.md`](twitch-integration-guide.md).
+  [`youtube-integration-guide.md`](youtube-integration-guide.md),
+  [`twitch-integration-guide.md`](twitch-integration-guide.md), and
+  [`kick-integration-guide.md`](kick-integration-guide.md).

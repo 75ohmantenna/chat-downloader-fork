@@ -1,6 +1,6 @@
 # chat-downloader-fork
 
-An up to date, enhanced YouTube and Twitch livestream chat logging and
+An up to date, enhanced YouTube, Twitch, and Kick livestream chat logging and
 retrieval tool. Personal fork of
 [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader),
 targeting Python 3.12+ (CI validates 3.12, 3.13, and 3.14) with improved typing, test coverage, and documentation.
@@ -107,6 +107,8 @@ in [`docs/cli-usage.md`](docs/cli-usage.md).
   YouTube capture flow and module map
 - [`docs/twitch-integration-guide.md`](docs/twitch-integration-guide.md) —
   Twitch capture flow and transport map
+- [`docs/kick-integration-guide.md`](docs/kick-integration-guide.md) —
+  Kick Pusher live capture and VOD replay flow
 - [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md) —
   development workflow and validation commands
 

@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-YouTube and Twitch livestream chat CLI plus typed Python API. Python 3.12+;
+YouTube, Twitch, and Kick livestream chat CLI plus typed Python API. Python 3.12+;
 CI validates 3.12, 3.13, and 3.14. This is a personal fork of
 `xenova/chat-downloader`; no upstream support is offered. Do not file issues or
 PRs against upstream for fork-originating problems.
@@ -35,9 +35,10 @@ For deeper context use:
   so CLI help and the typed API stay aligned.
 - CLI help is generated from dataclass metadata; change dataclasses before
   parser wiring.
-- Keep YouTube and Twitch behavior inside their site packages. Do not add
+- Keep YouTube, Twitch, and Kick behavior inside their site packages. The site
+  packages are import-independent (enforced by `lint-imports`); do not add
   cross-site abstractions for remapping, badges, retry, or parser logic unless
-  a real third-site or maintenance-pressure case exists.
+  a genuine shared-maintenance case exists.
 - Use `utils/json_types` accessors (`get_str`, `get_int`, `get_dict`,
   `get_list`, `dig`) for incoming platform JSON. Avoid annotating raw payloads
   as `Any`; reserve `dict[str, Any]` for heterogeneous accumulator dicts.

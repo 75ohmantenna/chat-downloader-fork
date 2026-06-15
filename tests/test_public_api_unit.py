@@ -29,6 +29,8 @@ EXPECTED_TOP_LEVEL: frozenset[str] = frozenset(
         "InvalidParameter",
         "InvalidURL",
         "ItemFormatter",
+        "KickChatDownloader",
+        "KickError",
         "LoginRequired",
         "NoChatReplay",
         "NoContinuation",

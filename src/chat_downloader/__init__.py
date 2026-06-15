@@ -41,6 +41,7 @@ from .models import ChatRequest, DownloaderConfig
 from .output import ContinuousFileWriter, ContinuousWriter
 from .sites import get_all_sites
 from .sites.base import BaseChatDownloader
+from .sites.kick import KickChatDownloader, KickError
 from .sites.models import Chat, Image
 from .sites.remap import Remapper
 from .sites.twitch import TwitchChatDownloader, TwitchError
@@ -71,6 +72,8 @@ __all__ = [
     "InvalidParameter",
     "InvalidURL",
     "ItemFormatter",
+    "KickChatDownloader",
+    "KickError",
     "LoginRequired",
     "NoChatReplay",
     "NoContinuation",

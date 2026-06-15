@@ -261,8 +261,8 @@ CLOUDFLARE_MARKERS = (
 #
 # Kick channel pages live at ``kick.com/{username}``. Reserved first-path
 # segments below are Kick's own site routes and must not be treated as channel
-# names. Multi-segment paths (e.g. ``/{user}/videos/{id}``) are intentionally
-# not matched: VOD/replay chat is out of scope for this initial implementation.
+# names. The ``/{user}/videos/{uuid}`` form is matched separately for VOD chat
+# replay (see ``_get_chat_by_video`` in ``VALID_URLS``).
 
 #: First-path segments that are Kick site routes, not channel names.
 RESERVED_PATHS = (

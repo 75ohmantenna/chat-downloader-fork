@@ -14,6 +14,9 @@ large refactors, parser reshaping, or tooling changes.
 | Twitch live IRC | `sites/twitch/live_service.py`, `irc_transport.py`, `parsing/` | live-service, transport, IRC parser, drift harness tests |
 | Twitch VOD and clip replay | `sites/twitch/replay_service.py`, `_replay_vod_loop.py`, `replay_transport.py` | replay service, replay transport, VOD edge tests |
 | Twitch GraphQL hashes, badges, Client-ID | `graphql_client.py`, `constants.py`, `types.py`, `parsing/badges.py` | Twitch client, hash coverage, badge-purity tests |
+| Kick live Pusher chat | `sites/kick/live_service.py`, `websocket_transport.py`, `api_client.py`, `parsing/` | Kick live-service, transport, api-client, parsing unit tests |
+| Kick VOD replay | `sites/kick/replay_service.py` | Kick replay-service tests |
+| Kick Pusher key discovery, Cloudflare handling, event/group maps | `sites/kick/constants.py`, `api_client.py`, `parsing/events.py` | Kick extractor, api-client, parsing-events tests |
 | Output formats: JSONL, CSV, TXT; no JSON-array `.json` | `output/continuous_write.py`, `output/writers.py` | output writer, continuous-write, CSV injection, JSONL UTC, multiple-output tests |
 | Filtering, formatting, time windows | `sites/filters.py`, `formatting/format.py`, `runtime/chat_pipeline.py` | filtering, formatting, chat-pipeline tests |
 | Cookies, sessions, auth, proxy safety | `chat_downloader.py`, `runtime/session_lifecycle.py`, `sites/session.py`, YouTube auth | session, lifecycle, auth-client, facade redaction tests |
@@ -27,7 +30,7 @@ large refactors, parser reshaping, or tooling changes.
   retry behavior, output persistence, runtime orchestration, or public API
   shape.
 - Promote raw platform drift examples into `tests/fixtures/` before reshaping
-  YouTube or Twitch parser logic.
+  YouTube, Twitch, or Kick parser logic.
 - Keep old public import paths working unless a deliberate compatibility break
   is documented and tested.
 - Do not weaken coverage, import-linter, Any-density, module-size, complexity,

@@ -164,7 +164,8 @@ Coverage reproducibility notes:
   `run()` kwargs should fail fast instead of being silently ignored
 - Keep runtime orchestration in `src/chat_downloader/runtime/`; avoid pushing
   output, timeout, run-loop, or URL-dispatch behavior into site modules
-- Keep site-specific behavior inside the YouTube and Twitch site packages
+- Keep site-specific behavior inside the YouTube, Twitch, and Kick site
+  packages
 - Prefer focused utility modules under `src/chat_downloader/utils/`
   (e.g. `time_utils.py`, `json_utils.py`, `string_utils.py`) over adding
   broad utility or compatibility-style aggregator modules
@@ -175,6 +176,8 @@ Coverage reproducibility notes:
   `client_context.py`, `client_requests_initial.py`,
   `client_requests_continuation.py`, `continuations.py`,
   `chat_streams_runtime_iteration.py`, `message_pipeline.py`, and `parsing/`
+- Use current Kick boundaries: `api_client.py`, `websocket_transport.py`,
+  `live_service.py`, `replay_service.py`, `constants.py`, and `parsing/`
 
 ## Documentation Maintenance
 

@@ -44,7 +44,7 @@ For behavior-preservation coverage see
 
 | Contract | Rule |
 |----------|------|
-| `youtube` ⊥ `twitch` | Independence — neither site package imports the other |
+| `youtube` ⊥ `twitch` ⊥ `kick` | Independence — no site package imports another |
 | `utils` is a leaf | No imports from `sites`, `runtime`, `output`, `formatting`, or `models` |
 | `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, or `sites` |
 
