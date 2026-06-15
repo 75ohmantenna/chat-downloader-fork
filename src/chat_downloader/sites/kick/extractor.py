@@ -3,10 +3,11 @@
 """Kick chat downloader extractor.
 
 Thin routing layer for Kick. URL matching and the public API live here; the
-actual work is delegated to :mod:`chat_downloader.sites.kick.live_service`.
+actual work is delegated to :mod:`chat_downloader.sites.kick.live_service`
+(live chat) and :mod:`chat_downloader.sites.kick.replay_service` (VOD replay).
 
-Scope: unauthenticated, read-only *live* chat only. VOD/replay chat is not
-supported.
+Supports live chat (``kick.com/{username}``) and VOD chat replay
+(``kick.com/{username}/videos/{uuid}``).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from chat_downloader.sites.base import BaseChatDownloader
 from .constants import VALID_URLS
 from .errors import KickError
 from .live_service import get_chat_by_channel as build_channel_chat
+from .replay_service import get_vod_chat as build_vod_chat
 
 if TYPE_CHECKING:
     import re
@@ -29,10 +31,11 @@ __all__ = ["KickChatDownloader", "KickError"]
 
 
 class KickChatDownloader(BaseChatDownloader):
-    """Download public, live chat from Kick channels.
+    """Download public, live chat from Kick channels or VOD replay.
 
-    Supports ``https://kick.com/{username}`` and the ``www`` variant. Live
-    chat only; the channel must be live or an error is raised.
+    Supports:
+    - Live: ``https://kick.com/{username}``
+    - VOD:  ``https://kick.com/{username}/videos/{uuid}``
     """
 
     _NAME = "kick.com"
@@ -71,12 +74,30 @@ class KickChatDownloader(BaseChatDownloader):
         """
         return self.get_chat_by_channel(match.group("id"), params)
 
+    def _get_chat_by_video(
+        self,
+        match: re.Match[str],
+        params: ChatRequest | dict[str, Any],
+    ) -> Chat:
+        """Route a VOD URL match to the replay chat builder.
+
+        Args:
+            match: Regex match with ``id`` (username) and ``video_id`` groups.
+            params: Chat request parameters.
+
+        Returns:
+            A :class:`Chat` that yields historical chat messages for the VOD.
+        """
+        return self.get_chat_by_video(
+            match.group("id"), match.group("video_id"), params
+        )
+
     def get_chat_by_channel(
         self,
         username: str,
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Get live chat for a Kick channel by username.
+        r"""Get live chat for a Kick channel by username.
 
         Args:
             username: Kick channel username/slug (e.g. ``"xqc"``).
@@ -92,3 +113,25 @@ class KickChatDownloader(BaseChatDownloader):
         """
         request = self._coerce_chat_request(params)
         return build_channel_chat(self, username, request)
+
+    def get_chat_by_video(
+        self,
+        username: str,
+        video_id: str,
+        params: ChatRequest | dict[str, Any],
+    ) -> Chat:
+        r"""Get chat replay for a Kick VOD by video UUID.
+
+        Args:
+            username: Kick channel username/slug.
+            video_id: VOD UUID (e.g. ``"4ef9b5aa-89f2-4aee-96c2-e72c1b5a8b4b"``).
+            params: Chat request parameters.
+
+        Returns:
+            A :class:`Chat` that yields historical chat messages.
+
+        Raises:
+            KickError: If the video is not found or metadata is incomplete.
+        """
+        request = self._coerce_chat_request(params)
+        return build_vod_chat(username, video_id, request)

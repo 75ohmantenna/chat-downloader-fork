@@ -44,6 +44,12 @@ PUSHER_WS_URL = (
 #: Template for the public chatroom channel name to subscribe to.
 CHATROOM_CHANNEL_TEMPLATE = "chatrooms.{chatroom_id}.v2"
 
+#: Video metadata endpoint, formatted with a video UUID.
+VIDEO_API_TEMPLATE = "https://kick.com/api/v1/video/{video_id}"
+
+#: Channel messages endpoint (VOD replay), formatted with a channel id.
+CHANNEL_MESSAGES_API = "https://kick.com/api/v2/channels/{channel_id}/messages"
+
 # Pusher protocol event names.
 PUSHER_SUBSCRIBE = "pusher:subscribe"
 PUSHER_CONNECTION_ESTABLISHED = "pusher:connection_established"
@@ -201,6 +207,15 @@ VALID_URLS = {
         rf"(?!(?:{'|'.join(RESERVED_PATHS)})(?:[/?#]|$))"
         rf"(?P<id>{_USERNAME_CHARS})"
         # Single path segment only: reject /{user}/videos/... style paths.
+        r"/?(?:[?#]|$)"
+    ),
+    "_get_chat_by_video": (
+        r"(?x)"
+        r"https?://"
+        r"(?:www\.)?kick\.com/"
+        rf"(?P<id>{_USERNAME_CHARS})"
+        r"/videos/"
+        r"(?P<video_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
         r"/?(?:[?#]|$)"
     ),
 }
