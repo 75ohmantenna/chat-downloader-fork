@@ -1,0 +1,23 @@
+{
+  "id": "sub-001-abc-def",
+  "chatroom_id": 12345,
+  "content": "cooluser95 subscribed!",
+  "type": "subscription",
+  "created_at": "2025-06-14T12:00:00Z",
+  "sender": {
+    "id": 1001,
+    "username": "cooluser95",
+    "slug": "cooluser95",
+    "identity": {
+      "color": "#FF69B4",
+      "badges": [{"type": "subscriber", "text": "3 months", "count": 3}]
+    }
+  },
+  "metadata": {
+    "subscription": {
+      "months": 3,
+      "plan": "primary_1",
+      "gift": false
+    }
+  }
+}

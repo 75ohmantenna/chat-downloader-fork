@@ -8,6 +8,7 @@ import pytest
 
 from chat_downloader.sites import YouTubeChatDownloader, get_all_sites
 from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.sites.kick.extractor import KickChatDownloader
 from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 
 
@@ -135,7 +136,11 @@ def test_valid_urls_dict_structure() -> None:
 def test_get_all_sites() -> None:
     """Test that get_all_sites returns site classes."""
     sites = get_all_sites()
-    assert sites == [TwitchChatDownloader, YouTubeChatDownloader]
+    assert sites == [
+        TwitchChatDownloader,
+        YouTubeChatDownloader,
+        KickChatDownloader,
+    ]
 
     for site in sites:
         assert hasattr(site, "matches")
@@ -148,6 +153,7 @@ def test_get_all_sites_include_parent() -> None:
         BaseChatDownloader,
         TwitchChatDownloader,
         YouTubeChatDownloader,
+        KickChatDownloader,
     ]
 
 

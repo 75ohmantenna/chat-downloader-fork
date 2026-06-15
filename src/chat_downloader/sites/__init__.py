@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from .base import BaseChatDownloader
+from .kick import KickChatDownloader, KickError
 from .models import Chat, Image
 from .remap import Remapper
 from .twitch import TwitchChatDownloader, TwitchError
@@ -14,6 +15,8 @@ __all__ = [
     "BaseChatDownloader",
     "Chat",
     "Image",
+    "KickChatDownloader",
+    "KickError",
     "Remapper",
     "TwitchChatDownloader",
     "TwitchError",
@@ -24,6 +27,7 @@ __all__ = [
 _SITE_CLASSES: tuple[type[BaseChatDownloader], ...] = (
     TwitchChatDownloader,
     YouTubeChatDownloader,
+    KickChatDownloader,
 )
 
 

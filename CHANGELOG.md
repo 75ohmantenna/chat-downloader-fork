@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.3.0 — 2026-06-14
+
+### Kick integration
+
+- **New site: Kick.com live chat support.** Unauthenticated, read-only live chat
+  retrieval via Kick's public Pusher WebSocket. Includes Cloudflare-bypass using
+  `cloudscraper` for the REST API lookup.
+- **Full event coverage:** `ChatMessageEvent` (text), `SubscriptionEvent` (new
+  subscribers), `GiftedSubscriptionsEvent` (gifted subs), `UserBannedEvent`,
+  `UserUnbannedEvent`, `MessageDeletedEvent`, `PinnedMessageCreatedEvent`,
+  `PinnedMessageDeletedEvent`, `StreamHostEvent`, `ChatClearMessagesEvent`.
+- **Message groups:** `"messages"`, `"subscriptions"`, `"moderation"`,
+  `"pins"`, `"hosts"` — use e.g. `--message_groups subscriptions moderation`
+  to capture non-text event types.
+- **Cloudscraper integration:** Kick REST API requests use `cloudscraper` for
+  automatic Cloudflare JS challenge handling, falling back to a standard
+  `requests.Session` with Kick-specific headers when cloudscraper is unavailable.
+- **Preloaded history:** Recent messages fetched on connect and deduplicated
+  against the live feed.
+- **Offline test suite:** 143 Kick-specific tests, all offline, fixtures at
+  `tests/fixtures/kick/`.
+
+### Dependencies
+
+- `websocket-client>=1.7.0,<2.0.0` — synchronous Pusher WebSocket transport.
+- `cloudscraper>=1.2.0,<2.0.0` — Cloudflare JS challenge bypass for REST API.
+
 ## 1.2.0 — 2026-06-12
 
 ### API changes (minor, backward-compatible for keyword callers)

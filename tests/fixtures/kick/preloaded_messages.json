@@ -1,0 +1,35 @@
+{
+  "data": {
+    "messages": [
+      {
+        "id": "preloaded-1",
+        "chatroom_id": 54321,
+        "content": "earlier message [emote:1:Kappa]",
+        "type": "message",
+        "created_at": "2024-01-01T00:00:00+00:00",
+        "sender": {
+          "id": 11,
+          "username": "EarlyUser",
+          "slug": "earlyuser",
+          "identity": {
+            "color": "#00FF00",
+            "badges": [{"type": "subscriber", "text": "Subscriber", "count": 3}]
+          }
+        }
+      },
+      {
+        "id": "preloaded-2",
+        "chatroom_id": 54321,
+        "content": "second earlier message",
+        "type": "message",
+        "created_at": "2024-01-01T00:00:05+00:00",
+        "sender": {
+          "id": 12,
+          "username": "OtherUser",
+          "slug": "otheruser",
+          "identity": {"color": "#0000FF", "badges": []}
+        }
+      }
+    ]
+  }
+}

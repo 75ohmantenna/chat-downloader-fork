@@ -1,0 +1,206 @@
+# SPDX-License-Identifier: MIT
+
+"""Kick chat downloader constants.
+
+URL patterns, API endpoints, Pusher configuration, message-type/group
+definitions, emote parsing patterns, and Cloudflare/challenge markers for the
+Kick site.
+
+All values reflect Kick's *current* public, unauthenticated web/API behavior
+and may break if Kick changes endpoints, the Pusher application key, websocket
+details, or event payloads.
+"""
+
+from __future__ import annotations
+
+import re
+
+# ── HTTP API ──────────────────────────────────────────────────────────────────
+
+#: Base site URL.
+BASE_URL = "https://kick.com"
+
+#: Channel metadata endpoint, formatted with a channel username/slug.
+CHANNEL_API_TEMPLATE = "https://kick.com/api/v2/channels/{username}"
+
+#: Preloaded (recent) messages endpoint, formatted with a numeric channel id.
+MESSAGES_API_TEMPLATE = "https://kick.com/api/v2/channels/{channel_id}/messages"
+
+# ── Pusher websocket ──────────────────────────────────────────────────────────
+
+#: Public Pusher application key used by Kick's web client. This is not a
+#: secret; it is shipped in Kick's public JavaScript bundle and grants only
+#: anonymous, read-only subscription to public chatroom channels.
+PUSHER_APP_KEY = "eb1d5f283081a78b932c"
+
+#: Pusher websocket endpoint. ``protocol``/``client``/``version`` mirror the
+#: values used by Kick's web client for compatibility.
+PUSHER_WS_URL = (
+    "wss://ws-us2.pusher.com/app/"
+    f"{PUSHER_APP_KEY}"
+    "?protocol=7&client=js&version=7.6.0&flash=false"
+)
+
+#: Template for the public chatroom channel name to subscribe to.
+CHATROOM_CHANNEL_TEMPLATE = "chatrooms.{chatroom_id}.v2"
+
+# Pusher protocol event names.
+PUSHER_SUBSCRIBE = "pusher:subscribe"
+PUSHER_CONNECTION_ESTABLISHED = "pusher:connection_established"
+PUSHER_SUBSCRIPTION_SUCCEEDED = "pusher_internal:subscription_succeeded"
+PUSHER_PING = "pusher:ping"
+PUSHER_PONG = "pusher:pong"
+PUSHER_ERROR = "pusher:error"
+
+#: Kick chat-message event name carried inside a Pusher frame's ``event`` field.
+CHAT_MESSAGE_EVENT = "App\\Events\\ChatMessageEvent"
+
+#: Pusher event name for a message being deleted.
+MESSAGE_DELETED_EVENT = "App\\Events\\MessageDeletedEvent"
+
+#: Pusher event name for a message being pinned.
+PINNED_MESSAGE_CREATED_EVENT = "App\\Events\\PinnedMessageCreatedEvent"
+
+#: Pusher event name for a pinned message being removed.
+PINNED_MESSAGE_DELETED_EVENT = "App\\Events\\PinnedMessageDeletedEvent"
+
+#: Pusher event name for a user being banned.
+USER_BANNED_EVENT = "App\\Events\\UserBannedEvent"
+
+#: Pusher event name for a user being unbanned.
+USER_UNBANNED_EVENT = "App\\Events\\UserUnbannedEvent"
+
+#: Pusher event name for a subscription event.
+SUBSCRIPTION_EVENT = "App\\Events\\SubscriptionEvent"
+
+#: Pusher event name for a gifted subscriptions event.
+GIFTED_SUBSCRIPTIONS_EVENT = "App\\Events\\GiftedSubscriptionsEvent"
+
+#: Pusher event name for a stream host event.
+STREAM_HOST_EVENT = "App\\Events\\StreamHostEvent"
+
+#: Pusher event name for a chat clear event.
+CHAT_CLEAR_EVENT = "App\\Events\\ChatClearMessagesEvent"
+
+#: Pusher event name for a reward redemption event.
+REWARD_REDEEMED_EVENT = "App\\Events\\RewardRedeemedEvent"
+
+# ── Event-to-message-type mapping ─────────────────────────────────────────────
+
+#: Maps raw Pusher event names to normalized message types.
+EVENT_NAME_MAP: dict[str, str] = {
+    CHAT_MESSAGE_EVENT: "text_message",
+    MESSAGE_DELETED_EVENT: "message_deleted",
+    PINNED_MESSAGE_CREATED_EVENT: "pinned_message",
+    PINNED_MESSAGE_DELETED_EVENT: "pinned_message_deleted",
+    USER_BANNED_EVENT: "user_banned",
+    USER_UNBANNED_EVENT: "user_unbanned",
+    SUBSCRIPTION_EVENT: "subscription",
+    GIFTED_SUBSCRIPTIONS_EVENT: "gifted_subscriptions",
+    STREAM_HOST_EVENT: "stream_host",
+    CHAT_CLEAR_EVENT: "chat_clear",
+    REWARD_REDEEMED_EVENT: "reward_redeemed",
+}
+
+# ── Message types and groups ──────────────────────────────────────────────────
+
+#: Maps Kick chat ``type`` values to normalized ``message_type`` values.
+MESSAGE_TYPE_REMAPPING = {
+    "message": "text_message",
+    "reply": "text_message",
+    "subscription": "subscription",
+    "gifted_subscriptions": "gifted_subscriptions",
+    "user_banned": "user_banned",
+    "user_unbanned": "user_unbanned",
+    "message_deleted": "message_deleted",
+    "pinned_message": "pinned_message",
+    "pinned_message_deleted": "pinned_message_deleted",
+    "stream_host": "stream_host",
+    "chat_clear": "chat_clear",
+    "reward_redeemed": "reward_redeemed",
+}
+
+#: Default normalized message type for a Kick chat message.
+DEFAULT_MESSAGE_TYPE = "text_message"
+
+#: Maps message-group names to the normalized message types they contain.
+MESSAGE_GROUPS = {
+    "messages": ["text_message"],
+    "subscriptions": ["subscription", "gifted_subscriptions"],
+    "moderation": ["user_banned", "user_unbanned", "message_deleted", "chat_clear"],
+    "pins": ["pinned_message", "pinned_message_deleted"],
+    "hosts": ["stream_host"],
+    "rewards": ["reward_redeemed"],
+}
+
+# ── Emotes ────────────────────────────────────────────────────────────────────
+
+#: Matches Kick inline emote markers, e.g. ``[emote:37233:PogU]`` or
+#: ``[emote:37233:]`` (missing name). Group 1 = id, group 2 = optional name.
+EMOTE_REGEX = re.compile(r"\[emote:(\d+):([^\]]*)\]")
+
+#: Template for an emote's full-size image URL.
+EMOTE_IMAGE_TEMPLATE = "https://files.kick.com/emotes/{emote_id}/fullsize"
+
+#: Source platform recorded on structured emote metadata.
+EMOTE_SOURCE = "kick"
+
+# ── Cloudflare / challenge detection ──────────────────────────────────────────
+
+#: Substrings that, when present in an HTML response body, strongly indicate a
+#: Cloudflare challenge / bot-protection interstitial rather than real content.
+CLOUDFLARE_MARKERS = (
+    "/cdn-cgi/challenge-platform",
+    "cf-challenge",
+    "cf_chl_opt",
+    "Just a moment...",
+    "Attention Required! | Cloudflare",
+    "Checking your browser before accessing",
+)
+
+# ── URL routing ───────────────────────────────────────────────────────────────
+#
+# Kick channel pages live at ``kick.com/{username}``. Reserved first-path
+# segments below are Kick's own site routes and must not be treated as channel
+# names. Multi-segment paths (e.g. ``/{user}/videos/{id}``) are intentionally
+# not matched: VOD/replay chat is out of scope for this initial implementation.
+
+#: First-path segments that are Kick site routes, not channel names.
+RESERVED_PATHS = (
+    "about",
+    "browse",
+    "categories",
+    "category",
+    "clips",
+    "dashboard",
+    "following",
+    "help",
+    "messages",
+    "notifications",
+    "popout",
+    "privacy",
+    "search",
+    "settings",
+    "subscriptions",
+    "support",
+    "terms",
+    "video",
+    "videos",
+)
+
+#: Allowed channel-username characters: letters, digits, underscore, hyphen.
+_USERNAME_CHARS = r"[A-Za-z0-9_-]+"
+
+#: Maps the handler method name to the URL regex it accepts.
+VALID_URLS = {
+    "_get_chat_by_channel": (
+        r"(?x)"
+        r"https?://"
+        r"(?:www\.)?kick\.com/"
+        # Exclude reserved site routes from being treated as channel names.
+        rf"(?!(?:{'|'.join(RESERVED_PATHS)})(?:[/?#]|$))"
+        rf"(?P<id>{_USERNAME_CHARS})"
+        # Single path segment only: reject /{user}/videos/... style paths.
+        r"/?(?:[?#]|$)"
+    ),
+}

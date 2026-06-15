@@ -31,6 +31,7 @@ For behavior-preservation coverage see
 │  base · ...  │   │  ContinuousWriter   │   │  ting/     │
 │  youtube/   │   │  writers.py          │   │            │
 │  twitch/    │   └──────────────────────┘   └────────────┘
+│  kick/      │
 └──────┬──────┘
        │
 ┌──────▼──────────────────────────────────────────────────┐
@@ -161,6 +162,23 @@ For behavior-preservation coverage see
 | `types.py` | Typed Twitch support containers |
 | `url_generation.py` | Twitch URL builders |
 | `validation_keys.py` | Known IRC tag/key validation lists |
+
+### `sites/kick/`
+| Module | Purpose |
+|--------|---------|
+| `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
+| `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with dedup and reconnect |
+| `api_client.py` | Cloudflare-bypass HTTP client for Kick's `api/v2` JSON endpoints |
+| `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |
+| `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
+| `errors.py` | `KickError`, `KickServerError` |
+| `parsing/events.py` | Pusher frame dispatch to typed event parsers |
+| `parsing/messages.py` | Chat message normalization (text messages) |
+| `parsing/emotes.py` | Inline emote marker parsing and structured metadata |
+| `parsing/subscriptions.py` | Subscription and gifted-subscription event normalization |
+| `parsing/moderation.py` | Ban, unban, message-delete, and chat-clear event normalization |
+| `parsing/pins.py` | Pinned-message created/deleted event normalization |
+| `parsing/hosts.py` | Stream-host event normalization |
 
 ---
 

@@ -1,0 +1,19 @@
+{
+  "id": "live-1",
+  "chatroom_id": 54321,
+  "content": "hello world [emote:37233:PogU]",
+  "type": "message",
+  "created_at": "2024-01-01T00:01:00+00:00",
+  "sender": {
+    "id": 99,
+    "username": "LiveUser",
+    "slug": "liveuser",
+    "identity": {
+      "color": "#FF0000",
+      "badges": [
+        {"type": "moderator", "text": "Moderator"},
+        {"type": "subscriber", "text": "Subscriber", "count": 5}
+      ]
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "host-008-qrs-tuv",
+  "chatroom_id": 12345,
+  "content": "Come check out my stream!",
+  "type": "stream_host",
+  "created_at": "2025-06-14T12:35:00Z",
+  "sender": {
+    "id": 4004,
+    "username": "hosting_user",
+    "slug": "hosting_user",
+    "identity": {"color": "#0000FF", "badges": []}
+  },
+  "metadata": {
+    "stream_host": {
+      "host_username": "hosting_user",
+      "number_viewers": 150,
+      "optional_message": "Come check out my stream!"
+    }
+  }
+}

@@ -117,6 +117,20 @@ BASELINE: dict[str, int] = {
     "chat_downloader.py": 5,
     "cli_args.py": 4,
     "request_profiles.py": 3,
+    # Kick site — Any sits at the untyped JSON/Pusher payload boundary and at
+    # the injectable transport/connector callables (parsing untyped chat events
+    # and websocket frames resists TypedDict).
+    "sites/kick/parsing/messages.py": 15,
+    "sites/kick/websocket_transport.py": 7,
+    "sites/kick/live_service.py": 7,
+    "sites/kick/extractor.py": 5,
+    "sites/kick/parsing/events.py": 7,
+    "sites/kick/api_client.py": 4,
+    "sites/kick/parsing/emotes.py": 4,
+    "sites/kick/parsing/subscriptions.py": 13,
+    "sites/kick/parsing/moderation.py": 18,
+    "sites/kick/parsing/pins.py": 11,
+    "sites/kick/parsing/hosts.py": 7,
 }
 
 

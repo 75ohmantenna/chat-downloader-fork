@@ -32,6 +32,8 @@ dependencies = [
     "requests>=2.28.0,<3.0.0",
     "colorlog>=6.7.0,<7.0.0",
     "PySocks>=1.7.1",
+    "websocket-client>=1.7.0,<2.0.0",
+    "cloudscraper>=1.2.0,<2.0.0",
 ]
 
 [dependency-groups]
@@ -173,11 +175,12 @@ exclude_also = [
 root_package = "chat_downloader"
 
 [[tool.importlinter.contracts]]
-name = "youtube and twitch are independent"
+name = "youtube, twitch and kick are independent"
 type = "independence"
 modules = [
     "chat_downloader.sites.youtube",
     "chat_downloader.sites.twitch",
+    "chat_downloader.sites.kick",
 ]
 
 [[tool.importlinter.contracts]]

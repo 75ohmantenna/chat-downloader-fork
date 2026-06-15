@@ -32,6 +32,7 @@ audit and do not replace your own review. **Use at your own risk.**
 | --- | --- |
 | YouTube | Live chat and replay chat (text, paid messages, memberships) |
 | Twitch  | Live IRC chat with broad event coverage; VOD and clip chat replay (text messages) |
+| Kick    | Live Pusher chat with full event coverage (text, subs, gifts, bans, pins, hosts) |
 
 ## Installation
 

@@ -1,0 +1,17 @@
+{
+  "id": 12345,
+  "slug": "examplechannel",
+  "user_id": 67890,
+  "chatroom": {
+    "id": 54321,
+    "chatable_type": "App\\Models\\Channel"
+  },
+  "livestream": {
+    "id": 998877,
+    "session_title": "Example live stream title",
+    "is_live": true
+  },
+  "user": {
+    "username": "ExampleChannel"
+  }
+}
