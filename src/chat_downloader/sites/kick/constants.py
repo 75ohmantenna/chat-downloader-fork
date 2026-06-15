@@ -31,7 +31,7 @@ MESSAGES_API_TEMPLATE = "https://kick.com/api/v2/channels/{channel_id}/messages"
 #: Public Pusher application key used by Kick's web client. This is not a
 #: secret; it is shipped in Kick's public JavaScript bundle and grants only
 #: anonymous, read-only subscription to public chatroom channels.
-PUSHER_APP_KEY = "eb1d5f283081a78b932c"
+PUSHER_APP_KEY = "32cbd69e4b950bf97679"
 
 #: Pusher websocket endpoint. ``protocol``/``client``/``version`` mirror the
 #: values used by Kick's web client for compatibility.

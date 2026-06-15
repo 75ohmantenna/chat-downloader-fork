@@ -77,8 +77,12 @@ def test_resolve_channel_missing_chatroom_id() -> None:
 
 def test_resolve_channel_offline() -> None:
     data = load_fixture("channel_offline.json")
-    with pytest.raises(KickError, match="offline"):
-        live_service._resolve_channel(data, "examplechannel")
+    channel_id, chatroom_id, title = live_service._resolve_channel(
+        data, "examplechannel"
+    )
+    assert channel_id == "12345"
+    assert chatroom_id == "54321"
+    assert title == "examplechannel"
 
 
 def test_resolve_channel_live_without_title_falls_back_to_username() -> None:
@@ -288,14 +292,15 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
         assert created[0].close_count >= 1
 
 
-def test_get_chat_by_channel_offline_raises_eagerly() -> None:
+def test_get_chat_by_channel_offline_succeeds_with_offline_title() -> None:
     downloader = FakeDownloader()
     session = FakeKickSession([FakeResponse(200, load_fixture("channel_offline.json"))])
-    with (
-        patch(
-            "chat_downloader.sites.kick.api_client._get_kick_session",
-            return_value=session,
-        ),
-        pytest.raises(KickError, match="offline"),
+    with patch(
+        "chat_downloader.sites.kick.api_client._get_kick_session",
+        return_value=session,
     ):
-        live_service.get_chat_by_channel(downloader, "examplechannel", _request())
+        chat = live_service.get_chat_by_channel(
+            downloader, "examplechannel", _request()
+        )
+        assert chat.title == "examplechannel"
+        assert chat.status == "idle"

@@ -7,6 +7,9 @@ streams live chat from the Pusher websocket — deduplicating across the two
 sources and filtering by the requested message groups/types. The websocket
 transport and frame iterator are injectable so this module is fully testable
 without live Kick access.
+
+The chatroom is active even when the channel is offline; the Pusher websocket
+streams messages regardless of stream status.
 """
 
 from __future__ import annotations
@@ -36,9 +39,7 @@ if TYPE_CHECKING:
 
     from .extractor import KickChatDownloader
 
-# Kick live dedup window. Generous enough to absorb the overlap between
-# preloaded history and the live feed, plus reconnect replays.
-_LIVE_SEEN_MESSAGE_LIMIT = 10_000
+_KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
 
 
 def _fetch_channel_with_retry(
@@ -74,6 +75,10 @@ def _resolve_channel(
 ) -> tuple[str, str, str]:
     """Resolve channel id, chatroom id, and title from metadata.
 
+    The chatroom is active even when the channel is offline — this function
+    does *not* reject offline channels.  If the channel is offline the title
+    falls back to the username.
+
     Args:
         data: Channel metadata object.
         username: Channel username/slug.
@@ -82,8 +87,8 @@ def _resolve_channel(
         A ``(channel_id, chatroom_id, title)`` tuple.
 
     Raises:
-        KickError: If the channel id or chatroom id is missing, or the channel
-            is offline (live chat is the only supported scope).
+        KickError: If the channel id or chatroom id is missing, making chat
+            retrieval impossible.
     """
     raw_channel_id = data.get("id")
     if raw_channel_id is None:
@@ -98,16 +103,19 @@ def _resolve_channel(
 
     livestream = data.get("livestream")
     if not isinstance(livestream, dict):
-        log("warning", f'Kick channel "{username}" is not currently live.')
-        msg = (
-            f'Kick channel "{username}" is offline; live chat is unavailable. '
-            "VOD/replay chat is not supported."
-        )
-        raise KickError(msg)
+        log("info", f'Kick channel "{username}" is offline; chatroom is still active.')
+        title = username
+    else:
+        raw_title = livestream.get("session_title")
+        title = str(raw_title) if raw_title else username
 
-    raw_title = livestream.get("session_title")
-    title = str(raw_title) if raw_title else username
     return str(raw_channel_id), str(raw_chatroom_id), title
+
+
+def _is_live_status(data: dict[str, Any]) -> bool:
+    """Return ``True`` if the channel metadata indicates a live stream."""
+    livestream = data.get("livestream")
+    return isinstance(livestream, dict)
 
 
 def get_chat_by_channel(
@@ -120,6 +128,8 @@ def get_chat_by_channel(
 ) -> Chat:
     """Build a live :class:`Chat` for a Kick channel.
 
+    Works for both live and offline channels — the chatroom is always active.
+
     Args:
         downloader: The Kick downloader.
         username: Channel username/slug.
@@ -131,14 +141,10 @@ def get_chat_by_channel(
 
     Returns:
         A configured :class:`Chat` whose generator yields normalized messages.
-
-    Raises:
-        UserNotFound: If the channel does not exist.
-        CaptchaChallengeRequired: If Kick returns a challenge page.
-        KickError: If metadata is incomplete or the channel is offline.
     """
     data = _fetch_channel_with_retry(downloader, username, request)
     channel_id, chatroom_id, title = _resolve_channel(data, username)
+    status = "live" if _is_live_status(data) else "idle"
 
     return Chat(
         _iter_chat_messages(
@@ -151,7 +157,7 @@ def get_chat_by_channel(
             frame_iterator=frame_iterator,
         ),
         title=title,
-        status="live",
+        status=status,
         video_type="video",
         id=username,
     )
@@ -207,7 +213,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
         request.message_groups if isinstance(request.message_groups, list) else None,
         request.message_types or [],
     )
-    seen_message_cache = _SeenMessageCache(limit=_LIVE_SEEN_MESSAGE_LIMIT)
+    seen_message_cache = _SeenMessageCache(limit=_KICK_LIVE_SEEN_MESSAGE_LIMIT)
 
     def emit(message: dict[str, Any]) -> bool:
         message_id = message.get("message_id")
@@ -241,8 +247,6 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
                     downloader, chatroom_id, request, transport_factory
                 )
             else:
-                # Finite injected iterators end here; the production generator
-                # is open-ended.
                 break
     finally:
         transport.close()
