@@ -73,9 +73,16 @@ class FakeDownloader:
 
     retry = staticmethod(_perform_retry)
 
-    def __init__(self, responses: list[Any] | None = None) -> None:
+    def __init__(
+        self,
+        responses: list[Any] | None = None,
+        *,
+        connect_timeout: float = 10.0,
+        read_timeout: float = 30.0,
+    ) -> None:
         self._responses = list(responses or [])
         self.requested_urls: list[str] = []
+        self._http_timeout = (connect_timeout, read_timeout)
 
     def _session_get(self, url: str, **_kwargs: Any) -> Any:
         self.requested_urls.append(url)
@@ -129,16 +136,20 @@ class FakeTransport:
         self._connect_errors = connect_errors
         self.connected = False
         self.subscribed_to: str | None = None
-        self.timeout: float | None = None
+        self.connect_timeout: float | None = None
+        self.receive_timeout: float | None = None
         self.close_count = 0
 
     def connect(self, timeout: float | None) -> None:
-        self.timeout = timeout
+        self.connect_timeout = timeout
         if self._connect_errors > 0:
             self._connect_errors -= 1
             msg = "fake connect failure"
             raise ConnectionError(msg)
         self.connected = True
+
+    def set_timeout(self, timeout: float | None) -> None:
+        self.receive_timeout = timeout
 
     def subscribe(self, chatroom_id: str) -> None:
         self.subscribed_to = chatroom_id

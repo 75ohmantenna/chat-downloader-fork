@@ -236,8 +236,9 @@ def _open_subscribed_transport(
         transport._http_proxy_host = http_proxy_host
         transport._http_proxy_port = http_proxy_port
         try:
-            transport.connect(request.message_receive_timeout)
+            transport.connect(downloader._http_timeout[0])
             transport.subscribe(chatroom_id)
+            transport.set_timeout(request.message_receive_timeout)
         except ConnectionError as error:
             transport.close()
             downloader.retry(attempt_number, error=error, request=request)
