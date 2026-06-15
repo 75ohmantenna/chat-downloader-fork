@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.0 — 2026-06-15
+
+### Chores
+
+- Removed `.hermes/` directory from git tracking and added to `.gitignore`.
+
+### Docs
+
+- Trimmed README: removed local-checkout reinstall and day-to-day development
+  sections; Documentation section already links to all three platform
+  implementation guides (YouTube, Twitch, Kick).
+
 ## 1.4.0 — 2026-06-15
 
 ### Fixes

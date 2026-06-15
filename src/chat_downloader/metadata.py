@@ -20,4 +20,4 @@ __copyright__ = "2020-2026 xenova and upstream contributors; 2025-2026 75ohmante
 __url__ = "https://github.com/75ohmantenna/chat-downloader-fork"
 __original_author__ = "xenova"
 __upstream_url__ = "https://github.com/xenova/chat-downloader"
-__version__ = "1.4.0"
+__version__ = "1.5.0"
