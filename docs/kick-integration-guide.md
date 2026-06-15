@@ -9,6 +9,14 @@ The Kick stack is split across two transport families:
 - Kick's public, unauthenticated `api/v2` JSON REST API for channel metadata,
   preloaded history, and VOD replay messages.
 
+Kick also publishes official developer documentation at
+<https://docs.kick.com/> and source docs at
+<https://github.com/KickEngineering/KickDevDocs>. That official Public API is
+OAuth-scoped and lives under `https://api.kick.com/public/v1/...`. The current
+downloader does **not** use it for capture, because the documented Chat API is
+for sending/deleting messages and the documented Events API is webhook-based;
+neither provides unauthenticated live chat replay or a public read-chat stream.
+
 Unlike Twitch and YouTube, Kick exposes no private GraphQL/InnerTube layer; the
 fragility points are the Pusher application key, the WebSocket event payload
 shapes, and Cloudflare bot-protection on the REST endpoints.
@@ -96,9 +104,11 @@ The Kick flow depends on the target type.
 ### Transport and API access
 
 - `api_client.py`: Cloudflare-aware HTTP client for the `api/v2` JSON
-  endpoints. Owns the lazy session singleton (`_get_kick_session`), challenge
-  detection, not-found handling, and transient-error classification. Does no
-  content parsing.
+  endpoints served from `kick.com`. This is the unauthenticated web/API path,
+  not Kick's official OAuth-scoped Public API at `api.kick.com/public/v1`.
+  Owns the lazy session singleton (`_get_kick_session`), challenge detection,
+  not-found handling, and transient-error classification. Does no content
+  parsing.
 - `websocket_transport.py`: the *only* module that imports `websocket-client`.
   Exposes a small parsing-free interface (`connect` / `subscribe` / `recv` /
   `send_pong` / `close`) plus the `read_frames` generator. The connector is
@@ -131,6 +141,36 @@ The Kick flow depends on the target type.
 There is no `client.py` facade in the Kick package. Import focused modules
 directly for patch points: `api_client.py` for REST, `websocket_transport.py`
 for the live feed, and `parsing/` for message shaping.
+
+## Official Public API Reference
+
+The official Kick Dev Docs are useful maintenance references, but they are not
+drop-in replacements for this tool's current capture path.
+
+Relevant documented surfaces:
+
+| Official surface | Usefulness to this project |
+| --- | --- |
+| `GET /public/v1/channels` | Authenticated channel metadata by slug or broadcaster id. Useful as a field-name reference (`slug`, `broadcaster_user_id`, `stream`, `viewer_count`, `stream_title`) and a possible future authenticated metadata fallback. |
+| `GET /public/v1/livestreams` | Authenticated livestream metadata (`channel_id`, `slug`, `started_at`, `viewer_count`, title/category fields). Useful for comparing live-status semantics, but not currently needed for unauthenticated capture. |
+| `POST /public/v1/chat` and `DELETE /public/v1/chat/{message_id}` | Write/moderation APIs only. They do not read chat and should not be wired into the downloader's read-only capture flow. |
+| Webhook event `chat.message.sent` | Best official schema reference for message fields (`message_id`, `replies_to`, `sender.identity.badges`, `content`, `emotes`, `created_at`). Use it to sanity-check parser fixtures and output-field expectations. |
+| Webhook events `channel.subscription.*`, `moderation.banned`, `kicks.gifted` | Useful shape references for subscription/moderation/gift-style events. They are webhook payloads, not Pusher payloads, so treat differences as evidence to investigate rather than direct parser contracts. |
+
+Known gaps:
+
+- The official docs do not document `https://kick.com/api/v2/channels/{slug}`,
+  `https://kick.com/api/v2/channels/{id}/messages`, or the VOD
+  `api/v1/video/{uuid}` endpoint this tool currently uses.
+- The official docs do not document Pusher event names such as
+  `App\Events\ChatMessageEvent`, `App\Events\PinnedMessageCreatedEvent`, or
+  `App\Events\PinnedMessageDeletedEvent`.
+- The official docs do not document the Pusher app-key discovery path
+  (`NEXT_PUBLIC_PUSHER_KEY`) or the anonymous `chatrooms.{id}.v2`
+  subscription channel.
+- A future authenticated mode would need new user-facing init/request fields in
+  `src/chat_downloader/models/` first, so CLI help and the typed API remain in
+  sync.
 
 ## Live Capture Details
 
@@ -246,6 +286,9 @@ The Kick stack is most sensitive to changes in:
 - Cloudflare bot-protection on the REST endpoints
 - channel/video metadata structure (`chatroom.id`, `livestream`, `start_time`,
   `duration`)
+- divergence between official webhook schemas and live Pusher payloads; the
+  official docs are schema hints, not authoritative contracts for the Pusher
+  path
 
 When debugging Kick breakage, inspect modules in this order:
 

@@ -23,6 +23,28 @@ the full rationale behind deferred items.
 
 ---
 
+## Active watchlist
+
+### Kick official Public API
+**Status: open/watch** — use as a schema and future-option reference; do not
+rewrite the live capture path without evidence that it can read public chat.
+
+- Kick's official docs live at <https://docs.kick.com/> and the source docs at
+  <https://github.com/KickEngineering/KickDevDocs>. They document an
+  OAuth-scoped `api.kick.com/public/v1` API, distinct from the current
+  unauthenticated `kick.com/api/v2` and Pusher paths.
+- Currently useful references: `GET /public/v1/channels`,
+  `GET /public/v1/livestreams`, webhook `chat.message.sent`, subscription,
+  moderation, and `kicks.gifted` payload examples.
+- Current non-goals: use `POST /public/v1/chat` or
+  `DELETE /public/v1/chat/{message_id}` in read-only capture; these are write
+  and moderation APIs.
+- Revisit only if Kick documents or exposes an authenticated read-chat,
+  replay-chat, or websocket/event-subscription API that covers the current
+  unauthenticated capture behavior.
+
+---
+
 ## Any-density stable boundaries
 
 These baselines are frozen. Do not lower without re-reading `maintenance-notes.md`.

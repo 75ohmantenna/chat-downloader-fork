@@ -168,7 +168,7 @@ For behavior-preservation coverage see
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
 | `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with dedup and reconnect |
-| `api_client.py` | Cloudflare-bypass HTTP client for Kick's `api/v2` JSON endpoints |
+| `api_client.py` | Cloudflare-bypass HTTP client for Kick's unauthenticated `kick.com/api/v2` JSON endpoints; separate from the official OAuth-scoped `api.kick.com/public/v1` API |
 | `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
 | `errors.py` | `KickError`, `KickServerError` |
