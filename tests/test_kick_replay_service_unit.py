@@ -159,3 +159,13 @@ class TestClassifyMessage:
         parsed, done = replay_service._classify_message(msg, start, end)
         assert parsed is None
         assert not done
+
+    def test_naive_timestamp_normalized_to_utc(self) -> None:
+        start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
+        # created_at has no timezone info — fix normalizes it to UTC
+        msg = self._make_msg("2026-01-01T00:30:00")
+        parsed, done = replay_service._classify_message(msg, start, end)
+        assert parsed is not None
+        assert parsed["message_type"] == "text_message"
+        assert not done

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -49,6 +49,71 @@ class _NoRetryDownloader:
         if isinstance(result, Exception):
             raise result
         return result
+
+
+# ── _resolve_proxy ────────────────────────────────────────────────────────────
+
+
+class _DownloaderWithProxy:
+    """Minimal downloader stub with a session that has proxy configured."""
+
+    def __init__(self) -> None:
+        self.session = MagicMock()
+        self.session.proxies = {"https": "http://proxy.example:8080"}
+
+
+class _DownloaderWithEmptyProxy:
+    """Downloader with a session but no proxy configured."""
+
+    def __init__(self) -> None:
+        self.session = MagicMock()
+        self.session.proxies = {}
+
+
+def test_resolve_proxy_returns_proxy_dict() -> None:
+    proxy = live_service._resolve_proxy(_DownloaderWithProxy())
+    assert proxy == {"https": "http://proxy.example:8080"}
+
+
+def test_resolve_proxy_returns_none_for_empty_proxies() -> None:
+    proxy = live_service._resolve_proxy(_DownloaderWithEmptyProxy())
+    assert proxy is None
+
+
+def test_resolve_proxy_returns_none_without_session() -> None:
+    proxy = live_service._resolve_proxy(object())
+    assert proxy is None
+
+
+# ── _resolve_ws_proxy ─────────────────────────────────────────────────────────
+
+
+def test_resolve_ws_proxy_returns_host_port() -> None:
+    downloader = _DownloaderWithProxy()
+    host, port = live_service._resolve_ws_proxy(downloader)
+    assert host == "proxy.example"
+    assert port == 8080
+
+
+def test_resolve_ws_proxy_returns_none_for_empty_proxies() -> None:
+    host, port = live_service._resolve_ws_proxy(_DownloaderWithEmptyProxy())
+    assert host is None
+    assert port is None
+
+
+def test_resolve_ws_proxy_returns_none_without_session() -> None:
+    host, port = live_service._resolve_ws_proxy(object())
+    assert host is None
+    assert port is None
+
+
+def test_resolve_ws_proxy_returns_none_for_empty_url() -> None:
+    """Proxies with empty string value yields None."""
+    downloader = _DownloaderWithEmptyProxy()
+    downloader.session.proxies = {"https": ""}
+    host, port = live_service._resolve_ws_proxy(downloader)
+    assert host is None
+    assert port is None
 
 
 # ── _resolve_channel ──────────────────────────────────────────────────────────

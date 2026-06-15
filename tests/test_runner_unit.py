@@ -480,6 +480,28 @@ def test_execute_run_logs_cleanup_errors_when_primary_error_occurs(
     )
 
 
+def test_execute_run_detects_write_errors(
+    monkeypatch: Any,
+) -> None:
+    """A chat with write_error_count > 0 sets result.success = False."""
+
+    class _WriteErrorChat(_FakeChat):
+        write_error_count = 1
+
+    class _WriteErrorDownloader(_FakeDownloader):
+        def get_chat(self, **kwargs: Any) -> _WriteErrorChat:
+            return _WriteErrorChat()
+
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda level, message: None,
+    )
+    result = execute_run(_WriteErrorDownloader)
+    assert result.success is False
+    assert result.error_message is not None
+    assert "output writers reported errors" in result.error_message
+
+
 def test_execute_run_raises_downloader_close_error_when_no_primary_error(
     monkeypatch,
 ) -> None:

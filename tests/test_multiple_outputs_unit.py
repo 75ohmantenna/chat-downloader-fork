@@ -96,3 +96,34 @@ def test_no_writers_attached(tmp_path: pathlib.Path) -> None:
 
     assert len(chat._output_dispatcher.writers) == 0
     assert len(list(chat)) == 1
+
+
+def test_write_error_count_tracks_close_failures(tmp_path: pathlib.Path) -> None:
+    """A writer that fails on close increments write_error_count."""
+    from chat_downloader.output.continuous_write import ContinuousWriter
+
+    chat = Chat(
+        chat=iter([{"message": "x", "author": {"name": "u"}}]),
+        title="Test",
+        id="test",
+    )
+    formatter = ItemFormatter()
+    chat.set_formatter(lambda msg: formatter.format(msg, format_name="default"))
+
+    writer = ContinuousWriter(
+        str(tmp_path / "fails.jsonl"), overwrite=True, lazy_initialise=True
+    )
+    # Patch close to raise
+    original_close = writer.close
+
+    def _failing_close() -> None:
+        original_close()
+        msg = "write error"
+        raise OSError(msg)
+
+    writer.close = _failing_close  # type: ignore[method-assign]
+    chat.attach_writer(writer)
+    list(chat)  # consume
+    chat.close()
+
+    assert chat.write_error_count > 0
