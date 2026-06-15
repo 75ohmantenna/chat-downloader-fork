@@ -1,12 +1,17 @@
 # Changelog
 
-## 1.3.0 — 2026-06-14
+## 1.3.0 — 2026-06-15
 
 ### Kick integration
 
-- **New site: Kick.com live chat support.** Unauthenticated, read-only live chat
-  retrieval via Kick's public Pusher WebSocket. Includes Cloudflare-bypass using
-  `cloudscraper` for the REST API lookup.
+- **New site: Kick.com chat support.** Unauthenticated, read-only chat
+  retrieval for live channels (`kick.com/{username}`) via Kick's public Pusher
+  WebSocket, and VOD chat replay (`kick.com/{username}/videos/{uuid}`) via the
+  REST message history API. Includes Cloudflare-bypass using `cloudscraper` for
+  the REST API lookups.
+- **VOD chat replay:** Past-broadcast chat is reconstructed by paginating the
+  channel message history and filtering to the VOD's time window, yielded in
+  chronological order.
 - **Full event coverage:** `ChatMessageEvent` (text), `SubscriptionEvent` (new
   subscribers), `GiftedSubscriptionsEvent` (gifted subs), `UserBannedEvent`,
   `UserUnbannedEvent`, `MessageDeletedEvent`, `PinnedMessageCreatedEvent`,
@@ -19,7 +24,11 @@
   `requests.Session` with Kick-specific headers when cloudscraper is unavailable.
 - **Preloaded history:** Recent messages fetched on connect and deduplicated
   against the live feed.
-- **Offline test suite:** 143 Kick-specific tests, all offline, fixtures at
+- **Auto-discovered Pusher key:** The Pusher application key is discovered from
+  Kick's public JS bundle at runtime, falling back to a compiled-in default.
+- **Public API:** `KickChatDownloader` and `KickError` are exported from the
+  top-level `chat_downloader` package and included in `get_all_sites()`.
+- **Offline test suite:** 154 Kick-specific tests, all offline, fixtures at
   `tests/fixtures/kick/`.
 
 ### Dependencies
