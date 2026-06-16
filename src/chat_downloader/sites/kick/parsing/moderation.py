@@ -17,7 +17,7 @@ from chat_downloader.sites.kick.parsing.messages import _opt_str
 from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
 
-def _parse_moderator(raw_mod: Any) -> dict[str, Any]:
+def _parse_moderator(raw_mod: object) -> dict[str, Any]:
     """Extract a minimal moderator/user reference.
 
     Args:
@@ -41,7 +41,7 @@ def _parse_moderator(raw_mod: Any) -> dict[str, Any]:
     return result
 
 
-def parse_user_banned_event(raw: Any) -> dict[str, Any]:
+def parse_user_banned_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick user-banned event.
 
     Args:
@@ -100,7 +100,7 @@ def parse_user_banned_event(raw: Any) -> dict[str, Any]:
     return info
 
 
-def parse_user_unbanned_event(raw: Any) -> dict[str, Any]:
+def parse_user_unbanned_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick user-unbanned event.
 
     Args:
@@ -149,7 +149,7 @@ def parse_user_unbanned_event(raw: Any) -> dict[str, Any]:
     return info
 
 
-def parse_message_deleted_event(raw: Any) -> dict[str, Any]:
+def parse_message_deleted_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick message-deleted event.
 
     Args:
@@ -191,7 +191,7 @@ def parse_message_deleted_event(raw: Any) -> dict[str, Any]:
     return info
 
 
-def parse_chat_clear_event(raw: Any) -> dict[str, Any]:
+def parse_chat_clear_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick chat-clear event.
 
     Args:

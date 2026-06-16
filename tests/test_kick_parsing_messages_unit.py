@@ -117,3 +117,23 @@ def test_parse_preloaded_skips_unparseable() -> None:
         [{"id": "ok", "content": "hi"}, {"no": "id"}, "garbage"]
     )
     assert [m["message_id"] for m in parsed] == ["ok"]
+
+
+# --- int-id coercion regression (Round-13) -----------------------------------
+# Kick sends numeric ids in some contexts.  _opt_str must coerce them to str
+# rather than rejecting them (which get_str would do).  Pin the invariant so
+# a future accessor swap cannot silently break numeric-id handling.
+
+
+def test_top_level_numeric_id_coerced_to_str() -> None:
+    """parse_chat_message accepts a numeric top-level id and stringifies it."""
+    msg = parse_chat_message({"id": 12345, "content": "hi"})
+    assert msg["message_id"] == "12345"
+
+
+def test_top_level_numeric_id_in_preloaded() -> None:
+    """parse_preloaded_messages coerces numeric ids in a batch."""
+    parsed = parse_preloaded_messages(
+        [{"id": 99, "content": "a"}, {"id": "str", "content": "b"}]
+    )
+    assert [m["message_id"] for m in parsed] == ["99", "str"]

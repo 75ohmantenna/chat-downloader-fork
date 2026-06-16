@@ -56,7 +56,7 @@ _KNOWN_CONTROL_EVENTS = frozenset(
 )
 
 #: Maps normalised message types to their parser functions.
-_PARSER_DISPATCH: dict[str, Callable[[Any], dict[str, Any] | None]] = {
+_PARSER_DISPATCH: dict[str, Callable[[object], dict[str, Any] | None]] = {
     "text_message": parse_chat_message,
     "subscription": parse_subscription_event,
     "gifted_subscriptions": parse_gifted_subscriptions_event,
@@ -70,7 +70,7 @@ _PARSER_DISPATCH: dict[str, Callable[[Any], dict[str, Any] | None]] = {
 }
 
 
-def _decode_event_data(data: Any) -> Any:
+def _decode_event_data(data: object) -> object:
     """Decode a Pusher frame's ``data`` field.
 
     Kick double-encodes event payloads: ``data`` is a JSON *string* that must
@@ -94,7 +94,7 @@ def _decode_event_data(data: Any) -> Any:
     return data
 
 
-def dispatch_event(frame: Mapping[str, Any]) -> dict[str, Any] | None:
+def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
     """Dispatch one decoded Pusher frame to its handler.
 
     Args:

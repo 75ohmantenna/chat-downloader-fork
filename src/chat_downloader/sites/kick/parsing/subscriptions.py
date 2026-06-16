@@ -16,7 +16,7 @@ from chat_downloader.sites.kick.parsing.messages import _opt_str, _parse_author
 from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
 
-def _parse_subscription_meta(raw_meta: Any) -> dict[str, Any]:
+def _parse_subscription_meta(raw_meta: object) -> dict[str, Any]:
     """Extract structured subscription metadata.
 
     Args:
@@ -44,7 +44,7 @@ def _parse_subscription_meta(raw_meta: Any) -> dict[str, Any]:
     return meta
 
 
-def _parse_gifted_meta(raw_meta: Any) -> dict[str, Any]:
+def _parse_gifted_meta(raw_meta: object) -> dict[str, Any]:
     """Extract structured gifted-subscription metadata.
 
     Args:
@@ -81,7 +81,7 @@ def _parse_gifted_meta(raw_meta: Any) -> dict[str, Any]:
     return meta
 
 
-def parse_subscription_event(raw: Any) -> dict[str, Any]:
+def parse_subscription_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick subscription event.
 
     Args:
@@ -128,7 +128,7 @@ def parse_subscription_event(raw: Any) -> dict[str, Any]:
     return info
 
 
-def parse_gifted_subscriptions_event(raw: Any) -> dict[str, Any]:
+def parse_gifted_subscriptions_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick gifted-subscriptions event.
 
     Args:

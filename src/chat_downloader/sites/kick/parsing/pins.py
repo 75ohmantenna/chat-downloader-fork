@@ -17,7 +17,7 @@ from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
 
 def _extract_pinned_message(
-    raw_message: Any, info: dict[str, Any], metadata: dict[str, Any]
+    raw_message: object, info: dict[str, Any], metadata: dict[str, Any]
 ) -> None:
     """Extract pinned message fields into info and metadata dicts.
 
@@ -49,7 +49,7 @@ def _extract_pinned_message(
             )
 
 
-def parse_pinned_message_created_event(raw: Any) -> dict[str, Any]:
+def parse_pinned_message_created_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick pinned-message-created event.
 
     Args:
@@ -97,7 +97,7 @@ def parse_pinned_message_created_event(raw: Any) -> dict[str, Any]:
     return info
 
 
-def parse_pinned_message_deleted_event(raw: Any) -> dict[str, Any]:
+def parse_pinned_message_deleted_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick pinned-message-deleted event.
 
     Args:

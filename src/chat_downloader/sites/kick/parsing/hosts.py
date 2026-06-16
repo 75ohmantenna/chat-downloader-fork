@@ -15,7 +15,7 @@ from chat_downloader.sites.kick.parsing.messages import _opt_str, _parse_author
 from chat_downloader.utils.time_utils import timestamp_to_microseconds
 
 
-def _extract_host_metadata(raw_meta: Any) -> dict[str, Any]:
+def _extract_host_metadata(raw_meta: object) -> dict[str, Any]:
     """Extract structured stream-host metadata.
 
     Args:
@@ -45,7 +45,7 @@ def _extract_host_metadata(raw_meta: Any) -> dict[str, Any]:
     return host_meta
 
 
-def parse_stream_host_event(raw: Any) -> dict[str, Any]:
+def parse_stream_host_event(raw: object) -> dict[str, Any]:
     """Normalize a Kick stream-host event.
 
     Args:

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 
-def _opt_str(value: Any) -> str | None:
+def _opt_str(value: object) -> str | None:
     """Stringify a present value, returning ``None`` when it is absent.
 
     Unlike ``str_or_none``, a ``None`` input maps to ``None`` (not the string
@@ -38,7 +38,7 @@ def _opt_str(value: Any) -> str | None:
     return None if value is None else str(value)
 
 
-def _parse_badges(raw_badges: Any) -> list[dict[str, Any]]:
+def _parse_badges(raw_badges: object) -> list[dict[str, Any]]:
     """Convert Kick identity badges into normalized badge dictionaries.
 
     Args:
@@ -71,7 +71,7 @@ def _parse_badges(raw_badges: Any) -> list[dict[str, Any]]:
     return badges
 
 
-def _parse_author(raw_sender: Any) -> dict[str, Any]:
+def _parse_author(raw_sender: object) -> dict[str, Any]:
     """Build the normalized ``author`` sub-dictionary from a Kick sender.
 
     Args:
@@ -109,7 +109,7 @@ def _parse_author(raw_sender: Any) -> dict[str, Any]:
     return author
 
 
-def parse_chat_message(raw: Any) -> dict[str, Any]:
+def parse_chat_message(raw: object) -> dict[str, Any]:
     """Normalize one Kick chat message object.
 
     Args:
@@ -158,7 +158,7 @@ def parse_chat_message(raw: Any) -> dict[str, Any]:
     return info
 
 
-def parse_preloaded_messages(raw_messages: Iterable[Any]) -> list[dict[str, Any]]:
+def parse_preloaded_messages(raw_messages: Iterable[object]) -> list[dict[str, Any]]:
     """Normalize a batch of preloaded history messages, skipping bad entries.
 
     Args:

@@ -389,3 +389,19 @@ def test_stream_host_missing_optional_fields() -> None:
 def test_stream_host_non_dict_raises() -> None:
     with pytest.raises(ParsingError):
         parse_stream_host_event(None)
+
+
+# --- int-id coercion regression (Round-13) -----------------------------------
+# Moderation events can have numeric top-level ids; _opt_str must stringify them.
+
+
+def test_user_banned_numeric_id_coerced() -> None:
+    """parse_user_banned_event accepts a numeric id and stringifies it."""
+    msg = parse_user_banned_event({"id": 777})
+    assert msg["message_id"] == "777"
+
+
+def test_user_unbanned_numeric_id_coerced() -> None:
+    """parse_user_unbanned_event accepts a numeric id and stringifies it."""
+    msg = parse_user_unbanned_event({"id": 42})
+    assert msg["message_id"] == "42"
