@@ -117,20 +117,31 @@ BASELINE: dict[str, int] = {
     "chat_downloader.py": 5,
     "cli_args.py": 4,
     "request_profiles.py": 3,
-    # Kick site — Any sits at the untyped JSON/Pusher payload boundary and at
-    # the injectable transport/connector callables (parsing untyped chat events
-    # and websocket frames resists TypedDict).
-    "sites/kick/parsing/messages.py": 15,
-    "sites/kick/websocket_transport.py": 7,
-    "sites/kick/live_service.py": 8,
-    "sites/kick/parsing/events.py": 7,
-    "sites/kick/api_client.py": 9,
+    # Kick site — transport/session callables, injectable Callable[...,Any]
+    # seams, and assembled-output accumulators (info/metadata/author) remain Any.
+    # Round-13: parsing-layer params narrowed from Any to object/Mapping[str,object]
+    # (param-annotation-only; extraction logic via _opt_str unchanged).
+    # Round-14: HTTP-response boundaries (api_client) and websocket-frame boundary
+    # (websocket_transport) migrated to JSONAny/JSONDict/JSONList + cast().
+    # Downstream callers (live_service, replay_service) param-narrowed accordingly.
+    # api_client.py retains Any from the curl-cffi/cloudscraper session backend
+    # (the multi-tier impersonation session is typed Any).
+    # Residuals per Round-11/13/14 taxonomy: Callable[...,Any] transport params,
+    # injectable connectors, ws-object Any, assembled-output dicts.
+    # emotes.py: inputs already typed (content: str); all Any are output accumulators.
+    # extractor.py: params: ChatRequest|dict[str,Any] x4 frozen public API; ClassVar
+    # data tables x2; import -- all intentional residuals, no code change.
+    "sites/kick/parsing/messages.py": 10,
+    "sites/kick/websocket_transport.py": 4,
+    "sites/kick/live_service.py": 5,
+    "sites/kick/parsing/events.py": 3,
+    "sites/kick/api_client.py": 6,
     "sites/kick/parsing/emotes.py": 4,
-    "sites/kick/parsing/subscriptions.py": 13,
-    "sites/kick/parsing/moderation.py": 18,
-    "sites/kick/parsing/pins.py": 11,
-    "sites/kick/parsing/hosts.py": 7,
-    "sites/kick/replay_service.py": 8,
+    "sites/kick/parsing/subscriptions.py": 9,
+    "sites/kick/parsing/moderation.py": 13,
+    "sites/kick/parsing/pins.py": 8,
+    "sites/kick/parsing/hosts.py": 5,
+    "sites/kick/replay_service.py": 5,
     "sites/kick/extractor.py": 7,
 }
 

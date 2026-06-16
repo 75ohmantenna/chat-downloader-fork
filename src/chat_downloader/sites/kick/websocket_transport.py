@@ -14,7 +14,7 @@ touching orchestration or parsing.
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from websocket import (
     WebSocketConnectionClosedException,
@@ -35,6 +35,8 @@ from .constants import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+
+    from chat_downloader.utils.json_types import JSONDict
 
 
 def _default_connector(
@@ -121,7 +123,7 @@ class KickPusherTransport:
         if self._ws is not None:
             self._ws.settimeout(timeout)
 
-    def _send(self, payload: dict[str, Any]) -> None:
+    def _send(self, payload: JSONDict) -> None:
         """Serialize and send a Pusher frame.
 
         Args:
@@ -154,7 +156,7 @@ class KickPusherTransport:
         """Reply to a Pusher ping to keep the connection alive."""
         self._send({"event": PUSHER_PONG, "data": {}})
 
-    def recv(self) -> dict[str, Any] | None:
+    def recv(self) -> JSONDict | None:
         """Receive and decode the next Pusher frame.
 
         Returns:
@@ -187,7 +189,7 @@ class KickPusherTransport:
         if not isinstance(frame, dict):
             logger.debug("Discarding non-object Kick websocket frame.")
             return None
-        return frame
+        return cast("JSONDict", frame)
 
     def close(self) -> None:
         """Close the websocket connection, ignoring errors."""
@@ -203,7 +205,7 @@ class KickPusherTransport:
 
 def read_frames(
     transport: KickPusherTransport,
-) -> Generator[dict[str, Any], None, None]:
+) -> Generator[JSONDict, None, None]:
     """Yield decoded Pusher frames, replying to pings transparently.
 
     This open-ended generator drives the live receive loop. It is separated

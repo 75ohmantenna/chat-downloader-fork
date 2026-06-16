@@ -703,3 +703,133 @@ current-directory output setup, absent optional debug snapshot state, Windows
 console fallback, and timed-input/thread shutdown races).  Reaching a
 trustworthy 100% branch gate from here would require artificial tests or broad
 branch exclusions, so line coverage remains the enforced 100% gate.
+
+---
+
+## Round-13 — Kick typed-payload migration: parsing layer (2026-06)
+
+Extended the typed-payload track from Round-11 (YouTube + Twitch) to the Kick
+**parsing layer**.  Kick had zero `json_types` adoption before this round.
+
+### Changes
+
+Six modules narrowed: `parsing/messages.py`, `parsing/moderation.py`,
+`parsing/subscriptions.py`, `parsing/pins.py`, `parsing/hosts.py`,
+`parsing/events.py`.
+
+**What changed:** raw-payload input parameters narrowed from `Any` to `object`
+(or, for the `dispatch_event` frame, `Mapping[str, object]`).  The
+`_PARSER_DISPATCH` callable type tightened to `Callable[[object], ...]`.
+`_decode_event_data` signature narrowed from `Any → Any` to
+`object → object`.  No extraction logic, output types, or public behavior
+changed — annotation-only.
+
+**What did not change:** assembled-output accumulators (`info`, `metadata`,
+`author`, `result`, `host_meta`, `meta`, `badge`) remain `dict[str, Any]`.
+These are not raw-payload boundaries; they are heterogeneous output containers
+populated by site-specific parsing logic — the same residual category used
+throughout Round-11.
+
+### Key constraint: `_opt_str` accessor is intentionally kept
+
+`messages.py::_opt_str(value: object) -> str | None` stringifies non-str
+values via `str(value)`.  This is deliberate: Kick sends numeric ids in
+`sender.id` and top-level `id` fields; `_opt_str` coerces them to strings
+rather than rejecting them.  The `json_types.get_str` accessor would reject
+non-str values (returning `""`), which for top-level `id` fields would trigger
+`ParsingError("missing an id")`.  Therefore all `_opt_str(raw.get(...))`
+extraction calls are left unchanged.  Two regression tests in
+`tests/test_kick_parsing_messages_unit.py` and
+`tests/test_kick_parsing_all_unit.py` lock this invariant.
+
+### Intentional residuals (Round-13, do not reopen)
+
+- `parsing/emotes.py` (4 Any): input is already typed (`content: str`); all
+  Any are output-accumulator/return types.  Nothing to narrow.
+- Non-parsing Kick modules at Round-13 time (`websocket_transport.py`,
+  `live_service.py`, `api_client.py`, `replay_service.py`): deferred to
+  Round-14.  `extractor.py`: frozen public-API params + ClassVar data tables;
+  confirmed intentional residual — no code change.
+
+### Any-density before → after
+
+| Module | Before | After |
+|--------|--------|-------|
+| `sites/kick/parsing/messages.py` | 15 | 10 |
+| `sites/kick/parsing/moderation.py` | 18 | 13 |
+| `sites/kick/parsing/subscriptions.py` | 13 | 9 |
+| `sites/kick/parsing/pins.py` | 11 | 8 |
+| `sites/kick/parsing/hosts.py` | 7 | 5 |
+| `sites/kick/parsing/events.py` | 7 | 3 |
+
+---
+
+## Round-14 — Kick typed-payload migration: non-parsing layer (2026-06)
+
+Completed the Kick typed-payload track by migrating the HTTP-response and
+websocket-frame boundaries in the four non-parsing modules deferred from
+Round-13.  Pattern mirrors Round-11.5 (Twitch `graphql_client.py`).
+
+### Changes
+
+**`api_client.py` (4 → 0 Any; removed from BASELINE):**
+Added `cast("JSONAny", response.json())` at both `_decode_json` and
+`fetch_preloaded_messages` call sites.  `_decode_json` return type narrowed to
+`JSONAny`; `fetch_channel` return narrowed to `JSONDict` (isinstance guard
+already present; mypy narrows automatically).  `fetch_preloaded_messages`
+return narrowed to `JSONList` using `get_list(get_dict(data, "data"),
+"messages")` — same accessor pattern as Round-11.  `Any` removed from
+imports entirely.
+
+**`websocket_transport.py` (7 → 4 Any):**
+Added `cast("JSONDict", frame)` in `recv()` after the isinstance guard;
+changed `recv()` return, `_send()` param, and `read_frames` yield type to
+`JSONDict`.  Genuine residuals kept: `_default_connector → Any` (returns
+opaque websocket object with no bundled stubs), `connector: Callable[...,
+Any]` (injectable factory), `self._ws: Any` (same websocket object).
+
+**`live_service.py` (8 → 5 Any):**
+Narrowed three channel-metadata params downstream of `fetch_channel →
+JSONDict`: `_fetch_channel_with_retry → JSONDict`, `_resolve_channel(data:
+JSONDict, ...)`, `_is_live_status(data: JSONDict) → bool`.  Added
+`from chat_downloader.utils.json_types import JSONDict`.  Genuine residuals:
+`frame_iterator: Callable[[KickPusherTransport], Any]` ×2 (injectable),
+`_iter_chat_messages → Generator[dict[str, Any], None, None]` and
+`emit(message: dict[str, Any])` (assembled-output boundary).
+
+**`replay_service.py` (8 → 5 Any):**
+Narrowed VOD-metadata and page-fetch boundaries: `_fetch_video_metadata →
+JSONDict` (cast + isinstance), `_resolve_vod_window(data: JSONDict, ...)`,
+`_fetch_message_page → JSONDict` (cast + isinstance; `_empty: JSONDict`
+literal for the fallback).  Restructured `_iter_vod_messages` loop: replaced
+chained `.get("data", {}).get("messages", [])` with
+`get_list(get_dict(page, "data"), "messages")` — consistent with
+`fetch_preloaded_messages`.  Cursor narrowed via `isinstance` guard
+(`str | None`).  Genuine residuals: `_classify_message → tuple[dict[str,
+Any] | None, bool]`, generator yield type, and `all_messages: list[dict[str,
+Any]]` accumulator (assembled-output boundaries).
+
+**`emotes.py` + `extractor.py` — no code change, confirmed residuals:**
+`emotes.py`: all 4 Any are output accumulators; input is already
+`content: str`.  `extractor.py`: `params: ChatRequest | dict[str, Any]` ×4
+is a frozen public API shape; `ClassVar` data tables; import.  Both
+intentional — do not reopen.
+
+### Any-density before → after
+
+| Module | Before | After |
+|--------|--------|-------|
+| `sites/kick/api_client.py` | 4 | 0 (removed from BASELINE) |
+| `sites/kick/websocket_transport.py` | 7 | 4 |
+| `sites/kick/live_service.py` | 8 | 5 |
+| `sites/kick/replay_service.py` | 8 | 5 |
+
+### Residual taxonomy (final state, all Kick modules)
+
+| Residual category | Examples |
+|-------------------|---------|
+| WS-object opaque type | `self._ws: Any`, `_default_connector → Any` |
+| Injectable callable | `connector: Callable[..., Any]`, `frame_iterator: Callable[..., Any]` |
+| Assembled output | `emit(message: dict[str, Any])`, generator yields, `all_messages`, `_classify_message` return |
+| Frozen public API | `extractor.py` `params: ChatRequest \| dict[str, Any]` |
+| Output accumulator | `emotes.py` return types |

@@ -14,11 +14,18 @@ chronological order.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log, logger
 from chat_downloader.errors import ParsingError
 from chat_downloader.sites.models import Chat
+from chat_downloader.utils.json_types import (
+    JSONAny,
+    JSONDict,
+    JSONList,
+    get_dict,
+    get_list,
+)
 
 from .api_client import _get_kick_session
 from .constants import CHANNEL_MESSAGES_API, VIDEO_API_TEMPLATE
@@ -35,7 +42,7 @@ def _fetch_video_metadata(
     video_id: str,
     *,
     proxy: dict[str, str] | None = None,
-) -> dict[str, Any]:  # pragma: no cover — network-dependent VOD API
+) -> JSONDict:  # pragma: no cover — network-dependent VOD API
     """Fetch video metadata from ``/api/v1/video/{video_id}``.
 
     Args:
@@ -57,7 +64,7 @@ def _fetch_video_metadata(
     if not resp.ok:
         msg = f"Kick video API returned HTTP {resp.status_code} for {video_id}"
         raise KickServerError(msg)
-    data = resp.json()
+    data = cast("JSONAny", resp.json())
     if not isinstance(data, dict):
         msg = f"Kick video metadata for {video_id} was not a JSON object."
         raise KickServerError(msg)
@@ -65,7 +72,7 @@ def _fetch_video_metadata(
 
 
 def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsewhere
-    data: dict[str, Any], username: str
+    data: JSONDict, username: str
 ) -> tuple[str, str, str, datetime, datetime]:
     """Resolve the channel id, title, and VOD time window from video metadata.
 
@@ -124,7 +131,7 @@ def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsew
 
 def _fetch_message_page(  # pragma: no cover — network-dependent
     channel_id: str, cursor: str | None = None, *, proxy: dict[str, str] | None = None
-) -> dict[str, Any]:
+) -> JSONDict:
     """Fetch one page of channel messages.
 
     Args:
@@ -135,17 +142,16 @@ def _fetch_message_page(  # pragma: no cover — network-dependent
     Returns:
         The API response dict with ``data.messages`` and ``data.cursor``.
     """
+    _empty: JSONDict = {"data": {"messages": [], "cursor": None}}
     session = _get_kick_session(proxy=proxy)
     url = CHANNEL_MESSAGES_API.format(channel_id=channel_id)
     params = {"cursor": cursor} if cursor else None
     resp = session.get(url, params=params, timeout=(10, 30))
     if not resp.ok:
         logger.debug("Kick messages API returned HTTP %s", resp.status_code)
-        return {"data": {"messages": [], "cursor": None}}
-    data = resp.json()
-    return (
-        data if isinstance(data, dict) else {"data": {"messages": [], "cursor": None}}
-    )
+        return _empty
+    data = cast("JSONAny", resp.json())
+    return data if isinstance(data, dict) else _empty
 
 
 def get_vod_chat(  # pragma: no cover — network-dependent
@@ -249,9 +255,10 @@ def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
 
     while not done and pages < 500:
         page = _fetch_message_page(channel_id, cursor, proxy=proxy)
-        data = page.get("data", {})
-        raw_messages = data.get("messages", [])
-        cursor = data.get("cursor")
+        data_section = get_dict(page, "data")
+        raw_messages: JSONList = get_list(data_section, "messages")
+        cursor_val = data_section.get("cursor")
+        cursor = cursor_val if isinstance(cursor_val, str) else None
 
         if not raw_messages:
             break

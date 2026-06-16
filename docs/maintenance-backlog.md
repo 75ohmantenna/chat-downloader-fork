@@ -128,12 +128,22 @@ parser changes. After each migration, lower the affected module's baseline in
 `tests/test_any_density_unit.py` (opportunistic tightening — not a scheduled
 round).
 
-### Typed-payload migration (Round-11, 2026-06) — COMPLETE
+### Typed-payload migration (Rounds 11 + 13 + 14, 2026-06) — FULLY CLOSED
 
-YouTube (Round-11.1–11.4) and Twitch (Round-11.5) are both migrated off
-`dict[str, Any]` payload boundaries to `json_types` aliases. The typed-payload
-track is closed for both sites. Per-module before/after tables and residual
-rationale live in `maintenance-notes.md § Round-11 — Typed-payload migration`.
-Residuals
-in every migrated module are transport objects, callables, public-API params,
-or assembled-output accumulators — intentional, do not reopen.
+YouTube (Round-11.1–11.4), Twitch (Round-11.5), Kick parsing layer (Round-13),
+and Kick non-parsing layer (Round-14) are all migrated off raw `Any` payload
+boundaries. The typed-payload track is fully closed for all three sites.
+Per-module before/after tables and residual rationale live in
+`maintenance-notes.md §§ Round-11, Round-13, Round-14`.
+
+**Final intentional Kick residuals (all confirmed, do not reopen):**
+- `parsing/emotes.py` (4 Any): input already typed (`content: str`); all Any
+  are output-accumulator/return types.
+- `extractor.py` (7 Any): `params: ChatRequest | dict[str, Any]` ×4 frozen
+  public API; `ClassVar` data tables ×2; import.
+- `websocket_transport.py` (4 Any): ws-object opaque type (`self._ws: Any`,
+  `_default_connector`) + injectable `Callable[..., Any]` connector.
+- `live_service.py` (5 Any): injectable `frame_iterator` ×2 +
+  assembled-output generator yields + `emit` param.
+- `replay_service.py` (5 Any): assembled-output `_classify_message` return,
+  generator yield, `all_messages` accumulator.

@@ -13,12 +13,19 @@ chat content; that lives in :mod:`chat_downloader.sites.kick.parsing`.
 from __future__ import annotations
 
 from http import HTTPStatus
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import requests
 
 from chat_downloader.debugging import logger
 from chat_downloader.errors import CaptchaChallengeRequired, UserNotFound
+from chat_downloader.utils.json_types import (
+    JSONAny,
+    JSONDict,
+    JSONList,
+    get_dict,
+    get_list,
+)
 
 from .constants import (
     CHANNEL_API_TEMPLATE,
@@ -194,7 +201,7 @@ def _raise_for_challenge(response: requests.Response, username: str) -> NoReturn
     raise CaptchaChallengeRequired(msg)
 
 
-def _decode_json(response: requests.Response, username: str) -> Any:
+def _decode_json(response: requests.Response, username: str) -> JSONAny:
     """Decode a JSON response, mapping a challenge HTML body to a clear error.
 
     Args:
@@ -211,7 +218,7 @@ def _decode_json(response: requests.Response, username: str) -> Any:
     from json import JSONDecodeError
 
     try:
-        return response.json()
+        return cast("JSONAny", response.json())
     except (JSONDecodeError, ValueError) as error:
         if _body_looks_like_challenge(response):
             _raise_for_challenge(response, username)
@@ -253,7 +260,7 @@ def fetch_channel(
     *,
     proxy: dict[str, str] | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> dict[str, Any]:
+) -> JSONDict:
     """Fetch channel metadata from ``/api/v2/channels/{username}``.
 
     Uses a dedicated HTTP session (with ``curl-cffi`` / ``cloudscraper``
@@ -290,7 +297,7 @@ def fetch_preloaded_messages(
     *,
     proxy: dict[str, str] | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> list[dict[str, Any]]:
+) -> JSONList:
     """Fetch recent preloaded messages from ``/channels/{id}/messages``.
 
     Uses a dedicated HTTP session (with ``curl-cffi`` / ``cloudscraper``
@@ -318,7 +325,7 @@ def fetch_preloaded_messages(
         logger.debug("Kick preloaded-message fetch failed (non-fatal): %s", error)
         return []
 
-    messages = data.get("data", {}).get("messages") if isinstance(data, dict) else None
-    if not isinstance(messages, list):
+    if not isinstance(data, dict):
         return []
-    return [message for message in messages if isinstance(message, dict)]
+    messages = get_list(get_dict(data, "data"), "messages")
+    return cast("JSONList", [m for m in messages if isinstance(m, dict)])

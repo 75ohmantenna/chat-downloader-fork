@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
     from .extractor import KickChatDownloader
 
@@ -68,7 +69,7 @@ def _fetch_channel_with_retry(
     downloader: KickChatDownloader,
     username: str,
     request: ChatRequest,
-) -> dict[str, Any]:
+) -> JSONDict:
     """Fetch channel metadata, retrying transient failures.
 
     Terminal conditions (channel not found, Cloudflare challenge) propagate
@@ -93,7 +94,7 @@ def _fetch_channel_with_retry(
 
 
 def _resolve_channel(
-    data: dict[str, Any],
+    data: JSONDict,
     username: str,
 ) -> tuple[str, str, str]:
     """Resolve channel id, chatroom id, and title from metadata.
@@ -135,7 +136,7 @@ def _resolve_channel(
     return str(raw_channel_id), str(raw_chatroom_id), title
 
 
-def _is_live_status(data: dict[str, Any]) -> bool:
+def _is_live_status(data: JSONDict) -> bool:
     """Return ``True`` if the channel metadata indicates a live stream."""
     livestream = data.get("livestream")
     return isinstance(livestream, dict)
