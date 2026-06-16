@@ -2,11 +2,12 @@
 
 """HTTP helpers for Kick's public, unauthenticated v2 JSON API.
 
-These functions use :func:`_get_kick_session` — a dedicated session with
-``cloudscraper`` Cloudflare bypass when available — and centralize response
-handling: Cloudflare/challenge detection, not-found handling, and
-transient-error classification. They perform *no* parsing of chat content;
-that lives in :mod:`chat_downloader.sites.kick.parsing`.
+These functions use :func:`_get_kick_session` — a dedicated session that
+tries ``curl_cffi`` (TLS-level Chrome impersonation) first, falling back to
+``cloudscraper`` (JS-challenge solver) and finally a plain ``requests.Session``
+— and centralize response handling: Cloudflare/challenge detection, not-found
+handling, and transient-error classification. They perform *no* parsing of
+chat content; that lives in :mod:`chat_downloader.sites.kick.parsing`.
 """
 
 from __future__ import annotations
@@ -26,19 +27,24 @@ from .constants import (
 )
 from .errors import KickError, KickServerError
 
-_KICK_SESSION: requests.Session | None = None
+_KICK_SESSION: Any = None
 
 
 def _get_kick_session(
     *,
     proxy: dict[str, str] | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> requests.Session:  # pragma: no cover — replaced by FakeKickSession in tests
+) -> Any:  # pragma: no cover — replaced by FakeKickSession in tests
     """Create an HTTP session with Cloudflare bypass for Kick.com API.
 
-    Uses ``cloudscraper`` when available for automatic Cloudflare challenge
-    handling. Falls back to a plain ``requests.Session`` with Kick-specific
-    headers (User-Agent, Accept, Referer).
+    Priority order:
+    1. ``curl-cffi`` with Chrome 124 TLS impersonation — avoids Cloudflare
+       challenges at the TLS-fingerprint level.
+    2. ``cloudscraper`` — JS-challenge solver for simpler challenges.
+    3. Plain ``requests.Session`` with browser-like headers — last resort.
+
+    The session is cached as a module-level singleton; proxy and extra_headers
+    only affect the first creation call.
 
     Args:
         proxy: Optional proxy mapping (e.g. ``{"http": "...", "https": "..."}``)
@@ -49,34 +55,93 @@ def _get_kick_session(
             retains its original config.
 
     Returns:
-        A configured ``requests.Session`` (or ``cloudscraper`` session).
+        A configured session (``curl_cffi.requests.Session``,
+        ``cloudscraper.CloudScraper``, or ``requests.Session``).
     """
     global _KICK_SESSION  # noqa: PLW0603 — lazy-init singleton
     if _KICK_SESSION is None:
-        try:
-            import cloudscraper  # type: ignore[import-untyped]
-
-            _KICK_SESSION = cloudscraper.create_scraper()
-        except ImportError:
-            session = requests.Session()
-            session.headers.update(
-                {
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/120.0.0.0 Safari/537.36"
-                    ),
-                    "Accept": "application/json, text/plain, */*",
-                    "Referer": "https://kick.com/",
-                    "DNT": "1",
-                }
-            )
-            _KICK_SESSION = session
+        session = _try_curl_cffi()
+        if session is None:
+            session = _try_cloudscraper()
+        if session is None:
+            session = _make_plain_session()
+        _KICK_SESSION = session
     if proxy:
         _KICK_SESSION.proxies.update(proxy)
     if extra_headers:
         _KICK_SESSION.headers.update(extra_headers)
     return _KICK_SESSION
+
+
+def _try_curl_cffi() -> Any | None:  # pragma: no cover — live-dependency path
+    """Try creating a ``curl_cffi`` session with Chrome 124 impersonation."""
+    try:
+        from curl_cffi import requests as curl_requests
+
+        session: Any = curl_requests.Session()
+        session.impersonate = "chrome124"
+        session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                "Accept": "application/json, text/plain, */*",
+                "Referer": "https://kick.com/",
+                "DNT": "1",
+            }
+        )
+    except ImportError:
+        logger.debug("curl-cffi not available; skipping Chrome-impersonation session.")
+        return None
+    else:
+        return session
+
+
+def _try_cloudscraper() -> Any | None:  # pragma: no cover — live-dependency path
+    """Try creating a ``cloudscraper`` session for JS-challenge bypass."""
+    try:
+        import cloudscraper  # type: ignore[import-untyped]
+
+        session = cloudscraper.create_scraper()
+        session.headers.update(
+            {
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+                "Accept": "application/json, text/plain, */*",
+                "Referer": "https://kick.com/",
+                "DNT": "1",
+            }
+        )
+    except ImportError:
+        logger.debug("cloudscraper not available; skipping JS-challenge session.")
+        return None
+    else:
+        return session
+
+
+def _make_plain_session() -> (
+    requests.Session
+):  # pragma: no cover — live-dependency path
+    """Create a plain ``requests.Session`` with browser-like headers."""
+    session = requests.Session()
+    session.headers.update(
+        {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Referer": "https://kick.com/",
+            "DNT": "1",
+        }
+    )
+    return session
 
 
 def _body_looks_like_challenge(response: requests.Response) -> bool:
@@ -120,10 +185,11 @@ def _raise_for_challenge(response: requests.Response, username: str) -> NoReturn
         response.headers.get("Content-Type", ""),
     )
     msg = (
-        "Kick blocked unauthenticated automated access (likely a Cloudflare "
-        "challenge). This implementation does not bypass challenges. Your "
-        "VPN/proxy endpoint reputation may contribute; changing endpoint can "
-        "help diagnose network reputation or rate-limit issues."
+        "Kick blocked automated access with a Cloudflare challenge. The"
+        " bundled curl-cffi (Chrome-124 impersonation) and cloudscraper"
+        " libraries could not bypass it. Your IP/proxy reputation may"
+        " contribute; changing endpoints can help diagnose rate-limit or"
+        " reputation issues."
     )
     raise CaptchaChallengeRequired(msg)
 
@@ -190,8 +256,8 @@ def fetch_channel(
 ) -> dict[str, Any]:
     """Fetch channel metadata from ``/api/v2/channels/{username}``.
 
-    Uses a dedicated HTTP session (with ``cloudscraper`` Cloudflare bypass
-    when available) to make the request.
+    Uses a dedicated HTTP session (with ``curl-cffi`` / ``cloudscraper``
+    Cloudflare bypass when available) to make the request.
 
     Args:
         username: Channel username/slug.
@@ -227,8 +293,8 @@ def fetch_preloaded_messages(
 ) -> list[dict[str, Any]]:
     """Fetch recent preloaded messages from ``/channels/{id}/messages``.
 
-    Uses a dedicated HTTP session (with ``cloudscraper`` Cloudflare bypass
-    when available) to make the request.
+    Uses a dedicated HTTP session (with ``curl-cffi`` / ``cloudscraper``
+    Cloudflare bypass when available) to make the request.
 
     Args:
         channel_id: Numeric channel id.

@@ -261,14 +261,21 @@ events.
 
 ## Cloudflare Dependency
 
-The REST endpoints sit behind Cloudflare. `api_client.py` uses `cloudscraper`
-when installed to clear JS challenges automatically, falling back to a plain
-`requests.Session` with browser-like headers when it is unavailable. When a
-response body looks like a challenge page (Cloudflare markers, or an HTML body
-where JSON was expected) or returns HTTP 403, the client raises
-`CaptchaChallengeRequired` with an actionable message — this implementation does
-**not** solve challenges. Endpoint/VPN reputation can contribute; changing the
-network endpoint can help diagnose reputation or rate-limit issues.
+The REST endpoints sit behind Cloudflare. `api_client.py` uses a three-tier
+session strategy:
+
+1. **``curl-cffi`` with Chrome 124 TLS impersonation** — avoids Cloudflare
+   challenges at the TLS-fingerprint level before they are even presented.
+2. **``cloudscraper``** — JS-challenge solver for simpler challenges (falls
+   through if curl-cffi is unavailable).
+3. **Plain ``requests.Session``** with browser-like headers — last resort when
+   neither optional library is installed.
+
+When a response body looks like a challenge page (Cloudflare markers, or an HTML
+body where JSON was expected) or returns HTTP 403, the client raises
+`CaptchaChallengeRequired` — neither curl-cffi nor cloudscraper could bypass the
+challenge (modern Cloudflare challenges may require tooling updates or an
+endpoint with better IP reputation).
 
 Status mapping in `api_client.py::_check_status`:
 

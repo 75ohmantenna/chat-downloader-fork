@@ -34,6 +34,7 @@ dependencies = [
     "PySocks>=1.7.1",
     "websocket-client>=1.7.0,<2.0.0",
     "cloudscraper>=1.2.0,<2.0.0",
+    "curl-cffi>=0.15.0",
 ]
 
 [dependency-groups]

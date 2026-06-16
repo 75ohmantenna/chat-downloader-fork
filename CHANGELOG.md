@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.6.0 — 2026-06-16
+
+### Features
+
+- **curl-cffi integration:** Replaced cloudscraper as the primary HTTP backend
+  for Kick REST API. Uses Chrome 124 TLS impersonation (`curl-cffi`) which
+  bypasses Cloudflare challenges at the TLS-fingerprint level before they're
+  even presented. Falls back to cloudscraper (JS-challenge solver), then plain
+  requests.Session.
+
+### Fixes
+
+- Updated `CaptchaChallengeRequired` error message in `_raise_for_challenge()`
+  to truthfully reflect that curl-cffi and cloudscraper were both attempted,
+  instead of the misleading "this implementation does not bypass challenges".
+
+### Docs
+
+- Updated Cloudflare Dependency section in `docs/kick-integration-guide.md`
+  to document the three-tier session strategy (curl-cffi → cloudscraper →
+  requests.Session).
+
 ## 1.5.0 — 2026-06-15
 
 ### Chores

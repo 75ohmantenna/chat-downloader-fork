@@ -124,7 +124,7 @@ BASELINE: dict[str, int] = {
     "sites/kick/websocket_transport.py": 7,
     "sites/kick/live_service.py": 8,
     "sites/kick/parsing/events.py": 7,
-    "sites/kick/api_client.py": 4,
+    "sites/kick/api_client.py": 9,
     "sites/kick/parsing/emotes.py": 4,
     "sites/kick/parsing/subscriptions.py": 13,
     "sites/kick/parsing/moderation.py": 18,
