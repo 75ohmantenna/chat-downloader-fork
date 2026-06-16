@@ -63,6 +63,9 @@ For behavior-preservation coverage see
 | `errors.py` | Public exception hierarchy |
 | `metadata.py` | `__version__`, `__program__`, `__summary__` |
 | `request_profiles.py` | Named HTTP request profiles (headers presets) |
+| `debug_sample_utils.py` | Debug-sample naming and fixture-hint helpers |
+| `_shared_defaults.py` | Leaf constant (`DEFAULT_MAX_SEEN_MESSAGE_IDS`) shared by runtime and site layers |
+| `_timeout_defaults.py` | Leaf HTTP-timeout constants (`DEFAULT_CONNECT_TIMEOUT`, `DEFAULT_READ_TIMEOUT`) shared by models and session helpers |
 
 ### `models/`
 | Module | Purpose |

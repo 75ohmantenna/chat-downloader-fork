@@ -13,7 +13,7 @@ chronological order.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log, logger
@@ -118,7 +118,7 @@ def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsew
         raise KickError(msg) from error
 
     if start_dt.tzinfo is None:
-        start_dt = start_dt.replace(tzinfo=timezone.utc)  # noqa: UP017 — mypy doesn't recognise datetime.UTC
+        start_dt = start_dt.replace(tzinfo=UTC)
 
     duration_ms = livestream.get("duration", 0)
     duration_seconds = (

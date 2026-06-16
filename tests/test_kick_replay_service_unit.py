@@ -8,7 +8,7 @@ on the pure-logic helper functions that are testable offline.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime
 
 from chat_downloader.sites.kick import KickError, replay_service
 
@@ -54,8 +54,8 @@ class TestResolveVodWindow:
         assert channel_id == "3150403"
         assert chatroom_id == "3142359"
         assert title == "Test Stream Title"
-        assert start_dt == datetime(2026, 6, 13, 0, 29, 45, tzinfo=timezone.utc)  # noqa: UP017
-        assert end_dt == datetime(2026, 6, 13, 1, 29, 45, tzinfo=timezone.utc)  # noqa: UP017
+        assert start_dt == datetime(2026, 6, 13, 0, 29, 45, tzinfo=UTC)
+        assert end_dt == datetime(2026, 6, 13, 1, 29, 45, tzinfo=UTC)
 
     def test_missing_livestream_raises(self) -> None:
         import pytest

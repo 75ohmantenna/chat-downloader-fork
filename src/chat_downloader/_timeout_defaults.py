@@ -7,10 +7,10 @@ the same values without creating runtime/session dependencies from
 ``chat_downloader.models``.
 """
 
-#: TCP connect timeout in seconds (passed as the first element of the
-#: ``(connect, read)`` tuple to ``requests``).
 from __future__ import annotations
 
+#: TCP connect timeout in seconds (passed as the first element of the
+#: ``(connect, read)`` tuple to ``requests``).
 DEFAULT_CONNECT_TIMEOUT: float = 10.0
 
 #: HTTP read timeout in seconds (passed as the second element of the
