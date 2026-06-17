@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.6.1 — 2026-06-17
+
+### Typing / maintainability
+
+- **Kick parsing layer narrowed off `Any` (Round-13).** Parser entry points in
+  six `sites/kick/parsing/` modules take `object`/`Mapping[str, object]` params
+  with `_opt_str`-style extraction; behavior unchanged.
+- **Kick non-parsing layer migrated to `json_types` (Round-14).** HTTP-response
+  boundaries (`api_client.py`) and the websocket-frame boundary
+  (`websocket_transport.py`) use `JSONAny`/`JSONDict`/`JSONList` with `cast`;
+  downstream callers in `live_service.py`/`replay_service.py` were
+  param-narrowed accordingly. `api_client.py` retains `Any` only for the
+  curl-cffi/cloudscraper impersonation session object.
+- **Removed stale lint suppressions and a redundant import.**
+  `kick/replay_service.py` and its test now use the already-imported
+  `datetime.UTC` sentinel instead of `timezone.utc`, dropping three
+  `# noqa: UP017` markers (the suppression rationale was false) and an unused
+  `timezone` import. Fixed a misplaced `#:` doc-comment in `_timeout_defaults.py`.
+
+### Docs
+
+- Synced the architecture.md top-level module table with the source tree
+  (`debug_sample_utils.py`, `_shared_defaults.py`, `_timeout_defaults.py`).
+
+### Tests
+
+- Added a contract test asserting every non-dunder top-level module appears in
+  the architecture.md Top-level table, freezing the corrected inventory against
+  future drift.
+
 ## 1.6.0 — 2026-06-16
 
 ### Features
