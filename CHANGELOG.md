@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.2 — 2026-06-21
+
+### Fixes
+
+- **Kick live channel preloaded history was emitted newest-first.**
+  The `/channels/{id}/messages` API returns messages newest-first. The VOD
+  replay path already reversed them, but the live path was yielding preloaded
+  history in raw API order. Fixed by reversing the batch before emission so
+  preloaded history appears in chronological order, consistent with all other
+  sites and with the VOD path.
+
 ## 1.6.1 — 2026-06-17
 
 ### Typing / maintainability
