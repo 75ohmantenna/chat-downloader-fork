@@ -281,7 +281,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
     # 1. Preloaded history (best-effort; non-fatal on failure).
     proxy = _resolve_proxy(downloader)
     preloaded = fetch_preloaded_messages(channel_id, username, proxy=proxy)
-    for message in parse_preloaded_messages(preloaded):
+    for message in reversed(parse_preloaded_messages(preloaded)):
         if emit(message):
             yield message
 

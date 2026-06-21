@@ -72,8 +72,9 @@ The Kick flow depends on the target type.
    transient failures).
 3. Resolve the channel id, chatroom id, and title. Offline channels are *not*
    rejected — the chatroom is still active.
-4. Fetch preloaded recent messages (best-effort; non-fatal on failure) and emit
-   them first.
+4. Fetch preloaded recent messages (best-effort; non-fatal on failure). The
+   API returns them newest-first; they are reversed into chronological order
+   before being emitted.
 5. Open the Pusher WebSocket, subscribe to the public chatroom channel, and
    stream live frames.
 6. Dispatch each frame to a typed parser, deduplicate against preloaded and

@@ -122,7 +122,7 @@ def test_fetch_preloaded_messages_success() -> None:
     session = FakeKickSession([FakeResponse(200, payload)])
     with patch.object(api_client, "_get_kick_session", return_value=session):
         messages = api_client.fetch_preloaded_messages("12345", "examplechannel")
-    assert [m["id"] for m in messages] == ["preloaded-1", "preloaded-2"]
+    assert [m["id"] for m in messages] == ["preloaded-2", "preloaded-1"]
     assert session.requested_urls == ["https://kick.com/api/v2/channels/12345/messages"]
 
 
