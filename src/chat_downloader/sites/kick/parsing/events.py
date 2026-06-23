@@ -104,7 +104,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
     Returns:
         A normalized chat message dictionary for a recognised event, or
         ``None`` for control frames, unknown/unsupported events, and
-        unparseable payloads (which are skipped, not raised).
+        unparsable payloads (which are skipped, not raised).
 
     Raises:
         KickError: If the frame is a ``pusher:error`` event, which indicates a

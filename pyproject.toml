@@ -216,3 +216,9 @@ filterwarnings = [
     "error::DeprecationWarning",
     "error::PendingDeprecationWarning",
 ]
+
+[tool.codespell]
+skip = [
+    "./tests/fixtures/youtube/innertube_bootstrap/youtube-IzopCEgh2G8-player-web.json",
+    "./tests/fixtures/youtube/live_events/youtube-IzopCEgh2G8-live-chat-first.json",
+]

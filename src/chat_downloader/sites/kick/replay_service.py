@@ -114,7 +114,7 @@ def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsew
     try:
         start_dt = datetime.fromisoformat(start_time_raw)
     except (ValueError, TypeError) as error:
-        msg = f"Kick video for {username!r} has an unparseable start_time: {error}"
+        msg = f"Kick video for {username!r} has an unparsable start_time: {error}"
         raise KickError(msg) from error
 
     if start_dt.tzinfo is None:
@@ -195,7 +195,7 @@ def get_vod_chat(  # pragma: no cover — network-dependent
 def _classify_message(
     raw: dict[str, Any], start_dt: datetime, end_dt: datetime
 ) -> tuple[dict[str, Any] | None, bool]:
-    """Classify a raw message as in-window, out-of-range, or unparseable.
+    """Classify a raw message as in-window, out-of-range, or unparsable.
 
     Args:
         raw: Raw message dict.

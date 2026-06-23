@@ -94,6 +94,13 @@ Run type checking:
 uv run mypy .
 ```
 
+Run the optional spelling check, using the repository's `pyproject.toml`
+configuration:
+
+```bash
+codespell
+```
+
 Run coverage locally:
 
 ```bash

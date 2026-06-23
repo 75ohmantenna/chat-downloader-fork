@@ -83,9 +83,9 @@ def test_safe_print_writes_bytes_via_buffer_with_preferred_encoding(
 
     monkeypatch.setattr(console_utils, "preferredencoding", lambda: "utf-8")
 
-    console_utils.safe_print("caf\xe9", out=out, flush=True)
+    console_utils.safe_print("\xe9", out=out, flush=True)
 
-    assert out.buffer.data == "caf\xe9\n".encode()
+    assert out.buffer.data == "\xe9\n".encode()
     assert out.flushed is True
 
 

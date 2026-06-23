@@ -24,7 +24,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     # https://www.youtube.com/watch?v=7PPnCOhkxqo
     # purchased a product linked to the YouTube channel merchandising
     # https://youtu.be/y5ih7nqEoc4
-    # TESTING FOR CORRECT FUNCIONALITY
+    # TESTING FOR CORRECT FUNCTIONALITY
     {
         "name": "Get chat messages from known replay video URL",
         "params": {
