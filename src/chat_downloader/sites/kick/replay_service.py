@@ -28,7 +28,7 @@ from chat_downloader.utils.json_types import (
 )
 
 from .api_client import _get_kick_session
-from .constants import CHANNEL_MESSAGES_API, VIDEO_API_TEMPLATE
+from .constants import CHANNEL_MESSAGES_API, VIDEO_API_TEMPLATE, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.messages import parse_chat_message
 
@@ -95,6 +95,9 @@ def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsew
     channel_id = str(channel.get("id")) if isinstance(channel, dict) else None
     if not channel_id:
         msg = f"Kick video for {username!r} is missing a channel id."
+        raise KickError(msg)
+    if not is_numeric_id(channel_id):
+        msg = f"Kick video for {username!r} returned a non-numeric channel id."
         raise KickError(msg)
 
     chatroom_id = ""

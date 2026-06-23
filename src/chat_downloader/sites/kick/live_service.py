@@ -26,7 +26,7 @@ from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers
 
 from .api_client import fetch_channel, fetch_preloaded_messages
-from .constants import MESSAGE_GROUPS
+from .constants import MESSAGE_GROUPS, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.events import dispatch_event
 from .parsing.messages import parse_preloaded_messages
@@ -125,6 +125,11 @@ def _resolve_channel(
         msg = f"Kick channel {username!r} metadata was missing a chatroom id."
         raise KickError(msg)
 
+    channel_id, chatroom_id = str(raw_channel_id), str(raw_chatroom_id)
+    if not is_numeric_id(channel_id) or not is_numeric_id(chatroom_id):
+        msg = f"Kick channel {username!r} returned a non-numeric channel/chatroom id."
+        raise KickError(msg)
+
     livestream = data.get("livestream")
     if not isinstance(livestream, dict):
         log("info", f'Kick channel "{username}" is offline; chatroom is still active.')
@@ -133,7 +138,7 @@ def _resolve_channel(
         raw_title = livestream.get("session_title")
         title = str(raw_title) if raw_title else username
 
-    return str(raw_channel_id), str(raw_chatroom_id), title
+    return channel_id, chatroom_id, title
 
 
 def _is_live_status(data: JSONDict) -> bool:

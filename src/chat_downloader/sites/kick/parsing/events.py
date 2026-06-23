@@ -142,6 +142,14 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
     try:
         payload = _decode_event_data(frame.get("data"))
         return parser(payload)
-    except ParsingError as error:  # pragma: no cover — defensive
+    except (
+        ParsingError,
+        ValueError,
+        TypeError,
+        KeyError,
+        IndexError,
+    ) as error:  # pragma: no cover — defensive
+        # A single malformed frame must never tear down the live download
+        # loop (which only retries on ConnectionError); skip it instead.
         logger.debug("Skipping malformed Kick %s: %s", message_type, error)
         return None

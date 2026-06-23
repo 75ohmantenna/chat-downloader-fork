@@ -31,6 +31,12 @@ _ROLE_ICON_MAP: dict[str, str] = {
 _REMAPPING: Mapping[str, Any] | None = None
 _COLOUR_KEYS: list[str] | None = None
 
+# Upper bound on nested-renderer recursion (showItemEndpoint/header chains).
+# Caps stack depth so a pathologically nested item payload truncates gracefully
+# instead of raising RecursionError and aborting message parsing.  Mirrors the
+# _MAX_FLATTEN_DEPTH guard in utils/json_utils.py.
+_MAX_ITEM_PARSE_DEPTH = 50
+
 
 def _apply_author_roles(author: dict[str, Any]) -> None:
     """Promote badge icon types to explicit boolean role fields."""
@@ -112,27 +118,32 @@ def _merge_nested_renderers(
     info: dict[str, Any],
     item_info: JSONDict,
     offset: float,
+    depth: int,
 ) -> None:
     """Recursively merge showItemEndpoint and header renderers into *info*."""
     item_endpoint = get_dict(item_info, "showItemEndpoint")
     if item_endpoint:
         renderer = multi_get(item_endpoint, "showLiveChatItemEndpoint", "renderer")
         if renderer:
-            info.update(_parse_item(renderer, offset=offset))
+            info.update(_parse_item(renderer, offset=offset, depth=depth + 1))
 
     header = get_dict(item_info, "header")
     if header:
-        info.update(_parse_item(header, offset=offset))
+        info.update(_parse_item(header, offset=offset, depth=depth + 1))
 
 
 def _parse_item(
     item: JSONDict,
     info: dict[str, Any] | None = None,
     offset: float = 0,
+    depth: int = 0,
 ) -> dict[str, Any]:
     """Parse a YouTube chat item recursively."""
     if info is None:
         info = {}
+
+    if depth > _MAX_ITEM_PARSE_DEPTH:
+        return info
 
     item_index = try_get_first_key(item)
     item_info = get_dict(item, item_index) if item_index else {}
@@ -145,7 +156,7 @@ def _parse_item(
         r.remap(info, remapping, key, value)
 
     _apply_colour_keys(info, item_info, colour_keys)
-    _merge_nested_renderers(info, item_info, offset)
+    _merge_nested_renderers(info, item_info, offset, depth)
     _normalize_author(info)
     _reconcile_time_fields(info, offset)
 

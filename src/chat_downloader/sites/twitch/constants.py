@@ -89,8 +89,16 @@ VALID_URLS = {
 EMOTE_REGEX = r"(\w+):([\d,-]+)"
 
 # IRC Message Parsing
+#
+# The tag group is wrapped in an atomic group ``(?>...)`` so it commits to the
+# first ``\s+:`` boundary (the prefix delimiter — IRC tags never contain a
+# literal space) instead of re-expanding on every later ``\s+:`` when the rest
+# of the pattern fails to match.  Without this, a crafted line lacking
+# ``tmi.twitch.tv`` forces O(n^2) backtracking across the (up to 1 MiB) read
+# buffer.  The atomic group keeps matching linear while producing identical
+# matches for all well-formed Twitch lines.
 MESSAGE_REGEX = re.compile(
-    r"^@(.+?(?=\s+:)).*tmi\.twitch\.tv\s+(\S+)"
+    r"^@((?>.+?(?=\s+:))).*tmi\.twitch\.tv\s+(\S+)"
     r"(?:[^#\r\n]+#)?\s(?:\S+)?(?:\s:([^\r\n]*))?",
     re.MULTILINE,
 )

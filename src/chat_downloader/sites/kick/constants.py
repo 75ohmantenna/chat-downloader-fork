@@ -37,6 +37,21 @@ _PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
 _PUSHER_DISCOVERED_KEY: str | None = None
 
 
+def _is_kick_origin(url: str) -> bool:
+    """Return True if *url* is an HTTPS URL on the ``kick.com`` domain.
+
+    Used to constrain which script URLs the Pusher-key discovery loop will
+    fetch, so a tampered homepage cannot redirect it to an arbitrary host.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    return host == "kick.com" or host.endswith(".kick.com")
+
+
 def resolve_pusher_key(
     *, force_discover: bool = False
 ) -> str:  # pragma: no cover — network-dependent; tested at integration level
@@ -82,6 +97,13 @@ def resolve_pusher_key(
             script_urls = re.findall(r'<script[^>]*src="([^"]+\.js)"[^>]*>', resp.text)
             for url in script_urls[:15]:
                 abs_url = url if url.startswith("http") else "https://kick.com" + url
+                # Only fetch scripts served over HTTPS from Kick's own domain.
+                # Without this guard a tampered/MITM'd homepage could point the
+                # loader at an arbitrary host (SSRF, e.g. cloud metadata
+                # endpoints).  ``*.kick.com`` is allowed so CDN-hosted bundles
+                # still resolve.
+                if not _is_kick_origin(abs_url):
+                    continue
                 try:
                     js_resp = session.get(abs_url, timeout=10)
                     if js_resp.ok:
@@ -133,6 +155,18 @@ VIDEO_API_TEMPLATE = "https://kick.com/api/v1/video/{video_id}"
 
 #: Channel messages endpoint (VOD replay), formatted with a channel id.
 CHANNEL_MESSAGES_API = "https://kick.com/api/v2/channels/{channel_id}/messages"
+
+
+def is_numeric_id(value: str) -> bool:
+    """Return True if *value* is a plain ASCII-digit identifier.
+
+    Kick channel and chatroom ids are integers.  Validating this before an id
+    is interpolated into an API URL path or Pusher channel name prevents a
+    tampered API response from injecting path segments (``../``) or other
+    characters into the outbound request.
+    """
+    return value.isascii() and value.isdigit()
+
 
 # Pusher protocol event names.
 PUSHER_SUBSCRIBE = "pusher:subscribe"
