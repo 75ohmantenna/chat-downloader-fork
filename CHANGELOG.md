@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.6.4 — 2026-06-27
+
+### Changes
+
+- **Emote names in plain-text messages are now colon-wrapped across services.**
+  Kick named emotes render as `:PogU:` instead of bare `PogU`, and YouTube
+  custom emoji that fall back to an emoji ID (no shortcuts) now render as
+  `:emojiId:` instead of a bare ID. This aligns both services with YouTube's
+  existing `:shortcut:` convention.
+
+## 1.6.3 — 2026-06-21
+
+### Security / hardening
+
+- **Bound untrusted-data parsing and constrain Kick egress.**
+  Tightened input validation on untrusted API payloads and restricted
+  outbound connections for the Kick integration.
+
+### Chores
+
+- Fixed spelling findings across the codebase.
+
 ## 1.6.2 — 2026-06-21
 
 ### Fixes
