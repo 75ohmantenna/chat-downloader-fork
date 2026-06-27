@@ -48,7 +48,9 @@ def _append_run(
     elif "emoji" in run:
         emoji = get_dict(run, "emoji")
         emoji_id = get_str(emoji, "emojiId") or None
-        name = multi_get(emoji, "shortcuts", 0) or emoji_id
+        name = multi_get(emoji, "shortcuts", 0) or (
+            f":{emoji_id}:" if emoji_id else None
+        )
         if emoji_id and emoji_id not in message_emotes:
             message_emotes[emoji_id] = {
                 "id": emoji_id,

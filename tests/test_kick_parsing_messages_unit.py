@@ -17,7 +17,7 @@ def test_parse_full_chat_message() -> None:
     msg = parse_chat_message(raw)
     assert msg["message_id"] == "live-1"
     assert msg["message_type"] == "text_message"
-    assert msg["message"] == "hello world PogU"
+    assert msg["message"] == "hello world :PogU:"
     assert msg["timestamp"] == 1704067260000000
     author = msg["author"]
     assert author["id"] == "99"

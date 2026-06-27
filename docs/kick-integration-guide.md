@@ -126,7 +126,8 @@ The Kick flow depends on the target type.
   `ChatMessageEvent` payloads and preloaded history (same shape); badge and
   timestamp handling. Entry points `parse_chat_message` /
   `parse_preloaded_messages`.
-- `parsing/emotes.py`: inline emote-marker parsing (`[emote:ID:NAME]`) and
+- `parsing/emotes.py`: inline emote-marker parsing (`[emote:ID:NAME]` →
+  `:NAME:` in plain text, or `:emote_ID:` when no name is present) and
   structured emote metadata/image URLs.
 - `parsing/subscriptions.py`: `SubscriptionEvent` and
   `GiftedSubscriptionsEvent` normalization.

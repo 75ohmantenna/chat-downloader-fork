@@ -5,8 +5,8 @@
 Kick chat content embeds emotes as markers such as ``[emote:37233:PogU]`` or
 ``[emote:37233:]`` (name omitted). This module converts that content into:
 
-* readable plain text, where each marker becomes the emote name (or a stable
-  ``:emote_<id>:`` placeholder when no name is present), and
+* readable plain text, where each marker becomes ``:NAME:`` (e.g. ``:PogU:``)
+  or a stable ``:emote_<id>:`` placeholder when no name is present, and
 * structured emote metadata for JSON/JSONL outputs.
 
 Emote image files are never downloaded; only the derivable full-size image URL
@@ -36,9 +36,9 @@ def _readable_emote_text(emote_id: str, name: str) -> str:
         name: The emote name from the marker (may be empty).
 
     Returns:
-        ``name`` if present, otherwise a stable ``:emote_<id>:`` placeholder.
+        ``:name:`` if present, otherwise a stable ``:emote_<id>:`` placeholder.
     """
-    return name or f":emote_{emote_id}:"
+    return f":{name}:" if name else f":emote_{emote_id}:"
 
 
 def _build_emote(

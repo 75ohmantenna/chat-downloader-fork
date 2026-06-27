@@ -136,6 +136,12 @@ def test_text_helpers_parse_simple_text_runs_links_and_emotes() -> None:
     assert _parse_runs("not-a-dict") == {"message": ""}
 
 
+def test_emoji_without_shortcuts_falls_back_to_colon_wrapped_emoji_id() -> None:
+    parsed = _parse_runs({"runs": [{"emoji": {"emojiId": "UC_custom_abc123"}}]})
+    assert parsed["message"] == ":UC_custom_abc123:"
+    assert parsed["emotes"][0]["name"] == ":UC_custom_abc123:"
+
+
 def test_thumbnail_and_action_button_helpers_parse_expected_shapes() -> None:
     thumbnails = _parse_thumbnails(
         {

@@ -21,7 +21,7 @@ def test_chat_message_event_is_parsed() -> None:
     message = dispatch_event(pusher_frame(CHAT_MESSAGE_EVENT, data))
     assert message is not None
     assert message["message_id"] == "live-1"
-    assert message["message"] == "hello world PogU"
+    assert message["message"] == "hello world :PogU:"
 
 
 def test_chat_message_event_with_object_data() -> None:
