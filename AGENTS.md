@@ -108,6 +108,7 @@ A behavior, runtime, parser, or tooling change is not done until:
 - `uv run ruff check src/chat_downloader tests` clean
 - `uv run ruff format --check src/chat_downloader tests` clean
 - `uv run mypy .` clean
+- `uv run lint-imports` clean
 - `uv run pytest -q -p no:rerunfailures -m "not network"` green
 - Docs updated in the same commit for user-facing behavior, tooling, project
   structure, or public API changes
