@@ -14,6 +14,7 @@ touching orchestration or parsing.
 from __future__ import annotations
 
 import json
+import time
 from typing import TYPE_CHECKING, Any, cast
 
 from websocket import (
@@ -37,6 +38,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
     from chat_downloader.utils.json_types import JSONDict
+
+_IDLE_WATCHDOG_SECONDS = 180.0
+_MIN_RECEIVE_TIMEOUT_SECONDS = 1.0
 
 
 def _default_connector(
@@ -218,6 +222,8 @@ class KickPusherTransport:
 
 def read_frames(
     transport: KickPusherTransport,
+    *,
+    idle_timeout: float = _IDLE_WATCHDOG_SECONDS,
 ) -> Generator[JSONDict, None, None]:
     """Yield decoded Pusher frames, replying to pings transparently.
 
@@ -226,6 +232,8 @@ def read_frames(
 
     Args:
         transport: A connected transport to read from.
+        idle_timeout: Maximum seconds without a decoded frame before the
+            connection is treated as stale.
 
     Yields:
         Decoded Pusher frames, excluding pings (answered in place) and
@@ -234,10 +242,19 @@ def read_frames(
     Raises:
         ConnectionError: If the connection is closed (drives reconnect).
     """
+    last_activity = time.monotonic()
     while True:
         frame = transport.recv()
         if frame is None:
+            if time.monotonic() - last_activity >= idle_timeout:
+                logger.debug(
+                    "Kick websocket idle watchdog expired after %ss; reconnecting.",
+                    idle_timeout,
+                )
+                msg = "Kick websocket connection became idle."
+                raise ConnectionError(msg)
             continue
+        last_activity = time.monotonic()
         if frame.get("event") == PUSHER_PING:
             transport.send_pong()
             continue

@@ -84,6 +84,7 @@ def _make_error_downloader(error_to_raise: BaseException) -> type:
         (ConnectionError("offline"), "internet connection"),
         (SiteNotSupported("no site"), "no site"),
         (RequestException("timeout"), "timeout"),
+        (OSError("disk full"), "disk full"),
     ],
 )
 def test_classify_run_error_returns_correct_message(
@@ -102,6 +103,7 @@ def test_classify_run_error_returns_correct_message(
         (ConnectionError("offline"), "internet connection", False),
         (SiteNotSupported("no site"), "no site", False),
         (RequestException("timeout"), "timeout", False),
+        (OSError("disk full"), "disk full", False),
         (KeyboardInterrupt(), "Keyboard Interrupt", True),
     ],
 )

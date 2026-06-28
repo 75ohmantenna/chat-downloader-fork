@@ -30,7 +30,11 @@ from .constants import MESSAGE_GROUPS, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.events import dispatch_event
 from .parsing.messages import parse_preloaded_messages
-from .websocket_transport import KickPusherTransport, read_frames
+from .websocket_transport import (
+    _MIN_RECEIVE_TIMEOUT_SECONDS,
+    KickPusherTransport,
+    read_frames,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -249,7 +253,12 @@ def _open_subscribed_transport(
         try:
             transport.connect(downloader._http_timeout[0])
             transport.subscribe(chatroom_id)
-            transport.set_timeout(request.message_receive_timeout)
+            transport.set_timeout(
+                max(
+                    request.message_receive_timeout,
+                    _MIN_RECEIVE_TIMEOUT_SECONDS,
+                )
+            )
         except ConnectionError as error:
             transport.close()
             downloader.retry(attempt_number, error=error, request=request)
@@ -259,7 +268,26 @@ def _open_subscribed_transport(
     raise RuntimeError(msg)
 
 
-def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically branchy
+def _iter_preloaded_messages(
+    downloader: KickChatDownloader,
+    channel_id: str,
+    username: str,
+    emit: Callable[[JSONDict], bool],
+) -> Generator[JSONDict, None, None]:
+    """Yield recent HTTP history not already emitted by the live stream."""
+    preloaded = fetch_preloaded_messages(
+        channel_id,
+        username,
+        proxy=_resolve_proxy(downloader),
+        session=getattr(downloader, "_kick_api_session", None),
+        timeout=downloader._http_timeout,
+    )
+    for message in reversed(parse_preloaded_messages(preloaded)):
+        if emit(message):
+            yield message
+
+
+def _iter_chat_messages(
     downloader: KickChatDownloader,
     username: str,
     channel_id: str,
@@ -289,17 +317,12 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
         return msg_filter.should_add(message)
 
     # 1. Preloaded history (best-effort; non-fatal on failure).
-    proxy = _resolve_proxy(downloader)
-    preloaded = fetch_preloaded_messages(
+    yield from _iter_preloaded_messages(
+        downloader,
         channel_id,
         username,
-        proxy=proxy,
-        session=getattr(downloader, "_kick_api_session", None),
-        timeout=downloader._http_timeout,
+        emit,
     )
-    for message in reversed(parse_preloaded_messages(preloaded)):
-        if emit(message):
-            yield message
 
     # 2. Live websocket feed with reconnect.
     ws_host, ws_port = _resolve_ws_proxy(downloader)
@@ -339,6 +362,17 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
                     transport_factory,
                     http_proxy_host=ws_host,
                     http_proxy_port=ws_port,
+                )
+                log(
+                    "debug",
+                    "Kick websocket reconnected; checking recent history for "
+                    "messages missed during the outage.",
+                )
+                yield from _iter_preloaded_messages(
+                    downloader,
+                    channel_id,
+                    username,
+                    emit,
                 )
             else:
                 break

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import contextlib
 import csv
-import shutil
+import os
 import tempfile
 from pathlib import Path
 from typing import IO, Any
@@ -65,11 +65,15 @@ def rewrite_csv_with_new_columns(
             # Existing rows were already escaped when first written; copy as-is.
             csv_dict_writer.writerows(csv.DictReader(current_file))
             csv_dict_writer.writerow(csv_safe_item(item))
+            new_file.flush()
+            os.fsync(new_file.fileno())
 
         current_file.close()
-        shutil.move(new_file_path, file_name)
+        Path(new_file_path).replace(file_name)
         new_file_path = None
     finally:
+        if not current_file.closed:
+            current_file.close()
         if new_file_path is not None:
             with contextlib.suppress(OSError):
                 Path(new_file_path).unlink()

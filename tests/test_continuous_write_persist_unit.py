@@ -10,6 +10,8 @@ import time
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
+import pytest
+
 from chat_downloader.output.continuous_write import (
     JsonLinesContinuousWriter,
     TextContinuousWriter,
@@ -81,14 +83,17 @@ def test_fsync_runs_at_most_once_per_interval(tmp_path: Path) -> None:
         writer.close()
 
 
-def test_fsync_failure_is_swallowed(tmp_path: Path) -> None:
-    """OSError from fsync must not propagate; data path keeps going."""
+def test_fsync_failure_is_propagated(tmp_path: Path) -> None:
+    """A durability failure must stop the run instead of hiding data loss."""
     path = tmp_path / "out.jsonl"
     writer = JsonLinesContinuousWriter(str(path))
     try:
         writer._last_fsync_monotonic = time.monotonic() - _FSYNC_INTERVAL_SECONDS - 1
-        with patch.object(os, "fsync", side_effect=OSError("nope")):
-            writer.write({"x": 1})  # must not raise
+        with (
+            patch.object(os, "fsync", side_effect=OSError("nope")),
+            pytest.raises(OSError, match="nope"),
+        ):
+            writer.write({"x": 1})
         # Subsequent writes still work.
         writer.write({"x": 2})
     finally:
@@ -97,3 +102,54 @@ def test_fsync_failure_is_swallowed(tmp_path: Path) -> None:
     with open(path, encoding="utf-8") as f:
         records: list[Any] = [json.loads(line) for line in f]
     assert records == [{"x": 1}, {"x": 2}]
+
+
+def test_jsonl_append_removes_crash_truncated_record(tmp_path: Path) -> None:
+    path = tmp_path / "out.jsonl"
+    path.write_bytes(b'{"ok": 1}\n{"partial":')
+
+    writer = JsonLinesContinuousWriter(str(path), overwrite=False)
+    writer.write({"ok": 2})
+    writer.close()
+
+    assert [json.loads(line) for line in path.read_text().splitlines()] == [
+        {"ok": 1},
+        {"ok": 2},
+    ]
+
+
+def test_jsonl_append_to_empty_file_needs_no_tail_repair(tmp_path: Path) -> None:
+    path = tmp_path / "empty.jsonl"
+    path.touch()
+
+    writer = JsonLinesContinuousWriter(str(path), overwrite=False)
+    writer.write({"ok": 1})
+    writer.close()
+
+    assert json.loads(path.read_text()) == {"ok": 1}
+
+
+def test_jsonl_append_terminates_valid_record_missing_newline(tmp_path: Path) -> None:
+    path = tmp_path / "out.jsonl"
+    path.write_bytes(b'{"ok": 1}')
+
+    writer = JsonLinesContinuousWriter(str(path), overwrite=False)
+    writer.write({"ok": 2})
+    writer.close()
+
+    assert [json.loads(line) for line in path.read_text().splitlines()] == [
+        {"ok": 1},
+        {"ok": 2},
+    ]
+
+
+def test_jsonl_append_tail_recovery_is_stable_for_large_log(tmp_path: Path) -> None:
+    path = tmp_path / "large.jsonl"
+    path.write_text("".join(f'{{"i": {i}}}\n' for i in range(20_000)))
+
+    writer = JsonLinesContinuousWriter(str(path), overwrite=False)
+    writer.write({"i": 20_000})
+    writer.close()
+
+    with path.open() as file:
+        assert sum(1 for _line in file) == 20_001

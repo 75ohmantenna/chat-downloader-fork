@@ -83,7 +83,7 @@ def test_persist_after_write_no_file_is_noop(tmp_path: pathlib.Path) -> None:
     writer._persist_after_write()  # file is None; must be a no-op
 
 
-def test_persist_after_write_flush_oserror_is_swallowed(
+def test_persist_after_write_flush_oserror_is_propagated(
     tmp_path: pathlib.Path,
 ) -> None:
     path = str(tmp_path / "test.txt")
@@ -92,9 +92,36 @@ def test_persist_after_write_flush_oserror_is_swallowed(
     mock_file.flush.side_effect = OSError("disk full")
     writer.file = mock_file
     writer.file_name = path
-    with patch.object(os, "fsync") as mock_fsync:
-        writer._persist_after_write()  # must not raise
+    with (
+        patch.object(os, "fsync") as mock_fsync,
+        pytest.raises(OSError, match="disk full"),
+    ):
+        writer._persist_after_write()
     mock_fsync.assert_not_called()  # returns before reaching fsync
+
+
+def test_persist_after_write_skips_non_file_descriptor(
+    tmp_path: pathlib.Path,
+) -> None:
+    writer = _DummyWriter(str(tmp_path / "test.txt"))
+    mock_file = Mock()
+    mock_file.fileno.side_effect = ValueError("no descriptor")
+    writer.file = mock_file
+    writer._last_fsync_monotonic = 0
+
+    with (
+        patch(
+            "chat_downloader.output.writers.time.monotonic",
+            return_value=1000,
+        ),
+        patch("chat_downloader.output.writers.log") as mock_log,
+    ):
+        writer._persist_after_write()
+
+    mock_log.assert_called_once_with(
+        "debug",
+        f"fsync() skipped on {writer.file_name}: no descriptor",
+    )
 
 
 # --- CsvContinuousWriter ---

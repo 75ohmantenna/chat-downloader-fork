@@ -30,6 +30,56 @@ MODE_WRITE_TEXT = "w"
 # Wall-clock seconds between fsync()s. Per-record flush handles process
 # crashes; fsync also survives OS-level events like power loss.
 _FSYNC_INTERVAL_SECONDS = 60.0
+_TAIL_SCAN_BYTES = 8192
+
+
+def _repair_jsonl_final_line(file_name: str) -> None:
+    r"""Repair a missing or crash-truncated final JSONL newline before append.
+
+    This writer always terminates records with ``\n``. A final non-newline byte
+    can therefore be either an interrupted write or a complete externally
+    produced record missing its terminator. Scan backward in fixed-size chunks
+    so recovery cost is independent of a multi-gigabyte log's total size.
+    """
+    path = Path(file_name)
+    if not path.exists() or path.stat().st_size == 0:
+        return
+
+    with path.open("r+b") as file:
+        end = file.seek(0, os.SEEK_END)
+        file.seek(end - 1)
+        if file.read(1) == b"\n":
+            return
+
+        position = end
+        truncate_at = 0
+        while position > 0:
+            chunk_start = max(0, position - _TAIL_SCAN_BYTES)
+            file.seek(chunk_start)
+            chunk = file.read(position - chunk_start)
+            newline_index = chunk.rfind(b"\n")
+            if newline_index >= 0:
+                truncate_at = chunk_start + newline_index + 1
+                break
+            position = chunk_start
+
+        file.seek(truncate_at)
+        tail = file.read(end - truncate_at)
+        try:
+            json.loads(tail)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            file.truncate(truncate_at)
+            action = "Removed an incomplete trailing JSONL record from"
+        else:
+            file.seek(0, os.SEEK_END)
+            file.write(b"\n")
+            action = "Terminated the final JSONL record in"
+        file.flush()
+        os.fsync(file.fileno())
+    log(
+        "warning",
+        f"{action} {file_name} before append.",
+    )
 
 
 def _assert_utc_aware(item: Any) -> None:
@@ -74,13 +124,25 @@ class ContinuousFileWriter(ABC):
         self._last_fsync_monotonic = time.monotonic()
 
     def close(self) -> None:
-        """Close the underlying file handle if open."""
+        """Durably flush and close the underlying file handle if open."""
         if self.file:
             if getattr(self.file, "closed", False) is True:
                 self.file = None
                 return
+            file = self.file
             try:
-                self.file.close()
+                try:
+                    file.flush()
+                    try:
+                        os.fsync(file.fileno())
+                    except (AttributeError, TypeError, ValueError) as e:
+                        # In-memory and test doubles may not expose a real fd.
+                        log(
+                            "debug",
+                            f"Final fsync() skipped on {self.file_name}: {e}",
+                        )
+                finally:
+                    file.close()
             except OSError as e:
                 log("warning", f"Error closing file {self.file_name}: {e}")
                 raise
@@ -106,26 +168,19 @@ class ContinuousFileWriter(ABC):
         """
         if self.file is None:
             return
-        try:
-            self.file.flush()
-        except OSError as e:
-            log(
-                "warning",
-                f"flush() failed on {self.file_name}: {e}",
-            )
-            return
+        self.file.flush()
         now = time.monotonic()
         if now - self._last_fsync_monotonic < _FSYNC_INTERVAL_SECONDS:
             return
-        self._last_fsync_monotonic = now
         try:
             os.fsync(self.file.fileno())
-        except (OSError, AttributeError, ValueError) as e:
+        except (AttributeError, TypeError, ValueError) as e:
             # AttributeError/ValueError: in-memory or non-fd files (tests).
             log(
                 "debug",
                 f"fsync() skipped on {self.file_name}: {e}",
             )
+        self._last_fsync_monotonic = now
 
 
 class CsvContinuousWriter(ContinuousFileWriter):
@@ -246,6 +301,8 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         super().__init__(file_name, **kwargs)
         self.sort_keys = sort_keys
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
+        if not self.overwrite:
+            _repair_jsonl_final_line(self.file_name)
         self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
 
     def write(self, item: Any, *, flush: bool = False) -> None:

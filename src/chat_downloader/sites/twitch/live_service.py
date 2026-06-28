@@ -19,6 +19,7 @@ from chat_downloader.utils.dict_utils import multi_get
 
 from .constants import MESSAGE_GROUPS, build_known_irc_keys
 from .irc_transport import (
+    _MIN_RECEIVE_TIMEOUT_SECONDS,
     _PROGRESS_LOG_INTERVAL_MESSAGES,
     TwitchChatIRC,
     get_chat_messages_by_stream_id,
@@ -70,7 +71,12 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
             irc: TwitchChatIRC | None = None
             try:
                 irc = irc_factory(connect_timeout=connect_timeout)
-                irc.set_timeout(request.message_receive_timeout)
+                irc.set_timeout(
+                    max(
+                        request.message_receive_timeout,
+                        _MIN_RECEIVE_TIMEOUT_SECONDS,
+                    )
+                )
                 irc.join_channel(stream_id)
             except OSError as error:
                 if irc is not None:

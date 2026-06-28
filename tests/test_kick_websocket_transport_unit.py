@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from websocket import (
@@ -200,3 +200,14 @@ def test_read_frames_handles_ping_and_skips_and_yields() -> None:
 
     assert frames == [message]
     assert json.loads(ws.sent[0])["event"] == PUSHER_PONG
+
+
+def test_read_frames_idle_watchdog_reconnects_after_repeated_timeouts() -> None:
+    ws = FakeWebSocket([TimeoutError(), TimeoutError()])
+    transport = _connected(ws)
+
+    with (
+        patch.object(wt.time, "monotonic", side_effect=[0.0, 179.0, 180.0]),
+        pytest.raises(ConnectionError, match="became idle"),
+    ):
+        next(read_frames(transport))

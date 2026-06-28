@@ -859,3 +859,26 @@ normal/error shutdown deterministic. Kick VOD metadata/page requests now retry
 network, malformed JSON, HTTP 429, and 5xx failures; terminal 4xx failures stop
 without retry. Shared HTTP sessions reject requests after close, and the facade
 replaces a closed cached site session instead of reusing it.
+
+---
+
+## Round-16 — Hundreds-of-hours hardening pass (2026-06)
+
+Twitch IRC and Kick WebSocket live reads now use monotonic 180-second idle
+watchdogs and a one-second minimum receive poll. This removes the former 10 Hz
+idle timeout loop and converts half-open connections into the existing bounded,
+backed-off reconnect path. Kick reconnects also query recent HTTP history and
+use the existing bounded stable-ID cache to recover messages without replaying
+duplicates when the provider still retains them.
+
+Output writers flush every record, sync every 60 seconds, and sync once more on
+close. Flush/fsync errors now propagate into run failure instead of being logged
+and ignored. JSONL append mode repairs a crash-truncated tail before continuing;
+CSV replacement syncs the temporary file and closes the old handle on every
+success/error path.
+
+Kick VOD pagination no longer retains every parsed message in `all_messages`.
+Newest-first page batches are serialized into a `SpooledTemporaryFile`, which
+rolls to disk after 1 MiB, and then read backward by page for chronological
+output. Only at most 500 page offsets and one decoded page remain in memory.
+Retry and timeout sleeps now use monotonic time, avoiding wall-clock/DST changes.
