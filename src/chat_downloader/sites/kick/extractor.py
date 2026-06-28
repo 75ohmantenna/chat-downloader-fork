@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.sites.base import BaseChatDownloader
 
+from .api_client import _close_kick_session, _get_kick_session
 from .constants import VALID_URLS
 from .errors import KickError
 from .live_service import get_chat_by_channel as build_channel_chat
@@ -57,6 +58,25 @@ class KickChatDownloader(BaseChatDownloader):
             "expected_result": {"error": KickError},
         },
     ]
+
+    def __init__(self, **kwargs: object) -> None:
+        """Initialize base HTTP state and an isolated Kick API session."""
+        super().__init__(**kwargs)
+        proxies = dict(self.session.proxies) if self.session.proxies else None
+        self._kick_api_session = _get_kick_session(
+            proxy=proxies,
+            extra_headers=dict(self.session.headers),
+        )
+
+    def close(self) -> None:
+        """Close the dedicated Kick API session and base HTTP session."""
+        kick_session = getattr(self, "_kick_api_session", None)
+        self._kick_api_session = None
+        try:
+            if kick_session is not None:
+                _close_kick_session(kick_session)
+        finally:
+            super().close()
 
     def _get_chat_by_channel(
         self,
@@ -138,5 +158,10 @@ class KickChatDownloader(BaseChatDownloader):
 
         proxy = _resolve_proxy(self)
         return build_vod_chat(
-            username, video_id, request, proxy=proxy
+            username,
+            video_id,
+            request,
+            proxy=proxy,
+            session=self._kick_api_session,
+            timeout=self._http_timeout,
         )  # pragma: no cover

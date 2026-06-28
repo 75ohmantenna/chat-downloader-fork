@@ -23,7 +23,7 @@ from chat_downloader.debugging import log, logger
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.retry import _attempt_numbers
+from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 
 from .api_client import fetch_channel, fetch_preloaded_messages
 from .constants import MESSAGE_GROUPS, is_numeric_id
@@ -86,8 +86,13 @@ def _fetch_channel_with_retry(
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
             proxy = _resolve_proxy(downloader)
-            return fetch_channel(username, proxy=proxy)
-        except (KickServerError, RequestException, JSONDecodeError) as error:
+            return fetch_channel(
+                username,
+                proxy=proxy,
+                session=getattr(downloader, "_kick_api_session", None),
+                timeout=downloader._http_timeout,
+            )
+        except (KickServerError, RequestException, JSONDecodeError, OSError) as error:
             downloader.retry(attempt_number, error=error, request=request)
     msg = "unreachable: retry should have raised RetriesExceeded"
     raise RuntimeError(msg)
@@ -285,7 +290,13 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
 
     # 1. Preloaded history (best-effort; non-fatal on failure).
     proxy = _resolve_proxy(downloader)
-    preloaded = fetch_preloaded_messages(channel_id, username, proxy=proxy)
+    preloaded = fetch_preloaded_messages(
+        channel_id,
+        username,
+        proxy=proxy,
+        session=getattr(downloader, "_kick_api_session", None),
+        timeout=downloader._http_timeout,
+    )
     for message in reversed(parse_preloaded_messages(preloaded)):
         if emit(message):
             yield message
@@ -300,16 +311,27 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect loop is intrinsically 
         http_proxy_host=ws_host,
         http_proxy_port=ws_port,
     )
+    consecutive_connection_failures = 0
     try:
         while True:
             try:
                 for frame in frame_iterator(transport):
+                    # A decoded application frame proves this connection made
+                    # progress, even when it is not a chat-message event.
+                    consecutive_connection_failures = 0
                     live_message = dispatch_event(frame)
                     if live_message is not None and emit(live_message):
                         yield live_message
             except ConnectionError as error:
                 logger.debug("Kick websocket disconnected; reconnecting: %s", error)
                 transport.close()
+                consecutive_connection_failures += 1
+                wait_for_reconnect(
+                    consecutive_connection_failures,
+                    error=error,
+                    request=request,
+                    provider="Kick websocket",
+                )
                 transport = _open_subscribed_transport(
                     downloader,
                     chatroom_id,

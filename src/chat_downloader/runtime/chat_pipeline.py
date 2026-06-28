@@ -4,9 +4,8 @@
 
 from __future__ import annotations
 
-import itertools
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
@@ -34,10 +33,46 @@ _YOUTUBE_LIVE_FORMAT_OVERRIDES: dict[str, str] = {
 }
 
 
+class _MessageSource(Protocol):
+    def __next__(self) -> object: ...
+
+
+class _MessageLimitIterator:
+    """Limit an iterator while preserving its explicit close lifecycle."""
+
+    def __init__(self, source: _MessageSource, limit: int) -> None:
+        self._source = source
+        self._remaining = limit
+        self._closed = False
+
+    def __iter__(self) -> _MessageLimitIterator:
+        return self
+
+    def __next__(self) -> object:
+        if self._closed or self._remaining <= 0:
+            self.close()
+            raise StopIteration
+        try:
+            item = next(self._source)
+        except BaseException:
+            self.close()
+            raise
+        self._remaining -= 1
+        return item
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        close = getattr(self._source, "close", None)
+        if callable(close):
+            close()
+
+
 def apply_message_limit(chat: Chat, max_messages: int | None) -> None:
     """Apply maximum message limit to a chat generator."""
     if max_messages is not None and chat.chat is not None:
-        chat.chat = itertools.islice(chat.chat, max_messages)
+        chat.chat = _MessageLimitIterator(chat.chat, max_messages)
 
 
 def configure_timeouts(

@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 from requests.exceptions import RequestException
 
+from chat_downloader.errors import RetriesExceeded
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch import live_service
 
@@ -28,6 +29,8 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
     request = ChatRequest(
         url="https://www.twitch.tv/example",
         max_attempts=3,
+        retry_timeout=0,
+        interruptible_retry=False,
         message_receive_timeout=1.5,
         message_groups=["messages"],
     )
@@ -81,7 +84,9 @@ def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -
     )
     request = ChatRequest(
         url="https://www.twitch.tv/example",
-        max_attempts=1,
+        max_attempts=2,
+        retry_timeout=0,
+        interruptible_retry=False,
         message_groups=["messages"],
     )
     messages = [
@@ -122,7 +127,9 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
     )
     request = ChatRequest(
         url="https://www.twitch.tv/example",
-        max_attempts=1,
+        max_attempts=2,
+        retry_timeout=0,
+        interruptible_retry=False,
         message_groups=["messages", "other"],
     )
     message_generator = Mock(
@@ -366,6 +373,8 @@ def test_live_service_reconnect_refreshes_badge_set() -> None:
     request = ChatRequest(
         url="https://www.twitch.tv/example",
         max_attempts=2,
+        retry_timeout=0,
+        interruptible_retry=False,
         message_receive_timeout=1.5,
         message_groups=["messages"],
     )
@@ -456,3 +465,69 @@ def test_live_service_iter_stream_chat_messages_raises_runtime_error_if_retry_re
                 irc_factory=Mock(side_effect=OSError("temporary")),
             )
         )
+
+
+def test_live_service_repeated_disconnects_exhaust_reconnect_budget() -> None:
+    ircs = [Mock(), Mock()]
+    downloader = SimpleNamespace(
+        badge_cache=SimpleNamespace(snapshot=dict),
+        _update_badge_info=Mock(),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/example",
+        max_attempts=2,
+        retry_timeout=0,
+        interruptible_retry=False,
+        message_groups=["messages"],
+    )
+
+    with pytest.raises(RetriesExceeded):
+        list(
+            live_service.iter_stream_chat_messages(
+                cast("Any", downloader),
+                "example",
+                request,
+                irc_factory=Mock(side_effect=ircs),
+                message_generator=Mock(
+                    side_effect=[
+                        ConnectionError("drop one"),
+                        ConnectionError("drop two"),
+                    ]
+                ),
+            )
+        )
+
+    assert all(irc.close_connection.called for irc in ircs)
+
+
+def test_live_service_closes_partial_connection_when_join_fails() -> None:
+    failed_irc = Mock()
+    failed_irc.join_channel.side_effect = OSError("join failed")
+    healthy_irc = Mock()
+    downloader = SimpleNamespace(
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/example",
+        max_attempts=2,
+        retry_timeout=0,
+        interruptible_retry=False,
+        message_groups=["messages"],
+    )
+
+    assert (
+        list(
+            live_service.iter_stream_chat_messages(
+                cast("Any", downloader),
+                "example",
+                request,
+                irc_factory=Mock(side_effect=[failed_irc, healthy_irc]),
+                message_generator=Mock(return_value=iter(())),
+            )
+        )
+        == []
+    )
+
+    failed_irc.close_connection.assert_called_once()

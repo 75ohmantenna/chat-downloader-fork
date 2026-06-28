@@ -141,6 +141,14 @@ def test_resolve_channel_missing_chatroom_id() -> None:
         live_service._resolve_channel(data, "examplechannel")
 
 
+def test_resolve_channel_rejects_non_numeric_ids() -> None:
+    with pytest.raises(KickError, match="non-numeric"):
+        live_service._resolve_channel(
+            {"id": "../channel", "chatroom": {"id": "room"}},
+            "examplechannel",
+        )
+
+
 def test_resolve_channel_offline() -> None:
     data = load_fixture("channel_offline.json")
     channel_id, chatroom_id, title = live_service._resolve_channel(
@@ -372,6 +380,45 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
         assert ids == ["a", "b"]
         assert len(created) == 2  # reconnected once
         assert created[0].close_count >= 1
+
+
+def test_get_chat_by_channel_repeated_disconnects_exhaust_budget() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    created: list[FakeTransport] = []
+
+    def factory() -> FakeTransport:
+        transport = FakeTransport()
+        created.append(transport)
+        return transport
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client._get_kick_session",
+            return_value=session,
+        ),
+        pytest.raises(RetriesExceeded),
+    ):
+        chat = _build_chat(
+            downloader,
+            request_kwargs={"max_attempts": 2},
+            transport_factory=factory,
+            frame_iterator=make_frame_iterator(
+                [
+                    [ConnectionError("drop one")],
+                    [ConnectionError("drop two")],
+                ]
+            ),
+        )
+        list(chat.chat)
+
+    assert len(created) == 2
+    assert all(transport.close_count >= 1 for transport in created)
 
 
 def test_get_chat_by_channel_offline_succeeds_with_offline_title() -> None:

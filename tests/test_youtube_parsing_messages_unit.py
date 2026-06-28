@@ -3,7 +3,20 @@
 from __future__ import annotations
 
 from chat_downloader.sites.youtube import constants_message as yt_constants
+from chat_downloader.sites.youtube.parsing import message_items_content_parser
 from chat_downloader.sites.youtube.parsing import messages as yt_messages
+
+
+def test_parse_item_depth_guard_returns_existing_info() -> None:
+    info = {"message": "kept"}
+
+    result = message_items_content_parser._parse_item(
+        {"ignored": {}},
+        info,
+        depth=message_items_content_parser._MAX_ITEM_PARSE_DEPTH + 1,
+    )
+
+    assert result is info
 
 
 def test_get_source_image_url_strips_query_params() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 from websocket import (
@@ -57,6 +58,13 @@ def test_connect_failure_raises_connection_error() -> None:
         transport.connect(1.0)
 
 
+def test_connect_rejects_missing_websocket_object() -> None:
+    transport = KickPusherTransport(connector=lambda *_args, **_kwargs: None)
+
+    with pytest.raises(ConnectionError, match="returned no connection"):
+        transport.connect(1.0)
+
+
 def test_set_timeout_noop_before_connect() -> None:
     transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
     # No connection yet: must not raise.
@@ -68,6 +76,18 @@ def test_set_timeout_after_connect() -> None:
     transport = _connected(ws)
     transport.set_timeout(2.0)
     assert ws.timeout == 2.0
+
+
+def test_set_timeout_failure_is_retryable_and_close_releases_socket() -> None:
+    ws = FakeWebSocket()
+    ws.settimeout = MagicMock(side_effect=OSError("bad socket"))
+    transport = _connected(ws)
+
+    with pytest.raises(ConnectionError, match="configure"):
+        transport.set_timeout(4)
+
+    transport.close()
+    assert ws.closed is True
 
 
 def test_subscribe_sends_expected_frame() -> None:

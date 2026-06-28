@@ -14,7 +14,7 @@ from chat_downloader.errors import ParsingError, UserNotFound
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.retry import _attempt_numbers
+from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.dict_utils import multi_get
 
 from .constants import MESSAGE_GROUPS, build_known_irc_keys
@@ -65,12 +65,16 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     )
 
     def create_connection() -> TwitchChatIRC:
+        connect_timeout = getattr(downloader, "_http_timeout", (10.0, 30.0))[0]
         for attempt_number in _attempt_numbers(request.max_attempts):
+            irc: TwitchChatIRC | None = None
             try:
-                irc = irc_factory()
+                irc = irc_factory(connect_timeout=connect_timeout)
                 irc.set_timeout(request.message_receive_timeout)
                 irc.join_channel(stream_id)
             except OSError as error:
+                if irc is not None:
+                    irc.close_connection()
                 downloader.retry(attempt_number, error=error, request=request)
             else:
                 return irc
@@ -84,6 +88,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     # window protects against duplicate emission after IRC reconnects,
     # which can replay several minutes of messages.
     seen_message_cache = _SeenMessageCache(limit=_LIVE_SEEN_MESSAGE_LIMIT)
+    consecutive_connection_failures = 0
 
     try:
         while True:
@@ -101,6 +106,10 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                         )
                         msg = "Server requested reconnect."
                         raise ConnectionError(msg)  # noqa: TRY301 — drives the outer reconnect loop via the enclosing except
+
+                    # A normal IRC item proves the connection made progress.
+                    # Future disconnects start a fresh bounded retry streak.
+                    consecutive_connection_failures = 0
 
                     if _is_duplicate_live_message(
                         raw_message.get("message_id"),
@@ -126,8 +135,15 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                         )
                     yield raw_message
 
-            except ConnectionError:
+            except ConnectionError as error:
                 twitch_chat_irc.close_connection()
+                consecutive_connection_failures += 1
+                wait_for_reconnect(
+                    consecutive_connection_failures,
+                    error=error,
+                    request=request,
+                    provider="Twitch IRC",
+                )
                 twitch_chat_irc = create_connection()
                 downloader._update_badge_info(stream_id)
                 badge_set = downloader.badge_cache.snapshot()

@@ -83,6 +83,7 @@ class TimedGenerator:
             self._timeout_expired.set()
 
         self.timer = threading.Timer(self.timeout, on_timeout)
+        self.timer.daemon = True
         self.timer.start()
 
     def start_inactivity_timer(self) -> None:
@@ -103,6 +104,7 @@ class TimedGenerator:
             self.inactivity_timeout,
             on_inactivity_timeout,
         )
+        self.inactivity_timer.daemon = True
         self.inactivity_timer.start()
 
     def reset_inactivity_timer(self) -> None:
@@ -174,15 +176,36 @@ class TimedGenerator:
                 if self._stop_requested.is_set():
                     self._close_generator()
                     return
-                self._result_queue.put(("item", item, time.monotonic()))
+                if not self._publish_result(("item", item, time.monotonic())):
+                    self._close_generator()
+                    return
             except StopIteration:
-                self._result_queue.put(("stop", None, time.monotonic()))
+                self._publish_result(("stop", None, time.monotonic()))
                 return
             except BaseException as error:
                 if isinstance(error, (SystemExit, GeneratorExit)):
                     raise
-                self._result_queue.put(("error", error, time.monotonic()))
+                self._publish_result(("error", error, time.monotonic()))
                 return
+
+    def _publish_result(self, result: tuple[str, object, float]) -> bool:
+        """Publish a worker result without blocking forever during shutdown."""
+        while not self._stop_requested.is_set():
+            try:
+                self._result_queue.put(result, timeout=POLLING_TIME)
+            except _queue.Full:
+                continue
+            return True
+        return False
+
+    def close(self) -> None:
+        """Request worker shutdown and close the wrapped iterator when safe."""
+        if self._closed:
+            return
+        self._closed = True
+        self._cancel_timers()
+        if threading.current_thread() is not self._worker:
+            self._worker.join(timeout=max(POLLING_TIME * 2, 0.2))
 
     def _deadline_wait(self) -> float | None:
         """Return the minimum remaining deadline; None when no timers active."""
@@ -197,8 +220,7 @@ class TimedGenerator:
 
     def _finish(self, reason: str | None) -> NoReturn:
         """Cancel timers, close, run callback for reason, then stop."""
-        self._cancel_timers()
-        self._closed = True
+        self.close()
         if reason == "timeout":
             self._run_function(self.on_timeout)
         elif reason is not None:

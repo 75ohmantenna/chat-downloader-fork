@@ -239,6 +239,9 @@ def test_header_cookie_and_close_helpers(monkeypatch) -> None:
     )
     close_session(owner)
 
+    with pytest.raises(RuntimeError, match="HTTP session is closed"):
+        session_get(owner, "https://example.com")
+
     assert owner.session.closed is True
     assert logged == [("debug", "Session closed.")]
 

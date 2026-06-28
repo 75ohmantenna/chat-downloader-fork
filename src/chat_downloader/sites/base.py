@@ -64,6 +64,7 @@ class BaseChatDownloader:
     _request_profile: str | None
     _auto_profile_fallback: bool
     _twitch_client_id: str | None
+    _session_closed: bool
 
     _NAME: str | None = None
 

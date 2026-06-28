@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.kick import extractor
+from chat_downloader.sites.kick import constants, extractor
 from chat_downloader.sites.kick.extractor import KickChatDownloader
 
 ACCEPTED = [
@@ -48,6 +49,24 @@ def test_rejects_non_channel_urls(url: str) -> None:
 def test_site_metadata() -> None:
     assert KickChatDownloader._NAME == "kick.com"
     assert KickChatDownloader._SITE_DEFAULT_PARAMS["format"] == "default"
+
+
+def test_kick_origin_rejects_non_https_url() -> None:
+    assert constants._is_kick_origin("http://kick.com/app.js") is False
+
+
+def test_downloader_close_releases_both_http_sessions(monkeypatch: Any) -> None:
+    kick_session = MagicMock()
+    monkeypatch.setattr(extractor, "_get_kick_session", lambda **_kwargs: kick_session)
+    downloader = KickChatDownloader()
+    base_session = downloader.session
+
+    downloader.close()
+    downloader.close()
+
+    kick_session.close.assert_called_once()
+    assert downloader._session_closed is True
+    assert base_session is downloader.session
 
 
 def test_get_chat_by_channel_routes_to_builder(monkeypatch: Any) -> None:

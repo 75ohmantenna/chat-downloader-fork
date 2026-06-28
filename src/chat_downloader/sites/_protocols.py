@@ -31,6 +31,7 @@ class SessionOwnerProto(Protocol):
     _request_profile: str | None
     _auto_profile_fallback: bool
     _twitch_client_id: str | None
+    _session_closed: bool
 
     @property
     def _has_auth_cookies(self) -> bool:

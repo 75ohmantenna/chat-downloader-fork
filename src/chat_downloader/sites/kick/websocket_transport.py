@@ -103,8 +103,9 @@ class KickPusherTransport:
         Raises:
             ConnectionError: If the underlying connection attempt fails.
         """
+        self.close()
         try:
-            self._ws = self._connector(
+            websocket = self._connector(
                 self._url,
                 timeout,
                 http_proxy_host=self._http_proxy_host,
@@ -113,6 +114,10 @@ class KickPusherTransport:
         except (WebSocketException, OSError) as error:
             msg = "Unable to open Kick websocket connection."
             raise ConnectionError(msg) from error
+        if websocket is None:
+            msg = "Kick websocket connector returned no connection."
+            raise ConnectionError(msg)
+        self._ws = websocket
 
     def set_timeout(self, timeout: float | None) -> None:
         """Set the receive timeout on the open socket.
@@ -121,7 +126,11 @@ class KickPusherTransport:
             timeout: Timeout in seconds, or ``None`` to block.
         """
         if self._ws is not None:
-            self._ws.settimeout(timeout)
+            try:
+                self._ws.settimeout(timeout)
+            except (WebSocketException, OSError) as error:
+                msg = "Unable to configure Kick websocket timeout."
+                raise ConnectionError(msg) from error
 
     def _send(self, payload: JSONDict) -> None:
         """Serialize and send a Pusher frame.
@@ -173,7 +182,11 @@ class KickPusherTransport:
             raw = self._ws.recv()
         except (TimeoutError, WebSocketTimeoutException):
             return None
-        except (WebSocketConnectionClosedException, OSError) as error:
+        except (
+            WebSocketConnectionClosedException,
+            WebSocketException,
+            OSError,
+        ) as error:
             msg = "Kick websocket connection closed."
             raise ConnectionError(msg) from error
 
@@ -197,8 +210,8 @@ class KickPusherTransport:
             return
         try:
             self._ws.close()
-        except (WebSocketException, OSError):
-            pass
+        except (WebSocketException, OSError) as error:
+            logger.debug("Error closing Kick websocket: %s", error)
         finally:
             self._ws = None
 

@@ -25,6 +25,25 @@ class BlockingCloseableIterator:
         self.closed.set()
 
 
+class QueueBlockingIterator:
+    def __init__(self) -> None:
+        self.second_item_requested = threading.Event()
+        self.closed = threading.Event()
+        self.calls = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        self.calls += 1
+        if self.calls >= 2:
+            self.second_item_requested.set()
+        return self.calls
+
+    def close(self) -> None:
+        self.closed.set()
+
+
 def test_cancel_timers_defers_close_while_worker_is_advancing() -> None:
     source = BlockingCloseableIterator()
     tg = TimedGenerator(source)
@@ -38,6 +57,18 @@ def test_cancel_timers_defers_close_while_worker_is_advancing() -> None:
     source.release.set()
     tg._worker.join(timeout=1)
 
+    assert source.closed.is_set()
+
+
+def test_close_unblocks_worker_waiting_to_publish_result() -> None:
+    source = QueueBlockingIterator()
+    tg = TimedGenerator(source)
+
+    assert source.second_item_requested.wait(timeout=1)
+    tg.close()
+    tg._worker.join(timeout=1)
+
+    assert not tg._worker.is_alive()
     assert source.closed.is_set()
 
 

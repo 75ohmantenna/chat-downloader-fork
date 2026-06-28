@@ -279,3 +279,30 @@ def test_create_session_overwrite_warns_and_replaces_when_existing_close_fails(
     )
     assert cast("Any", second).instance_id == 2
     assert cast("Any", second).kwargs == {"headers": {"User-Agent": "UA"}}
+
+
+def test_create_session_replaces_closed_cached_session() -> None:
+    owner = SimpleNamespace(
+        config=SimpleNamespace(as_dict=lambda: {"headers": {"User-Agent": "UA"}}),
+        sessions={},
+        _cookie_jar=[],
+    )
+
+    class FakeSite(BaseChatDownloader):
+        def __init__(self, **_kwargs) -> None:
+            self._session_closed = False
+            self.close_calls = 0
+            self.session = SimpleNamespace(
+                cookies=SimpleNamespace(set_cookie=MagicMock()),
+            )
+
+        def close(self) -> None:
+            self.close_calls += 1
+            self._session_closed = True
+
+    first = create_session(owner, FakeSite)
+    first._session_closed = True
+    second = create_session(owner, FakeSite)
+
+    assert second is not first
+    assert first.close_calls == 1

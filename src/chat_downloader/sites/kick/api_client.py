@@ -13,7 +13,7 @@ chat content; that lives in :mod:`chat_downloader.sites.kick.parsing`.
 from __future__ import annotations
 
 from http import HTTPStatus
-from typing import Any, NoReturn, cast
+from typing import Any, NoReturn, Protocol, cast
 
 import requests
 
@@ -34,7 +34,13 @@ from .constants import (
 )
 from .errors import KickError, KickServerError
 
-_KICK_SESSION: Any = None
+
+class _KickSession(Protocol):
+    """Minimal session shape accepted by public Kick request helpers."""
+
+    def get(self, url: str, **kwargs: object) -> requests.Response: ...
+
+    def close(self) -> None: ...
 
 
 def _get_kick_session(
@@ -50,34 +56,36 @@ def _get_kick_session(
     2. ``cloudscraper`` — JS-challenge solver for simpler challenges.
     3. Plain ``requests.Session`` with browser-like headers — last resort.
 
-    The session is cached as a module-level singleton; proxy and extra_headers
-    only affect the first creation call.
-
     Args:
         proxy: Optional proxy mapping (e.g. ``{"http": "...", "https": "..."}``)
-            applied to the session. Only takes effect on fresh sessions; the
-            singleton returned on subsequent calls retains its original config.
+            applied to the new session.
         extra_headers: Optional headers dict merged into the session's default
-            headers. Only takes effect on fresh sessions; the cached singleton
-            retains its original config.
+            headers.
 
     Returns:
         A configured session (``curl_cffi.requests.Session``,
         ``cloudscraper.CloudScraper``, or ``requests.Session``).
     """
-    global _KICK_SESSION  # noqa: PLW0603 — lazy-init singleton
-    if _KICK_SESSION is None:
-        session = _try_curl_cffi()
-        if session is None:
-            session = _try_cloudscraper()
-        if session is None:
-            session = _make_plain_session()
-        _KICK_SESSION = session
+    session = _try_curl_cffi()
+    if session is None:
+        session = _try_cloudscraper()
+    if session is None:
+        session = _make_plain_session()
     if proxy:
-        _KICK_SESSION.proxies.update(proxy)
+        session.proxies.update(proxy)
     if extra_headers:
-        _KICK_SESSION.headers.update(extra_headers)
-    return _KICK_SESSION
+        session.headers.update(extra_headers)
+    return session
+
+
+def _close_kick_session(session: Any) -> None:
+    """Close a dedicated Kick session when it exposes ``close``."""
+    close = getattr(session, "close", None)
+    if callable(close):
+        try:
+            close()
+        except (OSError, RuntimeError) as error:
+            logger.debug("Error closing Kick API session: %s", error)
 
 
 def _try_curl_cffi() -> Any | None:  # pragma: no cover — live-dependency path
@@ -260,6 +268,8 @@ def fetch_channel(
     *,
     proxy: dict[str, str] | None = None,
     extra_headers: dict[str, str] | None = None,
+    session: _KickSession | None = None,
+    timeout: tuple[float, float] = (10.0, 30.0),
 ) -> JSONDict:
     """Fetch channel metadata from ``/api/v2/channels/{username}``.
 
@@ -270,6 +280,8 @@ def fetch_channel(
         username: Channel username/slug.
         proxy: Optional proxy mapping for the HTTP session.
         extra_headers: Optional headers to merge into the session.
+        session: Optional caller-owned HTTP session.
+        timeout: Connect/read timeout tuple for the API request.
 
     Returns:
         The decoded channel metadata object.
@@ -280,15 +292,22 @@ def fetch_channel(
         KickServerError: On transient (429/5xx/malformed) responses.
     """
     url = CHANNEL_API_TEMPLATE.format(username=username)
-    response = _get_kick_session(proxy=proxy, extra_headers=extra_headers).get(
-        url, timeout=(10, 30)
+    owns_session = session is None
+    active_session = session or _get_kick_session(
+        proxy=proxy,
+        extra_headers=extra_headers,
     )
-    _check_status(response, username)
-    data = _decode_json(response, username)
-    if not isinstance(data, dict):
-        msg = f"Kick channel metadata for {username!r} was not a JSON object."
-        raise KickServerError(msg)
-    return data
+    try:
+        response = active_session.get(url, timeout=timeout)
+        _check_status(response, username)
+        data = _decode_json(response, username)
+        if not isinstance(data, dict):
+            msg = f"Kick channel metadata for {username!r} was not a JSON object."
+            raise KickServerError(msg)
+        return data
+    finally:
+        if owns_session:
+            _close_kick_session(active_session)
 
 
 def fetch_preloaded_messages(
@@ -297,6 +316,8 @@ def fetch_preloaded_messages(
     *,
     proxy: dict[str, str] | None = None,
     extra_headers: dict[str, str] | None = None,
+    session: _KickSession | None = None,
+    timeout: tuple[float, float] = (10.0, 30.0),
 ) -> JSONList:
     """Fetch recent preloaded messages from ``/channels/{id}/messages``.
 
@@ -308,6 +329,8 @@ def fetch_preloaded_messages(
         username: Channel username/slug, used only for error context.
         proxy: Optional proxy mapping for the HTTP session.
         extra_headers: Optional headers to merge into the session.
+        session: Optional caller-owned HTTP session.
+        timeout: Connect/read timeout tuple for the API request.
 
     Returns:
         A list of raw preloaded message objects (possibly empty). Failures to
@@ -315,15 +338,22 @@ def fetch_preloaded_messages(
         the live websocket stream is the primary source.
     """
     url = MESSAGES_API_TEMPLATE.format(channel_id=channel_id)
+    owns_session = session is None
+    active_session = session or _get_kick_session(
+        proxy=proxy,
+        extra_headers=extra_headers,
+    )
     try:
-        response = _get_kick_session(proxy=proxy, extra_headers=extra_headers).get(
-            url, timeout=(10, 30)
-        )
-        _check_status(response, username)
-        data = _decode_json(response, username)
-    except KickServerError as error:
-        logger.debug("Kick preloaded-message fetch failed (non-fatal): %s", error)
-        return []
+        try:
+            response = active_session.get(url, timeout=timeout)
+            _check_status(response, username)
+            data = _decode_json(response, username)
+        except (KickServerError, requests.RequestException, OSError) as error:
+            logger.debug("Kick preloaded-message fetch failed (non-fatal): %s", error)
+            return []
+    finally:
+        if owns_session:
+            _close_kick_session(active_session)
 
     if not isinstance(data, dict):
         return []

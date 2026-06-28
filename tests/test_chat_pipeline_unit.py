@@ -49,6 +49,32 @@ def test_apply_message_limit_none_is_no_op() -> None:
     assert list(cast("Any", chat.chat)) == [0, 1, 2, 3, 4]
 
 
+def test_apply_message_limit_propagates_close_to_source() -> None:
+    source = MagicMock()
+    source.__next__.side_effect = [{"id": "1"}, {"id": "2"}]
+    chat = Chat(source, title="Example")
+
+    apply_message_limit(chat, 1)
+    assert next(cast("Any", chat.chat)) == {"id": "1"}
+    limited = cast("Any", chat.chat)
+    chat.close()
+    limited.close()
+
+    source.close.assert_called_once()
+
+
+def test_apply_message_limit_closes_source_when_iteration_raises() -> None:
+    source = MagicMock()
+    source.__next__.side_effect = KeyboardInterrupt
+    chat = Chat(source, title="Example")
+    apply_message_limit(chat, 1)
+
+    with pytest.raises(KeyboardInterrupt):
+        next(cast("Any", chat.chat))
+
+    source.close.assert_called_once()
+
+
 def test_configure_timeouts_wraps_chat_and_installs_callbacks(
     monkeypatch,
 ) -> None:

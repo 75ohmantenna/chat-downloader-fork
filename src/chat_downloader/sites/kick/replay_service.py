@@ -14,11 +14,16 @@ chronological order.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from functools import partial
+from json import JSONDecodeError
 from typing import TYPE_CHECKING, Any, cast
 
-from chat_downloader.debugging import log, logger
-from chat_downloader.errors import ParsingError
+from requests.exceptions import RequestException
+
+from chat_downloader.debugging import log
+from chat_downloader.errors import ParsingError, RetriesExceeded
 from chat_downloader.sites.models import Chat
+from chat_downloader.sites.retry import retry
 from chat_downloader.utils.json_types import (
     JSONAny,
     JSONDict,
@@ -27,27 +32,48 @@ from chat_downloader.utils.json_types import (
     get_list,
 )
 
-from .api_client import _get_kick_session
+from .api_client import _close_kick_session, _get_kick_session
 from .constants import CHANNEL_MESSAGES_API, VIDEO_API_TEMPLATE, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.messages import parse_chat_message
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
 
     from chat_downloader.models import ChatRequest
+
+    from .api_client import _KickSession
+
+
+def _fetch_with_retry[T](fetch: Callable[[], T], request: ChatRequest) -> T:
+    """Run a transient Kick VOD request with the configured retry policy."""
+    for attempt_number in range(1, request.max_attempts + 1):
+        try:
+            return fetch()
+        except (
+            KickServerError,
+            RequestException,
+            JSONDecodeError,
+            OSError,
+        ) as error:
+            retry(attempt_number, error=error, request=request)
+    raise RetriesExceeded(request.max_attempts)  # pragma: no cover
 
 
 def _fetch_video_metadata(
     video_id: str,
     *,
     proxy: dict[str, str] | None = None,
+    session: _KickSession | None = None,
+    timeout: tuple[float, float] = (10.0, 30.0),
 ) -> JSONDict:  # pragma: no cover — network-dependent VOD API
     """Fetch video metadata from ``/api/v1/video/{video_id}``.
 
     Args:
         video_id: The VOD UUID.
         proxy: Optional proxy mapping for the HTTP session.
+        session: Optional caller-owned Kick API session.
+        timeout: Connect/read timeout tuple for the API request.
 
     Returns:
         The decoded video metadata object.
@@ -55,20 +81,28 @@ def _fetch_video_metadata(
     Raises:
         KickError: If the video is not found or metadata is incomplete.
     """
-    session = _get_kick_session(proxy=proxy)
+    owns_session = session is None
+    active_session = session or _get_kick_session(proxy=proxy)
     url = VIDEO_API_TEMPLATE.format(video_id=video_id)
-    resp = session.get(url, timeout=(10, 30))
-    if resp.status_code == 404:
-        msg = f"Kick video not found: {video_id}"
-        raise KickError(msg)
-    if not resp.ok:
-        msg = f"Kick video API returned HTTP {resp.status_code} for {video_id}"
-        raise KickServerError(msg)
-    data = cast("JSONAny", resp.json())
-    if not isinstance(data, dict):
-        msg = f"Kick video metadata for {video_id} was not a JSON object."
-        raise KickServerError(msg)
-    return data
+    try:
+        resp = active_session.get(url, timeout=timeout)
+        if resp.status_code == 404:
+            msg = f"Kick video not found: {video_id}"
+            raise KickError(msg)
+        if resp.status_code == 429 or resp.status_code >= 500:
+            msg = f"Kick video API returned HTTP {resp.status_code} for {video_id}"
+            raise KickServerError(msg)
+        if not resp.ok:
+            msg = f"Kick video API returned HTTP {resp.status_code} for {video_id}"
+            raise KickError(msg)
+        data = cast("JSONAny", resp.json())
+        if not isinstance(data, dict):
+            msg = f"Kick video metadata for {video_id} was not a JSON object."
+            raise KickServerError(msg)
+        return data
+    finally:
+        if owns_session:
+            _close_kick_session(active_session)
 
 
 def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsewhere
@@ -133,7 +167,12 @@ def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsew
 
 
 def _fetch_message_page(  # pragma: no cover — network-dependent
-    channel_id: str, cursor: str | None = None, *, proxy: dict[str, str] | None = None
+    channel_id: str,
+    cursor: str | None = None,
+    *,
+    proxy: dict[str, str] | None = None,
+    session: _KickSession | None = None,
+    timeout: tuple[float, float] = (10.0, 30.0),
 ) -> JSONDict:
     """Fetch one page of channel messages.
 
@@ -141,20 +180,36 @@ def _fetch_message_page(  # pragma: no cover — network-dependent
         channel_id: Numeric channel id.
         cursor: Optional pagination cursor (timestamp).
         proxy: Optional proxy mapping for the HTTP session.
+        session: Optional caller-owned Kick API session.
+        timeout: Connect/read timeout tuple for the API request.
 
     Returns:
         The API response dict with ``data.messages`` and ``data.cursor``.
     """
-    _empty: JSONDict = {"data": {"messages": [], "cursor": None}}
-    session = _get_kick_session(proxy=proxy)
+    owns_session = session is None
+    active_session = session or _get_kick_session(proxy=proxy)
     url = CHANNEL_MESSAGES_API.format(channel_id=channel_id)
     params = {"cursor": cursor} if cursor else None
-    resp = session.get(url, params=params, timeout=(10, 30))
-    if not resp.ok:
-        logger.debug("Kick messages API returned HTTP %s", resp.status_code)
-        return _empty
-    data = cast("JSONAny", resp.json())
-    return data if isinstance(data, dict) else _empty
+    try:
+        resp = active_session.get(url, params=params, timeout=timeout)
+        if resp.status_code == 429 or resp.status_code >= 500:
+            msg = f"Kick messages API returned HTTP {resp.status_code}"
+            raise KickServerError(msg)
+        if not resp.ok:
+            msg = f"Kick messages API returned HTTP {resp.status_code}"
+            raise KickError(msg)
+        try:
+            data = cast("JSONAny", resp.json())
+        except (JSONDecodeError, ValueError) as error:
+            msg = "Kick messages API returned malformed JSON."
+            raise KickServerError(msg) from error
+        if not isinstance(data, dict):
+            msg = "Kick messages API returned a non-object payload."
+            raise KickServerError(msg)
+        return data
+    finally:
+        if owns_session:
+            _close_kick_session(active_session)
 
 
 def get_vod_chat(  # pragma: no cover — network-dependent
@@ -163,6 +218,8 @@ def get_vod_chat(  # pragma: no cover — network-dependent
     request: ChatRequest,
     *,
     proxy: dict[str, str] | None = None,
+    session: _KickSession | None = None,
+    timeout: tuple[float, float] = (10.0, 30.0),
 ) -> Chat:
     """Build a :class:`Chat` for VOD chat replay.
 
@@ -175,11 +232,21 @@ def get_vod_chat(  # pragma: no cover — network-dependent
         video_id: VOD UUID.
         request: The active chat request.
         proxy: Optional proxy mapping for the HTTP session.
+        session: Optional caller-owned Kick API session.
+        timeout: Connect/read timeout tuple for API requests.
 
     Returns:
         A configured :class:`Chat` whose generator yields message dicts.
     """
-    video_data = _fetch_video_metadata(video_id, proxy=proxy)
+    video_data = _fetch_with_retry(
+        lambda: _fetch_video_metadata(
+            video_id,
+            proxy=proxy,
+            session=session,
+            timeout=timeout,
+        ),
+        request,
+    )
     channel_id, _chatroom_id, title, start_dt, end_dt = _resolve_vod_window(
         video_data, username
     )
@@ -187,7 +254,15 @@ def get_vod_chat(  # pragma: no cover — network-dependent
     log("info", f"VOD time window: {start_dt} to {end_dt}")
 
     return Chat(
-        _iter_vod_messages(channel_id, start_dt, end_dt, request, proxy=proxy),
+        _iter_vod_messages(
+            channel_id,
+            start_dt,
+            end_dt,
+            request,
+            proxy=proxy,
+            session=session,
+            timeout=timeout,
+        ),
         title=title,
         status="completed",
         video_type="video",
@@ -241,6 +316,8 @@ def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
     request: ChatRequest,
     *,
     proxy: dict[str, str] | None = None,
+    session: _KickSession | None = None,
+    timeout: tuple[float, float] = (10.0, 30.0),
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized VOD chat messages within the time window.
 
@@ -257,7 +334,17 @@ def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
     pages = 0
 
     while not done and pages < 500:
-        page = _fetch_message_page(channel_id, cursor, proxy=proxy)
+        page = _fetch_with_retry(
+            partial(
+                _fetch_message_page,
+                channel_id,
+                cursor,
+                proxy=proxy,
+                session=session,
+                timeout=timeout,
+            ),
+            request,
+        )
         data_section = get_dict(page, "data")
         raw_messages: JSONList = get_list(data_section, "messages")
         cursor_val = data_section.get("cursor")

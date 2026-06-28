@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 _SYSTEM_RANDOM = random.SystemRandom()
+_MAX_EXPONENTIAL_BACKOFF_SECONDS = 60.0
 
 
 def _convert_or_none[R, D](
@@ -71,7 +72,8 @@ def backoff_seconds(attempt_number: int, retry_timeout: float | None = None) -> 
     """Return sleep duration for the given attempt (1-indexed).
 
     When *retry_timeout* is ``None`` the formula is exponential back-off
-    (0 s, 1 s, 2 s, 4 s, …) plus a small random jitter of up to 0.5 s.
+    (0 s, 1 s, 2 s, 4 s, …) capped at 60 seconds, plus a small random jitter
+    of up to 0.5 s.
     The jitter prevents simultaneous retry storms when multiple processes or
     threads encounter the same transient error at the same time.
     When *retry_timeout* is a non-negative number it is used as a fixed wait.
@@ -82,6 +84,14 @@ def backoff_seconds(attempt_number: int, retry_timeout: float | None = None) -> 
     :return: Seconds to sleep before the next attempt.
     """
     if retry_timeout is None:
-        base = 0.0 if attempt_number <= 1 else 2.0 ** (attempt_number - 2)
+        exponent = min(max(attempt_number - 2, 0), 6)
+        base = (
+            0.0
+            if attempt_number <= 1
+            else min(
+                2.0**exponent,
+                _MAX_EXPONENTIAL_BACKOFF_SECONDS,
+            )
+        )
         return base + _SYSTEM_RANDOM.uniform(0, 0.5)
     return float(retry_timeout)

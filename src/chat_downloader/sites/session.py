@@ -47,6 +47,7 @@ def _validate_cookie_domain(domain: str) -> None:
 def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
     """Initialize HTTP session, headers, proxies, cookies, and timeout state."""
     owner.session = requests.Session()
+    owner._session_closed = False
 
     connect_timeout = float(kwargs.get("connect_timeout", DEFAULT_CONNECT_TIMEOUT))
     read_timeout = float(kwargs.get("read_timeout", DEFAULT_READ_TIMEOUT))
@@ -272,14 +273,26 @@ def get_cookie_value(
 
 def close_session(owner: SessionOwnerProto) -> None:
     """Close the underlying requests session."""
-    owner.session.close()
+    if owner._session_closed:
+        return
+    try:
+        owner.session.close()
+    finally:
+        owner._session_closed = True
     log("debug", "Session closed.")
+
+
+def _require_open_session(owner: SessionOwnerProto) -> None:
+    if owner._session_closed:
+        msg = "HTTP session is closed; create a new downloader session."
+        raise RuntimeError(msg)
 
 
 def session_post(
     owner: SessionOwnerProto, url: str, **kwargs: Any
 ) -> requests.Response:
     """Make a POST request using the configured session."""
+    _require_open_session(owner)
     kwargs.setdefault("timeout", owner._http_timeout)
     response = owner.session.post(url, **kwargs)
     check_cookie_rotation(owner)
@@ -288,6 +301,7 @@ def session_post(
 
 def session_get(owner: SessionOwnerProto, url: str, **kwargs: Any) -> requests.Response:
     """Make a GET request using the configured session."""
+    _require_open_session(owner)
     kwargs.setdefault("timeout", owner._http_timeout)
     response = owner.session.get(url, **kwargs)
     check_cookie_rotation(owner)

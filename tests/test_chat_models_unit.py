@@ -149,6 +149,52 @@ def test_chat_close_suppresses_writer_close_failures(monkeypatch) -> None:
     assert any("writer close failed" in message for message in logs)
 
 
+def test_chat_close_closes_message_source_once() -> None:
+    class CloseableIterator:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return {"message": "waiting"}
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    source = CloseableIterator()
+    chat = Chat(source, title="Example")
+
+    chat.close()
+    chat.close()
+
+    assert source.close_calls == 1
+
+
+def test_chat_close_suppresses_known_generator_close_error(monkeypatch) -> None:
+    class BrokenIterator:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return {"message": "waiting"}
+
+        @staticmethod
+        def close() -> None:
+            raise OSError("socket close failed")
+
+    logs: list[str] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.models.log",
+        lambda _level, message: logs.append(str(message)),
+    )
+
+    Chat(BrokenIterator(), title="Example").close()
+
+    assert any("socket close failed" in message for message in logs)
+
+
 def test_chat_next_without_generator_and_print_formatted(monkeypatch) -> None:
     printed: list[tuple[str, bool]] = []
     monkeypatch.setattr(

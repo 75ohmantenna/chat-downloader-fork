@@ -62,6 +62,14 @@ def test_retry_policy_sleep_seconds_matches_backoff_formula() -> None:
         assert policy.sleep_seconds(3) == pytest.approx(2.0)
 
 
+def test_exponential_backoff_is_capped_for_large_attempt_numbers() -> None:
+    with patch(
+        "chat_downloader.utils.conversion_utils._SYSTEM_RANDOM.uniform",
+        return_value=0.0,
+    ):
+        assert backoff_seconds(10_000, None) == pytest.approx(60.0)
+
+
 # ---------------------------------------------------------------------------
 # HTTP timeout tuple (Fix 1 — typed timeouts)
 # ---------------------------------------------------------------------------
