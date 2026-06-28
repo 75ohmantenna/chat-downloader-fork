@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.5 — 2026-06-28
+
+### Reliability / hardening
+
+- **Hardened unattended chat captures for multi-day operation.**
+  Twitch IRC and Kick WebSocket sessions now detect stale connections, use
+  bounded idle polling and reconnect backoff, and close transports reliably.
+  Kick reconnects backfill recent retained messages with bounded duplicate
+  suppression, while long Kick VOD replays spill page batches to disk instead
+  of retaining the full replay in memory.
+- **Made continuous output more durable and recoverable.**
+  Writers now surface flush and sync failures, perform a final sync on close,
+  repair interrupted JSONL tails before append, and close CSV rewrite handles
+  on every path.
+
 ## 1.6.4 — 2026-06-27
 
 ### Changes
