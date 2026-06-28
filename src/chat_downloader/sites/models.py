@@ -90,6 +90,7 @@ class Chat:
         )
 
         self._output_dispatcher = _ChatOutputDispatcher(self)
+        self._generator_closed = False
 
         # Track message IDs for deduplication (YouTube superchat/ticker items)
         max_seen_message_ids = (
@@ -131,8 +132,21 @@ class Chat:
         self._output_dispatcher.attach_writer(writer)
 
     def close(self) -> None:
-        """Close all attached writers once."""
-        self._output_dispatcher.close()
+        """Close the message source and all attached writers once."""
+        try:
+            if not self._generator_closed:
+                self._generator_closed = True
+                close_generator = getattr(self.chat, "close", None)
+                if callable(close_generator):
+                    try:
+                        close_generator()
+                    except (OSError, RuntimeError, ValueError) as error:
+                        log(
+                            "debug",
+                            f"Suppressed chat generator close() error: {error}",
+                        )
+        finally:
+            self._output_dispatcher.close()
 
     @property
     def write_error_count(self) -> int:

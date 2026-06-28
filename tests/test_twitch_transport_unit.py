@@ -642,6 +642,9 @@ def test_twitch_chat_irc_close_connection_sends_quit_before_closing(
     irc.socket.shutdown.assert_called_once_with(irc_transport.socket.SHUT_WR)
     irc.socket.close.assert_called_once()
 
+    irc.close_connection()
+    irc.socket.close.assert_called_once()
+
 
 def test_download_base_gql_raises_http_error_for_non_captcha_4xx() -> None:
     """Non-captcha 4xx/5xx must raise HTTPError via raise_for_status()."""

@@ -20,7 +20,7 @@ large refactors, parser reshaping, or tooling changes.
 | Output formats: JSONL, CSV, TXT; no JSON-array `.json` | `output/continuous_write.py`, `output/writers.py` | output writer, continuous-write, CSV injection, JSONL UTC, multiple-output tests |
 | Filtering, formatting, time windows | `sites/filters.py`, `formatting/format.py`, `runtime/chat_pipeline.py` | filtering, formatting, chat-pipeline tests |
 | Cookies, sessions, auth, proxy safety | `chat_downloader.py`, `runtime/session_lifecycle.py`, `sites/session.py`, YouTube auth | session, lifecycle, auth-client, facade redaction tests |
-| Retry, timeout, interruption, cleanup | `sites/retry.py`, `utils/retry_utils.py`, `runtime/runner.py`, `TimedGenerator` | retry, network-retry, runner, timed-generator tests |
+| Retry, timeout, interruption, cleanup | `sites/retry.py`, `utils/retry_utils.py`, `runtime/runner.py`, `Chat.close`, `TimedGenerator` | retry, network-retry, runner, chat-model, live-service, timed-generator tests |
 | Debug logging, redaction, debug sample capture | `debugging.py`, `redaction.py`, `debug_sample_utils.py` | debugging, redaction, debug-sample tests |
 | Build, install, smoke, import boundaries | `Makefile`, `pyproject.toml`, GitHub Actions | `tests/test_makefile_contract_unit.py`, import-linter, release metadata, `make ci` |
 

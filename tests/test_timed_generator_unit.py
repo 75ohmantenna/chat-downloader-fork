@@ -191,6 +191,15 @@ def test_next_stops_when_closed() -> None:
     tg._cancel_timers()
 
 
+def test_close_is_idempotent() -> None:
+    tg = TimedGenerator(iter(()))
+
+    tg.close()
+    tg.close()
+
+    assert tg._closed is True
+
+
 def test_next_empty_queue_falls_back_to_timeout_when_no_reason(
     monkeypatch,
 ) -> None:

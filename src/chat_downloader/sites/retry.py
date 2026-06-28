@@ -83,3 +83,33 @@ def retry(
         interruptible=interruptible_retry,
         sleep_func=polling_sleep,
     )
+
+
+def wait_for_reconnect(
+    attempt_number: int,
+    *,
+    error: Exception,
+    request: ChatRequest,
+    provider: str,
+) -> None:
+    """Back off before reconnecting, raising when the failure streak is spent.
+
+    Reconnect diagnostics stay at debug level because occasional disconnects
+    are expected during long captures.  Exhaustion still raises the same
+    ``RetriesExceeded`` error used by initial connection attempts.
+    """
+    policy = RetryPolicy(**request.retry_kwargs())
+    if not policy.can_retry(attempt_number):
+        msg = (
+            f"Maximum number of consecutive {provider} connection failures "
+            f"has been reached ({policy.max_attempts})."
+        )
+        raise RetriesExceeded(msg) from error
+
+    log(
+        "debug",
+        f"{provider} connection interrupted; reconnect "
+        f"{attempt_number}/{policy.max_attempts} {policy.sleep_text(attempt_number)}. "
+        f"{type(error).__name__}: {error}",
+    )
+    policy.wait(attempt_number, sleep_func=polling_sleep)

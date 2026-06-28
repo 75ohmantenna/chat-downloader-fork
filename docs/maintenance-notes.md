@@ -833,3 +833,29 @@ intentional — do not reopen.
 | Assembled output | `emit(message: dict[str, Any])`, generator yields, `all_messages`, `_classify_message` return |
 | Frozen public API | `extractor.py` `params: ChatRequest \| dict[str, Any]` |
 | Output accumulator | `emotes.py` return types |
+
+---
+
+## Round-15 — Network lifecycle robustness pass (2026-06)
+
+Kept provider transports separate while making their lifecycle rules
+consistent. HTTP exponential backoff is capped at 60 seconds plus jitter.
+Twitch IRC and Kick WebSocket reconnect streaks are bounded by
+`max_attempts`, back off through the shared retry policy, and reset only after
+the replacement connection receives useful traffic. This prevents an endpoint
+that repeatedly accepts and immediately drops sockets from creating an
+unbounded tight reconnect loop.
+
+Cleanup now flows from `Chat.close()` through message-limit and
+`TimedGenerator` wrappers into provider generators. Timed workers use
+cancellation-aware queue publication, so shutdown cannot strand a worker on a
+full result queue. Twitch closes partially initialized IRC connections, Kick
+maps WebSocket configuration/protocol failures to reconnectable transport
+errors, and both transports clear stale connection objects after close.
+
+Kick HTTP sessions are downloader-owned rather than process-global. This
+prevents proxy/header state from leaking across downloader instances and makes
+normal/error shutdown deterministic. Kick VOD metadata/page requests now retry
+network, malformed JSON, HTTP 429, and 5xx failures; terminal 4xx failures stop
+without retry. Shared HTTP sessions reject requests after close, and the facade
+replaces a closed cached site session instead of reusing it.

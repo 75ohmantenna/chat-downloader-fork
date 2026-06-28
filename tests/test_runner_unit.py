@@ -322,6 +322,44 @@ def test_execute_run_closes_chat_when_iteration_is_interrupted() -> None:
     assert FakeDownloader.instance.closed is True
 
 
+def test_execute_run_keyboard_interrupt_closes_real_chat_source() -> None:
+    from chat_downloader.sites.models import Chat
+
+    class InterruptingSource:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise KeyboardInterrupt
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeDownloader:
+        instance = None
+
+        def __init__(self, **_kwargs) -> None:
+            self.source = InterruptingSource()
+            self.chat = Chat(self.source)
+            self.closed = False
+            FakeDownloader.instance = self
+
+        def get_chat(self, **_kwargs):
+            return self.chat
+
+        def close(self) -> None:
+            self.closed = True
+
+    result = execute_run(FakeDownloader, quiet=True)
+
+    assert result.interrupted is True
+    assert FakeDownloader.instance.source.closed is True
+    assert FakeDownloader.instance.closed is True
+
+
 @pytest.mark.parametrize(
     ("error_to_raise", "expected_fragment"),
     [

@@ -13,6 +13,7 @@ details, or event payloads.
 
 from __future__ import annotations
 
+import contextlib
 import re
 
 # ── HTTP API ──────────────────────────────────────────────────────────────────
@@ -79,8 +80,8 @@ def resolve_pusher_key(
 
     import requests  # pragma: no cover
 
+    session = requests.Session()  # pragma: no cover
     try:  # pragma: no cover
-        session = requests.Session()
         session.headers.update(
             {
                 "User-Agent": (
@@ -123,6 +124,9 @@ def resolve_pusher_key(
                     continue
     except requests.RequestException:  # pragma: no cover
         pass  # pragma: no cover
+    finally:  # pragma: no cover
+        with contextlib.suppress(OSError, RuntimeError):
+            session.close()
 
     _PUSHER_DISCOVERED_KEY = _PUSHER_DEFAULT_KEY
     return _PUSHER_DEFAULT_KEY

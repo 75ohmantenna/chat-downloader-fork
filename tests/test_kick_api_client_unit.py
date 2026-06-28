@@ -26,6 +26,36 @@ def test_fetch_channel_success() -> None:
     assert session.requested_urls == ["https://kick.com/api/v2/channels/examplechannel"]
 
 
+def test_fetch_channel_closes_internally_owned_session() -> None:
+    payload = load_fixture("channel_live.json")
+
+    class CloseableSession(FakeKickSession):
+        def __init__(self) -> None:
+            super().__init__([FakeResponse(200, payload)])
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    session = CloseableSession()
+    with patch.object(api_client, "_get_kick_session", return_value=session):
+        api_client.fetch_channel("examplechannel")
+
+    assert session.closed is True
+
+
+def test_close_kick_session_logs_known_close_error(caplog) -> None:
+    class BrokenSession:
+        @staticmethod
+        def close() -> None:
+            raise OSError("close failed")
+
+    caplog.set_level("DEBUG", logger=api_client.logger.name)
+    api_client._close_kick_session(BrokenSession())
+
+    assert "close failed" in caplog.text
+
+
 def test_fetch_channel_not_found() -> None:
     session = FakeKickSession([FakeResponse(404, {"message": "not found"})])
     with (

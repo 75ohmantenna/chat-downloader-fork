@@ -157,6 +157,10 @@ def create_session(
 
     session_name = chat_downloader_class.__name__
     existing_session = owner.sessions.get(session_name)
+    if existing_session is not None and getattr(
+        existing_session, "_session_closed", False
+    ):
+        overwrite = True
     if existing_session is not None and not overwrite:
         log("debug", f"Reusing existing {session_name} session.")
         return existing_session

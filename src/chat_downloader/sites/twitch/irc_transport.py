@@ -7,6 +7,7 @@ from __future__ import annotations
 import socket
 import ssl
 import time
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
@@ -37,9 +38,12 @@ _PING_INTERVAL_SECONDS = 60
 _CRLF_LENGTH = 2
 
 
-def _create_irc_socket() -> ssl.SSLSocket:
+def _create_irc_socket(connect_timeout: float = 10.0) -> ssl.SSLSocket:
     """Create and return the Twitch IRC TLS socket."""
-    raw_socket = socket.create_connection((IRC_HOST, IRC_PORT), timeout=10)
+    raw_socket = socket.create_connection(
+        (IRC_HOST, IRC_PORT),
+        timeout=connect_timeout,
+    )
     try:
         context = ssl.create_default_context()
         return context.wrap_socket(raw_socket, server_hostname=IRC_HOST)
@@ -195,11 +199,12 @@ def _is_benign_unmatched_irc_buffer(readbuffer: str) -> bool:
 class TwitchChatIRC:
     """IRC socket connection manager for Twitch chat."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, connect_timeout: float = 10.0) -> None:
         """Open a socket and perform anonymous Twitch IRC setup."""
-        self.socket = _create_irc_socket()
+        self.socket = _create_irc_socket(connect_timeout)
         self.socket.settimeout(None)
         self.current_channel: str | None = None
+        self._closed = False
 
         try:
             self.send_raw(IRC_CAP_REQUEST)
@@ -250,13 +255,17 @@ class TwitchChatIRC:
 
     def close_connection(self) -> None:
         """Send QUIT and shut down the IRC socket."""
+        if getattr(self, "_closed", False):
+            return
+        self._closed = True
         try:
             self.send_raw("QUIT")
             self.socket.shutdown(socket.SHUT_WR)
         except OSError:
             pass
         finally:
-            self.socket.close()
+            with suppress(OSError):
+                self.socket.close()
 
 
 def _drain_readbuffer(readbuffer: str) -> str:
