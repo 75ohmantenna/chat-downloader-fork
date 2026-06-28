@@ -423,7 +423,11 @@ def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive
     time_values = iter([0.0, 61.0, 62.0])
 
     with (
-        patch.object(irc_transport.time, "time", side_effect=lambda: next(time_values)),
+        patch.object(
+            irc_transport.time,
+            "monotonic",
+            side_effect=lambda: next(time_values),
+        ),
         patch.object(
             irc_transport,
             "_parse_irc_item",
@@ -538,6 +542,59 @@ def test_irc_transport_swallows_timeout_and_continues_until_disconnect() -> None
         )
 
 
+def test_irc_transport_maps_socket_receive_error_to_reconnect() -> None:
+    class FakeIRC:
+        def recv(self, _buffer_size: int) -> str:
+            raise OSError("network changed")
+
+    with pytest.raises(ConnectionError, match="receive failed"):
+        next(
+            irc_transport.get_chat_messages_by_stream_id(
+                cast("Any", FakeIRC()),
+                "example",
+                ChatRequest(url="https://www.twitch.tv/example"),
+            )
+        )
+
+
+def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
+    class FakeIRC:
+        def __init__(self) -> None:
+            self.sent: list[str] = []
+
+        def recv(self, _buffer_size: int) -> str:
+            raise TimeoutError
+
+        def send_raw(self, message: str) -> None:
+            self.sent.append(message)
+
+    irc = FakeIRC()
+    time_values = iter([0.0, 61.0, 180.0])
+
+    with (
+        patch.object(
+            irc_transport.time,
+            "monotonic",
+            side_effect=lambda: next(time_values),
+        ),
+        patch.object(irc_transport, "log") as mock_log,
+        pytest.raises(ConnectionError, match="became idle"),
+    ):
+        next(
+            irc_transport.get_chat_messages_by_stream_id(
+                cast("Any", irc),
+                "example",
+                ChatRequest(url="https://www.twitch.tv/example"),
+            )
+        )
+
+    assert irc.sent == ["PING", "PING"]
+    mock_log.assert_called_once_with(
+        "debug",
+        "Twitch IRC idle watchdog expired after 180s; reconnecting.",
+    )
+
+
 def test_irc_transport_pong_oserror_raises_connection_error() -> None:
     """OSError from send_raw(PONG) becomes ConnectionError for reconnect."""
 
@@ -580,12 +637,16 @@ def test_irc_transport_ping_oserror_raises_connection_error() -> None:
         def send_raw(self, _message: str) -> None:
             raise OSError("broken pipe")
 
-    # time.time() called at init (→0.0), then once after recv succeeds (→61.0),
+    # monotonic() called at init (→0.0), then after recv succeeds (→61.0),
     # triggering the PING send_raw which raises OSError → ConnectionError.
     time_values = iter([0.0, 61.0])
 
     with (
-        patch.object(irc_transport.time, "time", side_effect=lambda: next(time_values)),
+        patch.object(
+            irc_transport.time,
+            "monotonic",
+            side_effect=lambda: next(time_values),
+        ),
         pytest.raises(ConnectionError),
     ):
         list(

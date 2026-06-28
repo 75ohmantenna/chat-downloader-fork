@@ -211,3 +211,69 @@ class TestClassifyMessage:
         assert parsed is not None
         assert parsed["message_type"] == "text_message"
         assert not done
+
+
+def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pages = [
+        {
+            "data": {
+                "messages": [
+                    {"message_id": "newest-2", "payload": "x" * 128},
+                    {"message_id": "newest-1", "payload": "x" * 128},
+                ],
+                "cursor": "next",
+            }
+        },
+        {
+            "data": {
+                "messages": [
+                    {"message_id": "oldest-2", "payload": "x" * 128},
+                    {"message_id": "oldest-1", "payload": "x" * 128},
+                ],
+                "cursor": None,
+            }
+        },
+    ]
+    created_spools = []
+    real_spool = replay_service.tempfile.SpooledTemporaryFile
+
+    def tracking_spool(*args, **kwargs):
+        spool = real_spool(*args, **kwargs)
+        created_spools.append(spool)
+        return spool
+
+    monkeypatch.setattr(replay_service, "_VOD_SPOOL_MEMORY_BYTES", 1)
+    monkeypatch.setattr(
+        replay_service.tempfile,
+        "SpooledTemporaryFile",
+        tracking_spool,
+    )
+    monkeypatch.setattr(
+        replay_service,
+        "_fetch_message_page",
+        Mock(side_effect=pages),
+    )
+    monkeypatch.setattr(
+        replay_service,
+        "_classify_message",
+        lambda raw, _start, _end: (raw, False),
+    )
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(max_attempts=1, interruptible_retry=False),
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == [
+        "oldest-1",
+        "oldest-2",
+        "newest-1",
+        "newest-2",
+    ]
+    assert created_spools[0]._rolled is True

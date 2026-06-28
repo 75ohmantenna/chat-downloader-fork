@@ -55,14 +55,20 @@ For behavior-preservation coverage see
 | Transport | Open/read path | Retry/reconnect owner | Close path |
 |-----------|----------------|-----------------------|------------|
 | Shared HTTP (YouTube and Twitch) | `sites/session.py` injects configured connect/read timeouts into every request | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; closed cached site sessions are replaced rather than reused |
-| Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout and bounded receive timeout | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
+| Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, and a 180-second idle watchdog | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
 | Kick API HTTP | `kick/api_client.py` creates one isolated Cloudflare-capable session per `KickChatDownloader` | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures | `KickChatDownloader.close()` closes both the Kick API and base sessions |
-| Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, and applies a receive timeout | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
+| Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, then deduplicates a recent-history backfill | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
 
 `Chat.close()` propagates closure through message-limit and timeout wrappers to
 the provider generator before output writers are finalized. This is the common
 Ctrl-C/SIGTERM and early-stop cleanup path. Reconnect diagnostics are debug-only;
 normal message output and file formats are unchanged.
+
+JSONL and text writers flush each record, periodically sync the file descriptor,
+and perform a final sync at close. JSONL append mode removes a malformed trailing
+record (or adds a missing newline to a valid record) before writing new data.
+Kick VOD reverse pagination spills to a temporary file after 1 MiB, keeping replay
+memory bounded independently of the number of fetched messages.
 
 ---
 

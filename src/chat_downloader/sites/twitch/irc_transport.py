@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 _PROGRESS_LOG_INTERVAL_MESSAGES = 250
 _READBUFFER_MAX_BYTES = 1 * 1024 * 1024  # 1 MiB
 _PING_INTERVAL_SECONDS = 60
+_IDLE_WATCHDOG_SECONDS = 180
+_MIN_RECEIVE_TIMEOUT_SECONDS = 1.0
 _CRLF_LENGTH = 2
 
 
@@ -148,13 +150,13 @@ def _should_send_keepalive(
 ) -> bool:
     """Return ``True`` when enough time has elapsed to send a keepalive PING.
 
-    The caller is responsible for sampling ``time.time()`` once and passing
+    The caller is responsible for sampling ``time.monotonic()`` once and passing
     it as ``current_time``.  This keeps the function pure and avoids a second
-    ``time.time()`` call per loop iteration.
+    clock read per loop iteration.
 
     Args:
-        current_time: The caller's snapshot of ``time.time()``.
-        last_ping_time: Unix timestamp of the most recent PING send.
+        current_time: The caller's snapshot of ``time.monotonic()``.
+        last_ping_time: Monotonic timestamp of the most recent PING send.
         ping_every: Interval in seconds between keepalive PINGs.
 
     Returns:
@@ -290,6 +292,17 @@ def _handle_ping(irc: TwitchChatIRC, readbuffer: str) -> None:
         raise ConnectionError(msg) from e
 
 
+def _recv_irc(irc: TwitchChatIRC, buffer_size: int) -> str:
+    """Receive one chunk, mapping socket failures into reconnect errors."""
+    try:
+        return irc.recv(buffer_size)
+    except TimeoutError:
+        raise
+    except OSError as error:
+        msg = "Twitch IRC receive failed; reconnecting."
+        raise ConnectionError(msg) from error
+
+
 def get_chat_messages_by_stream_id(
     irc: TwitchChatIRC,
     channel: str,  # noqa: ARG001 — part of the uniform transport callable signature
@@ -304,14 +317,15 @@ def get_chat_messages_by_stream_id(
     )
     buffer_size = request.buffer_size
 
-    last_ping_time = time.time()
+    last_receive_time = time.monotonic()
+    last_ping_time = last_receive_time
     ping_every = _PING_INTERVAL_SECONDS
 
     readbuffer = ""
     message_count = 0
     while True:
         try:
-            new_info = irc.recv(buffer_size)
+            new_info = _recv_irc(irc, buffer_size)
 
             if not new_info:
                 msg = "Lost connection, reconnecting."
@@ -345,13 +359,27 @@ def get_chat_messages_by_stream_id(
                         f'No matches found in "\n{unmatched_full_buffer.strip()}\n"',
                     )
 
-            current_time = time.time()
+            current_time = time.monotonic()
+            last_receive_time = current_time
             last_ping_time = _maybe_send_keepalive(
                 irc,
                 current_time,
                 last_ping_time,
                 ping_every,
             )
-
         except TimeoutError:
-            pass
+            current_time = time.monotonic()
+            last_ping_time = _maybe_send_keepalive(
+                irc,
+                current_time,
+                last_ping_time,
+                ping_every,
+            )
+            if current_time - last_receive_time >= _IDLE_WATCHDOG_SECONDS:
+                log(
+                    "debug",
+                    "Twitch IRC idle watchdog expired after "
+                    f"{_IDLE_WATCHDOG_SECONDS}s; reconnecting.",
+                )
+                msg = "Twitch IRC connection became idle."
+                raise ConnectionError(msg) from None

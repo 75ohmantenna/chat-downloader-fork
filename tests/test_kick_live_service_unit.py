@@ -239,7 +239,7 @@ def test_open_subscribed_transport_separates_connect_and_receive_timeouts() -> N
 
     assert opened is transport
     assert transport.connect_timeout == pytest.approx(7.5)
-    assert transport.receive_timeout == pytest.approx(0.1)
+    assert transport.receive_timeout == pytest.approx(1.0)
     assert transport.subscribed_to == "54321"
 
 
@@ -353,6 +353,7 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
         [
             FakeResponse(200, load_fixture("channel_live.json")),
             FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": []}}),
         ]
     )
     created: list[FakeTransport] = []
@@ -378,8 +379,35 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
         )
         ids = [m["message_id"] for m in chat.chat]
         assert ids == ["a", "b"]
-        assert len(created) == 2  # reconnected once
-        assert created[0].close_count >= 1
+    assert len(created) == 2  # reconnected once
+    assert created[0].close_count >= 1
+
+
+def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, load_fixture("preloaded_messages.json")),
+        ]
+    )
+
+    with patch(
+        "chat_downloader.sites.kick.api_client._get_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            downloader,
+            request_kwargs={"message_groups": ["messages"]},
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([[ConnectionError("drop")], []]),
+        )
+
+        assert [message["message_id"] for message in chat.chat] == [
+            "preloaded-1",
+            "preloaded-2",
+        ]
 
 
 def test_get_chat_by_channel_repeated_disconnects_exhaust_budget() -> None:
@@ -387,6 +415,7 @@ def test_get_chat_by_channel_repeated_disconnects_exhaust_budget() -> None:
     session = FakeKickSession(
         [
             FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
         ]
     )

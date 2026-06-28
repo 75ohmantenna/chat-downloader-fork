@@ -87,10 +87,10 @@ def configure_timeouts(
     chat.chat = TimedGenerator(chat.chat, timeout, inactivity_timeout)
 
     if isinstance(timeout, (float, int)):
-        start_time = time.time()
+        start_time = time.monotonic()
 
         def log_on_timeout() -> None:
-            elapsed = time.time() - start_time
+            elapsed = time.monotonic() - start_time
             log("debug", f"Timeout occurred after {elapsed} seconds.")
 
         chat.chat.on_timeout = log_on_timeout

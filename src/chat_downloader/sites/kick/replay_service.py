@@ -13,6 +13,8 @@ chronological order.
 
 from __future__ import annotations
 
+import json
+import tempfile
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from json import JSONDecodeError
@@ -36,6 +38,8 @@ from .api_client import _close_kick_session, _get_kick_session
 from .constants import CHANNEL_MESSAGES_API, VIDEO_API_TEMPLATE, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.messages import parse_chat_message
+
+_VOD_SPOOL_MEMORY_BYTES = 1024 * 1024
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -309,7 +313,7 @@ def _classify_message(
         return parsed, False
 
 
-def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
+def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output require branch handling  # pragma: no cover — calls _fetch_message_page
     channel_id: str,
     start_dt: datetime,
     end_dt: datetime,
@@ -329,49 +333,59 @@ def _iter_vod_messages(  # pragma: no cover — calls _fetch_message_page
     *N* messages (i.e. the first *N* from the stream start) are returned.
     """
     cursor: str | None = None
-    all_messages: list[dict[str, Any]] = []
     done = False
     pages = 0
+    page_offsets: list[int] = []
 
-    while not done and pages < 500:
-        page = _fetch_with_retry(
-            partial(
-                _fetch_message_page,
-                channel_id,
-                cursor,
-                proxy=proxy,
-                session=session,
-                timeout=timeout,
-            ),
-            request,
-        )
-        data_section = get_dict(page, "data")
-        raw_messages: JSONList = get_list(data_section, "messages")
-        cursor_val = data_section.get("cursor")
-        cursor = cursor_val if isinstance(cursor_val, str) else None
+    # The API is newest-first, so chronological output requires a reverse
+    # pass. Spill page batches to disk after 1 MiB instead of retaining an
+    # entire multi-hour replay in RAM.
+    with tempfile.SpooledTemporaryFile(max_size=_VOD_SPOOL_MEMORY_BYTES) as spool:
+        while not done and pages < 500:
+            page = _fetch_with_retry(
+                partial(
+                    _fetch_message_page,
+                    channel_id,
+                    cursor,
+                    proxy=proxy,
+                    session=session,
+                    timeout=timeout,
+                ),
+                request,
+            )
+            data_section = get_dict(page, "data")
+            raw_messages: JSONList = get_list(data_section, "messages")
+            cursor_val = data_section.get("cursor")
+            cursor = cursor_val if isinstance(cursor_val, str) else None
 
-        if not raw_messages:
-            break
-
-        for raw in raw_messages:
-            if not isinstance(raw, dict):
-                continue
-            parsed, msg_done = _classify_message(raw, start_dt, end_dt)
-            if msg_done:
-                done = True
+            if not raw_messages:
                 break
-            if parsed is not None:
-                all_messages.append(parsed)
 
-        pages += 1
+            page_messages: list[JSONDict] = []
+            for raw in raw_messages:
+                if not isinstance(raw, dict):
+                    continue
+                parsed, msg_done = _classify_message(raw, start_dt, end_dt)
+                if msg_done:
+                    done = True
+                    break
+                if parsed is not None:
+                    page_messages.append(parsed)
 
-        if not cursor or done:
-            break
+            if page_messages:
+                page_offsets.append(spool.tell())
+                spool.write(json.dumps(page_messages).encode("utf-8") + b"\n")
+            pages += 1
 
-    # Messages arrive newest-first; reverse to chronological.
-    # max_messages means the oldest N (first N of the VOD).
-    all_messages.reverse()
-    if request.max_messages:
-        all_messages = all_messages[: request.max_messages]
+            if not cursor or done:
+                break
 
-    yield from all_messages
+        emitted = 0
+        for page_offset in reversed(page_offsets):
+            spool.seek(page_offset)
+            page_messages = cast("list[JSONDict]", json.loads(spool.readline()))
+            for message in reversed(page_messages):
+                if request.max_messages is not None and emitted >= request.max_messages:
+                    return
+                emitted += 1
+                yield message

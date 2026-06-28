@@ -290,7 +290,7 @@ def polling_sleep(secs: float, poll_time: float = POLLING_TIME) -> None:
     if secs <= 0:
         return
 
-    start_time = time.time()
+    start_time = time.monotonic()
 
-    while time.time() - start_time < secs:
+    while time.monotonic() - start_time < secs:
         time.sleep(poll_time)

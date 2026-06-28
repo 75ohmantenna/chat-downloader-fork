@@ -96,7 +96,7 @@ def test_configure_timeouts_wraps_chat_and_installs_callbacks(
         FakeTimedGenerator,
     )
     monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.time.time",
+        "chat_downloader.runtime.chat_pipeline.time.monotonic",
         lambda: next(time_values),
     )
     monkeypatch.setattr(

@@ -85,7 +85,12 @@ chat output, especially for long-running live captures.
 
 File output is crash-resilient: every record is flushed to the OS as it is
 written, and the file is `fsync`-ed periodically (about every 60 seconds), so
-captures survive process crashes and power loss with minimal data loss.
+captures survive process crashes and power loss with minimal data loss. Writers
+also perform a final `fsync` during normal shutdown; a flush or sync failure is
+reported as an output error instead of allowing the capture to appear successful.
+When appending to JSONL, a crash-truncated final record is removed before new
+records are written; a complete final record missing only its newline is kept and
+terminated.
 
 ## Common Flags
 
@@ -104,6 +109,9 @@ Filtering and output:
 Request control:
 
 - `--connect_timeout`, `--read_timeout` — HTTP timeouts.
+- `--message_receive_timeout` — live socket receive polling timeout; Twitch and
+  Kick enforce a one-second minimum to avoid idle CPU churn (messages are still
+  delivered immediately when data arrives).
 - `--proxy`, `--cookies` — proxy and cookie jar.
 - `--request_profile` — Grayjay-inspired request header presets.
 - `--auto_profile_fallback` — rotate YouTube request profiles when
