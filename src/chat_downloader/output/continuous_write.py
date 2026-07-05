@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import csv
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
@@ -14,7 +13,6 @@ from chat_downloader.output.writers import (
     _WRITER_CLASSES,
     MODE_WRITE_TEXT,
     ContinuousFileWriter,
-    CsvContinuousWriter,
     JsonLinesContinuousWriter,
     TextContinuousWriter,
 )
@@ -22,7 +20,6 @@ from chat_downloader.output.writers import (
 __all__ = [
     "ContinuousFileWriter",
     "ContinuousWriter",
-    "CsvContinuousWriter",
     "JsonLinesContinuousWriter",
     "TextContinuousWriter",
 ]
@@ -32,9 +29,9 @@ if TYPE_CHECKING:
 
 DOT_PREFIX_LENGTH = 1
 _IGNORED_DEL_EXCEPTIONS = Exception
-UNSUPPORTED_JSON_EXTENSION_MESSAGE = (
-    "JSON array output is no longer supported. Use a .jsonl output path "
-    "for structured chat output."
+SUPPORTED_OUTPUT_FORMATS = frozenset(_WRITER_CLASSES)
+UNSUPPORTED_OUTPUT_FORMAT_MESSAGE = (
+    "Unsupported output format {extension!r}. Use a .jsonl or .txt output path."
 )
 
 
@@ -103,7 +100,7 @@ class ContinuousWriter:
 
         try:
             self._open_writer(self.file_name)
-        except (OSError, csv.Error, ValueError):
+        except (OSError, ValueError):
             self._writer = None
             raise
 
@@ -112,12 +109,27 @@ class ContinuousWriter:
         ext = self.format
         if ext is None and file_name is not None:
             ext = Path(file_name).suffix[DOT_PREFIX_LENGTH:].lower()
-        return ext or ""
+        return ext.lower() if ext else ""
 
     def _validate_extension(self, file_name: str | None) -> None:
-        """Raise ValueError if the resolved extension is unsupported."""
-        if self._get_extension(file_name) == "json":
-            raise ValueError(UNSUPPORTED_JSON_EXTENSION_MESSAGE)
+        """Raise ValueError if the path or explicit format is unsupported."""
+        if file_name is None:
+            return
+        path_extension = Path(file_name).suffix[DOT_PREFIX_LENGTH:].lower()
+        extensions = [path_extension]
+        if self.format is not None:
+            extensions.append(self.format.lower())
+        for extension in extensions:
+            if extension not in SUPPORTED_OUTPUT_FORMATS:
+                raise ValueError(
+                    UNSUPPORTED_OUTPUT_FORMAT_MESSAGE.format(extension=extension)
+                )
+        if self.format is not None and path_extension != self.format.lower():
+            msg = (
+                f"Output format {self.format!r} does not match file extension "
+                f"{path_extension!r}."
+            )
+            raise ValueError(msg)
 
     def _open_writer(self, file_name: str) -> None:
         """Create parent directories, seed the file, and instantiate writer."""
@@ -132,7 +144,7 @@ class ContinuousWriter:
             with path.open(MODE_WRITE_TEXT, encoding="utf-8"):
                 pass
 
-        writer_class = _WRITER_CLASSES.get(extension, TextContinuousWriter)
+        writer_class = _WRITER_CLASSES[extension]
         self._writer = writer_class(
             file_name=file_name,
             overwrite=self.overwrite,

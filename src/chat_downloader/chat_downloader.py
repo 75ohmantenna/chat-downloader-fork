@@ -291,8 +291,8 @@ class ChatDownloader:
 
         Output options:
         :param output: Output file path (None = print to stdout). Extension
-            determines format (.jsonl/.csv/.txt). JSON-array `.json` output
-            is not supported; use `.jsonl` for structured output.
+            determines format (.jsonl/.txt). Other extensions are not
+            supported.
         :type output: str, optional
         :param overwrite: Overwrite existing output file
             (default: True)

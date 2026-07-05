@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import dataclasses
 from dataclasses import dataclass, field
 from typing import Any
@@ -353,9 +352,8 @@ def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
     [
         OSError("io failure"),
         RuntimeError("runtime failure"),
-        csv.Error("csv failure"),
     ],
-    ids=["OSError", "RuntimeError", "csv.Error"],
+    ids=["OSError", "RuntimeError"],
 )
 def test_chat_output_dispatcher_close_suppresses_known_writer_errors(
     monkeypatch, exc: Exception

@@ -27,10 +27,10 @@ def test_generated_help_preserves_key_argument_groups() -> None:
         assert heading in help_text
 
 
-def test_generated_help_guides_jsonl_instead_of_json_array_output() -> None:
+def test_generated_help_lists_only_supported_output_formats() -> None:
     help_text = _build_arg_parser().format_help()
     normalized_help = " ".join(help_text.split())
 
-    assert ".jsonl/.csv/.txt" in normalized_help
-    assert "JSON-array .json output is no longer supported" in normalized_help
+    assert ".jsonl/.txt" in normalized_help
+    assert "Other extensions are not supported" in normalized_help
     assert "use .jsonl for structured output" in normalized_help

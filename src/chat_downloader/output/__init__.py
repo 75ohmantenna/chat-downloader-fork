@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Continuous file writers for chat output (JSONL, CSV, TXT)."""
+"""Continuous file writers for chat output (JSONL and TXT)."""
 
 from __future__ import annotations
 

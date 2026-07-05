@@ -151,8 +151,8 @@ class ChatRequest:
             "cli": _cli(
                 "Output file path (None = print to stdout). Extension "
                 "determines"
-                " format (.jsonl/.csv/.txt). JSON-array .json output is no"
-                " longer supported; use .jsonl for structured output.",
+                " format (.jsonl/.txt). Other extensions are not supported;"
+                " use .jsonl for structured output.",
                 group="output",
                 flags=["-o"],
             ),

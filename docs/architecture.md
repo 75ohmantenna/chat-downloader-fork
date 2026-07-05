@@ -113,8 +113,7 @@ memory bounded independently of the number of fetched messages.
 | Module | Purpose |
 |--------|---------|
 | `continuous_write.py` | `ContinuousWriter` factory; re-exports writer types |
-| `writers.py` | `ContinuousFileWriter` ABC; `CsvContinuousWriter`, `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
-| `csv_rewrite.py` | In-place CSV column-addition helper |
+| `writers.py` | `ContinuousFileWriter` ABC; `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
 
 ### `sites/` (shared)
 | Module | Purpose |

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import csv
 from typing import TYPE_CHECKING, Any, Protocol
 
 from chat_downloader.debugging import log
@@ -155,7 +154,7 @@ class _ChatOutputDispatcher:
         for writer in self.writers:
             try:
                 writer.close()
-            except (OSError, RuntimeError, csv.Error) as error:
+            except (OSError, RuntimeError) as error:
                 self._write_error_count += 1
                 log(
                     "warning",

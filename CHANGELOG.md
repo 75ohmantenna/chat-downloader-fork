@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Breaking changes
+
+- **Removed CSV file output.** File output now requires a `.jsonl` or `.txt`
+  path; CSV, unknown, and extensionless paths are rejected before file creation.
+
 ## 1.6.5 — 2026-06-28
 
 ### Reliability / hardening

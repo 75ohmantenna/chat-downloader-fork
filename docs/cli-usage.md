@@ -77,11 +77,10 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
 | Format | Notes |
 | --- | --- |
 | `jsonl` | One JSON object per line. Best for long or live captures. |
-| `csv`   | Flattens nested fields and rewrites the file when new columns appear. |
 | `txt`   | Applies the configured message formatter. |
 
-JSON-array `.json` output is no longer supported. Use `jsonl` for structured
-chat output, especially for long-running live captures.
+Other extensions, including `.json` and `.csv`, are unsupported. Output paths
+must end in `.jsonl` or `.txt`.
 
 File output is crash-resilient: every record is flushed to the OS as it is
 written, and the file is `fsync`-ed periodically (about every 60 seconds), so

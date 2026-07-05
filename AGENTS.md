@@ -42,8 +42,7 @@ For deeper context use:
 - Use `utils/json_types` accessors (`get_str`, `get_int`, `get_dict`,
   `get_list`, `dig`) for incoming platform JSON. Avoid annotating raw payloads
   as `Any`; reserve `dict[str, Any]` for heterogeneous accumulator dicts.
-- Output formats are `jsonl`, `csv`, and `txt`. JSON-array `.json` output is
-  not supported.
+- Output formats are `jsonl` and `txt`. Other extensions are not supported.
 
 ## Commands
 

@@ -119,7 +119,7 @@ def test_json_extension_rejected_with_jsonl_message(
 ) -> None:
     path = tmp_path / "test.json"
 
-    with pytest.raises(ValueError, match=r"Use a \.jsonl output path"):
+    with pytest.raises(ValueError, match=r"Use a \.jsonl or \.txt output path"):
         ContinuousWriter(str(path))
 
     assert not path.exists()

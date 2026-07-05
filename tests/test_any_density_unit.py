@@ -86,8 +86,7 @@ BASELINE: dict[str, int] = {
     "sites/youtube/constants_message.py": 3,
     "sites/youtube/chat_users_retrieval.py": 3,
     # Output and formatting layers — writers receive heterogeneous items.
-    "output/writers.py": 13,
-    "output/csv_rewrite.py": 6,
+    "output/writers.py": 9,
     "output/continuous_write.py": 3,
     # Utilities — generic helpers require Any for cross-type dispatch.
     "utils/dict_utils.py": 19,

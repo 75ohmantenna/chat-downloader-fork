@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import csv
 import datetime as _dt
 import json
 import os
@@ -14,17 +13,9 @@ from pathlib import Path
 from typing import IO, Any
 
 from chat_downloader.debugging import log
-from chat_downloader.output.csv_rewrite import (
-    csv_safe_item,
-    rewrite_csv_with_new_columns,
-)
-from chat_downloader.utils.json_utils import flatten_json
 
 # File operation constants
-FILE_EMPTY_POSITION = 0
-EXTENSION_INDEX = 1
 MODE_APPEND_TEXT = "a"
-MODE_APPEND_PLUS_TEXT = "a+"
 MODE_WRITE_TEXT = "w"
 
 # Wall-clock seconds between fsync()s. Per-record flush handles process
@@ -183,110 +174,6 @@ class ContinuousFileWriter(ABC):
         self._last_fsync_monotonic = now
 
 
-class CsvContinuousWriter(ContinuousFileWriter):
-    """Continuously write dicts to CSV, rewriting when new columns appear."""
-
-    def __init__(
-        self,
-        file_name: str,
-        *,
-        sort_keys: bool = True,
-        **kwargs: Any,
-    ) -> None:
-        """Initialize a CSV writer, loading existing columns when appending."""
-        super().__init__(file_name, **kwargs)
-        self.sort_keys = sort_keys
-        self.file = Path(self.file_name).open(  # noqa: SIM115
-            MODE_APPEND_PLUS_TEXT,
-            newline="",
-            encoding="utf-8",
-        )
-        try:
-            self.columns: list[str] = []
-
-            if not self.overwrite:
-                self._load_existing_columns()
-
-            self._reset_csv_writer()
-        except (OSError, csv.Error, RuntimeError):
-            self.file.close()
-            raise
-
-    def _load_existing_columns(self) -> None:
-        """Load existing CSV columns without reading all rows into memory."""
-        if self.file is None:
-            msg = "File must be initialized before use"
-            raise RuntimeError(msg)
-        self.file.seek(FILE_EMPTY_POSITION)
-        csv_reader = csv.DictReader(self.file)
-        self.columns = list(csv_reader.fieldnames or [])
-        self.file.seek(FILE_EMPTY_POSITION, os.SEEK_END)
-
-    def _reset_csv_writer(self) -> None:
-        """Recreate CSV writer with current column configuration."""
-        if self.file is None:
-            msg = "File must be initialized before use"
-            raise RuntimeError(msg)
-        if self.columns:
-            self.csv_dict_writer = csv.DictWriter(self.file, fieldnames=self.columns)
-        else:
-            self.csv_dict_writer = csv.DictWriter(self.file, fieldnames=[])
-
-    def write(
-        self,
-        item: dict[str, Any] | str,
-        *,
-        flush: bool = False,
-        flatten: bool = True,
-    ) -> None:
-        """Write a dict to the CSV file, flattening nested dicts by default."""
-        if not isinstance(item, dict):
-            msg = "CSV output requires a dictionary item"
-            raise TypeError(msg)
-
-        if flatten:
-            item = flatten_json(item)
-
-        if self._has_new_columns(item):
-            self._handle_new_columns(item)
-        else:
-            self.csv_dict_writer.writerow(csv_safe_item(item))
-
-        self._persist_after_write()
-        if flush:
-            self.flush()
-
-    def _has_new_columns(self, item: dict[str, Any]) -> bool:
-        """Return True if *item* contains columns not yet in the CSV."""
-        return any(column not in self.columns for column in item)
-
-    def _handle_new_columns(self, item: dict[str, Any]) -> None:
-        """Rewrite the entire file to add newly discovered columns."""
-        if self.file is None:
-            msg = "File must be initialized before use"
-            raise RuntimeError(msg)
-        new_columns = [column for column in item if column not in self.columns]
-        self.columns.extend(new_columns)
-        if self.sort_keys:
-            self.columns.sort()
-
-        old_file = self.file
-        # rewrite_csv_with_new_columns closes old_file; prevent stale handle.
-        self.file = None
-        rewrite_csv_with_new_columns(
-            current_file=old_file,
-            file_name=self.file_name,
-            columns=self.columns,
-            item=item,
-        )
-        self.file = Path(self.file_name).open(  # noqa: SIM115
-            MODE_APPEND_PLUS_TEXT,
-            newline="",
-            encoding="utf-8",
-        )
-        self._reset_csv_writer()
-
-
 class JsonLinesContinuousWriter(ContinuousFileWriter):
     """Write one JSON object per line (JSONL), crash-safe for live streams."""
 
@@ -338,7 +225,6 @@ class TextContinuousWriter(ContinuousFileWriter):
 
 
 _WRITER_CLASSES: dict[str, type[ContinuousFileWriter]] = {
-    "csv": CsvContinuousWriter,
     "jsonl": JsonLinesContinuousWriter,
     "txt": TextContinuousWriter,
 }

@@ -34,7 +34,6 @@ def test_multiple_writers_attached(tmp_path: pathlib.Path) -> None:
     chat.set_formatter(lambda msg: formatter.format(msg, format_name="default"))
 
     jsonl_output = str(tmp_path / "test.jsonl")
-    csv_output = str(tmp_path / "test.csv")
     txt_output = str(tmp_path / "test.txt")
 
     chat.attach_writer(
@@ -43,21 +42,15 @@ def test_multiple_writers_attached(tmp_path: pathlib.Path) -> None:
         )
     )
     chat.attach_writer(
-        ContinuousWriter(
-            csv_output, sort_keys=True, overwrite=True, lazy_initialise=True
-        )
-    )
-    chat.attach_writer(
         ContinuousWriter(txt_output, overwrite=True, lazy_initialise=True)
     )
 
-    assert len(chat._output_dispatcher.writers) == 3
+    assert len(chat._output_dispatcher.writers) == 2
 
     messages = list(chat)
     assert len(messages) == 3
 
     assert (tmp_path / "test.jsonl").exists()
-    assert (tmp_path / "test.csv").exists()
     assert (tmp_path / "test.txt").exists()
 
     with open(jsonl_output, encoding="utf-8") as f:
@@ -65,9 +58,8 @@ def test_multiple_writers_attached(tmp_path: pathlib.Path) -> None:
         assert len(lines) == 3
         assert json.loads(lines[0])["message"] == "Test message 0"
 
-    with open(csv_output, encoding="utf-8") as f:
-        csv_lines = f.readlines()
-        assert len(csv_lines) >= 3
+    with open(txt_output, encoding="utf-8") as f:
+        assert len(f.readlines()) == 3
 
 
 def test_single_writer_backwards_compatibility(tmp_path: pathlib.Path) -> None:

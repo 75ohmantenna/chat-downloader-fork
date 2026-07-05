@@ -327,7 +327,7 @@ def test_configure_output_writer_rejects_json_output(tmp_path) -> None:
     )
     chat = Chat(status="live")
 
-    with pytest.raises(ValueError, match=r"Use a \.jsonl output path"):
+    with pytest.raises(ValueError, match=r"Use a \.jsonl or \.txt output path"):
         configure_output_writer(chat, request)
 
 
