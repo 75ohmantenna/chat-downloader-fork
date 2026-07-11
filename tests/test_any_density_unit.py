@@ -41,16 +41,17 @@ BASELINE: dict[str, int] = {
     # live_service off dict[str,Any] JSON boundaries to json_types aliases.
     # Round-15 narrowed transport Callable[...,Any] seams to Protocols and precise
     # Callable signatures (live_service irc_factory/message_generator,
-    # replay_service fetch_messages/_fetch_gql_one, replay_transport signatures).
+    # replay_service fetch_messages/_fetch_gql_one, replay_transport signatures,
+    # graphql_client and discovery session/download_gql_func callables).
     # Residuals per the Round-11 taxonomy: badge accumulators (types.py containers),
     # IRC-tag accumulators (Round-08.3-declined), frozen public params,
     # assembled-output dicts.
     "sites/twitch/replay_service.py": 0,
     "sites/twitch/extractor.py": 18,
-    "sites/twitch/discovery.py": 10,
     "sites/twitch/parsing/message_irc_resolve.py": 14,
     "sites/twitch/parsing/messages.py": 14,
-    "sites/twitch/graphql_client.py": 7,
+    "sites/twitch/graphql_client.py": 3,
+    "sites/twitch/discovery.py": 4,
     "sites/twitch/remappings.py": 11,
     "sites/twitch/parsing/badges.py": 9,
     "sites/twitch/irc_transport.py": 6,

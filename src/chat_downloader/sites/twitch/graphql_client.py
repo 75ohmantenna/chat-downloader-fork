@@ -19,9 +19,9 @@ from chat_downloader.utils.string_utils import contains_any_hint
 from .constants import CLIENT_ID, GQL_API_URL, OPERATION_HASHES
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from chat_downloader.utils.json_types import JSONAny, JSONList
+
+    from ._protocols import _DownloadGQL, _SessionPost
 
 GQL_AUTH_COOKIE_NAME: str = "auth-token"
 
@@ -40,7 +40,7 @@ def _contains_challenge_text(text: object) -> bool:
 
 
 def _download_base_gql(
-    session_post: Callable[..., Any],
+    session_post: _SessionPost,
     ops: JSONList,
     auth_token: str | None = None,
     client_id: str | None = None,
@@ -70,7 +70,7 @@ def _download_base_gql(
         )
     if status_code >= 400:
         response.raise_for_status()
-    return cast("JSONAny", response.json())
+    return response.json()
 
 
 def _describe_operation_names(operation_names: list[str] | None) -> str:
@@ -146,11 +146,11 @@ def _handle_gql_errors(
 
 
 def _download_gql(
-    session_post: Callable[..., Any],
+    session_post: _SessionPost,
     ops: JSONList,
     auth_token: str | None = None,
     client_id: str | None = None,
-) -> JSONAny:
+) -> JSONList:
     """Download GraphQL data using persisted query hashes."""
     operation_names = [
         str(op.get("operationName", "")) if isinstance(op, dict) else "" for op in ops
@@ -203,26 +203,26 @@ def _download_gql(
     elif isinstance(result, dict) and "errors" in result:
         _handle_gql_errors(cast("JSONList", result["errors"]), operation_names)
 
-    return result
+    return cast("JSONList", result)
 
 
 def update_badge_info(
-    session_post: Callable[..., Any],
+    session_post: _SessionPost,
     channel: str,
-    download_gql_func: Callable[..., Any],
+    download_gql_func: _DownloadGQL,
     badge_info: dict[tuple[str, str], dict[str, Any]],
     subscriber_badge_info: dict[str, dict[tuple[str, str], dict[str, Any]]],
     client_id: str | None = None,
 ) -> None:
     """Update badge information cache for a channel."""
     try:
-        query = [
+        query: JSONList = [
             {
                 "operationName": "ChatList_Badges",
                 "variables": {"channelLogin": channel},
             },
         ]
-        gquery = [{"operationName": "GlobalBadges"}]
+        gquery: JSONList = [{"operationName": "GlobalBadges"}]
         channel_data = (
             multi_get(
                 download_gql_func(session_post, query, client_id=client_id),

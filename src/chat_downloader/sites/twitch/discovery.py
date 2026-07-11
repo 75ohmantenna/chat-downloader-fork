@@ -20,14 +20,16 @@ from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_list, get_str
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Generator
 
     from chat_downloader.utils.json_types import JSONDict, JSONList
 
+    from ._protocols import _DownloadGQL, _SessionPost
+
 
 def get_user_clips(
-    session_post: Callable[..., Any],
-    download_gql_func: Callable[..., Any],
+    session_post: _SessionPost,
+    download_gql_func: _DownloadGQL,
     username: str,
     limit: int = 100,
     filter_by: str = "LAST_WEEK",
@@ -42,7 +44,7 @@ def get_user_clips(
         if num_to_get <= 0:
             break
 
-        query = [
+        query: JSONList = [
             {
                 "operationName": "ClipsCards__User",
                 "variables": {
@@ -109,8 +111,8 @@ def _extract_user_videos(
 
 
 def get_user_videos(
-    session_post: Callable[..., Any],
-    download_gql_func: Callable[..., Any],
+    session_post: _SessionPost,
+    download_gql_func: _DownloadGQL,
     username: str,
     limit: int | None = None,
     video_type: str | None = None,
@@ -153,8 +155,8 @@ def get_user_videos(
 
 
 def get_top_livestreams(
-    session_post: Callable[..., Any],
-    download_gql_func: Callable[..., Any],
+    session_post: _SessionPost,
+    download_gql_func: _DownloadGQL,
     limit: int = 30,
 ) -> Generator[dict[str, Any], None, None]:
     """Get top live streams on Twitch."""
@@ -168,7 +170,7 @@ def get_top_livestreams(
         if num_to_get <= 0:
             break
 
-        query = [
+        query: JSONList = [
             {
                 "operationName": "BrowsePage_Popular",
                 "variables": {
