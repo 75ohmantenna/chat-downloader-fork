@@ -14,6 +14,9 @@ if TYPE_CHECKING:
     import pathlib
 
 
+import requests
+
+
 class _ConnectProxy(socketserver.StreamRequestHandler):
     """Minimal HTTP CONNECT-only proxy for testing."""
 
@@ -80,9 +83,15 @@ def make_fake_http_response():
                 self.status_code = status_code
                 self._payload = payload
                 self.text = text
+                self.ok = 200 <= status_code < 300
 
             def json(self):
                 return self._payload
+
+            def raise_for_status(self) -> None:
+                if not self.ok:
+                    msg = f"HTTP {self.status_code} error"
+                    raise requests.HTTPError(msg)
 
         return _Resp()
 

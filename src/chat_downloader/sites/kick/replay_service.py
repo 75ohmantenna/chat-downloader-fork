@@ -70,7 +70,7 @@ def _fetch_video_metadata(
     proxy: dict[str, str] | None = None,
     session: _KickSession | None = None,
     timeout: tuple[float, float] = (10.0, 30.0),
-) -> JSONDict:  # pragma: no cover — network-dependent VOD API
+) -> JSONDict:
     """Fetch video metadata from ``/api/v1/video/{video_id}``.
 
     Args:
@@ -109,7 +109,7 @@ def _fetch_video_metadata(
             _close_kick_session(active_session)
 
 
-def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsewhere
+def _resolve_vod_window(
     data: JSONDict, username: str
 ) -> tuple[str, str, str, datetime, datetime]:
     """Resolve the channel id, title, and VOD time window from video metadata.
@@ -170,7 +170,7 @@ def _resolve_vod_window(  # pragma: no cover — network-dependent; tested elsew
     return channel_id, chatroom_id, title, start_dt, end_dt
 
 
-def _fetch_message_page(  # pragma: no cover — network-dependent
+def _fetch_message_page(
     channel_id: str,
     cursor: str | None = None,
     *,
@@ -216,7 +216,7 @@ def _fetch_message_page(  # pragma: no cover — network-dependent
             _close_kick_session(active_session)
 
 
-def get_vod_chat(  # pragma: no cover — network-dependent
+def get_vod_chat(
     username: str,
     video_id: str,
     request: ChatRequest,
@@ -313,7 +313,7 @@ def _classify_message(
         return parsed, False
 
 
-def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output require branch handling  # pragma: no cover — calls _fetch_message_page
+def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output require branch handling
     channel_id: str,
     start_dt: datetime,
     end_dt: datetime,
