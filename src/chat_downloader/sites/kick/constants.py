@@ -13,8 +13,9 @@ details, or event payloads.
 
 from __future__ import annotations
 
-import contextlib
 import re
+
+from chat_downloader.sites.kick.pusher_discovery import resolve_pusher_key
 
 # ── HTTP API ──────────────────────────────────────────────────────────────────
 
@@ -28,109 +29,6 @@ CHANNEL_API_TEMPLATE = "https://kick.com/api/v2/channels/{username}"
 MESSAGES_API_TEMPLATE = "https://kick.com/api/v2/channels/{channel_id}/messages"
 
 # ── Pusher websocket ──────────────────────────────────────────────────────────
-
-#: Default Pusher application key compiled into Kick's JS bundle.
-#: This is not a secret; it is shipped in Kick's public JavaScript bundle and
-#: grants only anonymous, read-only subscription to public chatroom channels.
-_PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
-
-#: Cached dynamically-discovered Pusher key (None = not yet discovered).
-_PUSHER_DISCOVERED_KEY: str | None = None
-
-
-def _is_kick_origin(url: str) -> bool:
-    """Return True if *url* is an HTTPS URL on the ``kick.com`` domain.
-
-    Used to constrain which script URLs the Pusher-key discovery loop will
-    fetch, so a tampered homepage cannot redirect it to an arbitrary host.
-    """
-    from urllib.parse import urlparse
-
-    parsed = urlparse(url)
-    if parsed.scheme != "https":
-        return False
-    host = (parsed.hostname or "").lower()
-    return host == "kick.com" or host.endswith(".kick.com")
-
-
-def resolve_pusher_key(
-    *, force_discover: bool = False
-) -> str:  # pragma: no cover — network-dependent; tested at integration level
-    """Return the current Pusher application key, discovering it if needed.
-
-    The key lives in Kick's Next.js JS bundle as ``NEXT_PUBLIC_PUSHER_KEY``.
-    It is stable across page loads but can change when Kick rebuilds their
-    frontend. This function fetches the homepage on first call to extract the
-    current value, falling back to the compiled-in default if discovery fails.
-
-    Discovery scans at most 15 JS bundles with a per-bundle 10s timeout.
-    Once resolved the key is cached for the process lifetime.
-
-    Args:
-        force_discover: If True, skip the cache and re-discover from the live
-            page. Useful when a ``pusher:error`` suggests the key has rotated.
-
-    Returns:
-        The Pusher app key string.
-    """
-    global _PUSHER_DISCOVERED_KEY  # noqa: PLW0603 — lazy-init cache
-
-    if _PUSHER_DISCOVERED_KEY is not None and not force_discover:  # pragma: no cover
-        return _PUSHER_DISCOVERED_KEY  # pragma: no cover
-
-    import requests  # pragma: no cover
-
-    session = requests.Session()  # pragma: no cover
-    try:  # pragma: no cover
-        session.headers.update(
-            {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "Accept": "text/html",
-            }
-        )
-        resp = session.get("https://kick.com/", timeout=10)
-        if resp.ok:
-            # Find all JS chunk URLs in the page (scan at most 15 chunks)
-            script_urls = re.findall(r'<script[^>]*src="([^"]+\.js)"[^>]*>', resp.text)
-            for url in script_urls[:15]:
-                abs_url = url if url.startswith("http") else "https://kick.com" + url
-                # Only fetch scripts served over HTTPS from Kick's own domain.
-                # Without this guard a tampered/MITM'd homepage could point the
-                # loader at an arbitrary host (SSRF, e.g. cloud metadata
-                # endpoints).  ``*.kick.com`` is allowed so CDN-hosted bundles
-                # still resolve.
-                if not _is_kick_origin(abs_url):
-                    continue
-                try:
-                    js_resp = session.get(abs_url, timeout=10)
-                    if js_resp.ok:
-                        try:
-                            match = re.search(
-                                r"NEXT_PUBLIC_PUSHER_KEY[^}]*?"
-                                r'default\("([a-f0-9]+)"\)',
-                                js_resp.text,
-                            )
-                            if match:
-                                key = match.group(1)
-                                _PUSHER_DISCOVERED_KEY = key
-                                return key
-                        except re.error:
-                            continue
-                except requests.RequestException:
-                    continue
-    except requests.RequestException:  # pragma: no cover
-        pass  # pragma: no cover
-    finally:  # pragma: no cover
-        with contextlib.suppress(OSError, RuntimeError):
-            session.close()
-
-    _PUSHER_DISCOVERED_KEY = _PUSHER_DEFAULT_KEY
-    return _PUSHER_DEFAULT_KEY
-
 
 _PUSHER_WS_TEMPLATE = (
     "wss://ws-us2.pusher.com/app/{key}?protocol=7&client=js&version=7.6.0&flash=false"

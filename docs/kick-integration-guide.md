@@ -208,9 +208,9 @@ The transport:
 
 The Pusher app key is shipped in Kick's public Next.js JS bundle
 (`NEXT_PUBLIC_PUSHER_KEY`) and is not a secret — it grants only anonymous,
-read-only subscription to public chatrooms. `constants.py::resolve_pusher_key`
+read-only subscription to public chatrooms. `pusher_discovery.py::resolve_pusher_key`
 fetches the homepage, scans the JS chunks for the key, caches it, and falls back
-to the compiled-in `_PUSHER_DEFAULT_KEY` if discovery fails. Pass
+to the compiled-in default if discovery fails. Pass
 `force_discover=True` to re-discover when a `pusher:error` suggests the key has
 rotated.
 

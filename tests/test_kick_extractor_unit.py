@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.kick import constants, extractor
+from chat_downloader.sites.kick import extractor
 from chat_downloader.sites.kick.extractor import KickChatDownloader
 
 ACCEPTED = [
@@ -49,22 +49,6 @@ def test_rejects_non_channel_urls(url: str) -> None:
 def test_site_metadata() -> None:
     assert KickChatDownloader._NAME == "kick.com"
     assert KickChatDownloader._SITE_DEFAULT_PARAMS["format"] == "default"
-
-
-def test_kick_origin_rejects_non_https_url() -> None:
-    assert constants._is_kick_origin("http://kick.com/app.js") is False
-
-
-def test_kick_origin_accepts_kick_domain() -> None:
-    assert constants._is_kick_origin("https://kick.com/app.js") is True
-
-
-def test_kick_origin_accepts_kick_subdomain() -> None:
-    assert constants._is_kick_origin("https://static.kick.com/app.js") is True
-
-
-def test_kick_origin_rejects_other_domain() -> None:
-    assert constants._is_kick_origin("https://evil.com/app.js") is False
 
 
 def test_downloader_close_releases_both_http_sessions(monkeypatch: Any) -> None:
