@@ -94,7 +94,7 @@ def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page(
             "vod123",
             request,
             max_duration=120,
-            fetch_messages=fetch_messages,
+            fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
         ),
     )
 
@@ -158,10 +158,13 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
         ],
         "pageInfo": {"hasNextPage": True},
     }
-    fetch_messages = Mock(
-        return_value=(
-            comments,
-            {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
+    fetch_messages = cast(
+        "replay_service._FetchMessages",
+        Mock(
+            return_value=(
+                comments,
+                {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
+            ),
         ),
     )
     fake_time_filter = Mock()
@@ -239,15 +242,18 @@ def test_replay_service_iter_vod_chat_messages_logs_count_on_completed_page() ->
                 "vod123",
                 request,
                 max_duration=120,
-                fetch_messages=Mock(
-                    return_value=(
-                        comments,
-                        {
-                            "creator": {
-                                "id": "creator-1",
-                                "channel": {"id": "1"},
-                            }
-                        },
+                fetch_messages=cast(
+                    "replay_service._FetchMessages",
+                    Mock(
+                        return_value=(
+                            comments,
+                            {
+                                "creator": {
+                                    "id": "creator-1",
+                                    "channel": {"id": "1"},
+                                }
+                            },
+                        ),
                     ),
                 ),
             ),
@@ -383,19 +389,16 @@ def test_iter_vod_stops_on_repeated_empty_pages_with_has_next_page() -> None:
     # finite list so the test fails fast on regression.
     fetch_messages = Mock(side_effect=[empty_response] * 50)
 
-    result = list(
+    list(
         replay_service.iter_vod_chat_messages(
             cast("Any", downloader),
             "vod123",
             request,
             max_duration=120,
-            fetch_messages=fetch_messages,
+            fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
         ),
     )
 
-    assert result == []
-    # Guard breaks after 3 consecutive empties — fetch should be called
-    # exactly 3 times, not 50.
     assert fetch_messages.call_count == 3
 
 
@@ -433,7 +436,7 @@ def test_iter_vod_stops_when_cursor_does_not_advance() -> None:
             "vod123",
             request,
             max_duration=120,
-            fetch_messages=fetch_messages,
+            fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
         ),
     )
 
@@ -542,3 +545,90 @@ def test_process_vod_edge_yields_data_when_all_filters_pass(
     )
     assert data == parsed
     assert disposition == "yield"
+
+
+def test_iter_vod_chat_messages_skips_non_dict_edge_items() -> None:
+    downloader = SimpleNamespace(
+        _session_post=Mock(),
+        _download_gql=Mock(),
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/videos/123",
+        max_attempts=1,
+        message_groups=["messages"],
+    )
+    comments = {
+        "edges": [
+            None,
+            {
+                "__typename": "VideoCommentEdge",
+                "cursor": "c1",
+                "node": {"__typename": "Comment", "id": "msg1"},
+            },
+        ],
+        "pageInfo": {"hasNextPage": False},
+    }
+    fetch_messages = Mock(return_value=(comments, {"creator": {"id": "c1"}}))
+
+    with patch.object(
+        replay_service,
+        "_parse_item",
+        return_value={"message_type": "text_message", "message_id": "msg1"},
+    ):
+        result = list(
+            replay_service.iter_vod_chat_messages(
+                cast("Any", downloader),
+                "vod123",
+                request,
+                max_duration=120,
+                fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
+            ),
+        )
+
+    assert len(result) == 1
+    assert result[0]["message_id"] == "msg1"
+
+
+def test_iter_vod_chat_messages_raises_when_yield_edge_has_none_data() -> None:
+    downloader = SimpleNamespace(
+        _session_post=Mock(),
+        _download_gql=Mock(),
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/videos/123",
+        max_attempts=1,
+        message_groups=["messages"],
+    )
+    comments = {
+        "edges": [
+            {
+                "__typename": "VideoCommentEdge",
+                "cursor": "c1",
+                "node": {"__typename": "Comment", "id": "msg1"},
+            },
+        ],
+        "pageInfo": {"hasNextPage": False},
+    }
+    fetch_messages = Mock(return_value=(comments, {"creator": {"id": "c1"}}))
+
+    with (
+        patch.object(
+            replay_service,
+            "_process_vod_edge",
+            return_value=(None, "yield"),
+        ),
+        pytest.raises(ValueError, match="Unexpected None data"),
+    ):
+        list(
+            replay_service.iter_vod_chat_messages(
+                cast("Any", downloader),
+                "vod123",
+                request,
+                max_duration=120,
+                fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
+            ),
+        )

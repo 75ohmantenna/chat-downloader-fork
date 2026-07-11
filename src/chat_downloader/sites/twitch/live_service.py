@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from json.decoder import JSONDecodeError
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from requests.exceptions import RequestException
 
@@ -29,13 +29,33 @@ from .irc_transport import (
 # storms; ~5 MB of IDs in memory at full capacity.
 _LIVE_SEEN_MESSAGE_LIMIT = 50_000
 
+
+class _IRCFactory(Protocol):
+    """Callable that creates a configured Twitch IRC connection."""
+
+    def __call__(self, *, connect_timeout: float) -> TwitchChatIRC: ...
+
+
+class _MessageGenerator(Protocol):
+    """Callable that yields raw IRC messages for a channel."""
+
+    def __call__(
+        self,
+        irc: TwitchChatIRC,
+        channel: str,
+        params: ChatRequest,
+        badge_set: BadgeSet,
+    ) -> Generator[dict[str, Any], None, None]: ...
+
+
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Generator
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict
 
     from .extractor import TwitchChatDownloader
+    from .types import BadgeSet
 
 
 def _is_duplicate_live_message(
@@ -53,8 +73,8 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     downloader: TwitchChatDownloader,
     stream_id: str,
     request: ChatRequest,
-    irc_factory: Callable[..., Any] | None = None,
-    message_generator: Callable[..., Any] | None = None,
+    irc_factory: _IRCFactory | None = None,
+    message_generator: _MessageGenerator | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield live IRC chat messages for a stream."""
     irc_factory = irc_factory or TwitchChatIRC

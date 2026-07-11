@@ -4,17 +4,19 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
+
+from chat_downloader.utils.json_types import JSONDict, get_dict
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from chat_downloader.utils.json_types import JSONDict
+    from chat_downloader.utils.json_types import JSONList
 
 
 def get_chat_messages_by_vod_id(
-    session_post: Callable[..., Any],  # noqa: ARG001 — uniform transport callable signature; live transport uses this
-    download_gql_func: Callable[..., Any],
+    session_post: object,  # noqa: ARG001 — uniform transport callable signature; live transport uses this
+    download_gql_func: Callable[[JSONList], list[JSONDict]],
     vod_id: str,
     cursor: str | None,
     content_offset_seconds: float | None,
@@ -29,7 +31,7 @@ def get_chat_messages_by_vod_id(
     else:
         variables["contentOffsetSeconds"] = content_offset_seconds or 0
 
-    query = [
+    query: JSONList = [
         {
             "operationName": "VideoCommentsByOffsetOrCursor",
             "variables": variables,
@@ -37,16 +39,13 @@ def get_chat_messages_by_vod_id(
     ]
     result = download_gql_func(query)
 
-    try:
-        info = result[0]["data"]["video"]
-    except (KeyError, IndexError, TypeError):
-        return None, None
-
+    data = get_dict(result[0], "data") if result else {}
+    info = get_dict(data, "video")
     if not info:
         return None, None
 
     comments = info.get("comments")
-    if not comments:
+    if not isinstance(comments, dict):
         return None, None
 
     return comments, info

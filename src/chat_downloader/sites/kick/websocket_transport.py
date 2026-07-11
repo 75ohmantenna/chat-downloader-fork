@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from websocket import (
     WebSocketConnectionClosedException,
@@ -35,9 +35,32 @@ from .constants import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Generator
 
     from chat_downloader.utils.json_types import JSONDict
+
+
+class _WebSocketConnection(Protocol):
+    """Minimal shape of a connected websocket object."""
+
+    def settimeout(self, timeout: float | None) -> None: ...
+    def send(self, data: str) -> None: ...
+    def recv(self) -> str | bytes | None: ...
+    def close(self) -> None: ...
+
+
+class _PusherConnector(Protocol):
+    """Callable that opens a websocket connection for the Kick transport."""
+
+    def __call__(
+        self,
+        url: str,
+        timeout: float | None,
+        *,
+        http_proxy_host: str | None = None,
+        http_proxy_port: int | None = None,
+    ) -> _WebSocketConnection | None: ...
+
 
 _IDLE_WATCHDOG_SECONDS = 180.0
 _MIN_RECEIVE_TIMEOUT_SECONDS = 1.0
@@ -49,7 +72,7 @@ def _default_connector(
     *,
     http_proxy_host: str | None = None,
     http_proxy_port: int | None = None,
-) -> Any:
+) -> _WebSocketConnection:
     """Open a real Pusher websocket connection.
 
     Args:
@@ -61,11 +84,14 @@ def _default_connector(
     Returns:
         A connected ``websocket.WebSocket`` instance.
     """
-    return create_connection(
-        url,
-        timeout=timeout,
-        http_proxy_host=http_proxy_host,
-        http_proxy_port=http_proxy_port,
+    return cast(
+        "_WebSocketConnection",
+        create_connection(
+            url,
+            timeout=timeout,
+            http_proxy_host=http_proxy_host,
+            http_proxy_port=http_proxy_port,
+        ),
     )
 
 
@@ -75,7 +101,7 @@ class KickPusherTransport:
     def __init__(
         self,
         *,
-        connector: Callable[..., Any] | None = None,
+        connector: _PusherConnector | None = None,
         url: str | None = None,
         http_proxy_host: str | None = None,
         http_proxy_port: int | None = None,
@@ -96,7 +122,7 @@ class KickPusherTransport:
         self._url = url if url is not None else get_pusher_ws_url()
         self._http_proxy_host = http_proxy_host
         self._http_proxy_port = http_proxy_port
-        self._ws: Any = None
+        self._ws: _WebSocketConnection | None = None
 
     def connect(self, timeout: float | None) -> None:
         """Open the websocket connection.

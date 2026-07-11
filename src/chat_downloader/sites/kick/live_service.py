@@ -162,7 +162,8 @@ def get_chat_by_channel(
     request: ChatRequest,
     *,
     transport_factory: Callable[[], KickPusherTransport] | None = None,
-    frame_iterator: Callable[[KickPusherTransport], Any] | None = None,
+    frame_iterator: Callable[[KickPusherTransport], Generator[JSONDict, None, None]]
+    | None = None,
 ) -> Chat:
     """Build a live :class:`Chat` for a Kick channel.
 
@@ -295,7 +296,8 @@ def _iter_chat_messages(
     request: ChatRequest,
     *,
     transport_factory: Callable[[], KickPusherTransport] | None = None,
-    frame_iterator: Callable[[KickPusherTransport], Any] | None = None,
+    frame_iterator: Callable[[KickPusherTransport], Generator[JSONDict, None, None]]
+    | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized live chat messages for a channel."""
     transport_factory = transport_factory or KickPusherTransport

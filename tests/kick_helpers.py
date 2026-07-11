@@ -6,7 +6,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Generator
+
+    from chat_downloader.sites.kick.websocket_transport import KickPusherTransport
 
 from chat_downloader.sites.retry import retry as _perform_retry
 
@@ -158,7 +163,9 @@ class FakeTransport:
         self.close_count += 1
 
 
-def make_frame_iterator(batches: list[list[Any]]) -> Any:
+def make_frame_iterator(
+    batches: list[list[Any]],
+) -> Callable[[KickPusherTransport], Generator[dict[str, Any], None, None]]:
     """Return a frame-iterator callable that yields successive ``batches``.
 
     Each batch is a list of frames; an :class:`Exception` instance within a
@@ -166,7 +173,9 @@ def make_frame_iterator(batches: list[list[Any]]) -> Any:
     """
     iterator = iter(batches)
 
-    def frame_iterator(_transport: Any) -> Any:
+    def frame_iterator(
+        _transport: KickPusherTransport,
+    ) -> Generator[dict[str, Any], None, None]:
         for item in next(iterator):
             if isinstance(item, Exception):
                 raise item

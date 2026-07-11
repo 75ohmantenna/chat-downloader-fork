@@ -20,7 +20,10 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
 ):
     first_irc = Mock()
     second_irc = Mock()
-    irc_factory = Mock(side_effect=[OSError("temporary"), first_irc, second_irc])
+    irc_factory = cast(
+        "live_service._IRCFactory",
+        Mock(side_effect=[OSError("temporary"), first_irc, second_irc]),
+    )
     downloader = SimpleNamespace(
         badge_cache=SimpleNamespace(snapshot=dict),
         _update_badge_info=Mock(),
@@ -34,19 +37,22 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
         message_receive_timeout=1.5,
         message_groups=["messages"],
     )
-    message_generator = Mock(
-        side_effect=[
-            ConnectionError("reconnect"),
-            iter(
-                [
-                    {
-                        "message_type": "text_message",
-                        "message_id": "kept",
-                        "extra": "x",
-                    }
-                ],
-            ),
-        ],
+    message_generator = cast(
+        "live_service._MessageGenerator",
+        Mock(
+            side_effect=[
+                ConnectionError("reconnect"),
+                iter(
+                    [
+                        {
+                            "message_type": "text_message",
+                            "message_id": "kept",
+                            "extra": "x",
+                        }
+                    ],
+                ),
+            ],
+        ),
     )
 
     with (
@@ -106,8 +112,11 @@ def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -
                 cast("Any", downloader),
                 "example",
                 request,
-                irc_factory=Mock(return_value=irc),
-                message_generator=Mock(return_value=iter(messages)),
+                irc_factory=cast("live_service._IRCFactory", Mock(return_value=irc)),
+                message_generator=cast(
+                    "live_service._MessageGenerator",
+                    Mock(return_value=iter(messages)),
+                ),
             ),
         )
 
@@ -132,11 +141,14 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
         interruptible_retry=False,
         message_groups=["messages", "other"],
     )
-    message_generator = Mock(
-        side_effect=[
-            iter([{"action_type": "reconnect", "message_type": "reconnect"}]),
-            iter([{"message_type": "text_message", "message_id": "kept"}]),
-        ],
+    message_generator = cast(
+        "live_service._MessageGenerator",
+        Mock(
+            side_effect=[
+                iter([{"action_type": "reconnect", "message_type": "reconnect"}]),
+                iter([{"message_type": "text_message", "message_id": "kept"}]),
+            ],
+        ),
     )
 
     with patch.object(live_service, "log") as mock_log:
@@ -145,7 +157,10 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
                 cast("Any", downloader),
                 "example",
                 request,
-                irc_factory=Mock(side_effect=[first_irc, second_irc]),
+                irc_factory=cast(
+                    "live_service._IRCFactory",
+                    Mock(side_effect=[first_irc, second_irc]),
+                ),
                 message_generator=message_generator,
             ),
         )
@@ -193,8 +208,11 @@ def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> 
             cast("Any", downloader),
             "example",
             request,
-            irc_factory=Mock(return_value=irc),
-            message_generator=Mock(return_value=iter(messages)),
+            irc_factory=cast("live_service._IRCFactory", Mock(return_value=irc)),
+            message_generator=cast(
+                "live_service._MessageGenerator",
+                Mock(return_value=iter(messages)),
+            ),
         ),
     )
 
@@ -381,19 +399,22 @@ def test_live_service_reconnect_refreshes_badge_set() -> None:
 
     captured_badge_sets: list[Any] = []
 
-    def message_generator(irc, stream_id, req, badge_set):
+    def message_generator(irc, channel, params, badge_set):
         captured_badge_sets.append(badge_set)
         if irc is first_irc:
             raise ConnectionError("reconnect")
-        return iter([{"message_type": "text_message", "message_id": "kept"}])
+        yield from [{"message_type": "text_message", "message_id": "kept"}]
 
     result = list(
         live_service.iter_stream_chat_messages(
             cast("Any", downloader),
             "example",
             request,
-            irc_factory=Mock(side_effect=[first_irc, second_irc]),
-            message_generator=message_generator,
+            irc_factory=cast(
+                "live_service._IRCFactory",
+                Mock(side_effect=[first_irc, second_irc]),
+            ),
+            message_generator=cast("live_service._MessageGenerator", message_generator),
         ),
     )
 
@@ -462,7 +483,10 @@ def test_live_service_iter_stream_chat_messages_raises_runtime_error_if_retry_re
                 cast("Any", downloader),
                 "example",
                 request,
-                irc_factory=Mock(side_effect=OSError("temporary")),
+                irc_factory=cast(
+                    "live_service._IRCFactory",
+                    Mock(side_effect=OSError("temporary")),
+                ),
             )
         )
 
@@ -488,12 +512,15 @@ def test_live_service_repeated_disconnects_exhaust_reconnect_budget() -> None:
                 cast("Any", downloader),
                 "example",
                 request,
-                irc_factory=Mock(side_effect=ircs),
-                message_generator=Mock(
-                    side_effect=[
-                        ConnectionError("drop one"),
-                        ConnectionError("drop two"),
-                    ]
+                irc_factory=cast("live_service._IRCFactory", Mock(side_effect=ircs)),
+                message_generator=cast(
+                    "live_service._MessageGenerator",
+                    Mock(
+                        side_effect=[
+                            ConnectionError("drop one"),
+                            ConnectionError("drop two"),
+                        ]
+                    ),
                 ),
             )
         )
@@ -523,8 +550,14 @@ def test_live_service_closes_partial_connection_when_join_fails() -> None:
                 cast("Any", downloader),
                 "example",
                 request,
-                irc_factory=Mock(side_effect=[failed_irc, healthy_irc]),
-                message_generator=Mock(return_value=iter(())),
+                irc_factory=cast(
+                    "live_service._IRCFactory",
+                    Mock(side_effect=[failed_irc, healthy_irc]),
+                ),
+                message_generator=cast(
+                    "live_service._MessageGenerator",
+                    Mock(return_value=iter(())),
+                ),
             )
         )
         == []

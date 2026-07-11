@@ -39,10 +39,13 @@ BASELINE: dict[str, int] = {
     # Twitch site-specific accumulators and remapping tables.
     # Round-11.5 migrated discovery/graphql_client/replay_service/replay_transport/
     # live_service off dict[str,Any] JSON boundaries to json_types aliases.
-    # Residuals per the Round-11 taxonomy: Callable[...,Any] transport params,
-    # badge accumulators (types.py containers), IRC-tag accumulators (Round-08.3-
-    # declined), frozen public params, assembled-output dicts.
-    "sites/twitch/replay_service.py": 3,
+    # Round-15 narrowed transport Callable[...,Any] seams to Protocols and precise
+    # Callable signatures (live_service irc_factory/message_generator,
+    # replay_service fetch_messages/_fetch_gql_one, replay_transport signatures).
+    # Residuals per the Round-11 taxonomy: badge accumulators (types.py containers),
+    # IRC-tag accumulators (Round-08.3-declined), frozen public params,
+    # assembled-output dicts.
+    "sites/twitch/replay_service.py": 0,
     "sites/twitch/extractor.py": 18,
     "sites/twitch/discovery.py": 10,
     "sites/twitch/parsing/message_irc_resolve.py": 14,
@@ -51,10 +54,10 @@ BASELINE: dict[str, int] = {
     "sites/twitch/remappings.py": 11,
     "sites/twitch/parsing/badges.py": 9,
     "sites/twitch/irc_transport.py": 6,
-    "sites/twitch/replay_transport.py": 3,
+    "sites/twitch/replay_transport.py": 0,
     "sites/twitch/types.py": 5,
     "sites/twitch/parsing/message_emotes.py": 5,
-    "sites/twitch/live_service.py": 4,
+    "sites/twitch/live_service.py": 3,
     # YouTube site-specific accumulators and remapping tables.
     "sites/youtube/_protocols.py": 18,
     "sites/youtube/client_requests_bootstrap.py": 3,
@@ -122,17 +125,18 @@ BASELINE: dict[str, int] = {
     # (param-annotation-only; extraction logic via _opt_str unchanged).
     # Round-14: HTTP-response boundaries (api_client) and websocket-frame boundary
     # (websocket_transport) migrated to JSONAny/JSONDict/JSONList + cast().
-    # Downstream callers (live_service, replay_service) param-narrowed accordingly.
+    # Round-15: transport/service Callable[...,Any] seams narrowed to Protocols
+    # (websocket_transport connector, live_service frame_iterator, twitch live
+    # irc_factory/message_generator, replay fetch_messages/transport signatures).
     # api_client.py retains Any from the curl-cffi/cloudscraper session backend
     # (the multi-tier impersonation session is typed Any).
-    # Residuals per Round-11/13/14 taxonomy: Callable[...,Any] transport params,
-    # injectable connectors, ws-object Any, assembled-output dicts.
+    # Residuals per Round-11/13/14/15 taxonomy: assembled-output dicts.
     # emotes.py: inputs already typed (content: str); all Any are output accumulators.
     # extractor.py: params: ChatRequest|dict[str,Any] x4 frozen public API; ClassVar
     # data tables x2; import -- all intentional residuals, no code change.
     "sites/kick/parsing/messages.py": 10,
-    "sites/kick/websocket_transport.py": 4,
-    "sites/kick/live_service.py": 5,
+    "sites/kick/websocket_transport.py": 0,
+    "sites/kick/live_service.py": 3,
     "sites/kick/parsing/events.py": 3,
     "sites/kick/api_client.py": 6,
     "sites/kick/parsing/emotes.py": 4,

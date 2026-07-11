@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from json.decoder import JSONDecodeError
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from requests.exceptions import RequestException
 
@@ -34,10 +34,23 @@ if TYPE_CHECKING:
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
-    from chat_downloader.utils.json_types import JSONDict
+    from chat_downloader.utils.json_types import JSONDict, JSONList
 
     from .extractor import TwitchChatDownloader
     from .types import BadgeSet
+
+
+class _FetchMessages(Protocol):
+    """Callable that fetches one page of Twitch VOD replay comments."""
+
+    def __call__(
+        self,
+        session_post: object,
+        download_gql_func: Callable[[JSONList], list[JSONDict]],
+        vod_id: str,
+        cursor: str | None,
+        content_offset_seconds: float | None,
+    ) -> tuple[JSONDict | None, JSONDict | None]: ...
 
 
 def _process_vod_edge(
@@ -135,7 +148,7 @@ def _fetch_gql_one[T](
 
 def _fetch_vod_page(
     downloader: TwitchChatDownloader,
-    fetch_fn: Callable[..., Any],
+    fetch_fn: _FetchMessages,
     vod_id: str,
     cursor: str,
     content_offset: float,
@@ -147,15 +160,12 @@ def _fetch_vod_page(
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            return cast(
-                "tuple[JSONDict | None, JSONDict | None]",
-                fetch_fn(
-                    downloader._session_post,
-                    downloader._download_gql,
-                    vod_id,
-                    cursor or None,
-                    content_offset,
-                ),
+            return fetch_fn(
+                downloader._session_post,
+                downloader._download_gql,
+                vod_id,
+                cursor or None,
+                content_offset,
             )
         except (JSONDecodeError, RequestException) as error:
             downloader.retry(attempt_number, error=error, request=request)
@@ -168,7 +178,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
     request: ChatRequest,
     max_duration: float | None,
     offset: float | None = None,
-    fetch_messages: Callable[..., Any] | None = None,
+    fetch_messages: _FetchMessages | None = None,
     logger_obj: Logger | None = None,
 ) -> Generator[JSONDict, None, None]:
     """Yield replay chat messages for a VOD or clip."""
