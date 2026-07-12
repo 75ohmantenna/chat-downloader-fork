@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import NoReturn
+from typing import Any, NoReturn, cast
 
 import pytest
 
@@ -17,41 +17,60 @@ from chat_downloader.errors import (
 from chat_downloader.models import ChatRequest
 from chat_downloader.request_profiles import REQUEST_PROFILE_INNERTUBE_CONTEXTS
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.youtube.chat_streams_response import (
-    _apply_response_state_updates,
-    _handle_continuation_response,
-    _log_request_context,
-)
-from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
-    _advance_continuation_loop,
-    _get_chat_messages,
-    _resolve_poll_delay_ms,
-)
 from chat_downloader.sites.youtube.chat_users_retrieval import (
     YouTubeChatUsersRetrievalMixin,
     _copy_chat_metadata,
 )
-from chat_downloader.sites.youtube.continuation_loop_runtime import (
+from chat_downloader.sites.youtube.continuation import (
+    ContinuationLoopState,
+    _advance_continuation_loop,
+    _ContinuationLoop,
+    _get_chat_messages,
+    _resolve_poll_delay_ms,
     build_continuation_params,
     derive_live_offset_milliseconds,
     enrich_live_message_timing,
 )
-from chat_downloader.sites.youtube.continuation_loop_state import (
-    ContinuationLoopState,
-)
+
+
+def _loop(downloader: object, *, ytcfg: dict | None = None) -> _ContinuationLoop:
+    """Construct a loop bound to *downloader* for driving response-state methods."""
+    return _ContinuationLoop(
+        cast("Any", downloader), {}, ytcfg or {}, cast("Any", None)
+    )
+
+
+def _apply_response_state_updates(
+    downloader: object, yt_info: dict, auth: str | None
+) -> None:
+    _loop(downloader)._apply_response_state_updates(yt_info, auth)
+
+
+def _handle_continuation_response(
+    downloader: object, yt_info: dict, ytcfg: dict, continuation_params: dict
+) -> None:
+    _loop(downloader, ytcfg=ytcfg)._handle_continuation_response(
+        yt_info, continuation_params
+    )
+
+
+def _log_request_context(
+    downloader: object, yt_info: dict, continuation_params: dict
+) -> None:
+    _loop(downloader)._log_request_context(yt_info, continuation_params)
 
 
 @pytest.fixture(autouse=True)
 def _disable_youtube_poll_sleep(monkeypatch) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.polling_sleep",
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
         lambda _seconds: None,
     )
 
 
 def _patch_visitor_data(monkeypatch, return_value) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response.extract_visitor_data",
+        "chat_downloader.sites.youtube.continuation.extract_visitor_data",
         lambda _yt_info: return_value,
     )
 
@@ -112,19 +131,19 @@ def test_handle_continuation_response_composes_state_log_and_error_checks(
     calls: list[str] = []
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: "AUTH",
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._apply_response_state_updates",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._apply_response_state_updates",
         lambda *_args, **_kwargs: calls.append("state"),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._log_request_context",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._log_request_context",
         lambda *_args, **_kwargs: calls.append("log"),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._raise_if_api_error",
+        "chat_downloader.sites.youtube.continuation._raise_if_api_error",
         lambda *_args, **_kwargs: calls.append("error"),
     )
 
@@ -144,7 +163,7 @@ def test_log_request_context_includes_click_tracking_and_logged_in_info(
     """Logging includes click tracking, continuation token, and login info."""
     logs: list[tuple[str, object]] = []
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response.log",
+        "chat_downloader.sites.youtube.continuation.log",
         lambda level, message: logs.append((level, message)),
     )
 
@@ -202,19 +221,19 @@ def test_advance_continuation_loop_updates_state_and_sleeps(
     next_state = ContinuationLoopState(continuation="next-token")
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.parse_continuation_response",
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
         lambda _yt_info: _build_result(timeout_ms=250, is_end=True),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.update_state_from_result",
+        "chat_downloader.sites.youtube.continuation.update_state_from_result",
         lambda _state, _result: next_state,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.polling_sleep",
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
         sleep_calls.append,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.log",
+        "chat_downloader.sites.youtube.continuation.log",
         lambda level, message: logs.append((level, message)),
     )
 
@@ -234,19 +253,19 @@ def test_advance_continuation_loop_applies_min_floor_for_live_stream(
         is_replay=False,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.parse_continuation_response",
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
         lambda _yt_info: _build_result(timeout_ms=100, is_end=False),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.update_state_from_result",
+        "chat_downloader.sites.youtube.continuation.update_state_from_result",
         lambda _state, _result: _state,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.polling_sleep",
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
         sleep_calls.append,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.log",
+        "chat_downloader.sites.youtube.continuation.log",
         lambda *_: None,
     )
 
@@ -264,19 +283,19 @@ def test_advance_continuation_loop_applies_floor_when_timeout_absent_for_live(
         is_replay=False,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.parse_continuation_response",
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
         lambda _yt_info: _build_result(timeout_ms=None, is_end=False),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.update_state_from_result",
+        "chat_downloader.sites.youtube.continuation.update_state_from_result",
         lambda _state, _result: _state,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.polling_sleep",
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
         sleep_calls.append,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.log",
+        "chat_downloader.sites.youtube.continuation.log",
         lambda *_: None,
     )
 
@@ -504,23 +523,23 @@ def test_chat_iteration_raises_no_chat_replay_on_replay_api_400(
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
+        "chat_downloader.sites.youtube.continuation._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: {
             "error": {"code": 400, "message": "Replay disabled"},
         },
@@ -553,23 +572,23 @@ def test_chat_iteration_raises_api_error_for_non_replay_failure(
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
+        "chat_downloader.sites.youtube.continuation._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: {
             "error": {"code": 500, "message": "Server exploded"},
         },
@@ -602,23 +621,23 @@ def test_chat_iteration_raises_api_error_for_non_dict_error_payload(
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
+        "chat_downloader.sites.youtube.continuation._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: {"error": "backend unavailable"},
     )
 
@@ -652,29 +671,29 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     sleep_calls = []
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {"x-bootstrap": "1"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: "AUTH_TOKEN",
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
+        "chat_downloader.sites.youtube.continuation._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context.check_for_invalid_types",
+        "chat_downloader.sites.youtube.continuation.check_for_invalid_types",
         lambda message_types, valid_types: downloader.invalid_type_checks.append(
             (message_types, valid_types),
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"context": {}, "continuation": "live-token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: {
             "continuationContents": {"liveChatContinuation": {"actions": []}},
             "responseContext": {},
@@ -682,7 +701,7 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     )
     _patch_visitor_data(monkeypatch, "visitor-2")
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.parse_continuation_response",
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
         lambda _yt_info: _build_result(
             debug_info={
                 "unknown": True,
@@ -701,15 +720,15 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response.debug_log",
+        "chat_downloader.sites.youtube.continuation.debug_log",
         lambda *items: debug_messages.append(items),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response.capture_debug_sample",
+        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
         lambda label, payload: captured_samples.append((label, payload)),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.polling_sleep",
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
         sleep_calls.append,
     )
 
@@ -777,7 +796,7 @@ def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailab
     original_error = IncompleteContinuationError("original")
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._build_chat_context",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
         lambda *_args, **_kwargs: SimpleNamespace(
             continuation_url="https://example.test/continuation",
             innertube_context={"client": {}},
@@ -790,15 +809,15 @@ def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailab
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(original_error),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._attempt_profile_fallback",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._attempt_profile_fallback",
         lambda _downloader: False,
     )
 
@@ -823,7 +842,7 @@ def test_chat_iteration_raises_when_live_chat_continuation_is_missing(
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._build_chat_context",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
         lambda *_args, **_kwargs: SimpleNamespace(
             continuation_url="https://example.test/continuation",
             innertube_context={"client": {}},
@@ -836,19 +855,19 @@ def test_chat_iteration_raises_when_live_chat_continuation_is_missing(
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: {"responseContext": {}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._handle_continuation_response",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.summarize_continuation_payload",
+        "chat_downloader.sites.youtube.continuation.summarize_continuation_payload",
         lambda _yt_info: "summary",
     )
 
@@ -873,7 +892,7 @@ def test_chat_iteration_returns_immediately_when_action_processing_requests_stop
     downloader = _DummyDownloader()
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._build_chat_context",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
         lambda *_args, **_kwargs: SimpleNamespace(
             continuation_url="https://example.test/continuation",
             innertube_context={"client": {}},
@@ -886,17 +905,17 @@ def test_chat_iteration_returns_immediately_when_action_processing_requests_stop
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: {
             "continuationContents": {"liveChatContinuation": {"actions": [{"id": 1}]}}
         },
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._handle_continuation_response",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
         lambda *_args, **_kwargs: None,
     )
 
@@ -906,11 +925,11 @@ def test_chat_iteration_returns_immediately_when_action_processing_requests_stop
         return True
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._process_actions",
+        "chat_downloader.sites.youtube.continuation._process_actions",
         _stop_processing,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._advance_continuation_loop",
+        "chat_downloader.sites.youtube.continuation._advance_continuation_loop",
         lambda *_args, **_kwargs: pytest.fail(
             "_advance_continuation_loop should not run after stop"
         ),
@@ -940,7 +959,7 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
     msg_filter = SimpleNamespace(should_add=lambda _message: True)
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._build_chat_context",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
         lambda *_args, **_kwargs: SimpleNamespace(
             continuation_url="https://example.test/continuation",
             innertube_context={"client": {}},
@@ -953,21 +972,21 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_args, **_kwargs: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: {
             "continuationContents": {"liveChatContinuation": {"actions": []}},
         },
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._handle_continuation_response",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._advance_continuation_loop",
+        "chat_downloader.sites.youtube.continuation._advance_continuation_loop",
         lambda *_args, **_kwargs: True,
     )
 
@@ -998,15 +1017,15 @@ def test_chat_iteration_switches_profile_after_incomplete_continuation(
     call_state = {"count": 0}
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
+        "chat_downloader.sites.youtube.continuation._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
 
@@ -1020,11 +1039,11 @@ def test_chat_iteration_switches_profile_after_incomplete_continuation(
         }
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         fake_continuation,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.parse_continuation_response",
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
         lambda _yt_info: _build_result(timeout_ms=None, is_end=True),
     )
 
@@ -1074,19 +1093,19 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
     )
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
+        "chat_downloader.sites.youtube.continuation._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context.get_live_start_time_ms",
+        "chat_downloader.sites.youtube.continuation.get_live_start_time_ms",
         lambda: 1000,
     )
 
@@ -1095,18 +1114,18 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
         return next(responses)
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         fake_get_continuation_info,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.process_pipeline_action",
+        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
         lambda *_args, **_kwargs: SimpleNamespace(
             disposition="yield",
             message={"timestamp": 6_000_000},
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.parse_continuation_response",
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
         lambda _yt_info: next(parse_results),
     )
 
@@ -1194,19 +1213,19 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
     )
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._generate_headers",
+        "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_response._generate_sapisidhash_header",
+        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
+        "chat_downloader.sites.youtube.continuation._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_context.TimeRangeFilter",
+        "chat_downloader.sites.youtube.continuation_helpers.TimeRangeFilter",
         lambda *args, **kwargs: FakeTimeFilter(),
     )
 
@@ -1215,11 +1234,11 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         return {"continuation": state.continuation}
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         fake_build_continuation_params,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: next(responses),
     )
 
@@ -1235,11 +1254,11 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         return next(pipeline_results)
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.process_pipeline_action",
+        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
         fake_process_pipeline_action,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.parse_continuation_response",
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
         lambda _yt_info: _build_result(
             debug_info={"continuation_entry": {"timeoutMs": 0}},
             timeout_ms=None,
@@ -1252,7 +1271,7 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         return state
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.update_state_from_result",
+        "chat_downloader.sites.youtube.continuation.update_state_from_result",
         fake_update_state_from_result,
     )
 

@@ -78,8 +78,9 @@ BASELINE: dict[str, int] = {
     # Round-06.2 helper adds dict[str,Any] param; Any import duplicated across split.
     "sites/youtube/client_requests_errors.py": 2,
     "sites/youtube/client_auth.py": 6,
-    "sites/youtube/chat_streams_runtime_iteration.py": 2,
-    "sites/youtube/chat_streams_context.py": 2,
+    # Continuation loop: initial_info dict[str,Any] boundary appears in the loop
+    # entry points and the _ContinuationLoop constructor.
+    "sites/youtube/continuation.py": 3,
     "sites/youtube/parsing/actions_handlers_validation.py": 5,
     "sites/youtube/client_requests_initial.py": 4,
     "sites/youtube/video_status_helpers.py": 6,

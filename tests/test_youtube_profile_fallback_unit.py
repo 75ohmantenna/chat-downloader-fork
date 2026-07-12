@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for _attempt_profile_fallback helper."""
+"""Unit tests for _ContinuationLoop._attempt_profile_fallback."""
 
 from __future__ import annotations
 
+from typing import Any, cast
 from unittest.mock import patch
 
 
@@ -21,42 +22,39 @@ class _FakeDownloader:
         return True
 
 
-def _import():
-    from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
-        _attempt_profile_fallback,
-    )
+def _attempt_fallback(downloader: _FakeDownloader) -> bool:
+    """Drive the profile-fallback method on a loop bound to *downloader*."""
+    from chat_downloader.sites.youtube.continuation import _ContinuationLoop
 
-    return _attempt_profile_fallback
+    loop = _ContinuationLoop(cast("Any", downloader), {}, {}, cast("Any", None))
+    return loop._attempt_profile_fallback()
 
 
 def test_fallback_disabled_returns_false() -> None:
     """Returns False immediately when _auto_profile_fallback is False."""
-    fn = _import()
     dl = _FakeDownloader(auto_fallback=False)
-    assert fn(dl) is False
+    assert _attempt_fallback(dl) is False
     assert dl.applied_profiles == []
 
 
 def test_fallback_applies_next_profile_and_returns_true() -> None:
     """Returns True when a next profile exists and applies successfully."""
-    fn = _import()
     dl = _FakeDownloader(auto_fallback=True, profile="youtube_web")
     with patch(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.get_next_request_profile",
+        "chat_downloader.sites.youtube.continuation.get_next_request_profile",
         return_value="youtube_android",
     ):
-        result = fn(dl)
+        result = _attempt_fallback(dl)
     assert result is True
     assert "youtube_android" in dl.applied_profiles
 
 
 def test_fallback_returns_false_when_no_next_profile() -> None:
     """When get_next_request_profile returns None the function returns False."""
-    fn = _import()
     dl = _FakeDownloader(auto_fallback=True)
     with patch(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.get_next_request_profile",
+        "chat_downloader.sites.youtube.continuation.get_next_request_profile",
         return_value=None,
     ):
-        result = fn(dl)
+        result = _attempt_fallback(dl)
     assert result is False

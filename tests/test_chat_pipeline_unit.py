@@ -205,7 +205,32 @@ def test_configure_formatter_installs_item_formatter_wrapper(
     ]
 
 
-def test_configure_formatter_prefers_timestamp_variants_for_youtube_live(
+class _FakeSite:
+    """Minimal site exposing the live-format capability contract.
+
+    The pipeline is provider-neutral: it asks the site whether a status is live
+    and how to remap the format. This fake stands in for any site, so these
+    tests assert *delegation* rather than YouTube-specific values (those live in
+    the YouTube suite).
+    """
+
+    def __init__(
+        self,
+        *,
+        live_statuses: frozenset[str] = frozenset(),
+        overrides: dict[str, str] | None = None,
+    ) -> None:
+        self._live = live_statuses
+        self._overrides = overrides or {}
+
+    def is_live_status(self, status: str | None) -> bool:
+        return status in self._live
+
+    def resolve_live_format(self, format_name: str) -> str:
+        return self._overrides.get(format_name, format_name)
+
+
+def test_configure_formatter_applies_site_live_override_for_live_status(
     monkeypatch,
 ) -> None:
     formatter_calls = []
@@ -218,10 +243,14 @@ def test_configure_formatter_prefers_timestamp_variants_for_youtube_live(
             formatter_calls.append((self.format_file, message, format_name))
             return "formatted"
 
+    live_site = _FakeSite(
+        live_statuses=frozenset({"live"}),
+        overrides={"default": "live_default", "custom": "live_custom"},
+    )
     default_chat = Chat(iter(()), status="live")
-    default_chat.site = SimpleNamespace(_NAME="youtube.com")
-    site_default_chat = Chat(iter(()), status="live")
-    site_default_chat.site = SimpleNamespace(_NAME="youtube.com")
+    default_chat.site = cast("Any", live_site)
+    custom_chat = Chat(iter(()), status="live")
+    custom_chat.site = cast("Any", live_site)
 
     monkeypatch.setattr(
         "chat_downloader.runtime.chat_pipeline.ItemFormatter",
@@ -229,25 +258,17 @@ def test_configure_formatter_prefers_timestamp_variants_for_youtube_live(
     )
 
     configure_formatter(default_chat, "formats/custom.txt", "default")
-    configure_formatter(site_default_chat, "formats/custom.txt", "youtube")
+    configure_formatter(custom_chat, "formats/custom.txt", "custom")
 
     assert default_chat.format({"message_type": "text_message"}) == "formatted"
-    assert site_default_chat.format({"message_type": "text_message"}) == "formatted"
+    assert custom_chat.format({"message_type": "text_message"}) == "formatted"
     assert formatter_calls == [
-        (
-            "formats/custom.txt",
-            {"message_type": "text_message"},
-            "youtube_live_default",
-        ),
-        (
-            "formats/custom.txt",
-            {"message_type": "text_message"},
-            "youtube_live_default",
-        ),
+        ("formats/custom.txt", {"message_type": "text_message"}, "live_default"),
+        ("formats/custom.txt", {"message_type": "text_message"}, "live_custom"),
     ]
 
 
-def test_configure_formatter_keeps_replay_and_non_youtube_formats_unchanged(
+def test_configure_formatter_keeps_format_when_status_not_live(
     monkeypatch,
 ) -> None:
     formatter_calls = []
@@ -260,10 +281,17 @@ def test_configure_formatter_keeps_replay_and_non_youtube_formats_unchanged(
             formatter_calls.append((self.format_file, message, format_name))
             return "formatted"
 
+    live_site = _FakeSite(
+        live_statuses=frozenset({"live"}),
+        overrides={"default": "live_default"},
+    )
+    # Replay status: site declares override but the status is not live, so the
+    # pipeline must not remap.
     replay_chat = Chat(iter(()), status="past")
-    replay_chat.site = SimpleNamespace(_NAME="youtube.com")
-    twitch_chat = Chat(iter(()), status="live")
-    twitch_chat.site = SimpleNamespace(_NAME="twitch.tv")
+    replay_chat.site = cast("Any", live_site)
+    # A site with no overrides leaves the format untouched even when live.
+    neutral_chat = Chat(iter(()), status="live")
+    neutral_chat.site = cast("Any", _FakeSite(live_statuses=frozenset({"live"})))
 
     monkeypatch.setattr(
         "chat_downloader.runtime.chat_pipeline.ItemFormatter",
@@ -271,10 +299,10 @@ def test_configure_formatter_keeps_replay_and_non_youtube_formats_unchanged(
     )
 
     configure_formatter(replay_chat, "formats/custom.txt", "default")
-    configure_formatter(twitch_chat, "formats/custom.txt", "24_hour")
+    configure_formatter(neutral_chat, "formats/custom.txt", "24_hour")
 
     assert replay_chat.format({"message_type": "text_message"}) == "formatted"
-    assert twitch_chat.format({"message_type": "text_message"}) == "formatted"
+    assert neutral_chat.format({"message_type": "text_message"}) == "formatted"
     assert formatter_calls == [
         ("formats/custom.txt", {"message_type": "text_message"}, "default"),
         ("formats/custom.txt", {"message_type": "text_message"}, "24_hour"),

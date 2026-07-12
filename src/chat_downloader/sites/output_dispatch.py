@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol
 
+from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
+from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.utils.filename_utils import sanitize_filename_component
 
 if TYPE_CHECKING:
@@ -59,21 +61,50 @@ class _ChatHost(Protocol):
         """Render one chat item with the currently configured formatter."""
         ...
 
-    def _register_seen_message_id(self, message_id: str) -> bool:
-        """Register a message ID for deduplication; return True if new."""
-        ...
-
 
 class _ChatOutputDispatcher:
-    """Manage writer setup, callback dispatch, and shutdown for a chat."""
+    """Manage writer setup, callback dispatch, dedup, and shutdown for a chat.
 
-    def __init__(self, chat: _ChatHost) -> None:
+    Superchat/ticker deduplication is an output concern (it prevents the same
+    paid item from being written twice via the chat and ticker surfaces), so the
+    bounded seen-id cache lives here rather than on the result model.
+    """
+
+    def __init__(
+        self,
+        chat: _ChatHost,
+        max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
+    ) -> None:
         self._chat = chat
         self.writers: list[ChatOutputWriter] = []
         self.callbacks: list[Callable[[dict[str, Any]], None]] = []
         self._writers_with_callbacks: set[int] = set()
         self._write_error_count: int = 0
         self.closed = False
+
+        # Bounded dedup cache for superchat/ticker items (see class docstring).
+        normalized = (
+            int(max_seen_message_ids)
+            if max_seen_message_ids is not None and max_seen_message_ids > 0
+            else 0
+        )
+        self._seen_message_cache = _SeenMessageCache(normalized)
+
+    def _register_seen_message_id(self, message_id: str) -> bool:
+        """Register a message ID for dedup; return True if newly seen."""
+        added, evicted_message_id = self._seen_message_cache.register(message_id)
+
+        if not added:
+            return False
+
+        if evicted_message_id is not None:
+            log(
+                "debug",
+                f"Dedup cache limit reached "
+                f"({self._seen_message_cache.limit}); "
+                f"evicting message_id={evicted_message_id!r}.",
+            )
+        return True
 
     def _build_formatted_callback(
         self, writer: ChatOutputWriter
@@ -87,7 +118,7 @@ class _ChatOutputDispatcher:
             if (
                 message_type in SUPERCHAT_DEDUP_TYPES
                 and message_id
-                and not self._chat._register_seen_message_id(message_id)
+                and not self._register_seen_message_id(message_id)
             ):
                 return
 

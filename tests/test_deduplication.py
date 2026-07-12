@@ -351,9 +351,16 @@ def test_superchat_dedup_cache_is_bounded() -> None:
 
 
 def test_superchat_dedup_cache_none_uses_default_limit() -> None:
-    """Passing None should preserve default bounded-cache behavior."""
-    chat = Chat(chat=iter(()), title="Test", id="test123", max_seen_message_ids=None)
+    """Passing None should preserve default bounded-cache behavior.
 
-    assert chat._seen_message_cache.limit > 0
-    assert chat._register_seen_message_id("msg1")
-    assert not chat._register_seen_message_id("msg1")
+    Dedup lives on the output dispatcher (its only consumer); Chat forwards the
+    configured size when the dispatcher is created.
+    """
+    from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
+
+    chat = Chat(chat=iter(()), title="Test", id="test123", max_seen_message_ids=None)
+    dispatcher = _ChatOutputDispatcher(chat, chat._max_seen_message_ids)
+
+    assert dispatcher._seen_message_cache.limit > 0
+    assert dispatcher._register_seen_message_id("msg1")
+    assert not dispatcher._register_seen_message_id("msg1")
