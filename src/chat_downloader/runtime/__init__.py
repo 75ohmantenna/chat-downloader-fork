@@ -14,6 +14,7 @@ from .chat_pipeline import (
     is_live_stream,
 )
 from .cli_bridge import categorize_parameters
+from .config_guards import check_proxy_cookie_safety
 from .runner import RunResult, create_message_callback, execute_run
 from .session_lifecycle import (
     build_cookie,
@@ -39,6 +40,7 @@ __all__ = [
     "apply_message_limit",
     "build_cookie",
     "categorize_parameters",
+    "check_proxy_cookie_safety",
     "clear_all_cookies",
     "close_sessions",
     "configure_chat",

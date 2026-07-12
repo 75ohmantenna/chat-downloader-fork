@@ -7,14 +7,11 @@ Orchestrates chat retrieval from streaming platforms.
 
 from __future__ import annotations
 
-import ipaddress
 import sys
 from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Any, Literal
-from urllib.parse import urlparse
 
 from .debugging import log
-from .errors import InvalidParameter
 from .metadata import __version__
 from .models import (
     DEFAULT_BUFFER_SIZE,
@@ -29,6 +26,7 @@ from .models import (
 from .redaction import sanitize_for_log
 from .runtime import (
     RunResult,
+    check_proxy_cookie_safety,
     clear_all_cookies,
     close_sessions,
     execute_run,
@@ -53,22 +51,6 @@ _DEFAULT_FORMAT = SiteDefault("format")
 if TYPE_CHECKING:
     from .sites.base import BaseChatDownloader
     from .sites.models import Chat
-
-
-def _is_loopback_host(host: str) -> bool:
-    """Return True only for genuine loopback hosts.
-
-    Uses :mod:`ipaddress` so the whole ``127.0.0.0/8`` range and ``::1`` are
-    recognised, while spoofed names like ``127.0.0.1.attacker.com`` (which a
-    naive ``startswith("127.")`` check would wrongly accept) are rejected.
-    ``urlparse`` already strips IPv6 brackets, so ``::1`` arrives bare here.
-    """
-    if host == "localhost":
-        return True
-    try:
-        return ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        return False
 
 
 # ===== Main ChatDownloader Class =====
@@ -133,20 +115,7 @@ class ChatDownloader:
         :param twitch_client_id: Optional Twitch Client-ID override.
         :type twitch_client_id: str, optional
         """
-        if proxy and cookies is not None:
-            host = urlparse(proxy).hostname or ""
-            if _is_loopback_host(host):
-                log(
-                    "warning",
-                    "Using a local proxy with cookie authentication; "
-                    "credentials will be visible to the local proxy process.",
-                )
-            else:
-                msg = (
-                    "A proxy must not be used with cookie authentication: "
-                    "credentials would be exposed to the proxy."
-                )
-                raise InvalidParameter(msg)
+        check_proxy_cookie_safety(proxy, cookies)
 
         self.config = DownloaderConfig(
             headers=headers,
