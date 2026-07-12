@@ -25,6 +25,14 @@ the full rationale behind deferred items.
 
 ## Active watchlist
 
+### YouTube parsing public-symbol facades
+**Status: open/allowlisted** — `sites/youtube/parsing/messages.py`,
+`message_utils.py`, and `actions_handlers.py` are re-export-only barrels that
+aggregate the parsing subpackage's public symbols. They are allowlisted in
+`tests/test_no_reexport_barrels_unit.py`. Candidate to fold into a
+`parsing/__init__.py` public surface; deferred to keep the continuation-loop
+consolidation focused. No behavior impact.
+
 ### Kick official Public API
 **Status: open/watch** — use as a schema and future-option reference; do not
 rewrite the live capture path without evidence that it can read public chat.
