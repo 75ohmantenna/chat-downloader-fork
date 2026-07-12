@@ -24,6 +24,11 @@ if TYPE_CHECKING:
 __all__ = ["Chat", "Image", "SiteDefault"]
 
 
+def _default_formatter(item: dict[str, object]) -> str:
+    """Render a chat item before a pipeline formatter is configured."""
+    return str(item)
+
+
 @dataclass(slots=True)
 class Image:
     """An image with URL, optional dimensions, and an auto-generated ID."""
@@ -85,9 +90,7 @@ class Chat:
 
         # Formatter used by print_formatted() and writer callbacks. The default
         # keeps Chat usable without pipeline configuration.
-        self._formatter: Callable[[dict[str, Any]], str] = lambda item: str(  # noqa: PLW0108 — type annotation requires lambda; `str` alone fails mypy Callable check
-            item
-        )
+        self._formatter: Callable[[dict[str, Any]], str] = _default_formatter
 
         self._output_dispatcher = _ChatOutputDispatcher(self)
         self._generator_closed = False
