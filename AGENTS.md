@@ -88,6 +88,34 @@ Key ratchets:
   `# noqa: C901` only with a short rationale comment.
 - Prefer focused modules over broad compatibility helpers.
 - Test files are named `test_<behavior>.py` or `test_<area>_unit.py`.
+
+## Decomposition policy
+
+Split by cohesion, not by line count or test convenience. Concretely:
+
+- Split by **domain/behavior**, never by **phase**. Cutting one routine into
+  `*_context` / `*_response` / `*_iteration` (setup vs. iterate vs. handle) is
+  temporal decomposition — the reader must reassemble the phases and their
+  ordering. Keep a single behavior in one place.
+- **A module boundary must remove coupling.** A helper that takes its whole
+  parent object (`self: SomeProto`) and depends on a Protocol re-declaring most
+  of the class is a split on the wrong axis — it belongs *on* the class as a
+  method. Pure, genuinely-reusable helpers (no `self`, no I/O) are the right
+  thing to extract to a sibling module.
+- **Re-export/forwarding modules are a smell.** A module whose body is only
+  imports + `__all__` (a barrel), or a method that only casts and delegates,
+  adds an import boundary without cohesive behavior. Guarded by
+  `tests/test_no_reexport_barrels_unit.py`.
+- The 400-line gate (`tests/test_module_size_unit.py`) is a *smell signal, not a
+  splitting trigger*. If a cohesive unit needs a few more lines, allowlist it
+  with a rationale rather than splitting it by phase to duck under the ceiling.
+- **Test the assembly, not just the stages.** Every extracted pure-helper
+  cluster must ship at least one integration test that drives the real
+  composition (real collaborators, not a lambda/fake for every stage). Unit
+  tests prove stage contracts; composition tests catch where bugs actually live.
+- **Generic layers stay provider-neutral.** `runtime`/`output`/`formatting` must
+  not import a concrete site package; put site-specific behavior behind a
+  capability method on `BaseChatDownloader`. Enforced by `lint-imports`.
 - The 88-column reformat commit (Round-10.1) is listed in
   `.git-blame-ignore-revs`; use
   `git config blame.ignoreRevsFile .git-blame-ignore-revs` locally when blame
