@@ -163,3 +163,23 @@ def test_has_auth_cookies_is_false_without_login_info(monkeypatch) -> None:
     )
 
     assert downloader._has_auth_cookies is False
+
+
+def test_is_live_status_recognizes_live_and_post_live() -> None:
+    downloader = yt_extractor.YouTubeChatDownloader()
+
+    assert downloader.is_live_status("live") is True
+    assert downloader.is_live_status("post_live") is True
+    assert downloader.is_live_status("past") is False
+    assert downloader.is_live_status(None) is False
+
+
+def test_resolve_live_format_maps_base_names_to_live_variants() -> None:
+    downloader = yt_extractor.YouTubeChatDownloader()
+
+    assert downloader.resolve_live_format("default") == "youtube_live_default"
+    assert downloader.resolve_live_format("youtube") == "youtube_live_default"
+    assert downloader.resolve_live_format("24_hour") == "youtube_live_24_hour"
+    assert downloader.resolve_live_format("12_hour") == "youtube_live_12_hour"
+    # Unknown/custom names are passed through unchanged.
+    assert downloader.resolve_live_format("custom") == "custom"

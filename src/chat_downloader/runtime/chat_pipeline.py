@@ -10,27 +10,12 @@ from typing import TYPE_CHECKING, Any, Protocol
 from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.continuous_write import ContinuousWriter
-from chat_downloader.sites.youtube.video_status_models import REPLAY_STATUSES
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest, SiteDefault
     from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.sites.models import Chat
-
-# Statuses that indicate an ongoing or recently-ended live broadcast.
-# post_live = DVR available but stream not yet fully processed.
-LIVE_STATUSES: frozenset[str] = frozenset({"live", "post_live"})
-
-# Re-export so callers can import REPLAY_STATUSES from either location.
-__all__ = ["LIVE_STATUSES", "REPLAY_STATUSES"]
-
-_YOUTUBE_LIVE_FORMAT_OVERRIDES: dict[str, str] = {
-    "default": "youtube_live_default",
-    "youtube": "youtube_live_default",
-    "24_hour": "youtube_live_24_hour",
-    "12_hour": "youtube_live_12_hour",
-}
 
 
 class _MessageSource(Protocol):
@@ -106,21 +91,19 @@ def configure_timeouts(
         chat.chat.on_inactivity_timeout = log_on_inactivity_timeout
 
 
-def _is_youtube_chat(chat: Chat) -> bool:
-    """Return True when the chat was produced by the YouTube downloader."""
-    site = getattr(chat, "site", None)
-    return getattr(site, "_NAME", None) == "youtube.com"
-
-
 def _resolve_format_name(
     chat: Chat, format_name: str | SiteDefault
 ) -> str | SiteDefault:
-    """Select a live-aware format override when both time fields exist."""
+    """Select a live-aware format override via the site's own capability."""
     if not isinstance(format_name, str):
         return format_name
 
-    if _is_youtube_chat(chat) and is_live_stream(chat):
-        return _YOUTUBE_LIVE_FORMAT_OVERRIDES.get(format_name, format_name)
+    site: BaseChatDownloader | None = getattr(chat, "site", None)
+    if site is None:
+        return format_name
+
+    if site.is_live_status(getattr(chat, "status", None)):
+        return site.resolve_live_format(format_name)
 
     return format_name
 
@@ -140,11 +123,6 @@ def configure_formatter(
         return formatter.format(item, format_name=format_str)
 
     chat.set_formatter(format_callable)
-
-
-def is_live_stream(chat: Chat) -> bool:
-    """Return True when chat.status indicates an active/recent live stream."""
-    return getattr(chat, "status", None) in LIVE_STATUSES
 
 
 def build_output_writer(

@@ -209,6 +209,27 @@ forbidden_modules = [
     "chat_downloader.sites",
 ]
 
+[[tool.importlinter.contracts]]
+name = "generic layers stay provider-neutral"
+type = "forbidden"
+source_modules = [
+    "chat_downloader.runtime",
+    "chat_downloader.output",
+    "chat_downloader.formatting",
+]
+forbidden_modules = [
+    "chat_downloader.sites.youtube",
+    "chat_downloader.sites.twitch",
+    "chat_downloader.sites.kick",
+]
+# site_dispatch is the site registry: it alone may import the aggregate
+# `chat_downloader.sites` (which re-exports every concrete site) to enumerate
+# supported downloaders. All other generic modules must reach only the neutral
+# shared layer (sites.base, sites.models, sites.session, ...).
+ignore_imports = [
+    "chat_downloader.runtime.site_dispatch -> chat_downloader.sites",
+]
+
 [tool.pytest.ini_options]
 markers = [
     "network: tests that require external network access (not run in default CI)",

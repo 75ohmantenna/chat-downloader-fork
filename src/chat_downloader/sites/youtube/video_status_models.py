@@ -7,8 +7,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 # Statuses that indicate a finished broadcast with a chat replay available.
-# Defined here (not in runtime.chat_pipeline) so that site modules can import
-# it without triggering the runtime package's circular import chain.
+# Owned by the YouTube site package (the runtime layer no longer knows YouTube
+# status vocabularies — see BaseChatDownloader.is_live_status).
 REPLAY_STATUSES: frozenset[str] = frozenset({"past", "was_live", "post_live"})
 
 

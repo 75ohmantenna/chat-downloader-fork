@@ -66,6 +66,11 @@ class BaseChatDownloader:
 
     _NAME: str | None = None
 
+    # Status values that mark an ongoing or recently-ended live broadcast.
+    # Sites that distinguish live from replay override this; the base default is
+    # empty so the generic runtime never needs site-specific knowledge.
+    _LIVE_STATUSES: ClassVar[frozenset[str]] = frozenset()
+
     _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "message_groups": ["messages"],
         "format": "default",
@@ -223,6 +228,24 @@ class BaseChatDownloader:
                 BaseChatDownloader._SITE_DEFAULT_PARAMS.get(value.name),
             )
         return value
+
+    def is_live_status(self, status: str | None) -> bool:
+        """Return whether ``status`` marks an ongoing/recent live broadcast.
+
+        Provider-neutral hook: the generic runtime calls this instead of
+        inspecting site-specific status vocabularies. Sites that distinguish
+        live from replay override ``_LIVE_STATUSES``.
+        """
+        return status in self._LIVE_STATUSES
+
+    def resolve_live_format(self, format_name: str) -> str:
+        """Map a requested format name to a live-stream variant, if any.
+
+        Provider-neutral hook: the generic runtime calls this so site-specific
+        live-format overrides live with the site. The base implementation
+        returns ``format_name`` unchanged.
+        """
+        return format_name
 
     @staticmethod
     def _coerce_chat_request(

@@ -29,6 +29,16 @@ from .discovery_playlists import YouTubePlaylistDiscoveryMixin
 from .video_initialization import YouTubeVideoInitializationMixin
 from .video_metadata import YouTubeVideoMetadataCoreMixin
 
+# Live-stream format overrides: when a live YouTube broadcast is requested with
+# one of these base format names, prefer the timestamp-aware variant. Owned here
+# (not in the generic runtime) so the runtime stays provider-neutral.
+_YOUTUBE_LIVE_FORMAT_OVERRIDES: dict[str, str] = {
+    "default": "youtube_live_default",
+    "youtube": "youtube_live_default",
+    "24_hour": "youtube_live_24_hour",
+    "12_hour": "youtube_live_12_hour",
+}
+
 
 class YouTubeChatDownloader(
     YouTubeDiscoveryHelpersMixin,
@@ -64,8 +74,15 @@ class YouTubeChatDownloader(
 
     _NAME = "youtube.com"
 
+    # Ongoing/recently-ended broadcast statuses (see playability classification).
+    _LIVE_STATUSES: ClassVar[frozenset[str]] = frozenset({"live", "post_live"})
+
     _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "format": "youtube",
     }
+
+    def resolve_live_format(self, format_name: str) -> str:
+        """Prefer the timestamp-aware live variant for a base format name."""
+        return _YOUTUBE_LIVE_FORMAT_OVERRIDES.get(format_name, format_name)
 
     _VALID_URLS: ClassVar[dict[str, str]] = _VALID_URLS
