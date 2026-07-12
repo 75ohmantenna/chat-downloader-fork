@@ -122,10 +122,15 @@ contracts, and 100% offline line coverage).
 
 ## Medium-priority debt
 
-### 4. `ChatDownloader` facade growth
+### 4. `ChatDownloader` facade growth — DONE
 
-- **Location:** `src/chat_downloader/chat_downloader.py` (419 lines — already
-  over the 400 budget and therefore allowlisted), lines 218–381.
+- **Done:** Extracted the proxy-cookie safety guard (`check_proxy_cookie_safety`
+  + `_is_loopback_host`) into `runtime/config_guards.py`, bringing the facade
+  from 416 to 388 LOC and removing it from the module-size allowlist so the
+  <400 ceiling is now enforced. URL validation and request dispatch were already
+  delegated to `runtime/`. The class is now config + lifecycle plumbing.
+- **Location:** `src/chat_downloader/chat_downloader.py` (was 419 lines — over
+  the 400 budget and allowlisted), lines 218–381.
 - **Smell:** Large portions of the facade are thin parameter plumbing:
   - `get_chat()` → `get_chat_request()` → `try_create_chat_from_sites()`
   - `create_session()` → `create_runtime_session()`
@@ -232,7 +237,8 @@ lands first and the one behavior-risking change (mixin god object) lands last.
 - Item 1 (revised): keep `BaseChatDownloader` a thin **concrete** base; extract
   stateless utilities to `sites/common.py`; reuse `SessionOwnerProto` for new
   seams. Do not Protocol-ify the base.
-- Item 4: slim `chat_downloader.py` by moving dispatch plumbing into `runtime/`.
+- Item 4 — DONE: proxy-cookie guard moved to `runtime/config_guards.py`; facade
+  now 388 LOC and off the module-size allowlist.
 
 ### Phase 3 — Consolidate YouTube by domain
 - Merge chat-stream, continuation, client-request, video-metadata, and parsing
