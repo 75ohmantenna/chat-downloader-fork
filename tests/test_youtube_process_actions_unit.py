@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
-    _process_actions,
-)
-from chat_downloader.sites.youtube.continuation_loop_state import (
+from chat_downloader.sites.youtube.continuation import (
     ContinuationLoopState,
+    _process_actions,
 )
 
 
@@ -32,7 +30,7 @@ def test_process_actions_yields_accepted_messages() -> None:
     def fake_pipeline(action, offset, mf, tf):
         return next(pipeline_results)
 
-    import chat_downloader.sites.youtube.chat_streams_runtime_iteration as mod
+    import chat_downloader.sites.youtube.continuation as mod
 
     original = mod.process_pipeline_action
     mod.process_pipeline_action = fake_pipeline
@@ -74,7 +72,7 @@ def test_process_actions_stop_disposition_signals_stop_and_yields_nothing_after(
     def fake_pipeline(action, offset, mf, tf):
         return next(pipeline_results)
 
-    import chat_downloader.sites.youtube.chat_streams_runtime_iteration as mod
+    import chat_downloader.sites.youtube.continuation as mod
 
     original = mod.process_pipeline_action
     mod.process_pipeline_action = fake_pipeline
@@ -118,7 +116,7 @@ def test_process_actions_skip_disposition_does_not_yield() -> None:
     def fake_pipeline(action, offset, mf, tf):
         return next(pipeline_results)
 
-    import chat_downloader.sites.youtube.chat_streams_runtime_iteration as mod
+    import chat_downloader.sites.youtube.continuation as mod
 
     original = mod.process_pipeline_action
     mod.process_pipeline_action = fake_pipeline
@@ -153,7 +151,7 @@ def test_process_actions_counts_non_message_action_without_yielding() -> None:
     def fake_pipeline(action, offset, mf, tf):
         return next(pipeline_results)
 
-    import chat_downloader.sites.youtube.chat_streams_runtime_iteration as mod
+    import chat_downloader.sites.youtube.continuation as mod
 
     original = mod.process_pipeline_action
     mod.process_pipeline_action = fake_pipeline
@@ -182,7 +180,7 @@ def test_process_actions_counts_non_message_action_without_yielding() -> None:
 
 
 def test_enrich_live_message_timing_skips_when_time_in_seconds_present() -> None:
-    from chat_downloader.sites.youtube.continuation_loop_runtime import (
+    from chat_downloader.sites.youtube.continuation import (
         enrich_live_message_timing,
     )
 
@@ -192,7 +190,7 @@ def test_enrich_live_message_timing_skips_when_time_in_seconds_present() -> None
 
 
 def test_enrich_live_message_timing_skips_when_time_text_present() -> None:
-    from chat_downloader.sites.youtube.continuation_loop_runtime import (
+    from chat_downloader.sites.youtube.continuation import (
         enrich_live_message_timing,
     )
 

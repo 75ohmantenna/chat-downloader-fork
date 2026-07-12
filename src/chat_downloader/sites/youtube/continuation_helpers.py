@@ -1,21 +1,46 @@
 # SPDX-License-Identifier: MIT
 
-"""Continuation loop runtime helpers."""
+"""Pure helpers for the YouTube chat continuation loop.
+
+Stateless functions and the loop's mutable state model. These carry no
+downloader/session dependency and no network I/O, so they are unit-tested in
+isolation. The orchestration that wires them together lives in
+:mod:`.continuation`.
+"""
 
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, SupportsIndex, SupportsInt
 
+from chat_downloader.errors import NoContinuation
+from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.time_utils import seconds_to_time
 
-from .continuation_loop_state import ContinuationLoopState
+from .constants_message import _MESSAGE_GROUPS
+from .constants_patterns import _YT_HOME
 
 if TYPE_CHECKING:
+    from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict
 
     from .continuations import ContinuationParseResult
+
+_YOUTUBE_POLL_DELAY_FALLBACK_MS = 5000
+_YOUTUBE_POLL_DELAY_MIN_MS = 500
+_YOUTUBE_POLL_DELAY_MAX_MS = 8000
+_PollDelayHint = str | bytes | bytearray | SupportsInt | SupportsIndex | None
+
+
+@dataclass(slots=True)
+class ContinuationLoopState:
+    """Mutable state carried between continuation-loop iterations."""
+
+    continuation: str
+    click_tracking_params: str | None = None
+    offset_milliseconds: float | None = None
 
 
 def build_continuation_params(
@@ -113,3 +138,90 @@ def update_state_from_result(
         click_tracking_params=click_tracking,
         offset_milliseconds=state.offset_milliseconds,
     )
+
+
+def _resolve_poll_delay_ms(timeout_ms: _PollDelayHint) -> int:
+    """Return the safe YouTube chat poll delay in milliseconds."""
+    if isinstance(timeout_ms, bool) or timeout_ms is None:
+        return _YOUTUBE_POLL_DELAY_FALLBACK_MS
+    try:
+        poll_delay_ms = int(timeout_ms)
+    except (TypeError, ValueError):
+        return _YOUTUBE_POLL_DELAY_FALLBACK_MS
+    if poll_delay_ms < 0:
+        return _YOUTUBE_POLL_DELAY_FALLBACK_MS
+    return max(
+        _YOUTUBE_POLL_DELAY_MIN_MS,
+        min(poll_delay_ms, _YOUTUBE_POLL_DELAY_MAX_MS),
+    )
+
+
+def _select_initial_continuation(
+    initial_continuation_info: JSONDict,
+    *,
+    chat_type: str,
+    is_replay: bool,
+) -> tuple[str, str]:
+    """Select the initial continuation by semantic chat label."""
+    if chat_type == "top":
+        labels = ("Top chat replay", "Top chat") if is_replay else ("Top chat",)
+    else:
+        labels = ("Live chat replay", "Live chat") if is_replay else ("Live chat",)
+
+    for label in labels:
+        token = initial_continuation_info.get(label)
+        if isinstance(token, str) and token:
+            return label, token
+
+    available = ", ".join(initial_continuation_info) or "none"
+    msg = (
+        f"Initial {chat_type} chat continuation could not be found. "
+        f"Available continuation labels: {available}"
+    )
+    raise NoContinuation(msg)
+
+
+def _build_continuation_urls(
+    continuation: str,
+    api_key: str,
+    *,
+    is_replay: bool,
+) -> tuple[str, str]:
+    """Return (init_page, continuation_url) for the chat loop."""
+    api_type = "live_chat_replay" if is_replay else "live_chat"
+    init_page = f"{_YT_HOME}/{api_type}?continuation={continuation}"
+    continuation_url = f"{_YT_HOME}/youtubei/v1/live_chat/get_{api_type}?key={api_key}"
+    return init_page, continuation_url
+
+
+def _build_message_filters(
+    params: ChatRequest,
+    messages_types_to_add: list[str],
+    *,
+    is_replay: bool,
+    start_time: float | None,
+    end_time: float | None,
+    offset: float | None,
+) -> tuple[MessageFilter, TimeRangeFilter | None]:
+    """Assemble the message-group filter and optional replay time filter."""
+    messages_groups_to_add = (
+        []
+        if messages_types_to_add
+        else (params.message_groups if isinstance(params.message_groups, list) else [])
+    )
+    msg_filter = MessageFilter(
+        _MESSAGE_GROUPS,
+        messages_groups_to_add or None,
+        messages_types_to_add,
+    )
+    time_filter = (
+        TimeRangeFilter(
+            start_time,
+            end_time,
+            offset=offset,
+            skip_mode="first_page",
+        )
+        if is_replay
+        else None
+    )
+    return msg_filter, time_filter

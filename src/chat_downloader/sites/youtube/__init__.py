@@ -10,8 +10,9 @@ bootstrap, request, continuation, parsing, and discovery modules:
   bootstrap, metadata, and playability state.
 - client_context.py, client_requests_initial.py, and
   client_requests_continuation.py: request construction and InnerTube calls.
-- chat_streams.py and chat_streams_runtime_iteration.py: live/replay stream
-  orchestration.
+- chat_streams.py: live/replay stream entry points (mixin). continuation.py:
+  the continuation loop (_ContinuationLoop). continuation_helpers.py and
+  continuations.py: pure loop helpers and the response parser.
 - parsing/: action routing and message normalization.
 """
 

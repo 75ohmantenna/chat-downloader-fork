@@ -13,18 +13,16 @@ from chat_downloader.errors import (
     NoContinuation,
 )
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
-    _get_chat_messages,
-)
-from chat_downloader.sites.youtube.continuation_loop_state import (
+from chat_downloader.sites.youtube.continuation import (
     ContinuationLoopState,
+    _get_chat_messages,
 )
 
 
 @pytest.fixture(autouse=True)
 def _disable_polling_sleep(monkeypatch) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.polling_sleep",
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
         lambda _seconds: None,
     )
 
@@ -60,7 +58,7 @@ def _stub_loop_dependencies(
 ) -> None:
     """Wire enough fakes to drive _get_chat_messages without real HTTP."""
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._build_chat_context",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
         lambda *_a, **_kw: SimpleNamespace(
             continuation_url="https://example.test/c",
             innertube_context={"client": {}},
@@ -73,19 +71,19 @@ def _stub_loop_dependencies(
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_a, **_kw: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_a, **_kw: yt_info,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._handle_continuation_response",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
         lambda *_a, **_kw: None,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._advance_continuation_loop",
+        "chat_downloader.sites.youtube.continuation._advance_continuation_loop",
         lambda *_a, **_kw: advance_returns,
     )
 
@@ -126,7 +124,7 @@ def test_continuation_loop_bounded_profile_fallbacks(monkeypatch) -> None:
         return True
 
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._build_chat_context",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
         lambda *_a, **_kw: SimpleNamespace(
             continuation_url="https://example.test/c",
             innertube_context={"client": {}},
@@ -139,21 +137,21 @@ def test_continuation_loop_bounded_profile_fallbacks(monkeypatch) -> None:
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",
+        "chat_downloader.sites.youtube.continuation.build_continuation_params",
         lambda *_a, **_kw: {"continuation": "token"},
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._get_continuation_info",
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_a, **_kw: (_ for _ in ()).throw(
             IncompleteContinuationError("repeated")
         ),
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._attempt_profile_fallback",
+        "chat_downloader.sites.youtube.continuation._ContinuationLoop._attempt_profile_fallback",
         fake_fallback,
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.chat_streams_runtime_iteration._profiled_innertube_context",
+        "chat_downloader.sites.youtube.continuation._profiled_innertube_context",
         lambda *_a, **_kw: {"client": {}},
     )
 

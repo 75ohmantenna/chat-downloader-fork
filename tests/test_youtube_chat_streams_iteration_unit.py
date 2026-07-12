@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Isolated unit tests for chat_streams_runtime_iteration pure helpers."""
+"""Isolated unit tests for continuation pure helpers."""
 
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -13,16 +14,19 @@ from chat_downloader.errors import (
     NoChatReplay,
     NoContinuation,
 )
-from chat_downloader.sites.youtube.chat_streams_context import (
+from chat_downloader.sites.youtube.continuation import (
+    _ContinuationLoop,
+    _raise_if_api_error,
+    _resolve_poll_delay_ms,
     _select_initial_continuation,
 )
-from chat_downloader.sites.youtube.chat_streams_response import (
-    _raise_if_api_error,
-)
-from chat_downloader.sites.youtube.chat_streams_runtime_iteration import (
-    _attempt_profile_fallback,
-    _resolve_poll_delay_ms,
-)
+
+
+def _attempt_profile_fallback(downloader: object) -> bool:
+    """Drive the profile-fallback method on a loop bound to *downloader*."""
+    loop = _ContinuationLoop(cast("Any", downloader), {}, {}, cast("Any", None))
+    return loop._attempt_profile_fallback()
+
 
 # ── _raise_if_api_error ──────────────────────────────────────────────────────
 
@@ -165,27 +169,25 @@ def test_resolve_poll_delay_ms(timeout_ms: object, expected: int) -> None:
 
 def test_attempt_profile_fallback_returns_false_when_disabled() -> None:
     self_ = SimpleNamespace(_auto_profile_fallback=False, _request_profile=None)
-    assert _attempt_profile_fallback(self_) is False  # type: ignore[arg-type]
+    assert _attempt_profile_fallback(self_) is False
 
 
 def test_attempt_profile_fallback_returns_false_when_no_next_profile(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube"
-        ".chat_streams_runtime_iteration.get_next_request_profile",
+        "chat_downloader.sites.youtube.continuation.get_next_request_profile",
         lambda profile, site: None,
     )
     self_ = SimpleNamespace(_auto_profile_fallback=True, _request_profile="default")
-    assert _attempt_profile_fallback(self_) is False  # type: ignore[arg-type]
+    assert _attempt_profile_fallback(self_) is False
 
 
 def test_attempt_profile_fallback_returns_true_when_profile_applied(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube"
-        ".chat_streams_runtime_iteration.get_next_request_profile",
+        "chat_downloader.sites.youtube.continuation.get_next_request_profile",
         lambda profile, site: "youtube_android",
     )
     self_ = SimpleNamespace(
@@ -193,15 +195,14 @@ def test_attempt_profile_fallback_returns_true_when_profile_applied(
         _request_profile="default",
         apply_request_profile=lambda p: True,
     )
-    assert _attempt_profile_fallback(self_) is True  # type: ignore[arg-type]
+    assert _attempt_profile_fallback(self_) is True
 
 
 def test_attempt_profile_fallback_returns_false_when_apply_profile_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube"
-        ".chat_streams_runtime_iteration.get_next_request_profile",
+        "chat_downloader.sites.youtube.continuation.get_next_request_profile",
         lambda profile, site: "youtube_android",
     )
     self_ = SimpleNamespace(
@@ -209,4 +210,4 @@ def test_attempt_profile_fallback_returns_false_when_apply_profile_fails(
         _request_profile="default",
         apply_request_profile=lambda p: False,
     )
-    assert _attempt_profile_fallback(self_) is False  # type: ignore[arg-type]
+    assert _attempt_profile_fallback(self_) is False

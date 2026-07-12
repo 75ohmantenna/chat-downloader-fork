@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.time_utils import ensure_seconds
 
-from .chat_streams_runtime_iteration import _get_chat_messages
+from .continuation import _get_chat_messages
 
 if TYPE_CHECKING:
     import re
