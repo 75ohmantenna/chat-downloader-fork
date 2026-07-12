@@ -347,6 +347,16 @@ def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
     assert len(received) == 2
 
 
+def test_emit_without_writers_is_a_noop() -> None:
+    """emit() returns early and installs no callbacks when no writers exist."""
+    chat = Chat(iter(()), title="Example")
+    dispatcher = _ChatOutputDispatcher(chat)
+
+    dispatcher.emit({"message": "ignored"})
+
+    assert dispatcher.callbacks == []
+
+
 @pytest.mark.parametrize(
     "exc",
     [
