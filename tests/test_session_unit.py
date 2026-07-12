@@ -10,6 +10,7 @@ import pytest
 
 from chat_downloader.errors import CookieError
 from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.sites.common import check_for_invalid_types, get_mapped_keys
 from chat_downloader.sites.models import SiteDefault
 from chat_downloader.sites.session import (
     _build_session_headers,
@@ -435,9 +436,9 @@ def test_base_downloader_misc_helpers() -> None:
         downloader.generate_urls()
 
     with pytest.raises(InvalidParameter, match="Invalid types specified"):
-        BaseChatDownloader.check_for_invalid_types(["bad"], ["good"])
+        check_for_invalid_types(["bad"], ["good"])
 
-    assert BaseChatDownloader.get_mapped_keys({"a": "x", "b": "y"}) == {
+    assert get_mapped_keys({"a": "x", "b": "y"}) == {
         "x",
         "y",
     }

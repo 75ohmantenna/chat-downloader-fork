@@ -71,9 +71,6 @@ class _DummyDownloader:
         self._request_profile = "youtube_web"
         self._auto_profile_fallback = True
 
-    def check_for_invalid_types(self, message_types, valid_types) -> None:
-        self.invalid_type_checks.append((message_types, valid_types))
-
     def update_session_headers(self, headers) -> None:
         self.header_updates.append(headers)
         self.session.headers.update(headers)
@@ -665,6 +662,12 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_context._get_innertube_context",
         lambda _ytcfg: {"client": {"visitorData": "visitor"}},
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.chat_streams_context.check_for_invalid_types",
+        lambda message_types, valid_types: downloader.invalid_type_checks.append(
+            (message_types, valid_types),
+        ),
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.chat_streams_runtime_iteration.build_continuation_params",

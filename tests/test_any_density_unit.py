@@ -28,7 +28,8 @@ BASELINE: dict[str, int] = {
     # stable boundary between the JSON loader and the formatter internals).
     "formatting/format.py": 33,
     # Shared site infrastructure — heterogeneous field types resist TypedDict.
-    "sites/base.py": 14,
+    "sites/base.py": 12,
+    "sites/common.py": 3,
     "sites/models.py": 13,
     # Dispatcher callbacks/writer protocol — dict[str,Any] is the chat-item
     # boundary (moved from sites/models.py in Round-04.1).
