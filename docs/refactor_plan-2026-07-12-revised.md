@@ -20,7 +20,18 @@ contracts, and 100% offline line coverage).
 
 ## Highest-priority debt clusters
 
-### 1. `sites/base.py` is a mostly pass-through wrapper
+### 1. `sites/base.py` is a mostly pass-through wrapper — DONE (stateless-util extraction)
+
+> **Done:** `check_for_invalid_types` and `get_mapped_keys` moved to a new
+> stateless `sites/common.py`; callers (youtube `chat_streams_context`, twitch
+> `validation_keys`, tests) now use the free functions, and the stale
+> `check_for_invalid_types` member was dropped from `YouTubeDownloaderProto`.
+> `base.py` shrank 331 → 294 LOC. **Not moved (deliberate):** `matches` stays on
+> the base (class-polymorphic over `cls._VALID_URLS`; a free function would
+> degrade the `site.matches(url)` dispatch API) and `retry` stays a thin alias
+> over the canonical `sites/retry.py`. The base was **not** converted to a
+> Protocol (see constraints below) and the session-delegation methods remain.
+
 
 - **Location:** `src/chat_downloader/sites/base.py` (331 lines), especially lines 124–331.
 - **Smell:** Most instance methods delegate one-for-one to `sites/session.py`
@@ -234,9 +245,9 @@ lands first and the one behavior-risking change (mixin god object) lands last.
   the broad catch lives in `__next__` and is intentional/documented).
 
 ### Phase 2 — Collapse shallow layers
-- Item 1 (revised): keep `BaseChatDownloader` a thin **concrete** base; extract
-  stateless utilities to `sites/common.py`; reuse `SessionOwnerProto` for new
-  seams. Do not Protocol-ify the base.
+- Item 1 — DONE: extracted `check_for_invalid_types`/`get_mapped_keys` to
+  `sites/common.py`; kept `BaseChatDownloader` a thin concrete base (not
+  Protocol-ified); `matches`/`retry` deliberately left in place.
 - Item 4 — DONE: proxy-cookie guard moved to `runtime/config_guards.py`; facade
   now 388 LOC and off the module-size allowlist.
 
