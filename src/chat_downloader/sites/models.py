@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
 from chat_downloader.models import SiteDefault
-from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.utils.console_utils import safe_print
 
 if TYPE_CHECKING:
@@ -94,33 +93,13 @@ class Chat:
         # keeps Chat usable without pipeline configuration.
         self._formatter: Callable[[dict[str, Any]], str] = _default_formatter
 
-        # Output dispatch is created lazily when the first writer is attached,
-        # so this model module stays free of the output layer at import time.
+        # Output dispatch (writers, dedup, and shutdown) is created lazily when
+        # the first writer is attached, so this model module stays free of the
+        # output layer at import time. The dedup-cache size is remembered here
+        # and handed to the dispatcher, which owns deduplication.
         self._output_dispatcher: _ChatOutputDispatcher | None = None
         self._generator_closed = False
-
-        # Track message IDs for deduplication (YouTube superchat/ticker items)
-        max_seen_message_ids = (
-            int(max_seen_message_ids)
-            if max_seen_message_ids is not None and max_seen_message_ids > 0
-            else 0
-        )
-        self._seen_message_cache = _SeenMessageCache(max_seen_message_ids)
-
-    def _register_seen_message_id(self, message_id: str) -> bool:
-        added, evicted_message_id = self._seen_message_cache.register(message_id)
-
-        if not added:
-            return False
-
-        if evicted_message_id is not None:
-            log(
-                "debug",
-                f"Dedup cache limit reached "
-                f"({self._seen_message_cache.limit}); "
-                f"evicting message_id={evicted_message_id!r}.",
-            )
-        return True
+        self._max_seen_message_ids = max_seen_message_ids
 
     def set_formatter(self, formatter: Callable[[dict[str, Any]], str]) -> None:
         """Set the callable used to render formatted chat items."""
@@ -141,7 +120,9 @@ class Chat:
             # actually wires up output, keeping sites.models import-light.
             from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 
-            self._output_dispatcher = _ChatOutputDispatcher(self)
+            self._output_dispatcher = _ChatOutputDispatcher(
+                self, self._max_seen_message_ids
+            )
         self._output_dispatcher.attach_writer(writer)
 
     def close(self) -> None:

@@ -209,7 +209,6 @@ def test_chat_next_without_generator_and_print_formatted(monkeypatch) -> None:
 
     chat.print_formatted({"message": "hello"}, flush=False)
     assert printed == [("formatted:hello", False)]
-    assert chat._seen_message_cache.evictions == 0
 
 
 def test_chat_next_suppresses_close_error_while_preserving_generator_error(
