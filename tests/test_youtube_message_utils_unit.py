@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+import pytest
+
 from chat_downloader.sites.youtube.parsing.message_content_badges import (
     _parse_badges,
     _parse_currency,
@@ -17,6 +19,7 @@ from chat_downloader.sites.youtube.parsing.message_content_text_parser import (
     _parse_thumbnails,
 )
 from chat_downloader.sites.youtube.parsing.message_items_content_parser import (
+    _get_remapping,
     _parse_item,
 )
 from chat_downloader.sites.youtube.parsing.message_items_video import (
@@ -28,6 +31,14 @@ from chat_downloader.sites.youtube.parsing.message_links import (
     _parse_navigation_endpoint,
     _parse_youtube_link,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_remapping_cache():
+    """Isolate the memoised remapping table across tests that patch it."""
+    _get_remapping.cache_clear()
+    yield
+    _get_remapping.cache_clear()
 
 
 def test_link_helpers_normalize_supported_youtube_url_forms() -> None:
@@ -312,12 +323,7 @@ def test_parse_item_returns_existing_info_for_empty_renderer() -> None:
 def test_parse_item_recurses_moves_author_and_normalizes_time(
     monkeypatch,
 ) -> None:
-    from chat_downloader.sites.youtube.parsing import (
-        message_items_content_parser as _mcp,
-    )
 
-    monkeypatch.setattr(_mcp, "_REMAPPING", None)
-    monkeypatch.setattr(_mcp, "_COLOUR_KEYS", None)
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.constants_message.build_remapping",
         lambda: {
@@ -379,12 +385,7 @@ def test_apply_author_roles_ignores_unknown_badge_without_icons() -> None:
 def test_parse_item_merges_header_when_show_item_endpoint_has_no_renderer(
     monkeypatch,
 ) -> None:
-    from chat_downloader.sites.youtube.parsing import (
-        message_items_content_parser as _mcp,
-    )
 
-    monkeypatch.setattr(_mcp, "_REMAPPING", None)
-    monkeypatch.setattr(_mcp, "_COLOUR_KEYS", None)
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.constants_message.build_remapping",
         lambda: {"timeText": "time_text"},
@@ -410,12 +411,7 @@ def test_parse_item_merges_header_when_show_item_endpoint_has_no_renderer(
 def test_parse_item_generates_time_text_from_time_in_seconds(
     monkeypatch,
 ) -> None:
-    from chat_downloader.sites.youtube.parsing import (
-        message_items_content_parser as _mcp,
-    )
 
-    monkeypatch.setattr(_mcp, "_REMAPPING", None)
-    monkeypatch.setattr(_mcp, "_COLOUR_KEYS", None)
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.constants_message.build_remapping",
         dict,

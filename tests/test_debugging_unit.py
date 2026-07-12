@@ -13,7 +13,7 @@ import chat_downloader.debugging as dbg
 
 @pytest.fixture(autouse=True)
 def _restore_testing_mode():
-    original = dbg.TESTING_MODE
+    original = dbg.get_testing_mode()
     yield
     dbg.set_testing_mode(original)
 

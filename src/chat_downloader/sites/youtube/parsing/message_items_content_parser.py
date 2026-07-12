@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.sites.remap import (
@@ -25,12 +26,6 @@ _ROLE_ICON_MAP: dict[str, str] = {
     "VERIFIED": "is_verified",
 }
 
-# Module-level cache for the remapping table.  Populated on first use to avoid
-# a circular import at package initialisation time (constants_message imports
-# back through the top-level chat_downloader package).
-_REMAPPING: Mapping[str, Any] | None = None
-_COLOUR_KEYS: list[str] | None = None
-
 # Upper bound on nested-renderer recursion (showItemEndpoint/header chains).
 # Caps stack depth so a pathologically nested item payload truncates gracefully
 # instead of raising RecursionError and aborting message parsing.  Mirrors the
@@ -49,28 +44,21 @@ def _apply_author_roles(author: dict[str, Any]) -> None:
             author["is_sponsor"] = True
 
 
+@cache
 def _get_remapping() -> tuple[Mapping[str, Any], list[str]]:
-    """Return the module-level remapping table and colour-key list.
+    """Return the remapping table and colour-key list.
 
-    Initialised once on first call so that the deferred import of
+    Computed once and memoised so that the deferred import of
     ``constants_message`` does not run during package initialisation (which
-    would trigger a circular-import error).
+    would trigger a circular-import error). Tests that patch the underlying
+    tables must call ``_get_remapping.cache_clear()`` first.
     """
-    global _REMAPPING, _COLOUR_KEYS  # noqa: PLW0603 — lazy circular-import init; both vars set together
-    if _REMAPPING is None:
-        from chat_downloader.sites.youtube.constants_message import (
-            _COLOUR_KEYS as ck,  # noqa: N811 — alias avoids local/global name collision with the module-level _COLOUR_KEYS
-        )
-        from chat_downloader.sites.youtube.constants_message import (
-            build_remapping,
-        )
+    from chat_downloader.sites.youtube.constants_message import (
+        _COLOUR_KEYS,
+        build_remapping,
+    )
 
-        _REMAPPING = build_remapping()
-        _COLOUR_KEYS = ck
-    if _REMAPPING is None or _COLOUR_KEYS is None:  # pragma: no cover
-        msg = "Remapping tables failed to initialise"
-        raise RuntimeError(msg)
-    return _REMAPPING, _COLOUR_KEYS
+    return build_remapping(), _COLOUR_KEYS
 
 
 def _normalize_author(info: dict[str, Any]) -> None:
