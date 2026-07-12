@@ -11,17 +11,24 @@ from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
 from chat_downloader.models import SiteDefault
 from chat_downloader.sites._seen_cache import _SeenMessageCache
-from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 from chat_downloader.utils.console_utils import safe_print
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
 
     from chat_downloader.sites.base import BaseChatDownloader
-    from chat_downloader.sites.output_dispatch import ChatOutputWriter
+    from chat_downloader.sites.output_dispatch import (
+        ChatOutputWriter,
+        _ChatOutputDispatcher,
+    )
 
 
 __all__ = ["Chat", "Image", "SiteDefault"]
+
+
+def _default_formatter(item: dict[str, object]) -> str:
+    """Render a chat item before a pipeline formatter is configured."""
+    return str(item)
 
 
 @dataclass(slots=True)
@@ -85,11 +92,11 @@ class Chat:
 
         # Formatter used by print_formatted() and writer callbacks. The default
         # keeps Chat usable without pipeline configuration.
-        self._formatter: Callable[[dict[str, Any]], str] = lambda item: str(  # noqa: PLW0108 — type annotation requires lambda; `str` alone fails mypy Callable check
-            item
-        )
+        self._formatter: Callable[[dict[str, Any]], str] = _default_formatter
 
-        self._output_dispatcher = _ChatOutputDispatcher(self)
+        # Output dispatch is created lazily when the first writer is attached,
+        # so this model module stays free of the output layer at import time.
+        self._output_dispatcher: _ChatOutputDispatcher | None = None
         self._generator_closed = False
 
         # Track message IDs for deduplication (YouTube superchat/ticker items)
@@ -128,7 +135,13 @@ class Chat:
         return self
 
     def attach_writer(self, writer: ChatOutputWriter) -> None:
-        """Attach a writer to this chat."""
+        """Attach a writer to this chat, creating the dispatcher on demand."""
+        if self._output_dispatcher is None:
+            # Deferred import: output dispatch is only needed once a caller
+            # actually wires up output, keeping sites.models import-light.
+            from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
+
+            self._output_dispatcher = _ChatOutputDispatcher(self)
         self._output_dispatcher.attach_writer(writer)
 
     def close(self) -> None:
@@ -146,11 +159,14 @@ class Chat:
                             f"Suppressed chat generator close() error: {error}",
                         )
         finally:
-            self._output_dispatcher.close()
+            if self._output_dispatcher is not None:
+                self._output_dispatcher.close()
 
     @property
     def write_error_count(self) -> int:
         """Return the number of writer close errors encountered."""
+        if self._output_dispatcher is None:
+            return 0
         return self._output_dispatcher.write_error_count
 
     def __next__(self) -> dict[str, Any]:
@@ -161,7 +177,8 @@ class Chat:
 
         try:
             item: dict[str, Any] = next(self.chat)
-            self._output_dispatcher.emit(item)
+            if self._output_dispatcher is not None:
+                self._output_dispatcher.emit(item)
         except BaseException:
             # Close writers while unwinding any generator termination,
             # including KeyboardInterrupt/SystemExit. Runner-level cleanup may

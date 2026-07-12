@@ -27,8 +27,27 @@ import requests
 #: grants only anonymous, read-only subscription to public chatroom channels.
 _PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
 
-#: Cached dynamically-discovered Pusher key (None = not yet discovered).
-_PUSHER_DISCOVERED_KEY: str | None = None
+#: Pusher websocket URL template, formatted with the resolved app key.
+_PUSHER_WS_TEMPLATE = (
+    "wss://ws-us2.pusher.com/app/{key}?protocol=7&client=js&version=7.6.0&flash=false"
+)
+
+
+class PusherKeyCache:
+    """Holder for a discovered Pusher app key.
+
+    Encapsulates the discovered-key cache so callers can inject an isolated
+    instance (tests) instead of mutating shared module state. ``key`` is
+    ``None`` until a key has been resolved.
+    """
+
+    def __init__(self) -> None:
+        """Initialise an empty cache with no resolved key."""
+        self.key: str | None = None
+
+
+#: Process-wide cache used by :func:`resolve_pusher_key` when no cache is passed.
+_pusher_key_cache = PusherKeyCache()
 
 
 class _HttpResponse(Protocol):
@@ -130,6 +149,7 @@ def resolve_pusher_key(
     *,
     force_discover: bool = False,
     http_client: _HttpClient | None = None,
+    cache: PusherKeyCache | None = None,
 ) -> str:
     """Return the current Pusher application key, discovering it if needed.
 
@@ -146,14 +166,16 @@ def resolve_pusher_key(
             page. Useful when a ``pusher:error`` suggests the key has rotated.
         http_client: Optional HTTP client for dependency injection (tests
             supply a fake). Defaults to a browser-like ``requests`` session.
+        cache: Optional key cache to read/populate. Defaults to the shared
+            process-wide cache.
 
     Returns:
         The Pusher app key string.
     """
-    global _PUSHER_DISCOVERED_KEY  # noqa: PLW0603 — lazy-init cache
+    key_cache = cache if cache is not None else _pusher_key_cache
 
-    if _PUSHER_DISCOVERED_KEY is not None and not force_discover:
-        return _PUSHER_DISCOVERED_KEY
+    if key_cache.key is not None and not force_discover:
+        return key_cache.key
 
     client = http_client or _RequestsHttpClient()
     try:
@@ -164,5 +186,19 @@ def resolve_pusher_key(
     if key is None:
         key = _PUSHER_DEFAULT_KEY
 
-    _PUSHER_DISCOVERED_KEY = key
+    key_cache.key = key
     return key
+
+
+def get_pusher_ws_url(*, force_discover: bool = False) -> str:
+    """Return the Pusher websocket URL with the current app key.
+
+    Args:
+        force_discover: If True, force re-discovery of the app key from
+            Kick's live JS bundle before building the URL.
+
+    Returns:
+        The full Pusher WebSocket URL.
+    """
+    key = resolve_pusher_key(force_discover=force_discover)
+    return _PUSHER_WS_TEMPLATE.format(key=key)

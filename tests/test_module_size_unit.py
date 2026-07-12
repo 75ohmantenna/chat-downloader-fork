@@ -15,9 +15,6 @@ ALLOWLIST: frozenset[str] = frozenset(
         "sites/youtube/constants_message.py",
         "sites/twitch/remappings.py",
         "sites/twitch/constants.py",
-        # Cohesive single-purpose modules intentionally over 400 LOC;
-        # see docs/maintenance-notes.md "Modules still over 360 LOC".
-        "chat_downloader.py",
     }
 )
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"

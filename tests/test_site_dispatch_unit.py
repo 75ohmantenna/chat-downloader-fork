@@ -11,6 +11,7 @@ import pytest
 from chat_downloader.errors import InvalidURL, SiteNotSupported, URLNotProvided
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.site_dispatch import (
+    _chat_debug_snapshot,
     create_chat_for_site,
     execute_chat_generator,
     handle_unsupported_url,
@@ -161,6 +162,27 @@ def test_create_chat_for_site_configures_chat_without_owner_wrapper() -> None:
 
     assert chat.title == "Example title"
     assert chat.site is owner.sessions["FakeSite"]
+
+
+def test_chat_debug_snapshot_counts_writers_when_dispatcher_present() -> None:
+    chat = Chat(iter(()), title="t", id="x")
+    # Attaching a writer creates the dispatcher, so the snapshot reports counts.
+    chat.attach_writer(
+        SimpleNamespace(file_name="out.jsonl", output_mode="raw"),  # type: ignore[arg-type]
+    )
+
+    snapshot = _chat_debug_snapshot(chat)
+
+    assert snapshot["writer_count"] == 1
+    assert snapshot["callback_count"] == 0
+
+
+def test_chat_debug_snapshot_omits_counts_without_dispatcher() -> None:
+    chat = Chat(iter(()), title="t", id="x")
+
+    snapshot = _chat_debug_snapshot(chat)
+
+    assert "writer_count" not in snapshot
 
 
 def test_create_chat_for_site_logs_sanitized_chat_snapshot(monkeypatch) -> None:

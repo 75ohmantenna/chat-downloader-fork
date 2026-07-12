@@ -139,14 +139,14 @@ blocked the `X as X` re-export idiom.
 |-----------|-----------|
 | Import-layering contracts | `uv run lint-imports` (wired into `make lint`); config in `pyproject.toml [tool.importlinter]` |
 | Public-API snapshot | `tests/test_public_api_unit.py` — update the frozen sets when intentionally changing `__all__` |
-| Module-size gate | `tests/test_module_size_unit.py` — ceiling tightened to 400 (Round-03); `chat_downloader.py` allowlisted (docstring-dominated facade); `utils/timed_utils.py` split into two sub-400-LOC modules in Round-05.1 and removed from allowlist |
+| Module-size gate | `tests/test_module_size_unit.py` — ceiling tightened to 400 (Round-03); `chat_downloader.py` allowlisted (docstring-dominated facade), later reduced to 388 LOC and removed from allowlist; `utils/timed_utils.py` split into two sub-400-LOC modules in Round-05.1 and removed from allowlist |
 
 ### Modules still over 360 LOC (intentional)
 
 | Module | LOC | Reason |
 |--------|-----|--------|
 | ~~`utils/timed_utils.py`~~ | ~~422~~ | Split into `timed_input.py` + `timed_generator.py` (Round-05.1); removed from allowlist |
-| `chat_downloader.py` | 416 | Docstring-dominated thin facade; `get_chat` docstring alone is ~90 lines. No split — harms single public entry point |
+| ~~`chat_downloader.py`~~ | ~~416~~ | Now 388 LOC after moving the proxy-cookie safety guard to `runtime/config_guards.py`; removed from allowlist |
 | `sites/twitch/extractor.py` | 394 | Single-class extractor; split only if a seam emerges |
 | `sites/twitch/replay_service.py` | 353 | Reduced from 377 LOC (Round-05.2 extracted helpers to `_replay_vod_loop.py`) |
 | `sites/youtube/client_requests_continuation.py` | 367 | Cohesive HTTP-layer module |
@@ -262,11 +262,12 @@ Round-05 work on the `maintainability-pass` branch.
 
 ### Design decisions
 
-**`chat_downloader.py` keep-decision:** At 416 LOC, `chat_downloader.py` exceeds
-the 400-LOC ceiling but remains allowlisted. The `get_chat()` API docstring alone
-is ~90 lines; the implementation is a thin dispatch facade with no independent
-logic to extract.  Splitting would fragment the single public entry point without
-reducing cognitive complexity.
+**`chat_downloader.py` size (resolved):** Previously allowlisted at 416 LOC. The
+proxy-cookie safety guard and its `_is_loopback_host` helper moved to
+`runtime/config_guards.py`, bringing the facade to 388 LOC — now under the
+400-LOC ceiling and removed from the allowlist. The `get_chat()` API docstring
+(~90 lines) still dominates; the class is left as config + lifecycle plumbing
+that delegates to `runtime/`.
 
 **Import independence (Round-05.1):** `timed_input.py` uses a local `_INPUT_POLL_SECONDS
 = 0.1` constant rather than importing `POLLING_TIME` from `timed_generator.py`.

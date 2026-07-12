@@ -196,6 +196,46 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
     assert result[1]["resource_restriction"] == "restricted"
 
 
+def test_discovery_get_user_videos_skips_non_dict_edges() -> None:
+    """A malformed non-dict edge is skipped without aborting the page."""
+
+    def download_gql_func(_session_post, _query):
+        return [
+            {
+                "data": {
+                    "user": {
+                        "id": "123",
+                        "videos": {
+                            "edges": [
+                                "not-a-dict",
+                                {
+                                    "cursor": "cursor-1",
+                                    "node": {
+                                        "id": "9",
+                                        "owner": {"login": "streamer"},
+                                        "title": "Video 9",
+                                    },
+                                },
+                            ],
+                            "pageInfo": {"hasNextPage": False},
+                        },
+                    },
+                },
+            },
+        ]
+
+    result = list(
+        discovery.get_user_videos(
+            session_post=lambda *args, **kwargs: None,
+            download_gql_func=download_gql_func,
+            username="streamer",
+            limit=5,
+        ),
+    )
+
+    assert [item["id"] for item in result] == ["9"]
+
+
 def test_discovery_get_user_videos_stops_for_zero_limit_empty_payload_and_missing_videos() -> (  # noqa: E501
     None
 ):

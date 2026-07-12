@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from contextvars import ContextVar
 from enum import Enum
 from typing import Any
 
@@ -28,17 +29,25 @@ class TestingModes(Enum):
     NONE = 0
 
 
-TESTING_MODE = TestingModes.NONE
+#: Current testing mode, held in a ContextVar so concurrent callers (and tests)
+#: get isolated values instead of mutating shared module state.
+_TESTING_MODE: ContextVar[TestingModes] = ContextVar(
+    "chat_downloader_testing_mode", default=TestingModes.NONE
+)
 
 
 def set_testing_mode(new_mode: TestingModes) -> None:
-    """Set the global testing mode used by :func:`log` and :func:`debug_log`.
+    """Set the testing mode used by :func:`log` and :func:`debug_log`.
 
     Args:
         new_mode: The desired testing mode from :class:`TestingModes`.
     """
-    global TESTING_MODE  # noqa: PLW0603 — module-level singleton mutated by test setup
-    TESTING_MODE = new_mode
+    _TESTING_MODE.set(new_mode)
+
+
+def get_testing_mode() -> TestingModes:
+    """Return the current testing mode for the active context."""
+    return _TESTING_MODE.get()
 
 
 def log(
@@ -61,14 +70,15 @@ def log(
         for item in items:
             logger_at_level(item)
 
-        if to_exit and TESTING_MODE in (
+        testing_mode = _TESTING_MODE.get()
+        if to_exit and testing_mode in (
             TestingModes.EXIT_ON_ERROR,
             TestingModes.EXIT_ON_DEBUG,
         ):
             msg = "Testing exception encountered, exiting program"
             raise TestingException(msg)
 
-        if to_pause and TESTING_MODE in (
+        if to_pause and testing_mode in (
             TestingModes.PAUSE_ON_ERROR,
             TestingModes.PAUSE_ON_DEBUG,
         ):
@@ -195,6 +205,7 @@ __all__ = [
     "TestingModes",
     "debug_log",
     "disable_logger",
+    "get_testing_mode",
     "log",
     "logger",
     "set_log_level",

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import NoContinuation
+from chat_downloader.sites.common import check_for_invalid_types
 from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 from chat_downloader.utils.json_types import get_dict
 from chat_downloader.utils.time_utils import ensure_seconds
@@ -197,7 +198,7 @@ def _build_chat_context(
     )
 
     messages_types_to_add = params.message_types or []
-    self.check_for_invalid_types(messages_types_to_add, _MESSAGE_TYPES)
+    check_for_invalid_types(messages_types_to_add, _MESSAGE_TYPES)
     msg_filter, time_filter = _build_message_filters(
         params,
         messages_types_to_add,

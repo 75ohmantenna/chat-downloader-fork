@@ -149,8 +149,10 @@ def test_chat_stops_iteration() -> None:
 
 def test_chat_writer_initialization() -> None:
     chat = Chat()
-    assert chat._output_dispatcher.writers == []
-    assert chat._output_dispatcher.callbacks == []
+    # The output dispatcher is created lazily on first attach_writer().
+    assert chat._output_dispatcher is None
+    # With no dispatcher there are no writer close errors to report.
+    assert chat.write_error_count == 0
 
 
 def test_chat_empty_generator() -> None:

@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from functools import cache
 
+from chat_downloader.sites.common import get_mapped_keys
+
 OPTIONAL_TWITCH_PASSTHROUGH_KEYS = {
     "animation_id",
     "msg_param_gift_theme",
@@ -20,8 +22,6 @@ OPTIONAL_TWITCH_PASSTHROUGH_KEYS = {
 @cache
 def build_known_comment_keys() -> set[str]:
     """Build set of known comment keys."""
-    from chat_downloader.sites.base import BaseChatDownloader
-
     from .remappings import (
         build_comment_remapping,
         build_message_param_remapping,
@@ -41,7 +41,7 @@ def build_known_comment_keys() -> set[str]:
         "emotes",
     }
     known_keys.update(
-        BaseChatDownloader.get_mapped_keys(
+        get_mapped_keys(
             {**comment_remapping, **message_param_remapping},
         ),
     )
@@ -52,8 +52,6 @@ def build_known_comment_keys() -> set[str]:
 @cache
 def build_known_irc_keys() -> set[str]:
     """Build set of known IRC keys."""
-    from chat_downloader.sites.base import BaseChatDownloader
-
     from .remappings import build_irc_remapping
 
     irc_remapping = build_irc_remapping()
@@ -71,6 +69,6 @@ def build_known_irc_keys() -> set[str]:
         "shared_chat_effective_source_channel_id",
         "shared_chat_is_cross_channel",
     }
-    known_keys.update(BaseChatDownloader.get_mapped_keys(irc_remapping))
+    known_keys.update(get_mapped_keys(irc_remapping))
     known_keys.update(OPTIONAL_TWITCH_PASSTHROUGH_KEYS)
     return known_keys

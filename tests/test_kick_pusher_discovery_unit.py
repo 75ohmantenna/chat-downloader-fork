@@ -7,6 +7,7 @@ import pytest
 from chat_downloader.sites.kick import pusher_discovery
 from chat_downloader.sites.kick.pusher_discovery import (
     _PUSHER_DEFAULT_KEY,
+    PusherKeyCache,
     resolve_pusher_key,
 )
 
@@ -54,7 +55,7 @@ class _FakeClient:
 @pytest.fixture(autouse=True)
 def _reset_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear the process-wide Pusher-key cache around every test."""
-    monkeypatch.setattr(pusher_discovery, "_PUSHER_DISCOVERED_KEY", None)
+    monkeypatch.setattr(pusher_discovery._pusher_key_cache, "key", None)
 
 
 def test_is_kick_origin_rejects_non_https_url() -> None:
@@ -148,10 +149,33 @@ def test_resolve_pusher_key_caches_result() -> None:
     assert key1 == key2 == "abcdef123456"
 
 
+def test_resolve_pusher_key_uses_injected_cache() -> None:
+    cache = PusherKeyCache()
+    client = _FakeClient(
+        {
+            "https://kick.com/": _FakeResponse(
+                True,
+                '<script src="/app.js"></script>',
+            ),
+            "https://kick.com/app.js": _FakeResponse(
+                True,
+                'NEXT_PUBLIC_PUSHER_KEY={default("cafebabe0001")}',
+            ),
+        }
+    )
+
+    key1 = resolve_pusher_key(http_client=client, cache=cache)
+    # A pre-seeded injected cache is returned without re-discovering.
+    key2 = resolve_pusher_key(http_client=_FakeClient({}), cache=cache)
+
+    assert key1 == key2 == "cafebabe0001"
+    assert cache.key == "cafebabe0001"
+
+
 def test_resolve_pusher_key_force_discover_bypasses_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(pusher_discovery, "_PUSHER_DISCOVERED_KEY", "oldkey")
+    monkeypatch.setattr(pusher_discovery._pusher_key_cache, "key", "oldkey")
 
     client = _FakeClient(
         {

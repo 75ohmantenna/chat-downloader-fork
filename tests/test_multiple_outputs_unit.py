@@ -86,7 +86,8 @@ def test_no_writers_attached(tmp_path: pathlib.Path) -> None:
     formatter = ItemFormatter()
     chat.set_formatter(lambda msg: formatter.format(msg, format_name="default"))
 
-    assert len(chat._output_dispatcher.writers) == 0
+    # No writers attached means the dispatcher is never created.
+    assert chat._output_dispatcher is None
     assert len(list(chat)) == 1
 
 
