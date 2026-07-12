@@ -31,8 +31,8 @@ from .constants import (
     PUSHER_PING,
     PUSHER_PONG,
     PUSHER_SUBSCRIBE,
-    get_pusher_ws_url,
 )
+from .pusher_discovery import get_pusher_ws_url
 
 if TYPE_CHECKING:
     from collections.abc import Generator

@@ -15,8 +15,6 @@ from __future__ import annotations
 
 import re
 
-from chat_downloader.sites.kick.pusher_discovery import resolve_pusher_key
-
 # ── HTTP API ──────────────────────────────────────────────────────────────────
 
 #: Base site URL.
@@ -27,27 +25,6 @@ CHANNEL_API_TEMPLATE = "https://kick.com/api/v2/channels/{username}"
 
 #: Preloaded (recent) messages endpoint, formatted with a numeric channel id.
 MESSAGES_API_TEMPLATE = "https://kick.com/api/v2/channels/{channel_id}/messages"
-
-# ── Pusher websocket ──────────────────────────────────────────────────────────
-
-_PUSHER_WS_TEMPLATE = (
-    "wss://ws-us2.pusher.com/app/{key}?protocol=7&client=js&version=7.6.0&flash=false"
-)
-
-
-def get_pusher_ws_url(*, force_discover: bool = False) -> str:
-    """Return the Pusher websocket URL with the current app key.
-
-    Args:
-        force_discover: If True, force re-discovery of the app key from
-            Kick's live JS bundle before building the URL.
-
-    Returns:
-        The full Pusher WebSocket URL.
-    """
-    key = resolve_pusher_key(force_discover=force_discover)
-    return _PUSHER_WS_TEMPLATE.format(key=key)
-
 
 #: Template for the public chatroom channel name to subscribe to.
 CHATROOM_CHANNEL_TEMPLATE = "chatrooms.{chatroom_id}.v2"

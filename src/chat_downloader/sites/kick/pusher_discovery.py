@@ -27,6 +27,11 @@ import requests
 #: grants only anonymous, read-only subscription to public chatroom channels.
 _PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
 
+#: Pusher websocket URL template, formatted with the resolved app key.
+_PUSHER_WS_TEMPLATE = (
+    "wss://ws-us2.pusher.com/app/{key}?protocol=7&client=js&version=7.6.0&flash=false"
+)
+
 #: Cached dynamically-discovered Pusher key (None = not yet discovered).
 _PUSHER_DISCOVERED_KEY: str | None = None
 
@@ -166,3 +171,17 @@ def resolve_pusher_key(
 
     _PUSHER_DISCOVERED_KEY = key
     return key
+
+
+def get_pusher_ws_url(*, force_discover: bool = False) -> str:
+    """Return the Pusher websocket URL with the current app key.
+
+    Args:
+        force_discover: If True, force re-discovery of the app key from
+            Kick's live JS bundle before building the URL.
+
+    Returns:
+        The full Pusher WebSocket URL.
+    """
+    key = resolve_pusher_key(force_discover=force_discover)
+    return _PUSHER_WS_TEMPLATE.format(key=key)
