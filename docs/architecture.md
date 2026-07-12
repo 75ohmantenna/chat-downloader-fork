@@ -47,6 +47,7 @@ For behavior-preservation coverage see
 | `youtube` ⊥ `twitch` ⊥ `kick` | Independence — no site package imports another |
 | `utils` is a leaf | No imports from `sites`, `runtime`, `output`, `formatting`, or `models` |
 | `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, or `sites` |
+| Generic layers stay provider-neutral | `runtime`, `output`, and `formatting` must not import a concrete site package (`sites.youtube`/`twitch`/`kick`). The lone exception is the site registry `runtime.site_dispatch`, which imports the `sites` aggregate to enumerate downloaders. Provider-specific behavior (e.g. live-status classification, live-format overrides) lives behind capability methods on `BaseChatDownloader` (`is_live_status`, `resolve_live_format`) that sites override. |
 
 ---
 
@@ -122,8 +123,8 @@ memory bounded independently of the number of fetched messages.
 | `session.py` | `ChatDownloaderSession`: HTTP session, proxy config, auth |
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
-| `models.py` | `Chat`, `Image`; compatibility re-export of `models.SiteDefault` |
-| `output_dispatch.py` | `ChatOutputWriter` Protocol, `_ChatOutputDispatcher`, `SUPERCHAT_DEDUP_TYPES` |
+| `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output/dedup are delegated to `_ChatOutputDispatcher` |
+| `output_dispatch.py` | `ChatOutputWriter` Protocol, `_ChatOutputDispatcher` (writer setup, callback dispatch, superchat/ticker **deduplication**, shutdown), `SUPERCHAT_DEDUP_TYPES` |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded LRU dedup cache |
 | `_protocols.py` | Shared Protocol definitions |
@@ -149,20 +150,19 @@ memory bounded independently of the number of fetched messages.
 | `client_requests_errors.py` | HTTP/JSON error classification, captcha detection, retry helpers (Round-07) |
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |
 
-#### Chat-streams split (post-Round-02)
+#### Continuation loop (reunified)
 | Module | Purpose |
 |--------|---------|
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |
-| `chat_streams_context.py` | Continuation-loop context construction (`_build_chat_context`, `_select_initial_continuation`, `_profiled_innertube_context`, `_apply_live_timing`) |
-| `chat_streams_response.py` | Continuation response handling (`_handle_continuation_response`, `_raise_if_api_error`, `_update_visitor_data`, `_log_*` helpers) |
-| `chat_streams_runtime_iteration.py` | The continuation loop itself (`_get_chat_messages`, `_process_actions`, `_advance_continuation_loop`, `_attempt_profile_fallback`) |
+| `continuation.py` | The cohesive continuation loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`) as methods; stateless composables (`_process_actions`, `_advance_continuation_loop`, `_raise_if_api_error`, `_profiled_innertube_context`) stay at module scope. `_get_chat_messages` is the factory the mixin calls |
+| `continuation_helpers.py` | Pure, downloader-independent helpers: `ContinuationLoopState`, `build_continuation_params`, `update_state_from_result`, live-timing/poll-delay/URL/filter builders |
+| `continuations.py` | Continuation response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
 
 #### Other YouTube modules
 | Module | Purpose |
 |--------|---------|
 | `_protocols.py` | YouTube-specific Protocol definitions |
 | `chat_users_retrieval.py`, `chat_users_router.py` | Chat participant retrieval and routing |
-| `continuation_loop.py`, `continuation_loop_runtime.py`, `continuation_loop_state.py`, `continuations.py` | Continuation state, token parsing, loop helpers |
 | `discovery_channels_runtime_iteration.py`, `discovery_helpers.py`, `discovery_playlists.py` | Channel and playlist discovery helpers |
 | `extractor.py` | YouTube site extractor class wiring mixins together |
 | `helpers.py` | YouTube payload/navigation helpers |
@@ -210,7 +210,7 @@ memory bounded independently of the number of fetched messages.
 
 | Guardrail | Where |
 |-----------|-------|
-| Import-layering contracts | `pyproject.toml [tool.importlinter]`; enforced by `uv run lint-imports` (wired into `make lint`) |
+| Import-layering contracts | `pyproject.toml [tool.importlinter]`; enforced by `uv run lint-imports` (wired into `make lint`). Includes site independence, the `utils`/`models` leaf rules, and the provider-neutral contract keeping `runtime`/`output`/`formatting` free of concrete site packages |
 | Public-API snapshot | `tests/test_public_api_unit.py` — frozen `__all__` sets for `chat_downloader` and `chat_downloader.models`; any intentional surface change must update the snapshot in the same commit |
 | Module-size gate | `tests/test_module_size_unit.py` — 400-line ceiling on all source modules (allowlist for intentional data tables and cohesive modules); fails on future bloat |
 | McCabe complexity | `ruff C9` rule, gate = 10; intrinsically branchy transport loops carry `# noqa: C901` with rationale |
