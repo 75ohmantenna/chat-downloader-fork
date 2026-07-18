@@ -883,3 +883,26 @@ Newest-first page batches are serialized into a `SpooledTemporaryFile`, which
 rolls to disk after 1 MiB, and then read backward by page for chronological
 output. Only at most 500 page offsets and one decoded page remain in memory.
 Retry and timeout sleeps now use monotonic time, avoiding wall-clock/DST changes.
+
+---
+
+## Round-17 — Ownership and cohesion corrections (2026-07)
+
+Formatted paid/ticker deduplication is now decided once per emitted item and
+shared by every formatted writer. Raw JSONL writers retain every provider event,
+while text files and console output independently receive one semantic record.
+The dispatcher no longer builds per-writer callbacks, and repeated attachment
+of the same writer object is idempotent.
+
+Kick HTTP endpoint ownership now lives in one downloader-owned `KickApiClient`.
+The client owns timeouts, session lifecycle, challenge detection, status
+classification, JSON decoding, and object-shape validation for channel, recent
+history, VOD metadata, and VOD message pages. Live and replay services retain
+their distinct retry and best-effort decisions. Optional curl-cffi,
+cloudscraper, and requests session construction moved to `kick/http_session.py`.
+
+YouTube channel discovery was reunited in `youtube/discovery.py` as a cohesive
+`YouTubeDiscoveryMixin`. The former forwarding mixin and phase-named iteration
+module were removed without compatibility barrels. Channel and playlist page
+processors now skip malformed non-object entries, and handles accept either
+`name` or `@name` without producing a double-`@` URL.
