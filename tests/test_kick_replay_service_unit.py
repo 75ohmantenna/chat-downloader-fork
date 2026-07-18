@@ -319,6 +319,72 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
     assert created_spools[0]._rolled is True
 
 
+def test_iter_vod_messages_stops_repeated_cursor_without_duplicates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page = {
+        "data": {
+            "messages": [{"message_id": "same-message"}],
+            "cursor": "stuck",
+        }
+    }
+    monkeypatch.setattr(
+        replay_service,
+        "_classify_message",
+        lambda raw, _start, _end: (raw, False),
+    )
+    api_client = Mock()
+    api_client.fetch_message_page.return_value = page
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(max_attempts=1, interruptible_retry=False),
+            api_client=api_client,
+        )
+    )
+
+    assert messages == [{"message_id": "same-message"}]
+    assert api_client.fetch_message_page.call_count == 2
+
+
+def test_iter_vod_messages_has_no_silent_page_ceiling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    page_count = 501
+    pages = [
+        {
+            "data": {
+                "messages": [{"message_id": f"message-{index}"}],
+                "cursor": f"cursor-{index + 1}" if index + 1 < page_count else None,
+            }
+        }
+        for index in range(page_count)
+    ]
+    monkeypatch.setattr(
+        replay_service,
+        "_classify_message",
+        lambda raw, _start, _end: (raw, False),
+    )
+    api_client = Mock()
+    api_client.fetch_message_page.side_effect = pages
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(max_attempts=1, interruptible_retry=False),
+            api_client=api_client,
+        )
+    )
+
+    assert len(messages) == page_count
+    assert api_client.fetch_message_page.call_count == page_count
+
+
 class TestGetVodChat:
     """Offline tests for ``get_vod_chat``."""
 

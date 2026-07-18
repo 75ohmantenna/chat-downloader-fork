@@ -13,6 +13,7 @@ chronological order.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 from datetime import UTC, datetime, timedelta
@@ -215,20 +216,31 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
     Paginates through channel messages (newest first) and yields those
     whose ``created_at`` falls within the VOD's time window. Unlike live
     chat which streams messages as they arrive, VOD replay accumulates
-    all pages (up to a 500-page ceiling), reverses to chronological
-    order, and yields the result. With ``max_messages`` set, the oldest
-    *N* messages (i.e. the first *N* from the stream start) are returned.
+    all pages, reverses them to chronological order, and yields the result.
+    Cursor cycles terminate pagination safely. With ``max_messages`` set,
+    the oldest *N* messages (i.e. the first *N* from the stream start) are
+    returned.
     """
     cursor: str | None = None
     done = False
-    pages = 0
     page_offsets: list[int] = []
+    requested_cursors: set[str] = set()
+    seen_page_digests: set[bytes] = set()
 
     # The API is newest-first, so chronological output requires a reverse
     # pass. Spill page batches to disk after 1 MiB instead of retaining an
     # entire multi-hour replay in RAM.
     with tempfile.SpooledTemporaryFile(max_size=_VOD_SPOOL_MEMORY_BYTES) as spool:
-        while not done and pages < 500:
+        while not done:
+            if cursor is not None:
+                if cursor in requested_cursors:
+                    log(
+                        "warning",
+                        "Kick VOD pagination cursor repeated; stopping to avoid "
+                        "duplicate pages.",
+                    )
+                    break
+                requested_cursors.add(cursor)
             page = _fetch_with_retry(
                 partial(
                     api_client.fetch_message_page,
@@ -244,6 +256,16 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
 
             if not raw_messages:
                 break
+            page_digest = hashlib.sha256(
+                json.dumps(raw_messages, sort_keys=True).encode("utf-8")
+            ).digest()
+            if page_digest in seen_page_digests:
+                log(
+                    "warning",
+                    "Kick VOD pagination returned a duplicate page; stopping.",
+                )
+                break
+            seen_page_digests.add(page_digest)
 
             page_messages: list[JSONDict] = []
             for raw in raw_messages:
@@ -259,8 +281,6 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
             if page_messages:
                 page_offsets.append(spool.tell())
                 spool.write(json.dumps(page_messages).encode("utf-8") + b"\n")
-            pages += 1
-
             if not cursor or done:
                 break
 
