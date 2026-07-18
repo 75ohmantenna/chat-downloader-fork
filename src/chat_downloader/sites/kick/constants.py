@@ -198,7 +198,7 @@ VALID_URLS = {
         rf"(?!(?:{'|'.join(RESERVED_PATHS)})(?:[/?#]|$))"
         rf"(?P<id>{_USERNAME_CHARS})"
         # Single path segment only: reject /{user}/videos/... style paths.
-        r"/?(?:[?#]|$)"
+        r"/?(?=[?#]|$)"
     ),
     "_get_chat_by_video": (
         r"(?x)"
@@ -207,6 +207,6 @@ VALID_URLS = {
         rf"(?P<id>{_USERNAME_CHARS})"
         r"/videos/"
         r"(?P<video_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
-        r"/?(?:[?#]|$)"
+        r"/?(?=[?#]|$)"
     ),
 }

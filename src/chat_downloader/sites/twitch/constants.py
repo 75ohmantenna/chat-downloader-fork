@@ -55,6 +55,19 @@ OPERATION_HASHES = {
 }
 
 # URL Validation Patterns
+_RESERVED_CHANNEL_PATHS = (
+    "clips",
+    "directory",
+    "downloads",
+    "jobs",
+    "p",
+    "settings",
+    "subscriptions",
+    "turbo",
+    "videos",
+    "wallet",
+)
+
 VALID_URLS = {
     # e.g. 'http://www.twitch.tv/riotgames/v/6528877?t=5m10s'
     "_get_chat_by_vod_id": r"""(?x)
@@ -81,6 +94,9 @@ VALID_URLS = {
                             (?:(?:www|go|m)\.)?twitch\.tv/|
                             player\.twitch\.tv/\?.*?\bchannel=
                         )
+                        (?!(?:"""
+    + "|".join(_RESERVED_CHANNEL_PATHS)
+    + r""")(?:[/?#]|$))
                         (?P<id>[^/#?]+)
                     """,
 }

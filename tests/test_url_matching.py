@@ -195,3 +195,36 @@ def test_protocol_variations(protocol: str) -> None:
     url = protocol + "www.youtube.com/watch?v=jfKfPfyJRdk"
     result = YouTubeChatDownloader.matches(url)
     assert result is not None, f"Failed with protocol: {protocol}"
+
+
+@pytest.mark.parametrize(
+    ("site", "url"),
+    [
+        (
+            TwitchChatDownloader,
+            "https://evil.example/?next=https://www.twitch.tv/realchannel",
+        ),
+        (KickChatDownloader, "prefix https://kick.com/xqc"),
+        (YouTubeChatDownloader, "ABCDEFGHIJK-extra"),
+        (TwitchChatDownloader, "https://www.twitch.tv/videos"),
+        (YouTubeChatDownloader, "https://www.youtube.com/watch"),
+        (YouTubeChatDownloader, "https://www.youtube.com/playlist"),
+    ],
+)
+def test_url_matching_rejects_embedded_trailing_and_reserved_routes(
+    site: type[BaseChatDownloader],
+    url: str,
+) -> None:
+    assert site.matches(url) is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/watch?v=jfKfPfyJRdk&list=example",
+        "https://www.twitch.tv/realchannel?referrer=raid",
+        "https://kick.com/xqc?clip=example",
+    ],
+)
+def test_url_matching_accepts_complete_urls_with_query_suffixes(url: str) -> None:
+    assert any(site.matches(url) is not None for site in get_all_sites())

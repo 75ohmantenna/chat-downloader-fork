@@ -419,7 +419,7 @@ def test_base_downloader_misc_helpers() -> None:
     class DemoDownloader(BaseChatDownloader):
         _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {"format": "demo"}
         _VALID_URLS: ClassVar[dict[str, Any]] = {
-            "vod": r"/videos/(?P<id>\d+)",
+            "vod": r"https://twitch\.tv/videos/(?P<id>\d+)",
             "skip": 123,
         }
 

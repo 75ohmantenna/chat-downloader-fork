@@ -32,6 +32,28 @@ _YT_MAX_NO_PROGRESS_POLLS = 5
 _YT_MAX_PROFILE_FALLBACKS = 3
 
 # URL matching patterns
+_YT_RESERVED_USER_PATHS = (
+    "account",
+    "clip",
+    "dashboard",
+    "e",
+    "embed",
+    "feed",
+    "gaming",
+    "live",
+    "live_chat",
+    "live_chat_replay",
+    "logout",
+    "playlist",
+    "premium",
+    "results",
+    "shorts",
+    "signin",
+    "upload",
+    "v",
+    "watch",
+)
+
 _VALID_URLS = {
     "_get_chat_by_video_id": r"""(?x)^
                  (
@@ -73,6 +95,9 @@ _VALID_URLS = {
                 (?:
                     youtube(?:kids)?\.com
                 )/
+                (?!(?:"""
+    + "|".join(_YT_RESERVED_USER_PATHS)
+    + r""")(?:[/?#]|$))
                 (?:
                     (?P<type>channel/|c/|user/|@)
                 )?

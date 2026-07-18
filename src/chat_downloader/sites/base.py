@@ -270,10 +270,22 @@ class BaseChatDownloader:
         """
         for function_name, regex in cls._VALID_URLS.items():
             if isinstance(regex, str):
-                match = re.search(regex, url)
-                if match:
+                match = re.match(regex, url)
+                if match and cls._has_valid_match_suffix(url, match.end()):
                     return function_name, match
         return None
+
+    @staticmethod
+    def _has_valid_match_suffix(url: str, match_end: int) -> bool:
+        """Return whether unmatched text is only a URL suffix delimiter."""
+        remainder = url[match_end:]
+        if not remainder or remainder == "/":
+            return True
+        if remainder.startswith(("?", "#", "/?", "/#")):
+            return True
+        if remainder.startswith(("&", ";")):
+            return "?" in url[:match_end]
+        return False
 
     def generate_urls(self, **kwargs: Any) -> Iterator[str]:
         """Yield URLs supported by this site for testing or enumeration."""

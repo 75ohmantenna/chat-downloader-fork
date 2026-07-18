@@ -165,6 +165,10 @@ Common fields:
 | `overwrite` | `True` | Replace existing output files |
 | `sort_keys` | `True` | Sort keys in JSON output |
 
+URL dispatch matches the complete input. Normal query strings and fragments are
+accepted, while URLs embedded in unrelated text, reserved site routes, and
+trailing non-URL text are rejected.
+
 For YouTube live chats, the site default text format renders absolute
 timestamps before elapsed replay offsets. Replay chats keep the standard
 elapsed-time rendering.
