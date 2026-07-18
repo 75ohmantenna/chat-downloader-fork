@@ -55,6 +55,37 @@ def test_txt_flushes_each_record(tmp_path: Path) -> None:
         writer.close()
 
 
+def test_txt_append_terminates_existing_line_missing_newline(tmp_path: Path) -> None:
+    path = tmp_path / "out.txt"
+    path.write_text("existing", encoding="utf-8")
+
+    writer = TextContinuousWriter(str(path), overwrite=False)
+    writer.write("next")
+    writer.close()
+
+    assert path.read_text(encoding="utf-8") == "existing\nnext\n"
+
+
+@pytest.mark.parametrize("initial", ["", "existing\n"])
+def test_txt_append_keeps_complete_file_unchanged(tmp_path: Path, initial: str) -> None:
+    path = tmp_path / "out.txt"
+    path.write_text(initial, encoding="utf-8")
+
+    writer = TextContinuousWriter(str(path), overwrite=False)
+    writer.close()
+
+    assert path.read_text(encoding="utf-8") == initial
+
+
+def test_txt_append_creates_missing_file(tmp_path: Path) -> None:
+    path = tmp_path / "out.txt"
+
+    writer = TextContinuousWriter(str(path), overwrite=False)
+    writer.close()
+
+    assert path.read_text(encoding="utf-8") == ""
+
+
 def test_fsync_runs_at_most_once_per_interval(tmp_path: Path) -> None:
     """fsync() runs on first write, then is suppressed until the interval."""
     path = tmp_path / "out.jsonl"

@@ -476,7 +476,7 @@ def test_continuous_writer_preserves_existing_file_without_overwrite(
     writer = ContinuousWriter(str(path), overwrite=False)
     writer.close()
 
-    assert path.read_text(encoding="utf-8") == "kept"
+    assert path.read_text(encoding="utf-8") == "kept\n"
 
 
 def test_jsonl_text_and_continuous_writer_edge_paths(tmp_path) -> None:

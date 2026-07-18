@@ -89,7 +89,9 @@ also perform a final `fsync` during normal shutdown; a flush or sync failure is
 reported as an output error instead of allowing the capture to appear successful.
 When appending to JSONL, a crash-truncated final record is removed before new
 records are written; a complete final record missing only its newline is kept and
-terminated.
+terminated. Text append mode similarly terminates an existing final line before
+writing the next record. Equivalent output paths that resolve to the same file are
+deduplicated so each message is written once.
 
 ## Common Flags
 

@@ -24,6 +24,26 @@ _FSYNC_INTERVAL_SECONDS = 60.0
 _TAIL_SCAN_BYTES = 8192
 
 
+def _repair_text_final_line(file_name: str) -> None:
+    """Terminate an existing text file's final line before appending."""
+    path = Path(file_name)
+    if not path.exists() or path.stat().st_size == 0:
+        return
+
+    with path.open("r+b") as file:
+        file.seek(-1, os.SEEK_END)
+        if file.read(1) == b"\n":
+            return
+        file.seek(0, os.SEEK_END)
+        file.write(b"\n")
+        file.flush()
+        os.fsync(file.fileno())
+    log(
+        "warning",
+        f"Terminated the final text line in {file_name} before append.",
+    )
+
+
 def _repair_jsonl_final_line(file_name: str) -> None:
     r"""Repair a missing or crash-truncated final JSONL newline before append.
 
@@ -211,6 +231,8 @@ class TextContinuousWriter(ContinuousFileWriter):
         """Initialize a line-oriented text writer."""
         super().__init__(file_name, **kwargs)
         file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
+        if not self.overwrite:
+            _repair_text_final_line(self.file_name)
         self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
 
     def write(self, item: Any, *, flush: bool = False) -> None:

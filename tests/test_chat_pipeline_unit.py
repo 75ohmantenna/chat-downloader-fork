@@ -336,9 +336,10 @@ def test_configure_output_writer_supports_multiple_outputs() -> None:
 
 def test_configure_output_writer_deduplicates_duplicate_paths(tmp_path) -> None:
     output_path = str(tmp_path / "out.jsonl")
+    aliased_path = f"{tmp_path}/./out.jsonl"
     request = ChatRequest(
         url="https://www.youtube.com/watch?v=abc",
-        output=[output_path, output_path],
+        output=[output_path, aliased_path],
     )
 
     chat = Chat(status="live")
@@ -346,6 +347,25 @@ def test_configure_output_writer_deduplicates_duplicate_paths(tmp_path) -> None:
 
     configure_output_writer(chat, request, writer_factory=writer_factory)
     assert len(chat._output_dispatcher.writers) == 1
+
+
+def test_configure_output_writer_alias_writes_each_item_once(tmp_path) -> None:
+    output_path = tmp_path / "out.txt"
+    output_path.write_text("existing\n", encoding="utf-8")
+    request = ChatRequest(
+        url="https://www.youtube.com/watch?v=abc",
+        output=[str(output_path), f"{tmp_path}/./out.txt"],
+        overwrite=False,
+    )
+    chat = Chat(iter([{"message_type": "text_message"}]), status="live")
+    chat.set_formatter(lambda _item: "hello")
+
+    configure_output_writer(chat, request)
+    assert next(chat) == {"message_type": "text_message"}
+    with pytest.raises(StopIteration):
+        next(chat)
+
+    assert output_path.read_text(encoding="utf-8") == "existing\nhello\n"
 
 
 def test_configure_output_writer_rejects_json_output(tmp_path) -> None:

@@ -63,7 +63,9 @@ normal message output and file formats are unchanged.
 
 JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing
-record (or adds a missing newline to a valid record) before writing new data.
+record (or adds a missing newline to a valid record) before writing new data;
+text append mode also terminates an existing final line before appending. Output
+path aliases resolving to the same file are attached only once.
 Kick VOD reverse pagination spills to a temporary file after 1 MiB, keeping replay
 memory bounded independently of the number of fetched messages.
 

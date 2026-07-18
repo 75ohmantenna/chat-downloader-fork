@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -151,13 +152,14 @@ def configure_output_writer(
     outputs = request.output if isinstance(request.output, list) else [request.output]
     seen: set[str] = set()
     for output_file in outputs:
-        if output_file in seen:
+        canonical_path = os.path.normcase(os.path.realpath(output_file))
+        if canonical_path in seen:
             log(
                 "warning",
                 f"Duplicate output path '{output_file}' — skipping.",
             )
             continue
-        seen.add(output_file)
+        seen.add(canonical_path)
         chat.attach_writer(build_output_writer(output_file, request, writer_factory))
 
 
