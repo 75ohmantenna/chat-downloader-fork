@@ -21,3 +21,10 @@ repos:
         entry: uv run --locked mypy .
         pass_filenames: false
         stages: [pre-push]
+
+      - id: issue-reference-check
+        name: forbid issue references in fork history
+        language: system
+        entry: uv run --locked python scripts/check_issue_references.py
+        pass_filenames: false
+        stages: [pre-push]

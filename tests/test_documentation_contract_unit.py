@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from dataclasses import fields
 from pathlib import Path
 from urllib.parse import unquote
@@ -28,6 +30,25 @@ def _project_documents() -> list[Path]:
     )
 
 
+def _project_text_files() -> list[Path]:
+    """Return maintained text files that can carry repository references."""
+    suffixes = {".json", ".md", ".py", ".toml", ".txt", ".yaml", ".yml"}
+    files = {
+        path
+        for directory in (
+            ROOT / "docs",
+            ROOT / "scripts",
+            ROOT / "src",
+            ROOT / "tests",
+        )
+        for path in directory.rglob("*")
+        if path.is_file() and path.suffix in suffixes
+    }
+    files.update(ROOT.glob("*.md"))
+    files.add(ROOT / "pyproject.toml")
+    return sorted(files)
+
+
 def test_local_markdown_links_resolve() -> None:
     """Reject broken relative links in project-owned Markdown."""
     broken: list[str] = []
@@ -44,6 +65,32 @@ def test_local_markdown_links_resolve() -> None:
                 broken.append(f"{doc_name}: {target}")
 
     assert not broken, "broken local Markdown links:\n" + "\n".join(broken)
+
+
+def test_project_does_not_reference_upstream_issues() -> None:
+    """Keep fork-owned surfaces independent from upstream issue trackers."""
+    forbidden = "github.com/" + "xenova/chat-downloader/" + "issues/"
+    references = [
+        path.relative_to(ROOT).as_posix()
+        for path in _project_text_files()
+        if forbidden in path.read_text(encoding="utf-8")
+    ]
+
+    assert not references, "upstream issue references found:\n" + "\n".join(references)
+
+
+def test_fork_history_does_not_reference_issue_numbers() -> None:
+    """Reject commit messages that GitHub could link to upstream issues."""
+    script = ROOT / "scripts" / "check_issue_references.py"
+    result = subprocess.run(  # noqa: S603 - fixed local interpreter and script
+        [sys.executable, str(script)],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_python_api_reference_lists_exact_top_level_exports() -> None:

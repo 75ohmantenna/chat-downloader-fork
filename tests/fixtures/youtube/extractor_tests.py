@@ -148,7 +148,6 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
     },
     {
-        # https://github.com/xenova/chat-downloader/issues/178#issuecomment-1330029347
         "name": "Chat replay with membership gifts",
         "params": {
             "url": "https://www.youtube.com/watch?v=cb0h-KbpDo8",
@@ -179,7 +178,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "messages_condition": lambda messages: len(messages) > 0,
         },
     },
-    {  # https://github.com/xenova/chat-downloader/issues/175#issue-1438381085
+    {
         "name": "Chat replay with a message that has no author name",
         "params": {
             "url": "https://www.youtube.com/watch?v=-JU0rbfPECY",

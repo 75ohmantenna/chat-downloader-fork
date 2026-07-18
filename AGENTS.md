@@ -5,6 +5,10 @@ CI validates 3.12, 3.13, and 3.14. This is a personal fork of
 `xenova/chat-downloader`; no upstream support is offered. Do not file issues or
 PRs against upstream for fork-originating problems.
 
+Do not link to or cite upstream issue or pull-request discussions in project
+documentation, source, tests, fixtures, or release notes. Keep fork-owned
+regression context self-contained.
+
 For deeper context use:
 
 - [`docs/architecture.md`](docs/architecture.md) — layer diagram, module

@@ -37,7 +37,10 @@ uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type pre
 ```
 
 The pre-commit stage runs Ruff lint and format checks. The pre-push stage runs
-mypy. Hooks use `uv run --locked` so they match the committed lockfile.
+mypy and rejects fork-history commit messages that could notify an upstream
+issue tracker. Avoid bare issue-number syntax in commit subjects and bodies;
+describe the local change without an issue reference instead. Hooks use
+`uv run --locked` so they match the committed lockfile.
 
 ## Daily workflow
 
