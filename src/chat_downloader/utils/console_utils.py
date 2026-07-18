@@ -16,6 +16,7 @@ FILE_TYPE_CHAR = 0x0002
 FILE_TYPE_REMOTE = 0x8000
 MAX_BMP_CODEPOINT = 0xFFFF
 WINDOWS_CONSOLE_BUFFER_SIZE = 1024
+WINDOWS_CONSOLE_MAX_WRITE_FAILURES = 3
 
 # Windows output handle mapping
 WIN_OUTPUT_IDS = {
@@ -140,6 +141,8 @@ def _write_to_windows_console(
     )(("WriteConsoleW", ctypes.windll.kernel32))  # type: ignore[attr-defined]
 
     written = ctypes.wintypes.DWORD(0)
+    consecutive_failures = 0
+    wrote_any = False
 
     while text:
         # Determine how many characters to write
@@ -156,10 +159,16 @@ def _write_to_windows_console(
         )
 
         if ret == 0:
-            if skip_errors:
-                continue
-            msg = "Failed to write string"
-            raise OSError(msg)
+            if not skip_errors:
+                msg = "Failed to write string"
+                raise OSError(msg)
+            consecutive_failures += 1
+            if consecutive_failures >= WINDOWS_CONSOLE_MAX_WRITE_FAILURES:
+                return wrote_any
+            continue
+
+        consecutive_failures = 0
+        wrote_any = True
 
         # Update position in string
         if not count:  # We just wrote a non-BMP character

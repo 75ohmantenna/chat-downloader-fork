@@ -260,6 +260,39 @@ def test_write_to_windows_console_retries_when_skip_errors_enabled(
     ]
 
 
+def test_write_to_windows_console_bounds_persistent_skipped_errors(
+    monkeypatch,
+) -> None:
+    calls = []
+
+    def write_console(handle, text, count, _written, _reserved) -> int:
+        calls.append((handle, text, count))
+        return 0
+
+    _install_fake_ctypes(monkeypatch, {"WriteConsoleW": write_console})
+
+    assert console_utils._write_to_windows_console(7, "hello") is False
+    assert calls == [(7, "hello", 5)] * 3
+
+
+def test_write_to_windows_console_avoids_fallback_after_partial_write(
+    monkeypatch,
+) -> None:
+    calls = []
+
+    def write_console(handle, text, count, written, _reserved) -> int:
+        calls.append((handle, text, count))
+        if len(calls) == 1:
+            written.value = count
+            return 1
+        return 0
+
+    _install_fake_ctypes(monkeypatch, {"WriteConsoleW": write_console})
+
+    assert console_utils._write_to_windows_console(7, "a\U0001f600") is True
+    assert calls == [(7, "a\U0001f600", 1)] + [(7, "\U0001f600", 2)] * 3
+
+
 def test_write_to_windows_console_raises_on_wrong_nonbmp_written_count(
     monkeypatch,
 ) -> None:
