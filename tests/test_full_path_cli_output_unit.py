@@ -34,7 +34,7 @@ def test_cli_full_path_writes_and_closes_output_file(tmp_path, monkeypatch) -> N
     class _FakeSite(BaseChatDownloader):
         _NAME = "fake.test"
         _VALID_URLS: ClassVar[dict[str, str]] = {
-            "_get_chat_by_fake": r"fake\.test/(?P<id>\w+)"
+            "_get_chat_by_fake": r"https://fake\.test/(?P<id>\w+)"
         }
 
         def _get_chat_by_fake(self, match, request: ChatRequest) -> Chat:
