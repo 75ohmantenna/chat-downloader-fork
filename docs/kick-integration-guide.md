@@ -234,7 +234,8 @@ preloaded live history, not a dedicated replay API. `replay_service.py`:
 
 - loads video metadata and derives the `(start, end)` window from `start_time`
   and `duration`
-- pages newest-first using the timestamp `cursor` (capped at 500 pages)
+- pages newest-first using the timestamp `cursor` until the time window is
+  exhausted; repeated cursors or pages stop pagination safely
 - classifies each message as in-window, after-window (skip), or before-window
   (stop — older messages cannot belong to the VOD)
 - reverses the collected messages into chronological order and applies
