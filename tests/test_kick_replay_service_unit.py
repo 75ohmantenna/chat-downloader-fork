@@ -350,6 +350,44 @@ def test_iter_vod_messages_stops_repeated_cursor_without_duplicates(
     assert api_client.fetch_message_page.call_count == 2
 
 
+def test_iter_vod_messages_stops_cursor_cycle_before_refetch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pages = [
+        {
+            "data": {
+                "messages": [{"message_id": f"message-{index}"}],
+                "cursor": cursor,
+            }
+        }
+        for index, cursor in enumerate(("cursor-a", "cursor-b", "cursor-a"))
+    ]
+    monkeypatch.setattr(
+        replay_service,
+        "_classify_message",
+        lambda raw, _start, _end: (raw, False),
+    )
+    api_client = Mock()
+    api_client.fetch_message_page.side_effect = pages
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(max_attempts=1, interruptible_retry=False),
+            api_client=api_client,
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == [
+        "message-2",
+        "message-1",
+        "message-0",
+    ]
+    assert api_client.fetch_message_page.call_count == 3
+
+
 def test_iter_vod_messages_has_no_silent_page_ceiling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
