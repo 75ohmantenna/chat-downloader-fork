@@ -43,6 +43,7 @@ def test_timed_generator_timeout() -> None:
 
     def fake_start_timer(self) -> None:
         self.timer = FakeTimer(alive=False)  # expired timer
+        self._timeout_deadline = 0.0
         self._timeout_expired.set()
 
     with patch.object(TimedGenerator, "start_timer", fake_start_timer):
