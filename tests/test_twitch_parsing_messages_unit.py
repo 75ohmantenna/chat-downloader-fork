@@ -24,6 +24,7 @@ from chat_downloader.sites.twitch.parsing.tag_decoding import (
 )
 from chat_downloader.sites.twitch.remappings import build_comment_remapping
 from chat_downloader.sites.twitch.types import BadgeSet
+from chat_downloader.sites.twitch.validation_keys import build_known_irc_keys
 
 
 def test_announcement_is_mapped_and_in_default_message_group() -> None:
@@ -39,6 +40,12 @@ def test_new_text_variants_are_mapped_and_in_default_message_group() -> None:
     )
     assert "animated-message" in MESSAGE_GROUPS["messages"]
     assert "gigantified-emote-message" in MESSAGE_GROUPS["messages"]
+
+
+def test_social_sharing_badge_is_mapped_and_in_default_message_group() -> None:
+    assert MESSAGE_TYPE_REMAPPING["socialsharingbadge"] == "social_sharing_badge"
+    assert "social_sharing_badge" in MESSAGE_GROUPS["messages"]
+    assert "current_badge_level" in build_known_irc_keys()
 
 
 def test_sharedchatnotice_is_mapped_and_in_notices_group() -> None:
@@ -69,6 +76,30 @@ def test_parse_irc_item_parses_announcement_usernotice() -> None:
         "DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR"
     )
     assert parsed["author"]["name"] == "streamelements"
+
+
+def test_parse_irc_item_parses_social_sharing_badge_usernotice() -> None:
+    raw = (
+        "@badge-info=subscriber/3;badges=subscriber/3;color=#FF69B4;"
+        "display-name=SocialBadgeUser;emotes=;flags=;id=social-badge-1;"
+        "login=socialbadgeuser;mod=0;msg-id=socialsharingbadge;"
+        "msg-param-current-badge-level=1;room-id=641972806;subscriber=1;"
+        r"system-msg=Unlocked\sa\ssocial\ssharing\sbadge;"
+        "tmi-sent-ts=1784401035261;user-id=1206377490;user-type=;vip=0 "
+        ":tmi.twitch.tv USERNOTICE #kaicenat "
+        ":Wooohooo, I got a social media badge!\r\n"
+    )
+
+    match = MESSAGE_REGEX.search(raw)
+    assert match is not None
+
+    parsed = _parse_irc_item(match)
+
+    assert parsed["action_type"] == "user_notice"
+    assert parsed["message_type"] == "social_sharing_badge"
+    assert parsed["current_badge_level"] == 1
+    assert parsed["message"] == "Wooohooo, I got a social media badge!"
+    assert parsed["author"]["name"] == "socialbadgeuser"
 
 
 def test_parse_irc_item_parses_shared_chat_privmsg_tags() -> None:

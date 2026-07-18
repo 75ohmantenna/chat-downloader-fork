@@ -119,6 +119,39 @@ def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
     )
 
 
+def test_live_service_default_messages_include_social_sharing_badge() -> None:
+    irc = Mock()
+    downloader = SimpleNamespace(
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/example",
+        max_attempts=1,
+        message_groups=["messages"],
+    )
+    social_sharing_badge = {
+        "action_type": "user_notice",
+        "message_type": "social_sharing_badge",
+        "message_id": "social-badge-1",
+    }
+
+    result = list(
+        live_service.iter_stream_chat_messages(
+            cast("Any", downloader),
+            "example",
+            request,
+            irc_factory=cast("live_service._IRCFactory", Mock(return_value=irc)),
+            message_generator=cast(
+                "live_service._MessageGenerator",
+                Mock(return_value=iter([social_sharing_badge])),
+            ),
+        )
+    )
+
+    assert result == [social_sharing_badge]
+
+
 def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> None:
     irc = Mock()
     downloader = SimpleNamespace(

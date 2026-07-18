@@ -151,6 +151,7 @@ def build_message_param_remapping() -> dict[str, Any]:
         "msg-param-charity-days-remaining": r("charity_days_remaining", int_or_none),
         "msg-param-total": r("charity_total_raised", int_or_none),
         "msg-param-category": "milestone_category",
+        "msg-param-current-badge-level": r("current_badge_level", int_or_none),
         "msg-param-value": r("milestone_value", int_or_none),
         "msg-param-copoReward": r("milestone_channel_points_reward", int_or_none),
         "msg-param-id": "milestone_id",

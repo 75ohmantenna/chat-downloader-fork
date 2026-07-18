@@ -160,6 +160,7 @@ MESSAGE_GROUP_REMAPPINGS = {
         "animated-message": "animated-message",
         "gigantified-emote-message": "gigantified-emote-message",
         "highlighted-message": "highlighted_message",
+        "socialsharingbadge": "social_sharing_badge",
         "skip-subs-mode-message": "send_message_in_subscriber_only_mode",
     },
     "bits": {

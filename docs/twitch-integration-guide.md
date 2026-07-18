@@ -212,12 +212,12 @@ To turn a captured drift sample into a permanent regression anchor:
 2. Read the snapshot. The two sentinel phrases checked by the
    harness are `"Unknown action type"` and `"Unknown message type"`.
 3. Update the relevant parser contract:
-   - New IRC action type → extend
-     `parsing/message_irc_resolve.py::_resolve_irc_action_and_message_type`.
-   - New IRC message type → extend
-     `parsing/message_irc_resolve.py::_resolve_message_type`.
-   - New IRC tag → add to `parsing/tag_decoding.py` and extend the
-     known-key set in `validation_keys.py`.
+   - New IRC action type → extend `ACTION_TYPE_REMAPPING` in `constants.py`.
+   - New IRC message type → extend `MESSAGE_GROUP_REMAPPINGS` in
+     `constants.py` and assign it to the appropriate message group.
+   - New IRC tag → add it to `build_irc_remapping()` or
+     `build_message_param_remapping()` in `remappings.py`; the known-key set
+     derives from those mappings.
    - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`;
      see GraphQL Hash Rotation below.
 4. Add a `{"raw": "<irc line>\\r\\n"}` fixture to
