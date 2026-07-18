@@ -125,6 +125,7 @@ non-`__init__.py` module remains represented.
 | `base.py` | `BaseChatDownloader` ABC: URL matching, session setup, cookie handling |
 | `common.py` | Stateless site utilities for key validation and mapped-key discovery |
 | `session.py` | `ChatDownloaderSession`: HTTP session, proxy config, auth |
+| `proxy.py` | Shared proxy resolution and TLS tunneling for live transports |
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output/dedup are delegated to `_ChatOutputDispatcher` |

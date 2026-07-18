@@ -14,10 +14,11 @@ from chat_downloader.errors import ParsingError, UserNotFound
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
+from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.dict_utils import multi_get
 
-from .constants import MESSAGE_GROUPS, build_known_irc_keys
+from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
 from .irc_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
     _PROGRESS_LOG_INTERVAL_MESSAGES,
@@ -33,7 +34,12 @@ _LIVE_SEEN_MESSAGE_LIMIT = 50_000
 class _IRCFactory(Protocol):
     """Callable that creates a configured Twitch IRC connection."""
 
-    def __call__(self, *, connect_timeout: float) -> TwitchChatIRC: ...
+    def __call__(
+        self,
+        *,
+        connect_timeout: float,
+        proxy_url: str | None,
+    ) -> TwitchChatIRC: ...
 
 
 class _MessageGenerator(Protocol):
@@ -87,10 +93,17 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
 
     def create_connection() -> TwitchChatIRC:
         connect_timeout = getattr(downloader, "_http_timeout", (10.0, 30.0))[0]
+        proxy_url = resolve_session_proxy(
+            getattr(downloader, "session", None),
+            f"https://{IRC_HOST}",
+        )
         for attempt_number in _attempt_numbers(request.max_attempts):
             irc: TwitchChatIRC | None = None
             try:
-                irc = irc_factory(connect_timeout=connect_timeout)
+                irc = irc_factory(
+                    connect_timeout=connect_timeout,
+                    proxy_url=proxy_url,
+                )
                 irc.set_timeout(
                     max(
                         request.message_receive_timeout,

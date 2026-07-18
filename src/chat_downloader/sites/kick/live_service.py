@@ -23,12 +23,14 @@ from chat_downloader.errors import CaptchaChallengeRequired
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
+from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 
 from .constants import MESSAGE_GROUPS, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.events import dispatch_event
 from .parsing.messages import parse_preloaded_messages
+from .pusher_discovery import _HttpClient, _RequestsHttpClient
 from .websocket_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
     KickPusherTransport,
@@ -173,27 +175,12 @@ def get_chat_by_channel(
     )
 
 
-def _resolve_ws_proxy(downloader: object) -> tuple[str | None, int | None]:
-    """Extract websocket proxy host/port from a downloader's session.
-
-    Parses the first non-empty proxy URL (preferring https) into host and
-    port. Returns ``(None, None)`` when no proxy is configured.
-    """
-    session = getattr(downloader, "session", None)
-    proxies: dict[str, str] | None = (
-        getattr(session, "proxies", None) if session else None
+def _resolve_ws_proxy(downloader: object) -> str | None:
+    """Return the effective proxy URL for Kick's secure websocket."""
+    return resolve_session_proxy(
+        getattr(downloader, "session", None),
+        "https://ws-us2.pusher.com",
     )
-    if not proxies:
-        return None, None
-    proxy_url = proxies.get("https") or proxies.get("http")
-    if not proxy_url:
-        return None, None
-    from urllib.parse import urlparse
-
-    parsed = urlparse(proxy_url)
-    host = parsed.hostname
-    port = parsed.port
-    return host, port
 
 
 def _open_subscribed_transport(
@@ -202,8 +189,8 @@ def _open_subscribed_transport(
     request: ChatRequest,
     transport_factory: Callable[[], KickPusherTransport],
     *,
-    http_proxy_host: str | None = None,
-    http_proxy_port: int | None = None,
+    proxy_url: str | None = None,
+    pusher_http_client: _HttpClient | None = None,
 ) -> KickPusherTransport:
     """Open a transport and subscribe to the chatroom, retrying failures.
 
@@ -212,16 +199,16 @@ def _open_subscribed_transport(
         chatroom_id: Chatroom id to subscribe to.
         request: The active chat request (retry policy and recv timeout).
         transport_factory: Factory producing a fresh transport.
-        http_proxy_host: Optional HTTP proxy hostname for the WS connection.
-        http_proxy_port: Optional HTTP proxy port for the WS connection.
+        proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
+        pusher_http_client: HTTP client used for Pusher-key discovery.
 
     Returns:
         A connected, subscribed transport.
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         transport = transport_factory()
-        transport._http_proxy_host = http_proxy_host
-        transport._http_proxy_port = http_proxy_port
+        transport._proxy_url = proxy_url
+        transport._pusher_http_client = pusher_http_client
         try:
             transport.connect(downloader._http_timeout[0])
             transport.subscribe(chatroom_id)
@@ -304,14 +291,16 @@ def _iter_chat_messages(
     )
 
     # 2. Live websocket feed with reconnect.
-    ws_host, ws_port = _resolve_ws_proxy(downloader)
+    proxy_url = _resolve_ws_proxy(downloader)
+    session = getattr(downloader, "session", None)
+    pusher_http_client = _RequestsHttpClient(session) if session is not None else None
     transport = _open_subscribed_transport(
         downloader,
         chatroom_id,
         request,
         transport_factory,
-        http_proxy_host=ws_host,
-        http_proxy_port=ws_port,
+        proxy_url=proxy_url,
+        pusher_http_client=pusher_http_client,
     )
     consecutive_connection_failures = 0
     try:
@@ -339,8 +328,8 @@ def _iter_chat_messages(
                     chatroom_id,
                     request,
                     transport_factory,
-                    http_proxy_host=ws_host,
-                    http_proxy_port=ws_port,
+                    proxy_url=proxy_url,
+                    pusher_http_client=pusher_http_client,
                 )
                 log(
                     "debug",

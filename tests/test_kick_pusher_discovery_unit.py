@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from chat_downloader.sites.kick import pusher_discovery
@@ -106,6 +108,16 @@ def test_resolve_pusher_key_uses_requests_adapter_by_default(
 
     assert key == "feedfacedead"
     assert "https://kick.com/" in calls
+
+
+def test_requests_adapter_reuses_downloader_session_without_closing() -> None:
+    session = pusher_discovery.requests.Session()
+    session.close = MagicMock()
+    adapter = pusher_discovery._RequestsHttpClient(session)
+
+    adapter.close()
+
+    session.close.assert_not_called()
 
 
 def test_resolve_pusher_key_discovers_key_from_bundle() -> None:

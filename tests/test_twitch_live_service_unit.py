@@ -82,6 +82,43 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
     mock_debug_log.assert_called_once()
 
 
+def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
+    irc = Mock()
+    irc_factory = cast("live_service._IRCFactory", Mock(return_value=irc))
+    downloader = SimpleNamespace(
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+        session=SimpleNamespace(
+            proxies={"https": "socks5h://proxy.test:1080"},
+            trust_env=False,
+        ),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/example",
+        max_attempts=1,
+        message_groups=["messages"],
+    )
+
+    result = list(
+        live_service.iter_stream_chat_messages(
+            cast("Any", downloader),
+            "example",
+            request,
+            irc_factory=irc_factory,
+            message_generator=cast(
+                "live_service._MessageGenerator",
+                Mock(return_value=iter(())),
+            ),
+        )
+    )
+
+    assert result == []
+    irc_factory.assert_called_once_with(
+        connect_timeout=10.0,
+        proxy_url="socks5h://proxy.test:1080",
+    )
+
+
 def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> None:
     irc = Mock()
     downloader = SimpleNamespace(

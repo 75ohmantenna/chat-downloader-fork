@@ -4,10 +4,11 @@
 
 from __future__ import annotations
 
-import contextlib
 import re
 import time
 from unittest.mock import Mock
+
+import pytest
 
 from chat_downloader.sites.twitch.irc_transport import (
     _create_irc_socket,
@@ -187,54 +188,36 @@ def test_should_send_keepalive_boundary_just_over() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_create_irc_socket_wraps_raw_socket_and_uses_tls_defaults(
+def test_create_irc_socket_uses_shared_tls_connector(
     monkeypatch,
 ) -> None:
-    """Verify ``_create_irc_socket`` wraps the raw socket with SSL."""
-    raw_socket = Mock()
+    """Verify ``_create_irc_socket`` delegates target and proxy settings."""
     wrapped_socket = Mock()
-
-    mock_ctx = Mock()
-    mock_ctx.wrap_socket = Mock(return_value=wrapped_socket)
-
+    connector = Mock(return_value=wrapped_socket)
     monkeypatch.setattr(
-        "chat_downloader.sites.twitch.irc_transport.socket.create_connection",
-        lambda address, timeout: raw_socket,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.twitch.irc_transport.ssl.create_default_context",
-        lambda: mock_ctx,
+        "chat_downloader.sites.twitch.irc_transport.open_proxied_tls_socket",
+        connector,
     )
 
-    result = _create_irc_socket()
+    result = _create_irc_socket(3.5, "socks5h://user:pass@proxy.test:1080")
 
     assert result is wrapped_socket
-    mock_ctx.wrap_socket.assert_called_once_with(
-        raw_socket,
-        server_hostname="irc.chat.twitch.tv",
+    connector.assert_called_once_with(
+        "irc.chat.twitch.tv",
+        6697,
+        timeout=3.5,
+        proxy_url="socks5h://user:pass@proxy.test:1080",
     )
 
 
-def test_create_irc_socket_closes_raw_socket_if_ssl_wrap_fails(
+def test_create_irc_socket_propagates_connector_failure(
     monkeypatch,
 ) -> None:
-    """Raw socket must be closed when SSL wrapping raises."""
-    import ssl
-
-    raw_socket = Mock()
-    mock_ctx = Mock()
-    mock_ctx.wrap_socket = Mock(side_effect=ssl.SSLError("tls-fail"))
-
+    """Connection failures remain visible to the reconnect loop."""
     monkeypatch.setattr(
-        "chat_downloader.sites.twitch.irc_transport.socket.create_connection",
-        lambda address, timeout: raw_socket,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.twitch.irc_transport.ssl.create_default_context",
-        lambda: mock_ctx,
+        "chat_downloader.sites.twitch.irc_transport.open_proxied_tls_socket",
+        Mock(side_effect=OSError("tls-fail")),
     )
 
-    with contextlib.suppress(ssl.SSLError):
+    with pytest.raises(OSError, match="tls-fail"):
         _create_irc_socket()
-
-    raw_socket.close.assert_called_once_with()

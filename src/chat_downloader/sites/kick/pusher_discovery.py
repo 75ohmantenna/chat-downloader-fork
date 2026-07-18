@@ -67,25 +67,28 @@ class _HttpClient(Protocol):
 class _RequestsHttpClient:
     """Thin ``requests`` adapter used by default discovery."""
 
-    def __init__(self) -> None:
-        self._session = requests.Session()
-        self._session.headers.update(
-            {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "Accept": "text/html",
-            }
-        )
+    def __init__(self, session: requests.Session | None = None) -> None:
+        self._owns_session = session is None
+        self._session = session or requests.Session()
+        if self._owns_session:
+            self._session.headers.update(
+                {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    "Accept": "text/html",
+                }
+            )
 
     def get(self, url: str, *, timeout: float) -> _HttpResponse:
         return cast("_HttpResponse", self._session.get(url, timeout=timeout))
 
     def close(self) -> None:
-        with contextlib.suppress(OSError, RuntimeError):
-            self._session.close()
+        if self._owns_session:
+            with contextlib.suppress(OSError, RuntimeError):
+                self._session.close()
 
 
 def _is_kick_origin(url: str) -> bool:
@@ -190,15 +193,23 @@ def resolve_pusher_key(
     return key
 
 
-def get_pusher_ws_url(*, force_discover: bool = False) -> str:
+def get_pusher_ws_url(
+    *,
+    force_discover: bool = False,
+    http_client: _HttpClient | None = None,
+) -> str:
     """Return the Pusher websocket URL with the current app key.
 
     Args:
         force_discover: If True, force re-discovery of the app key from
             Kick's live JS bundle before building the URL.
+        http_client: Optional HTTP client carrying downloader session settings.
 
     Returns:
         The full Pusher WebSocket URL.
     """
-    key = resolve_pusher_key(force_discover=force_discover)
+    key = resolve_pusher_key(
+        force_discover=force_discover,
+        http_client=http_client,
+    )
     return _PUSHER_WS_TEMPLATE.format(key=key)

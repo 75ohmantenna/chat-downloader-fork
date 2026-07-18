@@ -49,6 +49,74 @@ def test_default_connector_invokes_create_connection(monkeypatch: Any) -> None:
     assert captured == {"url": "wss://example", "timeout": 3.0}
 
 
+def test_default_connector_opens_authenticated_proxy_tunnel(
+    monkeypatch: Any,
+) -> None:
+    captured: dict[str, Any] = {}
+    proxy_socket = MagicMock()
+
+    monkeypatch.setattr(
+        wt,
+        "open_proxied_tls_socket",
+        MagicMock(return_value=proxy_socket),
+    )
+
+    def fake_create(url: str, timeout: float | None, **kwargs: Any) -> str:
+        captured.update(url=url, timeout=timeout, **kwargs)
+        return "connection"
+
+    monkeypatch.setattr(wt, "create_connection", fake_create)
+
+    result = wt._default_connector(
+        "wss://example.test/socket",
+        4.0,
+        proxy_url="socks5h://user:pass@proxy.test:1080",
+    )
+
+    assert result == "connection"
+    wt.open_proxied_tls_socket.assert_called_once_with(
+        "example.test",
+        443,
+        timeout=4.0,
+        proxy_url="socks5h://user:pass@proxy.test:1080",
+    )
+    assert captured["socket"] is proxy_socket
+
+
+def test_default_connector_rejects_non_secure_proxied_url() -> None:
+    with pytest.raises(OSError, match="Unsupported proxied websocket"):
+        wt._default_connector(
+            "ws://example.test/socket",
+            4.0,
+            proxy_url="http://proxy.test:8080",
+        )
+
+
+def test_default_connector_closes_proxy_socket_on_handshake_failure(
+    monkeypatch: Any,
+) -> None:
+    proxy_socket = MagicMock()
+    monkeypatch.setattr(
+        wt,
+        "open_proxied_tls_socket",
+        MagicMock(return_value=proxy_socket),
+    )
+    monkeypatch.setattr(
+        wt,
+        "create_connection",
+        MagicMock(side_effect=WebSocketException("handshake failed")),
+    )
+
+    with pytest.raises(WebSocketException, match="handshake failed"):
+        wt._default_connector(
+            "wss://example.test/socket",
+            None,
+            proxy_url="https://proxy.test:443",
+        )
+
+    proxy_socket.close.assert_called_once_with()
+
+
 def test_connect_failure_raises_connection_error() -> None:
     def boom(_url: str, _timeout: float | None, **_kwargs: Any) -> Any:
         raise WebSocketException

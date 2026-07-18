@@ -5,12 +5,12 @@
 from __future__ import annotations
 
 import socket
-import ssl
 import time
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
+from chat_downloader.sites.proxy import _ProxySocket, open_proxied_tls_socket
 
 from .constants import (
     IRC_ANONYMOUS_NICK,
@@ -40,18 +40,17 @@ _MIN_RECEIVE_TIMEOUT_SECONDS = 1.0
 _CRLF_LENGTH = 2
 
 
-def _create_irc_socket(connect_timeout: float = 10.0) -> ssl.SSLSocket:
+def _create_irc_socket(
+    connect_timeout: float = 10.0,
+    proxy_url: str | None = None,
+) -> _ProxySocket:
     """Create and return the Twitch IRC TLS socket."""
-    raw_socket = socket.create_connection(
-        (IRC_HOST, IRC_PORT),
+    return open_proxied_tls_socket(
+        IRC_HOST,
+        IRC_PORT,
         timeout=connect_timeout,
+        proxy_url=proxy_url,
     )
-    try:
-        context = ssl.create_default_context()
-        return context.wrap_socket(raw_socket, server_hostname=IRC_HOST)
-    except (ssl.SSLError, OSError):
-        raw_socket.close()
-        raise
 
 
 def _maybe_send_keepalive(
@@ -201,9 +200,14 @@ def _is_benign_unmatched_irc_buffer(readbuffer: str) -> bool:
 class TwitchChatIRC:
     """IRC socket connection manager for Twitch chat."""
 
-    def __init__(self, *, connect_timeout: float = 10.0) -> None:
+    def __init__(
+        self,
+        *,
+        connect_timeout: float = 10.0,
+        proxy_url: str | None = None,
+    ) -> None:
         """Open a socket and perform anonymous Twitch IRC setup."""
-        self.socket = _create_irc_socket(connect_timeout)
+        self.socket = _create_irc_socket(connect_timeout, proxy_url)
         self.socket.settimeout(None)
         self.current_channel: str | None = None
         self._closed = False

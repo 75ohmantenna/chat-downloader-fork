@@ -194,23 +194,13 @@ def test_twitch_chat_irc_timeout_and_close_delegate_to_socket() -> None:
 
 
 def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
-    raw_socket = Mock()
     fake_socket = Mock()
     fake_socket.recv.return_value = b"hello world"
 
     monkeypatch.setattr(
-        irc_transport.socket,
-        "create_connection",
-        lambda address, timeout: raw_socket,
-    )
-    monkeypatch.setattr(
-        irc_transport.ssl,
-        "create_default_context",
-        type(
-            "_Context",
-            (),
-            {"wrap_socket": staticmethod(lambda sock, server_hostname: fake_socket)},
-        ),
+        irc_transport,
+        "open_proxied_tls_socket",
+        lambda *args, **kwargs: fake_socket,
     )
 
     irc = irc_transport.TwitchChatIRC()
@@ -662,23 +652,13 @@ def test_twitch_chat_irc_constructor_closes_socket_on_send_raw_oserror(
     monkeypatch,
 ) -> None:
     """SSL socket must be closed if send_raw raises during IRC registration."""
-    raw_socket = Mock()
     fake_socket = Mock()
     fake_socket.sendall.side_effect = OSError("broken pipe")
 
     monkeypatch.setattr(
-        irc_transport.socket,
-        "create_connection",
-        lambda address, timeout: raw_socket,
-    )
-    monkeypatch.setattr(
-        irc_transport.ssl,
-        "create_default_context",
-        type(
-            "_Context",
-            (),
-            {"wrap_socket": staticmethod(lambda sock, server_hostname: fake_socket)},
-        ),
+        irc_transport,
+        "open_proxied_tls_socket",
+        lambda *args, **kwargs: fake_socket,
     )
 
     with pytest.raises(OSError):

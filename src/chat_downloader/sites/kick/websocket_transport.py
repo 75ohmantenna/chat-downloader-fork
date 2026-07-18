@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import json
 import time
+from contextlib import suppress
 from typing import TYPE_CHECKING, Protocol, cast
+from urllib.parse import urlparse
 
 from websocket import (
     WebSocketConnectionClosedException,
@@ -25,6 +27,7 @@ from websocket import (
 )
 
 from chat_downloader.debugging import logger
+from chat_downloader.sites.proxy import open_proxied_tls_socket
 
 from .constants import (
     CHATROOM_CHANNEL_TEMPLATE,
@@ -32,7 +35,7 @@ from .constants import (
     PUSHER_PONG,
     PUSHER_SUBSCRIBE,
 )
-from .pusher_discovery import get_pusher_ws_url
+from .pusher_discovery import _HttpClient, get_pusher_ws_url
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -57,8 +60,7 @@ class _PusherConnector(Protocol):
         url: str,
         timeout: float | None,
         *,
-        http_proxy_host: str | None = None,
-        http_proxy_port: int | None = None,
+        proxy_url: str | None = None,
     ) -> _WebSocketConnection | None: ...
 
 
@@ -70,29 +72,46 @@ def _default_connector(
     url: str,
     timeout: float | None,
     *,
-    http_proxy_host: str | None = None,
-    http_proxy_port: int | None = None,
+    proxy_url: str | None = None,
 ) -> _WebSocketConnection:
     """Open a real Pusher websocket connection.
 
     Args:
         url: The websocket URL to connect to.
         timeout: Socket timeout in seconds, or ``None`` to block.
-        http_proxy_host: Optional HTTP proxy hostname for the connection.
-        http_proxy_port: Optional HTTP proxy port for the connection.
+        proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
 
     Returns:
         A connected ``websocket.WebSocket`` instance.
     """
-    return cast(
-        "_WebSocketConnection",
-        create_connection(
-            url,
-            timeout=timeout,
-            http_proxy_host=http_proxy_host,
-            http_proxy_port=http_proxy_port,
-        ),
-    )
+    socket_timeout = 10.0 if timeout is None else timeout
+    proxy_socket = None
+    if proxy_url is not None:
+        parsed = urlparse(url)
+        if parsed.scheme != "wss" or parsed.hostname is None:
+            msg = f"Unsupported proxied websocket URL: {url!r}"
+            raise OSError(msg)
+        proxy_socket = open_proxied_tls_socket(
+            parsed.hostname,
+            parsed.port or 443,
+            timeout=socket_timeout,
+            proxy_url=proxy_url,
+        )
+    try:
+        connection_options = {"socket": proxy_socket} if proxy_socket else {}
+        return cast(
+            "_WebSocketConnection",
+            create_connection(
+                url,
+                timeout=timeout,
+                **connection_options,
+            ),
+        )
+    except BaseException:
+        if proxy_socket is not None:
+            with suppress(OSError):
+                proxy_socket.close()
+        raise
 
 
 class KickPusherTransport:
@@ -103,25 +122,25 @@ class KickPusherTransport:
         *,
         connector: _PusherConnector | None = None,
         url: str | None = None,
-        http_proxy_host: str | None = None,
-        http_proxy_port: int | None = None,
+        proxy_url: str | None = None,
+        pusher_http_client: _HttpClient | None = None,
     ) -> None:
         """Initialize the transport.
 
         Args:
             connector: Callable that opens a websocket given ``(url, timeout)``
-                and optional ``http_proxy_host``/``http_proxy_port`` kwargs.
+                and an optional ``proxy_url`` keyword argument.
                 Defaults to a real ``websocket-client`` connection; tests inject
                 a fake.
             url: Pusher websocket URL to connect to. Defaults to the auto-
                 discovered Pusher URL from Kick's JS bundle.
-            http_proxy_host: Optional HTTP proxy hostname for the connection.
-            http_proxy_port: Optional HTTP proxy port for the connection.
+            proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
+            pusher_http_client: HTTP client used to discover the Pusher key.
         """
         self._connector = connector or _default_connector
-        self._url = url if url is not None else get_pusher_ws_url()
-        self._http_proxy_host = http_proxy_host
-        self._http_proxy_port = http_proxy_port
+        self._url = url
+        self._proxy_url = proxy_url
+        self._pusher_http_client = pusher_http_client
         self._ws: _WebSocketConnection | None = None
 
     def connect(self, timeout: float | None) -> None:
@@ -135,11 +154,13 @@ class KickPusherTransport:
         """
         self.close()
         try:
+            url = self._url or get_pusher_ws_url(
+                http_client=self._pusher_http_client,
+            )
             websocket = self._connector(
-                self._url,
+                url,
                 timeout,
-                http_proxy_host=self._http_proxy_host,
-                http_proxy_port=self._http_proxy_port,
+                proxy_url=self._proxy_url,
             )
         except (WebSocketException, OSError) as error:
             msg = "Unable to open Kick websocket connection."

@@ -67,6 +67,7 @@ class _DownloaderWithProxy:
     def __init__(self) -> None:
         self.session = MagicMock()
         self.session.proxies = {"https": "http://proxy.example:8080"}
+        self.session.trust_env = False
 
 
 class _DownloaderWithEmptyProxy:
@@ -75,37 +76,30 @@ class _DownloaderWithEmptyProxy:
     def __init__(self) -> None:
         self.session = MagicMock()
         self.session.proxies = {}
+        self.session.trust_env = False
 
 
 # ── _resolve_ws_proxy ─────────────────────────────────────────────────────────
 
 
-def test_resolve_ws_proxy_returns_host_port() -> None:
+def test_resolve_ws_proxy_returns_complete_url() -> None:
     downloader = _DownloaderWithProxy()
-    host, port = live_service._resolve_ws_proxy(downloader)
-    assert host == "proxy.example"
-    assert port == 8080
+    assert live_service._resolve_ws_proxy(downloader) == "http://proxy.example:8080"
 
 
 def test_resolve_ws_proxy_returns_none_for_empty_proxies() -> None:
-    host, port = live_service._resolve_ws_proxy(_DownloaderWithEmptyProxy())
-    assert host is None
-    assert port is None
+    assert live_service._resolve_ws_proxy(_DownloaderWithEmptyProxy()) is None
 
 
 def test_resolve_ws_proxy_returns_none_without_session() -> None:
-    host, port = live_service._resolve_ws_proxy(object())
-    assert host is None
-    assert port is None
+    assert live_service._resolve_ws_proxy(object()) is None
 
 
 def test_resolve_ws_proxy_returns_none_for_empty_url() -> None:
     """Proxies with empty string value yields None."""
     downloader = _DownloaderWithEmptyProxy()
     downloader.session.proxies = {"https": ""}
-    host, port = live_service._resolve_ws_proxy(downloader)
-    assert host is None
-    assert port is None
+    assert live_service._resolve_ws_proxy(downloader) is None
 
 
 # ── _resolve_channel ──────────────────────────────────────────────────────────

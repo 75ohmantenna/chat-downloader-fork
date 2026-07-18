@@ -274,11 +274,11 @@ def test_twitch_irc_connect_uses_10_second_timeout() -> None:
 
     with (
         patch(
-            "chat_downloader.sites.twitch.irc_transport.socket.create_connection",
+            "chat_downloader.sites.proxy.socket.create_connection",
             fake_create_connection,
         ),
         patch(
-            "chat_downloader.sites.twitch.irc_transport.ssl.create_default_context",
+            "chat_downloader.sites.proxy.ssl.create_default_context",
             return_value=FakeContext(),
         ),
     ):
@@ -310,11 +310,11 @@ def test_twitch_irc_connect_resets_to_blocking_after_connect() -> None:
 
     with (
         patch(
-            "chat_downloader.sites.twitch.irc_transport.socket.create_connection",
+            "chat_downloader.sites.proxy.socket.create_connection",
             fake_create_connection,
         ),
         patch(
-            "chat_downloader.sites.twitch.irc_transport.ssl.create_default_context",
+            "chat_downloader.sites.proxy.ssl.create_default_context",
             return_value=FakeContext(),
         ),
     ):
@@ -343,11 +343,11 @@ def test_twitch_irc_set_timeout_delegates_to_socket() -> None:
 
     with (
         patch(
-            "chat_downloader.sites.twitch.irc_transport.socket.create_connection",
+            "chat_downloader.sites.proxy.socket.create_connection",
             fake_create_connection,
         ),
         patch(
-            "chat_downloader.sites.twitch.irc_transport.ssl.create_default_context",
+            "chat_downloader.sites.proxy.ssl.create_default_context",
             return_value=FakeContext(),
         ),
     ):
