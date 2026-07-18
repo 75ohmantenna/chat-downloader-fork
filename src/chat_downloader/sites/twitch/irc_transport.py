@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import codecs
 import socket
 import time
 from contextlib import suppress
@@ -208,6 +209,7 @@ class TwitchChatIRC:
     ) -> None:
         """Open a socket and perform anonymous Twitch IRC setup."""
         self.socket = _create_irc_socket(connect_timeout, proxy_url)
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
         self.socket.settimeout(None)
         self.current_channel: str | None = None
         self._closed = False
@@ -235,9 +237,11 @@ class TwitchChatIRC:
             buffer_size: Maximum number of bytes to receive.
 
         Returns:
-            Decoded UTF-8 string with undecodable bytes ignored.
+            Incrementally decoded UTF-8 text. Valid multibyte characters split
+            across network chunks are preserved; malformed bytes are ignored.
         """
-        return self.socket.recv(buffer_size).decode("utf-8", "ignore")
+        data = self.socket.recv(buffer_size)
+        return self._decoder.decode(data, final=not data)
 
     def join_channel(self, channel_name: str) -> None:
         """Join the given Twitch IRC channel if not already joined.

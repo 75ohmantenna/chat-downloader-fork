@@ -220,6 +220,24 @@ def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
     assert irc.recv(32) == "hello world"
 
 
+def test_twitch_chat_irc_preserves_utf8_split_across_recv_chunks(
+    monkeypatch,
+) -> None:
+    fake_socket = Mock()
+    encoded = "hello 😀 world".encode()
+    fake_socket.recv.side_effect = [encoded[:8], encoded[8:]]
+    monkeypatch.setattr(
+        irc_transport,
+        "open_proxied_tls_socket",
+        lambda *_args, **_kwargs: fake_socket,
+    )
+    irc = irc_transport.TwitchChatIRC()
+
+    received = irc.recv(1024) + irc.recv(1024)
+
+    assert received == "hello 😀 world"
+
+
 @pytest.mark.parametrize(
     ("readbuffer", "expected"),
     [
