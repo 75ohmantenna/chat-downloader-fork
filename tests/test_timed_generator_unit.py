@@ -159,6 +159,10 @@ def test_timeout_reason_uses_worker_completion_time_over_expiry_events() -> None
     tg._timeout_expired.set()
     tg._inactivity_expired.set()
 
+    assert tg._timeout_reason() == "timeout"
+    tg._timeout_expired.clear()
+    assert tg._timeout_reason() == "inactivity"
+    tg._timeout_expired.set()
     assert tg._timeout_reason(19.0) is None
     assert tg._timeout_reason(20.0) == "timeout"
     tg.close()
