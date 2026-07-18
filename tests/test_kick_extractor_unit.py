@@ -52,17 +52,47 @@ def test_site_metadata() -> None:
 
 
 def test_downloader_close_releases_both_http_sessions(monkeypatch: Any) -> None:
-    kick_session = MagicMock()
-    monkeypatch.setattr(extractor, "_get_kick_session", lambda **_kwargs: kick_session)
+    kick_client = MagicMock()
+    monkeypatch.setattr(extractor, "KickApiClient", lambda **_kwargs: kick_client)
     downloader = KickChatDownloader()
     base_session = downloader.session
 
     downloader.close()
     downloader.close()
 
-    kick_session.close.assert_called_once()
+    kick_client.close.assert_called_once()
     assert downloader._session_closed is True
     assert base_session is downloader.session
+
+
+def test_client_construction_failure_closes_base_session(monkeypatch: Any) -> None:
+    closed: list[Any] = []
+
+    def fail_client(**_kwargs: Any) -> Any:
+        raise RuntimeError("client setup failed")
+
+    def track_close(owner: Any) -> None:
+        closed.append(owner)
+
+    monkeypatch.setattr(extractor, "KickApiClient", fail_client)
+    monkeypatch.setattr(
+        extractor.BaseChatDownloader,
+        "close",
+        track_close,
+    )
+
+    with pytest.raises(RuntimeError, match="client setup failed"):
+        KickChatDownloader()
+
+    assert len(closed) == 1
+
+
+def test_closed_downloader_rejects_api_client_access() -> None:
+    downloader = KickChatDownloader()
+    downloader.close()
+
+    with pytest.raises(RuntimeError, match="closed"):
+        _ = downloader._kick_client
 
 
 def test_get_chat_by_channel_routes_to_builder(monkeypatch: Any) -> None:
@@ -94,3 +124,36 @@ def test_internal_router_extracts_username(monkeypatch: Any) -> None:
     assert match is not None
     downloader._get_chat_by_channel(match[1], {"url": "https://kick.com/somechannel"})
     assert captured["username"] == "somechannel"
+
+
+def test_get_chat_by_video_passes_owned_client_to_builder(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_build(
+        username: str,
+        video_id: str,
+        request: ChatRequest,
+        *,
+        api_client: Any,
+    ) -> str:
+        captured.update(
+            username=username,
+            video_id=video_id,
+            request=request,
+            api_client=api_client,
+        )
+        return "VOD"
+
+    monkeypatch.setattr(extractor, "build_vod_chat", fake_build)
+    downloader = KickChatDownloader()
+
+    result = downloader.get_chat_by_video(
+        "creator",
+        "video-id",
+        {"url": "https://kick.com/creator/videos/video-id"},
+    )
+
+    assert result == "VOD"
+    assert captured["username"] == "creator"
+    assert captured["video_id"] == "video-id"
+    assert captured["api_client"] is downloader._kick_client

@@ -55,7 +55,7 @@ class FakeResponse:
 
 
 class FakeKickSession:
-    """Stand-in for the session returned by ``_get_kick_session``.
+    """Stand-in for the session returned by ``create_kick_session``.
 
     Mimics ``requests.Session.get()`` by returning :class:`FakeResponse`
     objects and tracks requested URLs for test assertions.
@@ -64,13 +64,19 @@ class FakeKickSession:
     def __init__(self, responses: list[Any] | None = None) -> None:
         self._responses = list(responses or [])
         self.requested_urls: list[str] = []
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.close_calls = 0
 
     def get(self, url: str, **kwargs: Any) -> Any:
         self.requested_urls.append(url)
+        self.calls.append((url, kwargs))
         result = self._responses.pop(0)
         if isinstance(result, Exception):
             raise result
         return result
+
+    def close(self) -> None:
+        self.close_calls += 1
 
 
 class FakeDownloader:
@@ -88,6 +94,16 @@ class FakeDownloader:
         self._responses = list(responses or [])
         self.requested_urls: list[str] = []
         self._http_timeout = (connect_timeout, read_timeout)
+        self._kick_api_client: Any | None = None
+
+    @property
+    def _kick_client(self) -> Any:
+        """Lazily create the provider client so tests can patch its factory."""
+        if self._kick_api_client is None:
+            from chat_downloader.sites.kick.api_client import KickApiClient
+
+            self._kick_api_client = KickApiClient(timeout=self._http_timeout)
+        return self._kick_api_client
 
     def _session_get(self, url: str, **_kwargs: Any) -> Any:
         self.requested_urls.append(url)

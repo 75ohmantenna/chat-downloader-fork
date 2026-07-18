@@ -104,12 +104,11 @@ The Kick flow depends on the target type.
 
 ### Transport and API access
 
-- `api_client.py`: Cloudflare-aware HTTP client for the `api/v2` JSON
-  endpoints served from `kick.com`. This is the unauthenticated web/API path,
-  not Kick's official OAuth-scoped Public API at `api.kick.com/public/v1`.
-  Owns the lazy session singleton (`_get_kick_session`), challenge detection,
-  not-found handling, and transient-error classification. Does no content
-  parsing.
+- `api_client.py`: downloader-owned HTTP client for the unauthenticated
+  `kick.com/api/v1` and `api/v2` JSON endpoints. It owns endpoint status,
+  challenge, JSON, and object-shape classification but does no chat parsing.
+- `http_session.py`: constructs the client's isolated curl-cffi,
+  cloudscraper, or requests transport and defines its narrow session Protocol.
 - `websocket_transport.py`: the *only* module that imports `websocket-client`.
   Exposes a small parsing-free interface (`connect` / `subscribe` / `recv` /
   `send_pong` / `close`) plus the `read_frames` generator. The connector is
@@ -188,10 +187,10 @@ present and `"idle"` otherwise.
 ### Preloaded history
 
 Recent messages are fetched from `api/v2/channels/{id}/messages` before the
-WebSocket opens and emitted first. This fetch is best-effort: any
-`KickServerError` is swallowed and yields an empty list, since the live feed is
-the primary source. Preloaded ids seed the dedup cache so they are not repeated
-when they also arrive over the socket.
+WebSocket opens and emitted first. This fetch is best-effort: expected provider,
+challenge, and transport errors yield an empty list, since the live feed is the
+primary source. Process interrupts still propagate. Preloaded ids seed the
+dedup cache so they are not repeated when they also arrive over the socket.
 
 ### Pusher transport
 
@@ -263,8 +262,8 @@ events.
 
 ## Cloudflare Dependency
 
-The REST endpoints sit behind Cloudflare. `api_client.py` uses a three-tier
-session strategy:
+The REST endpoints sit behind Cloudflare. `http_session.py` uses a three-tier
+session strategy for the client-owned transport:
 
 1. **``curl-cffi`` with Chrome 124 TLS impersonation** — avoids Cloudflare
    challenges at the TLS-fingerprint level before they are even presented.
@@ -281,7 +280,7 @@ endpoint with better IP reputation).
 
 Status mapping in `api_client.py::_check_status`:
 
-- `404` → `UserNotFound`
+- channel `404` → `UserNotFound`; VOD/history `404` → terminal `KickError`
 - `403` / challenge body → `CaptchaChallengeRequired`
 - `429` / `5xx` → `KickServerError` (transient, retried)
 - other non-`200` → `KickError`
@@ -301,12 +300,13 @@ The Kick stack is most sensitive to changes in:
 
 When debugging Kick breakage, inspect modules in this order:
 
-1. `api_client.py` — REST status mapping, challenge detection, session setup
-2. `constants.py` — endpoints, `resolve_pusher_key`, event/group maps
-3. `live_service.py` or `replay_service.py` — service-layer orchestration
-4. `websocket_transport.py` — Pusher framing, subscribe, reconnect signals
-5. `parsing/events.py` — event-name resolution and dispatch
-6. `parsing/messages.py` and the per-event parsers — field assembly
+1. `api_client.py` — REST status mapping and challenge detection
+2. `http_session.py` — optional backend selection and session setup
+3. `constants.py` — endpoints, `resolve_pusher_key`, event/group maps
+4. `live_service.py` or `replay_service.py` — service-layer orchestration
+5. `websocket_transport.py` — Pusher framing, subscribe, reconnect signals
+6. `parsing/events.py` — event-name resolution and dispatch
+7. `parsing/messages.py` and the per-event parsers — field assembly
 
 ## Testing
 

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from typing import Any
 
 import pytest
 
 from chat_downloader.errors import CaptchaChallengeRequired, UserNotFound
 from chat_downloader.sites.kick import api_client
+from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.errors import KickError, KickServerError
 from tests.kick_helpers import (
     FakeKickSession,
@@ -17,77 +18,105 @@ from tests.kick_helpers import (
 )
 
 
-def test_fetch_channel_success() -> None:
+def _client(
+    responses: list[Any],
+    *,
+    timeout: tuple[float, float] = (10.0, 30.0),
+) -> tuple[KickApiClient, FakeKickSession]:
+    session = FakeKickSession(responses)
+    return KickApiClient(session=session, timeout=timeout), session
+
+
+def test_fetch_channel_success_uses_owned_session_and_timeout() -> None:
     payload = load_fixture("channel_live.json")
-    session = FakeKickSession([FakeResponse(200, payload)])
-    with patch.object(api_client, "_get_kick_session", return_value=session):
-        data = api_client.fetch_channel("examplechannel")
+    client, session = _client([FakeResponse(200, payload)], timeout=(3.0, 7.0))
+
+    data = client.fetch_channel("examplechannel")
+
     assert data["id"] == 12345
-    assert session.requested_urls == ["https://kick.com/api/v2/channels/examplechannel"]
+    assert session.calls == [
+        (
+            "https://kick.com/api/v2/channels/examplechannel",
+            {"params": None, "timeout": (3.0, 7.0)},
+        )
+    ]
 
 
-def test_fetch_channel_closes_internally_owned_session() -> None:
-    payload = load_fixture("channel_live.json")
+def test_client_copies_proxy_and_header_configuration(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+    session = FakeKickSession([])
 
-    class CloseableSession(FakeKickSession):
-        def __init__(self) -> None:
-            super().__init__([FakeResponse(200, payload)])
-            self.closed = False
+    def fake_create(**kwargs: Any) -> FakeKickSession:
+        captured.update(kwargs)
+        return session
 
-        def close(self) -> None:
-            self.closed = True
+    monkeypatch.setattr(api_client, "create_kick_session", fake_create)
+    proxy = {"https": "http://proxy.example:8080"}
+    headers = {"Authorization": "secret"}
+    KickApiClient(proxy=proxy, extra_headers=headers)
+    proxy["https"] = "changed"
+    headers["Authorization"] = "changed"
 
-    session = CloseableSession()
-    with patch.object(api_client, "_get_kick_session", return_value=session):
-        api_client.fetch_channel("examplechannel")
+    assert captured == {
+        "proxy": {"https": "http://proxy.example:8080"},
+        "extra_headers": {"Authorization": "secret"},
+    }
 
-    assert session.closed is True
+
+def test_client_close_is_idempotent_and_use_after_close_fails() -> None:
+    client, session = _client([])
+
+    client.close()
+    client.close()
+
+    assert session.close_calls == 1
+    with pytest.raises(RuntimeError, match="closed"):
+        client.fetch_channel("examplechannel")
 
 
-def test_close_kick_session_logs_known_close_error(caplog) -> None:
+def test_client_close_logs_known_close_error(caplog: Any) -> None:
     class BrokenSession:
+        @staticmethod
+        def get(_url: str, **_kwargs: object) -> Any:
+            raise AssertionError("not called")
+
         @staticmethod
         def close() -> None:
             raise OSError("close failed")
 
     caplog.set_level("DEBUG", logger=api_client.logger.name)
-    api_client._close_kick_session(BrokenSession())
+    KickApiClient(session=BrokenSession()).close()  # type: ignore[arg-type]
 
     assert "close failed" in caplog.text
 
 
 def test_fetch_channel_not_found() -> None:
-    session = FakeKickSession([FakeResponse(404, {"message": "not found"})])
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(UserNotFound),
-    ):
-        api_client.fetch_channel("ghost")
+    client, _ = _client([FakeResponse(404, {"message": "not found"})])
+
+    with pytest.raises(UserNotFound):
+        client.fetch_channel("ghost")
 
 
-def test_fetch_channel_forbidden_is_challenge() -> None:
-    session = FakeKickSession([FakeResponse(403, None, text="denied")])
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(CaptchaChallengeRequired),
-    ):
-        api_client.fetch_channel("blocked")
-
-
-def test_fetch_channel_cloudflare_html_is_challenge() -> None:
+@pytest.mark.parametrize("status", [403, 503])
+def test_challenge_body_is_detected_regardless_of_status(status: int) -> None:
     html = load_text_fixture("cloudflare_challenge.html")
-    session = FakeKickSession(
-        [FakeResponse(200, malformed=True, text=html, content_type="text/html")]
+    client, _ = _client(
+        [FakeResponse(status, text=html, content_type="text/html", malformed=True)]
     )
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(CaptchaChallengeRequired),
-    ):
-        api_client.fetch_channel("blocked")
+
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_channel("blocked")
 
 
-def test_fetch_channel_html_without_markers_is_challenge() -> None:
-    session = FakeKickSession(
+def test_plain_forbidden_is_challenge() -> None:
+    client, _ = _client([FakeResponse(403, None, text="denied")])
+
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_channel("blocked")
+
+
+def test_html_without_markers_is_challenge() -> None:
+    client, _ = _client(
         [
             FakeResponse(
                 200,
@@ -97,86 +126,93 @@ def test_fetch_channel_html_without_markers_is_challenge() -> None:
             )
         ]
     )
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(CaptchaChallengeRequired),
-    ):
-        api_client.fetch_channel("blocked")
+
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_channel("blocked")
 
 
-def test_fetch_channel_malformed_json_is_transient() -> None:
-    session = FakeKickSession(
+def test_malformed_json_is_transient() -> None:
+    client, _ = _client(
         [
             FakeResponse(
-                200, malformed=True, text="garbage", content_type="application/json"
+                200,
+                malformed=True,
+                text="garbage",
+                content_type="application/json",
             )
         ]
     )
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(KickServerError),
-    ):
-        api_client.fetch_channel("x")
+
+    with pytest.raises(KickServerError, match="malformed JSON"):
+        client.fetch_channel("x")
 
 
 @pytest.mark.parametrize("status", [429, 500, 503])
-def test_fetch_channel_transient_status(status: int) -> None:
-    session = FakeKickSession([FakeResponse(status, {"err": True})])
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(KickServerError),
-    ):
-        api_client.fetch_channel("x")
+def test_transient_statuses_are_retryable(status: int) -> None:
+    client, _ = _client([FakeResponse(status, {"err": True})])
+
+    with pytest.raises(KickServerError, match=str(status)):
+        client.fetch_channel("x")
 
 
-def test_fetch_channel_unexpected_status() -> None:
-    session = FakeKickSession([FakeResponse(418, {"err": True})])
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(KickError),
-    ):
-        api_client.fetch_channel("x")
+def test_unexpected_status_is_terminal() -> None:
+    client, _ = _client([FakeResponse(418, {"err": True})])
+
+    with pytest.raises(KickError, match="418"):
+        client.fetch_channel("x")
 
 
-def test_fetch_channel_non_object_payload() -> None:
-    session = FakeKickSession([FakeResponse(200, ["not", "an", "object"])])
-    with (
-        patch.object(api_client, "_get_kick_session", return_value=session),
-        pytest.raises(KickServerError),
-    ):
-        api_client.fetch_channel("x")
+def test_non_object_payload_is_transient() -> None:
+    client, _ = _client([FakeResponse(200, ["not", "an", "object"])])
 
-
-def test_fetch_preloaded_messages_success() -> None:
-    payload = load_fixture("preloaded_messages.json")
-    session = FakeKickSession([FakeResponse(200, payload)])
-    with patch.object(api_client, "_get_kick_session", return_value=session):
-        messages = api_client.fetch_preloaded_messages("12345", "examplechannel")
-    assert [m["id"] for m in messages] == ["preloaded-2", "preloaded-1"]
-    assert session.requested_urls == ["https://kick.com/api/v2/channels/12345/messages"]
-
-
-def test_fetch_preloaded_messages_transient_is_empty() -> None:
-    session = FakeKickSession([FakeResponse(500, {"err": True})])
-    with patch.object(api_client, "_get_kick_session", return_value=session):
-        assert api_client.fetch_preloaded_messages("1", "x") == []
-
-
-def test_fetch_preloaded_messages_non_dict_is_empty() -> None:
-    session = FakeKickSession([FakeResponse(200, ["not", "a", "dict"])])
-    with patch.object(api_client, "_get_kick_session", return_value=session):
-        assert api_client.fetch_preloaded_messages("1", "x") == []
-
-
-def test_fetch_preloaded_messages_missing_messages_is_empty() -> None:
-    session = FakeKickSession([FakeResponse(200, {"data": {}})])
-    with patch.object(api_client, "_get_kick_session", return_value=session):
-        assert api_client.fetch_preloaded_messages("1", "x") == []
+    with pytest.raises(KickServerError, match="JSON object"):
+        client.fetch_channel("x")
 
 
 def test_fetch_preloaded_messages_filters_non_dict_entries() -> None:
     payload = {"data": {"messages": [{"id": "a"}, "bad", 7]}}
-    session = FakeKickSession([FakeResponse(200, payload)])
-    with patch.object(api_client, "_get_kick_session", return_value=session):
-        messages = api_client.fetch_preloaded_messages("1", "x")
-    assert messages == [{"id": "a"}]
+    client, _ = _client([FakeResponse(200, payload)])
+
+    assert client.fetch_preloaded_messages("1", "x") == [{"id": "a"}]
+
+
+def test_fetch_preloaded_messages_missing_messages_is_empty() -> None:
+    client, _ = _client([FakeResponse(200, {"data": {}})])
+
+    assert client.fetch_preloaded_messages("1", "x") == []
+
+
+def test_fetch_preloaded_messages_does_not_hide_required_response_errors() -> None:
+    client, _ = _client([FakeResponse(500, {"err": True})])
+
+    with pytest.raises(KickServerError):
+        client.fetch_preloaded_messages("1", "x")
+
+
+def test_fetch_video_metadata_uses_endpoint_specific_not_found_error() -> None:
+    client, _ = _client([FakeResponse(404, {})])
+
+    with pytest.raises(KickError, match="video not found"):
+        client.fetch_video_metadata("vod-1")
+
+
+def test_fetch_message_page_passes_non_empty_cursor_only() -> None:
+    client, session = _client(
+        [
+            FakeResponse(200, {"data": {}}),
+            FakeResponse(200, {"data": {}}),
+        ]
+    )
+
+    client.fetch_message_page("123", "next")
+    client.fetch_message_page("123", "")
+
+    assert session.calls[0][1]["params"] == {"cursor": "next"}
+    assert session.calls[1][1]["params"] is None
+
+
+def test_fetch_message_page_forbidden_is_challenge() -> None:
+    client, _ = _client([FakeResponse(403, {})])
+
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_message_page("123")

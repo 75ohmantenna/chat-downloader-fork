@@ -130,8 +130,8 @@ BASELINE: dict[str, int] = {
     # Round-15: transport/service Callable[...,Any] seams narrowed to Protocols
     # (websocket_transport connector, live_service frame_iterator, twitch live
     # irc_factory/message_generator, replay fetch_messages/transport signatures).
-    # api_client.py retains Any from the curl-cffi/cloudscraper session backend
-    # (the multi-tier impersonation session is typed Any).
+    # http_session.py retains Any at the optional curl-cffi/cloudscraper
+    # construction boundary; KickApiClient itself uses a narrow Protocol.
     # Residuals per Round-11/13/14/15 taxonomy: assembled-output dicts.
     # emotes.py: inputs already typed (content: str); all Any are output accumulators.
     # extractor.py: params: ChatRequest|dict[str,Any] x4 frozen public API; ClassVar
@@ -140,13 +140,13 @@ BASELINE: dict[str, int] = {
     "sites/kick/websocket_transport.py": 0,
     "sites/kick/live_service.py": 3,
     "sites/kick/parsing/events.py": 3,
-    "sites/kick/api_client.py": 6,
+    "sites/kick/http_session.py": 4,
     "sites/kick/parsing/emotes.py": 4,
     "sites/kick/parsing/subscriptions.py": 9,
     "sites/kick/parsing/moderation.py": 13,
     "sites/kick/parsing/pins.py": 8,
     "sites/kick/parsing/hosts.py": 5,
-    "sites/kick/replay_service.py": 5,
+    "sites/kick/replay_service.py": 4,
     "sites/kick/extractor.py": 7,
 }
 

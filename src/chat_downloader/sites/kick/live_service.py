@@ -14,18 +14,17 @@ streams messages regardless of stream status.
 
 from __future__ import annotations
 
-from json import JSONDecodeError
 from typing import TYPE_CHECKING, Any
 
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log, logger
+from chat_downloader.errors import CaptchaChallengeRequired
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 
-from .api_client import fetch_channel, fetch_preloaded_messages
 from .constants import MESSAGE_GROUPS, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.events import dispatch_event
@@ -45,28 +44,6 @@ if TYPE_CHECKING:
     from .extractor import KickChatDownloader
 
 _KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
-
-
-def _resolve_proxy(
-    downloader: object,
-) -> dict[str, str] | None:
-    """Extract proxy mapping from a downloader's session if configured.
-
-    Args:
-        downloader: A downloader instance with an optional ``session`` attribute
-            carrying a ``proxies`` dict.
-
-    Returns:
-        A proxy dict for requests/cloudscraper, or ``None`` when no non-empty
-        proxy config is available.
-    """
-    session = getattr(downloader, "session", None)
-    proxies: dict[str, str] | None = (
-        getattr(session, "proxies", None) if session else None
-    )
-    if proxies and any(proxies.values()):
-        return dict(proxies)
-    return None
 
 
 def _fetch_channel_with_retry(
@@ -89,14 +66,8 @@ def _fetch_channel_with_retry(
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            proxy = _resolve_proxy(downloader)
-            return fetch_channel(
-                username,
-                proxy=proxy,
-                session=getattr(downloader, "_kick_api_session", None),
-                timeout=downloader._http_timeout,
-            )
-        except (KickServerError, RequestException, JSONDecodeError, OSError) as error:
+            return downloader._kick_client.fetch_channel(username)
+        except (KickServerError, RequestException, OSError) as error:
             downloader.retry(attempt_number, error=error, request=request)
     msg = "unreachable: retry should have raised RetriesExceeded"
     raise RuntimeError(msg)
@@ -276,13 +247,19 @@ def _iter_preloaded_messages(
     emit: Callable[[JSONDict], bool],
 ) -> Generator[JSONDict, None, None]:
     """Yield recent HTTP history not already emitted by the live stream."""
-    preloaded = fetch_preloaded_messages(
-        channel_id,
-        username,
-        proxy=_resolve_proxy(downloader),
-        session=getattr(downloader, "_kick_api_session", None),
-        timeout=downloader._http_timeout,
-    )
+    try:
+        preloaded = downloader._kick_client.fetch_preloaded_messages(
+            channel_id,
+            username,
+        )
+    except (
+        CaptchaChallengeRequired,
+        KickError,
+        RequestException,
+        OSError,
+    ) as error:
+        logger.debug("Kick preloaded-message fetch failed (non-fatal): %s", error)
+        return
     for message in reversed(parse_preloaded_messages(preloaded)):
         if emit(message):
             yield message

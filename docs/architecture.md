@@ -57,7 +57,7 @@ For behavior-preservation coverage see
 |-----------|----------------|-----------------------|------------|
 | Shared HTTP (YouTube and Twitch) | `sites/session.py` injects configured connect/read timeouts into every request | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; closed cached site sessions are replaced rather than reused |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, and a 180-second idle watchdog | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
-| Kick API HTTP | `kick/api_client.py` creates one isolated Cloudflare-capable session per `KickChatDownloader` | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures | `KickChatDownloader.close()` closes both the Kick API and base sessions |
+| Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
 | Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, then deduplicates a recent-history backfill | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
 
 `Chat.close()` propagates closure through message-limit and timeout wrappers to
@@ -193,7 +193,8 @@ memory bounded independently of the number of fetched messages.
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
 | `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with dedup and reconnect |
-| `api_client.py` | Downloader-owned Cloudflare-bypass HTTP client for Kick's unauthenticated `kick.com/api/v2` JSON endpoints; separate from the official OAuth-scoped `api.kick.com/public/v1` API |
+| `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, and VOD endpoints |
+| `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
 | `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
 | `errors.py` | `KickError`, `KickServerError` |

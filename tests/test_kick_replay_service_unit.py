@@ -9,8 +9,7 @@ on the pure-logic helper functions that are testable offline.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from json import JSONDecodeError
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import Mock
 
 import pytest
@@ -19,9 +18,6 @@ from chat_downloader.errors import RetriesExceeded
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import KickError, replay_service
 from chat_downloader.sites.kick.errors import KickServerError
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 
 def test_fetch_with_retry_recovers_from_temporary_failure() -> None:
@@ -298,14 +294,11 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
     )
     monkeypatch.setattr(
         replay_service,
-        "_fetch_message_page",
-        Mock(side_effect=pages),
-    )
-    monkeypatch.setattr(
-        replay_service,
         "_classify_message",
         lambda raw, _start, _end: (raw, False),
     )
+    api_client = Mock()
+    api_client.fetch_message_page.side_effect = pages
 
     messages = list(
         replay_service._iter_vod_messages(
@@ -313,6 +306,7 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
             datetime(2026, 1, 1, tzinfo=UTC),
             datetime(2026, 1, 2, tzinfo=UTC),
             ChatRequest(max_attempts=1, interruptible_retry=False),
+            api_client=api_client,
         )
     )
 
@@ -323,182 +317,6 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
         "newest-2",
     ]
     assert created_spools[0]._rolled is True
-
-
-class _FakeResponse:
-    """Stub HTTP response returned by ``_FakeKickSession``."""
-
-    def __init__(
-        self,
-        status_code: int,
-        payload: Any = None,
-        *,
-        json_error: bool = False,
-    ) -> None:
-        self.status_code = status_code
-        self._payload = payload
-        self.text = ""
-        self.ok = 200 <= status_code < 300
-        self._json_error = json_error
-
-    def json(self) -> Any:
-        if self._json_error:
-            raise JSONDecodeError("bad json", "", 0)
-        return self._payload
-
-
-class _FakeKickSession:
-    """In-memory Kick API session for testing replay service HTTP paths."""
-
-    def __init__(
-        self,
-        handler: Callable[[str], Any],
-    ) -> None:
-        self.handler = handler
-        self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.closed = False
-
-    def get(self, url: str, **kwargs: Any) -> Any:
-        self.calls.append((url, kwargs))
-        return self.handler(url)
-
-    def close(self) -> None:
-        self.closed = True
-
-
-def _video_url(video_id: str) -> str:
-    return f"https://kick.com/api/v1/video/{video_id}"
-
-
-def _messages_url(channel_id: str) -> str:
-    return f"https://kick.com/api/v2/channels/{channel_id}/messages"
-
-
-class TestFetchVideoMetadata:
-    """Offline tests for ``_fetch_video_metadata``."""
-
-    def test_returns_metadata_on_success(self) -> None:
-        response = _FakeResponse(200, {"id": "vod-1"})
-        session = _FakeKickSession(lambda url: response)
-
-        data = replay_service._fetch_video_metadata(
-            "vod-1",
-            session=session,
-        )
-
-        assert data == {"id": "vod-1"}
-        assert session.calls[0][0] == _video_url("vod-1")
-
-    def test_404_raises_kick_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(404, {}))
-
-        with pytest.raises(KickError, match="not found"):
-            replay_service._fetch_video_metadata("vod-1", session=session)
-
-    def test_429_raises_kick_server_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(429, {}))
-
-        with pytest.raises(KickServerError, match="429"):
-            replay_service._fetch_video_metadata("vod-1", session=session)
-
-    def test_5xx_raises_kick_server_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(500, {}))
-
-        with pytest.raises(KickServerError, match="500"):
-            replay_service._fetch_video_metadata("vod-1", session=session)
-
-    def test_other_error_raises_kick_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(400, {}))
-
-        with pytest.raises(KickError, match="400"):
-            replay_service._fetch_video_metadata("vod-1", session=session)
-
-    def test_non_object_response_raises_kick_server_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(200, ["bad"]))
-
-        with pytest.raises(KickServerError, match="JSON object"):
-            replay_service._fetch_video_metadata("vod-1", session=session)
-
-    def test_creates_and_closes_session_when_none_provided(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        fake_session = _FakeKickSession(lambda url: _FakeResponse(200, {"id": "vod-1"}))
-        monkeypatch.setattr(
-            replay_service,
-            "_get_kick_session",
-            lambda **kwargs: fake_session,
-        )
-
-        data = replay_service._fetch_video_metadata("vod-1", session=None)
-
-        assert data == {"id": "vod-1"}
-        assert fake_session.closed
-
-
-class TestFetchMessagePage:
-    """Offline tests for ``_fetch_message_page``."""
-
-    def test_returns_page_data(self) -> None:
-        page = {"data": {"messages": [], "cursor": "next"}}
-        session = _FakeKickSession(lambda url: _FakeResponse(200, page))
-
-        data = replay_service._fetch_message_page(
-            "123",
-            "cursor",
-            session=session,
-        )
-
-        assert data == page
-        assert _messages_url("123") in session.calls[0][0]
-        assert session.calls[0][1].get("params") == {"cursor": "cursor"}
-
-    def test_malformed_json_raises_kick_server_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(200, json_error=True))
-
-        with pytest.raises(KickServerError, match="malformed JSON"):
-            replay_service._fetch_message_page("123", session=session)
-
-    def test_429_raises_kick_server_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(429, {}))
-
-        with pytest.raises(KickServerError, match="429"):
-            replay_service._fetch_message_page("123", session=session)
-
-    def test_5xx_raises_kick_server_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(500, {}))
-
-        with pytest.raises(KickServerError, match="500"):
-            replay_service._fetch_message_page("123", session=session)
-
-    def test_non_server_error_raises_kick_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(403, {}))
-
-        with pytest.raises(KickError, match="403"):
-            replay_service._fetch_message_page("123", session=session)
-
-    def test_non_object_response_raises_kick_server_error(self) -> None:
-        session = _FakeKickSession(lambda url: _FakeResponse(200, "bad"))
-
-        with pytest.raises(KickServerError, match="non-object"):
-            replay_service._fetch_message_page("123", session=session)
-
-    def test_creates_and_closes_session_when_none_provided(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        page = {"data": {"messages": [], "cursor": None}}
-        fake_session = _FakeKickSession(lambda url: _FakeResponse(200, page))
-        monkeypatch.setattr(
-            replay_service,
-            "_get_kick_session",
-            lambda **kwargs: fake_session,
-        )
-
-        data = replay_service._fetch_message_page("123", session=None)
-
-        assert data == page
-        assert fake_session.closed
 
 
 class TestGetVodChat:
@@ -537,19 +355,16 @@ class TestGetVodChat:
             }
         }
 
-        def handler(url: str) -> _FakeResponse:
-            if "/video/" in url:
-                return _FakeResponse(200, video_meta)
-            return _FakeResponse(200, page)
-
-        session = _FakeKickSession(handler)
+        api_client = Mock()
+        api_client.fetch_video_metadata.return_value = video_meta
+        api_client.fetch_message_page.return_value = page
         request = ChatRequest(max_attempts=1, interruptible_retry=False)
 
         chat = replay_service.get_vod_chat(
             "testuser",
             "vid-1",
             request,
-            session=session,
+            api_client=api_client,
         )
 
         assert chat.title == "Test VOD"
@@ -574,14 +389,16 @@ def _make_raw_msg(msg_id: str, created_at: str) -> dict[str, Any]:
     }
 
 
-def _iter_session_for_page(page: dict[str, Any]) -> _FakeKickSession:
-    """Return a fake session that always returns *page* for message fetches."""
-    return _FakeKickSession(lambda url: _FakeResponse(200, page))
+def _client_for_page(page: dict[str, Any]) -> Mock:
+    """Return a fake client that always returns *page* for message fetches."""
+    client = Mock()
+    client.fetch_message_page.return_value = page
+    return client
 
 
 def test_iter_vod_messages_stops_on_empty_page() -> None:
     page = {"data": {"messages": [], "cursor": None}}
-    session = _iter_session_for_page(page)
+    api_client = _client_for_page(page)
     request = ChatRequest(max_attempts=1, interruptible_retry=False)
 
     messages = list(
@@ -590,7 +407,7 @@ def test_iter_vod_messages_stops_on_empty_page() -> None:
             datetime(2026, 1, 1, tzinfo=UTC),
             datetime(2026, 1, 2, tzinfo=UTC),
             request,
-            session=session,
+            api_client=api_client,
         )
     )
 
@@ -611,7 +428,7 @@ def test_iter_vod_messages_classifies_and_stops_at_window_edge() -> None:
             "cursor": None,
         }
     }
-    session = _iter_session_for_page(page)
+    api_client = _client_for_page(page)
     request = ChatRequest(max_attempts=1, interruptible_retry=False)
 
     messages = list(
@@ -620,7 +437,7 @@ def test_iter_vod_messages_classifies_and_stops_at_window_edge() -> None:
             start,
             end,
             request,
-            session=session,
+            api_client=api_client,
         )
     )
 
@@ -642,7 +459,7 @@ def test_iter_vod_messages_respects_max_messages() -> None:
             "cursor": None,
         }
     }
-    session = _iter_session_for_page(page)
+    api_client = _client_for_page(page)
     request = ChatRequest(
         max_attempts=1,
         interruptible_retry=False,
@@ -655,7 +472,7 @@ def test_iter_vod_messages_respects_max_messages() -> None:
             start,
             end,
             request,
-            session=session,
+            api_client=api_client,
         )
     )
 

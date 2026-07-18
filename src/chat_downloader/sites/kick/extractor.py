@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.sites.base import BaseChatDownloader
 
-from .api_client import _close_kick_session, _get_kick_session
+from .api_client import KickApiClient
 from .constants import VALID_URLS
 from .errors import KickError
 from .live_service import get_chat_by_channel as build_channel_chat
@@ -63,18 +63,32 @@ class KickChatDownloader(BaseChatDownloader):
         """Initialize base HTTP state and an isolated Kick API session."""
         super().__init__(**kwargs)
         proxies = dict(self.session.proxies) if self.session.proxies else None
-        self._kick_api_session = _get_kick_session(
-            proxy=proxies,
-            extra_headers=dict(self.session.headers),
-        )
+        self._kick_api_client: KickApiClient | None = None
+        try:
+            self._kick_api_client = KickApiClient(
+                proxy=proxies,
+                extra_headers=dict(self.session.headers),
+                timeout=self._http_timeout,
+            )
+        except BaseException:
+            super().close()
+            raise
+
+    @property
+    def _kick_client(self) -> KickApiClient:
+        """Return the owned client while the downloader is open."""
+        if self._kick_api_client is None:
+            msg = "Kick downloader is closed."
+            raise RuntimeError(msg)
+        return self._kick_api_client
 
     def close(self) -> None:
         """Close the dedicated Kick API session and base HTTP session."""
-        kick_session = getattr(self, "_kick_api_session", None)
-        self._kick_api_session = None
+        kick_client = getattr(self, "_kick_api_client", None)
+        self._kick_api_client = None
         try:
-            if kick_session is not None:
-                _close_kick_session(kick_session)
+            if kick_client is not None:
+                kick_client.close()
         finally:
             super().close()
 
@@ -154,14 +168,9 @@ class KickChatDownloader(BaseChatDownloader):
             KickError: If the video is not found or metadata is incomplete.
         """
         request = self._coerce_chat_request(params)
-        from .live_service import _resolve_proxy
-
-        proxy = _resolve_proxy(self)
         return build_vod_chat(
             username,
             video_id,
             request,
-            proxy=proxy,
-            session=self._kick_api_session,
-            timeout=self._http_timeout,
+            api_client=self._kick_client,
         )  # pragma: no cover

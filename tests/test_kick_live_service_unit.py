@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chat_downloader.errors import RetriesExceeded
+from chat_downloader.errors import CaptchaChallengeRequired, RetriesExceeded
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import live_service
 from chat_downloader.sites.kick.constants import CHAT_MESSAGE_EVENT
@@ -44,15 +44,21 @@ class _NoRetryDownloader:
     def __init__(self, responses: list[Any] | None = None) -> None:
         self._responses = list(responses or [])
         self._http_timeout = (10.0, 30.0)
+        self._kick_api_client: Any | None = None
+
+    @property
+    def _kick_client(self) -> Any:
+        if self._kick_api_client is None:
+            from chat_downloader.sites.kick.api_client import KickApiClient
+
+            self._kick_api_client = KickApiClient(timeout=self._http_timeout)
+        return self._kick_api_client
 
     def _session_get(self, _url: str, **_kwargs: Any) -> Any:
         result = self._responses.pop(0)
         if isinstance(result, Exception):
             raise result
         return result
-
-
-# ── _resolve_proxy ────────────────────────────────────────────────────────────
 
 
 class _DownloaderWithProxy:
@@ -69,21 +75,6 @@ class _DownloaderWithEmptyProxy:
     def __init__(self) -> None:
         self.session = MagicMock()
         self.session.proxies = {}
-
-
-def test_resolve_proxy_returns_proxy_dict() -> None:
-    proxy = live_service._resolve_proxy(_DownloaderWithProxy())
-    assert proxy == {"https": "http://proxy.example:8080"}
-
-
-def test_resolve_proxy_returns_none_for_empty_proxies() -> None:
-    proxy = live_service._resolve_proxy(_DownloaderWithEmptyProxy())
-    assert proxy is None
-
-
-def test_resolve_proxy_returns_none_without_session() -> None:
-    proxy = live_service._resolve_proxy(object())
-    assert proxy is None
 
 
 # ── _resolve_ws_proxy ─────────────────────────────────────────────────────────
@@ -173,7 +164,7 @@ def test_fetch_channel_with_retry_succeeds_after_transient() -> None:
     downloader = FakeDownloader()
     session = FakeKickSession([FakeResponse(503, {"e": 1}), FakeResponse(200, payload)])
     with patch(
-        "chat_downloader.sites.kick.api_client._get_kick_session",
+        "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
     ):
         data = live_service._fetch_channel_with_retry(
@@ -187,7 +178,7 @@ def test_fetch_channel_with_retry_exhausts() -> None:
     session = FakeKickSession([FakeResponse(500, {"e": 1})])
     with (
         patch(
-            "chat_downloader.sites.kick.api_client._get_kick_session",
+            "chat_downloader.sites.kick.api_client.create_kick_session",
             return_value=session,
         ),
         pytest.raises(RetriesExceeded),
@@ -203,7 +194,7 @@ def test_fetch_channel_with_retry_unreachable_guard() -> None:
     session = FakeKickSession([FakeResponse(500, {"e": 1})])
     with (
         patch(
-            "chat_downloader.sites.kick.api_client._get_kick_session",
+            "chat_downloader.sites.kick.api_client.create_kick_session",
             return_value=session,
         ),
         pytest.raises(RuntimeError, match="unreachable"),
@@ -275,7 +266,7 @@ def test_get_chat_by_channel_emits_preloaded_then_live() -> None:
     )
     live_data = load_fixture("chat_message_event_data.json")
     with patch(
-        "chat_downloader.sites.kick.api_client._get_kick_session",
+        "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
     ):
         chat = _build_chat(
@@ -303,7 +294,7 @@ def test_get_chat_by_channel_dedups_live_against_preloaded() -> None:
     duplicate = {"id": "preloaded-1", "content": "dup", "type": "message"}
     fresh = {"id": "fresh", "content": "new", "type": "message"}
     with patch(
-        "chat_downloader.sites.kick.api_client._get_kick_session",
+        "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
     ):
         chat = _build_chat(
@@ -332,7 +323,7 @@ def test_get_chat_by_channel_filters_by_message_type() -> None:
     )
     live_data = load_fixture("chat_message_event_data.json")
     with patch(
-        "chat_downloader.sites.kick.api_client._get_kick_session",
+        "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
     ):
         chat = _build_chat(
@@ -366,7 +357,7 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
     frame_one = pusher_frame(CHAT_MESSAGE_EVENT, {"id": "a", "content": "1"})
     frame_two = pusher_frame(CHAT_MESSAGE_EVENT, {"id": "b", "content": "2"})
     with patch(
-        "chat_downloader.sites.kick.api_client._get_kick_session",
+        "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
     ):
         chat = _build_chat(
@@ -394,7 +385,7 @@ def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> Non
     )
 
     with patch(
-        "chat_downloader.sites.kick.api_client._get_kick_session",
+        "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
     ):
         chat = _build_chat(
@@ -428,7 +419,7 @@ def test_get_chat_by_channel_repeated_disconnects_exhaust_budget() -> None:
 
     with (
         patch(
-            "chat_downloader.sites.kick.api_client._get_kick_session",
+            "chat_downloader.sites.kick.api_client.create_kick_session",
             return_value=session,
         ),
         pytest.raises(RetriesExceeded),
@@ -454,7 +445,7 @@ def test_get_chat_by_channel_offline_succeeds_with_offline_title() -> None:
     downloader = FakeDownloader()
     session = FakeKickSession([FakeResponse(200, load_fixture("channel_offline.json"))])
     with patch(
-        "chat_downloader.sites.kick.api_client._get_kick_session",
+        "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
     ):
         chat = live_service.get_chat_by_channel(
@@ -462,3 +453,53 @@ def test_get_chat_by_channel_offline_succeeds_with_offline_title() -> None:
         )
         assert chat.title == "examplechannel"
         assert chat.status == "idle"
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        KickError("terminal"),
+        CaptchaChallengeRequired("challenge"),
+        OSError("offline"),
+    ],
+)
+def test_preloaded_history_is_best_effort(error: Exception) -> None:
+    class FailingClient:
+        @staticmethod
+        def fetch_preloaded_messages(_channel_id: str, _username: str) -> Any:
+            raise error
+
+    downloader = MagicMock()
+    downloader._kick_client = FailingClient()
+
+    assert (
+        list(
+            live_service._iter_preloaded_messages(
+                downloader,
+                "123",
+                "creator",
+                lambda _message: True,
+            )
+        )
+        == []
+    )
+
+
+def test_preloaded_history_does_not_swallow_keyboard_interrupt() -> None:
+    class InterruptingClient:
+        @staticmethod
+        def fetch_preloaded_messages(_channel_id: str, _username: str) -> Any:
+            raise KeyboardInterrupt
+
+    downloader = MagicMock()
+    downloader._kick_client = InterruptingClient()
+
+    with pytest.raises(KeyboardInterrupt):
+        list(
+            live_service._iter_preloaded_messages(
+                downloader,
+                "123",
+                "creator",
+                lambda _message: True,
+            )
+        )

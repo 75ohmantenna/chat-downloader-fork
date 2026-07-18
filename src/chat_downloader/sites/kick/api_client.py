@@ -1,21 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""HTTP helpers for Kick's public, unauthenticated v2 JSON API.
-
-These functions use :func:`_get_kick_session` — a dedicated session that
-tries ``curl_cffi`` (TLS-level Chrome impersonation) first, falling back to
-``cloudscraper`` (JS-challenge solver) and finally a plain ``requests.Session``
-— and centralize response handling: Cloudflare/challenge detection, not-found
-handling, and transient-error classification. They perform *no* parsing of
-chat content; that lives in :mod:`chat_downloader.sites.kick.parsing`.
-"""
+"""Owned client for Kick's public, unauthenticated HTTP APIs."""
 
 from __future__ import annotations
 
 from http import HTTPStatus
-from typing import Any, NoReturn, Protocol, cast
-
-import requests
+from json import JSONDecodeError
+from typing import TYPE_CHECKING, Literal, NoReturn, cast
 
 from chat_downloader.debugging import logger
 from chat_downloader.errors import CaptchaChallengeRequired, UserNotFound
@@ -29,333 +20,185 @@ from chat_downloader.utils.json_types import (
 
 from .constants import (
     CHANNEL_API_TEMPLATE,
+    CHANNEL_MESSAGES_API,
     CLOUDFLARE_MARKERS,
     MESSAGES_API_TEMPLATE,
+    VIDEO_API_TEMPLATE,
 )
 from .errors import KickError, KickServerError
+from .http_session import _KickSession, create_kick_session
+
+if TYPE_CHECKING:
+    import requests
+
+_DEFAULT_TIMEOUT = (10.0, 30.0)
+_ResourceKind = Literal["channel", "video", "messages"]
 
 
-class _KickSession(Protocol):
-    """Minimal session shape accepted by public Kick request helpers."""
+class KickApiClient:
+    """Own one HTTP session and apply one response policy to Kick endpoints."""
 
-    def get(self, url: str, **kwargs: object) -> requests.Response: ...
+    def __init__(
+        self,
+        *,
+        proxy: dict[str, str] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        timeout: tuple[float, float] = _DEFAULT_TIMEOUT,
+        session: _KickSession | None = None,
+    ) -> None:
+        """Create a client that owns either the supplied or a new session."""
+        self._session = session or create_kick_session(
+            proxy=dict(proxy) if proxy else None,
+            extra_headers=dict(extra_headers) if extra_headers else None,
+        )
+        self._timeout = tuple(timeout)
+        self._closed = False
 
-    def close(self) -> None: ...
+    def fetch_channel(self, username: str) -> JSONDict:
+        """Fetch channel metadata by username."""
+        return self._request_object(
+            CHANNEL_API_TEMPLATE.format(username=username),
+            context=username,
+            resource="channel",
+        )
 
+    def fetch_preloaded_messages(
+        self,
+        channel_id: str,
+        username: str,
+    ) -> JSONList:
+        """Fetch and validate recent live-chat history."""
+        payload = self._request_object(
+            MESSAGES_API_TEMPLATE.format(channel_id=channel_id),
+            context=username,
+            resource="messages",
+        )
+        messages = get_list(get_dict(payload, "data"), "messages")
+        return cast("JSONList", [item for item in messages if isinstance(item, dict)])
 
-def _get_kick_session(
-    *,
-    proxy: dict[str, str] | None = None,
-    extra_headers: dict[str, str] | None = None,
-) -> Any:  # pragma: no cover — replaced by FakeKickSession in tests
-    """Create an HTTP session with Cloudflare bypass for Kick.com API.
+    def fetch_video_metadata(self, video_id: str) -> JSONDict:
+        """Fetch VOD metadata by UUID."""
+        return self._request_object(
+            VIDEO_API_TEMPLATE.format(video_id=video_id),
+            context=video_id,
+            resource="video",
+        )
 
-    Priority order:
-    1. ``curl-cffi`` with Chrome 124 TLS impersonation — avoids Cloudflare
-       challenges at the TLS-fingerprint level.
-    2. ``cloudscraper`` — JS-challenge solver for simpler challenges.
-    3. Plain ``requests.Session`` with browser-like headers — last resort.
+    def fetch_message_page(
+        self,
+        channel_id: str,
+        cursor: str | None = None,
+    ) -> JSONDict:
+        """Fetch one VOD message-history page."""
+        params = {"cursor": cursor} if cursor else None
+        return self._request_object(
+            CHANNEL_MESSAGES_API.format(channel_id=channel_id),
+            context=channel_id,
+            resource="messages",
+            params=params,
+        )
 
-    Args:
-        proxy: Optional proxy mapping (e.g. ``{"http": "...", "https": "..."}``)
-            applied to the new session.
-        extra_headers: Optional headers dict merged into the session's default
-            headers.
+    def _request_object(
+        self,
+        url: str,
+        *,
+        context: str,
+        resource: _ResourceKind,
+        params: dict[str, str] | None = None,
+    ) -> JSONDict:
+        """GET one endpoint and require a JSON-object response."""
+        session = self._require_open_session()
+        response = session.get(url, params=params, timeout=self._timeout)
+        if _body_looks_like_challenge(response):
+            _raise_for_challenge(response, context)
+        _check_status(response, context=context, resource=resource)
+        data = _decode_json(response, context=context, resource=resource)
+        if not isinstance(data, dict):
+            msg = f"Kick {resource} response for {context!r} was not a JSON object."
+            raise KickServerError(msg)
+        return data
 
-    Returns:
-        A configured session (``curl_cffi.requests.Session``,
-        ``cloudscraper.CloudScraper``, or ``requests.Session``).
-    """
-    session = _try_curl_cffi()
-    if session is None:
-        session = _try_cloudscraper()
-    if session is None:
-        session = _make_plain_session()
-    if proxy:
-        session.proxies.update(proxy)
-    if extra_headers:
-        session.headers.update(extra_headers)
-    return session
+    def _require_open_session(self) -> _KickSession:
+        """Return the owned session or fail deterministically after close."""
+        if self._closed:
+            msg = "KickApiClient is closed."
+            raise RuntimeError(msg)
+        return self._session
 
-
-def _close_kick_session(session: Any) -> None:
-    """Close a dedicated Kick session when it exposes ``close``."""
-    close = getattr(session, "close", None)
-    if callable(close):
+    def close(self) -> None:
+        """Close the owned HTTP session exactly once."""
+        if self._closed:
+            return
+        self._closed = True
         try:
-            close()
+            self._session.close()
         except (OSError, RuntimeError) as error:
             logger.debug("Error closing Kick API session: %s", error)
 
 
-def _try_curl_cffi() -> Any | None:  # pragma: no cover — live-dependency path
-    """Try creating a ``curl_cffi`` session with Chrome 124 impersonation."""
-    try:
-        from curl_cffi import requests as curl_requests
-
-        session: Any = curl_requests.Session()
-        session.impersonate = "chrome124"
-        session.headers.update(
-            {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/124.0.0.0 Safari/537.36"
-                ),
-                "Accept": "application/json, text/plain, */*",
-                "Referer": "https://kick.com/",
-                "DNT": "1",
-            }
-        )
-    except ImportError:
-        logger.debug("curl-cffi not available; skipping Chrome-impersonation session.")
-        return None
-    else:
-        return session
-
-
-def _try_cloudscraper() -> Any | None:  # pragma: no cover — live-dependency path
-    """Try creating a ``cloudscraper`` session for JS-challenge bypass."""
-    try:
-        import cloudscraper  # type: ignore[import-untyped]
-
-        session = cloudscraper.create_scraper()
-        session.headers.update(
-            {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                ),
-                "Accept": "application/json, text/plain, */*",
-                "Referer": "https://kick.com/",
-                "DNT": "1",
-            }
-        )
-    except ImportError:
-        logger.debug("cloudscraper not available; skipping JS-challenge session.")
-        return None
-    else:
-        return session
-
-
-def _make_plain_session() -> (
-    requests.Session
-):  # pragma: no cover — live-dependency path
-    """Create a plain ``requests.Session`` with browser-like headers."""
-    session = requests.Session()
-    session.headers.update(
-        {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/json, text/plain, */*",
-            "Referer": "https://kick.com/",
-            "DNT": "1",
-        }
-    )
-    return session
-
-
 def _body_looks_like_challenge(response: requests.Response) -> bool:
-    """Return ``True`` if a response *body* looks like a challenge page.
-
-    Status-code-based detection (e.g. HTTP 403) is handled separately in
-    :func:`_check_status`; this inspects only the body, so a JSON API that
-    returns an HTML document (with or without explicit Cloudflare markers) is
-    treated as a likely challenge.
-
-    Args:
-        response: The HTTP response to inspect.
-
-    Returns:
-        ``True`` when the body contains known Cloudflare markers or is HTML.
-    """
+    """Return whether a JSON endpoint returned a challenge document."""
     if any(marker in response.text for marker in CLOUDFLARE_MARKERS):
         return True
     content_type = response.headers.get("Content-Type", "").lower()
-    if not isinstance(content_type, str) or "text/html" not in content_type:
+    if "text/html" not in content_type:
         return False
     body_start = response.text.lstrip()[:64].lower()
     return body_start.startswith(("<!doctype html", "<html"))
 
 
-def _raise_for_challenge(response: requests.Response, username: str) -> NoReturn:
-    """Raise :class:`CaptchaChallengeRequired` for a challenge response.
-
-    Args:
-        response: The HTTP response that looked like a challenge.
-        username: Channel username, used only for a sanitized log line.
-
-    Raises:
-        CaptchaChallengeRequired: Always, with an actionable message.
-    """
+def _raise_for_challenge(response: requests.Response, context: str) -> NoReturn:
+    """Raise the actionable challenge error without logging credentials."""
     logger.debug(
-        "Kick request for channel %r returned a likely challenge "
-        "(status=%s, content-type=%s).",
-        username,
+        "Kick request for %r returned a likely challenge (status=%s, content-type=%s).",
+        context,
         response.status_code,
         response.headers.get("Content-Type", ""),
     )
     msg = (
         "Kick blocked automated access with a Cloudflare challenge. The"
-        " bundled curl-cffi (Chrome-124 impersonation) and cloudscraper"
-        " libraries could not bypass it. Your IP/proxy reputation may"
-        " contribute; changing endpoints can help diagnose rate-limit or"
-        " reputation issues."
+        " bundled curl-cffi and cloudscraper fallbacks could not bypass it."
+        " Changing IP or proxy endpoints can help diagnose reputation issues."
     )
     raise CaptchaChallengeRequired(msg)
 
 
-def _decode_json(response: requests.Response, username: str) -> JSONAny:
-    """Decode a JSON response, mapping a challenge HTML body to a clear error.
-
-    Args:
-        response: The HTTP response to decode.
-        username: Channel username, used for error context.
-
-    Returns:
-        The decoded JSON payload.
-
-    Raises:
-        CaptchaChallengeRequired: If the body is an HTML challenge page.
-        KickServerError: If the body is malformed JSON (transient/retryable).
-    """
-    from json import JSONDecodeError
-
-    try:
-        return cast("JSONAny", response.json())
-    except (JSONDecodeError, ValueError) as error:
-        if _body_looks_like_challenge(response):
-            _raise_for_challenge(response, username)
-        msg = f"Kick returned a malformed JSON response for channel {username!r}."
-        raise KickServerError(msg) from error
-
-
-def _check_status(response: requests.Response, username: str) -> None:
-    """Raise an appropriate error for a non-OK status code.
-
-    Args:
-        response: The HTTP response to validate.
-        username: Channel username, used for error context.
-
-    Raises:
-        UserNotFound: On HTTP 404.
-        CaptchaChallengeRequired: On HTTP 403 / challenge responses.
-        KickServerError: On HTTP 429 or 5xx (transient/retryable).
-    """
+def _check_status(
+    response: requests.Response,
+    *,
+    context: str,
+    resource: _ResourceKind,
+) -> None:
+    """Classify endpoint status codes consistently."""
     status = response.status_code
     if status == HTTPStatus.NOT_FOUND:
-        msg = f'Unable to find Kick channel: "{username}"'
-        raise UserNotFound(msg)
+        if resource == "channel":
+            msg = f'Unable to find Kick channel: "{context}"'
+            raise UserNotFound(msg)
+        msg = f"Kick {resource} not found: {context}"
+        raise KickError(msg)
     if status == HTTPStatus.FORBIDDEN:
-        _raise_for_challenge(response, username)
+        _raise_for_challenge(response, context)
     if (
         status == HTTPStatus.TOO_MANY_REQUESTS
         or status >= HTTPStatus.INTERNAL_SERVER_ERROR
     ):
-        msg = f"Kick API returned HTTP {status} for channel {username!r}."
+        msg = f"Kick {resource} API returned HTTP {status} for {context!r}."
         raise KickServerError(msg)
     if status != HTTPStatus.OK:
-        msg = f"Kick API returned unexpected HTTP {status} for channel {username!r}."
+        msg = f"Kick {resource} API returned unexpected HTTP {status} for {context!r}."
         raise KickError(msg)
 
 
-def fetch_channel(
-    username: str,
+def _decode_json(
+    response: requests.Response,
     *,
-    proxy: dict[str, str] | None = None,
-    extra_headers: dict[str, str] | None = None,
-    session: _KickSession | None = None,
-    timeout: tuple[float, float] = (10.0, 30.0),
-) -> JSONDict:
-    """Fetch channel metadata from ``/api/v2/channels/{username}``.
-
-    Uses a dedicated HTTP session (with ``curl-cffi`` / ``cloudscraper``
-    Cloudflare bypass when available) to make the request.
-
-    Args:
-        username: Channel username/slug.
-        proxy: Optional proxy mapping for the HTTP session.
-        extra_headers: Optional headers to merge into the session.
-        session: Optional caller-owned HTTP session.
-        timeout: Connect/read timeout tuple for the API request.
-
-    Returns:
-        The decoded channel metadata object.
-
-    Raises:
-        UserNotFound: If the channel does not exist.
-        CaptchaChallengeRequired: If Kick returns a challenge page.
-        KickServerError: On transient (429/5xx/malformed) responses.
-    """
-    url = CHANNEL_API_TEMPLATE.format(username=username)
-    owns_session = session is None
-    active_session = session or _get_kick_session(
-        proxy=proxy,
-        extra_headers=extra_headers,
-    )
+    context: str,
+    resource: _ResourceKind,
+) -> JSONAny:
+    """Decode one successful JSON response or classify malformed content."""
     try:
-        response = active_session.get(url, timeout=timeout)
-        _check_status(response, username)
-        data = _decode_json(response, username)
-        if not isinstance(data, dict):
-            msg = f"Kick channel metadata for {username!r} was not a JSON object."
-            raise KickServerError(msg)
-        return data
-    finally:
-        if owns_session:
-            _close_kick_session(active_session)
-
-
-def fetch_preloaded_messages(
-    channel_id: str,
-    username: str,
-    *,
-    proxy: dict[str, str] | None = None,
-    extra_headers: dict[str, str] | None = None,
-    session: _KickSession | None = None,
-    timeout: tuple[float, float] = (10.0, 30.0),
-) -> JSONList:
-    """Fetch recent preloaded messages from ``/channels/{id}/messages``.
-
-    Uses a dedicated HTTP session (with ``curl-cffi`` / ``cloudscraper``
-    Cloudflare bypass when available) to make the request.
-
-    Args:
-        channel_id: Numeric channel id.
-        username: Channel username/slug, used only for error context.
-        proxy: Optional proxy mapping for the HTTP session.
-        extra_headers: Optional headers to merge into the session.
-        session: Optional caller-owned HTTP session.
-        timeout: Connect/read timeout tuple for the API request.
-
-    Returns:
-        A list of raw preloaded message objects (possibly empty). Failures to
-        retrieve preloaded history are non-fatal and yield an empty list, since
-        the live websocket stream is the primary source.
-    """
-    url = MESSAGES_API_TEMPLATE.format(channel_id=channel_id)
-    owns_session = session is None
-    active_session = session or _get_kick_session(
-        proxy=proxy,
-        extra_headers=extra_headers,
-    )
-    try:
-        try:
-            response = active_session.get(url, timeout=timeout)
-            _check_status(response, username)
-            data = _decode_json(response, username)
-        except (KickServerError, requests.RequestException, OSError) as error:
-            logger.debug("Kick preloaded-message fetch failed (non-fatal): %s", error)
-            return []
-    finally:
-        if owns_session:
-            _close_kick_session(active_session)
-
-    if not isinstance(data, dict):
-        return []
-    messages = get_list(get_dict(data, "data"), "messages")
-    return cast("JSONList", [m for m in messages if isinstance(m, dict)])
+        return cast("JSONAny", response.json())
+    except (JSONDecodeError, ValueError) as error:
+        msg = f"Kick {resource} API returned malformed JSON for {context!r}."
+        raise KickServerError(msg) from error
