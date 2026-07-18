@@ -293,7 +293,14 @@ def _iter_chat_messages(
     # 2. Live websocket feed with reconnect.
     proxy_url = _resolve_ws_proxy(downloader)
     session = getattr(downloader, "session", None)
-    pusher_http_client = _RequestsHttpClient(session) if session is not None else None
+    pusher_http_client = (
+        _RequestsHttpClient(
+            session,
+            configured_timeout=getattr(downloader, "_http_timeout", None),
+        )
+        if session is not None
+        else None
+    )
     transport = _open_subscribed_transport(
         downloader,
         chatroom_id,

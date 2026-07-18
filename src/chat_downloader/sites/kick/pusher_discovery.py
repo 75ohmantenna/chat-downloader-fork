@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import re
+import time
 from typing import Protocol, cast
 
 import requests
@@ -26,6 +27,8 @@ import requests
 #: This is not a secret; it is shipped in Kick's public JavaScript bundle and
 #: grants only anonymous, read-only subscription to public chatroom channels.
 _PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
+_DISCOVERY_REQUEST_TIMEOUT_SECONDS = 3.0
+_DISCOVERY_TOTAL_TIMEOUT_SECONDS = 10.0
 
 #: Pusher websocket URL template, formatted with the resolved app key.
 _PUSHER_WS_TEMPLATE = (
@@ -67,9 +70,14 @@ class _HttpClient(Protocol):
 class _RequestsHttpClient:
     """Thin ``requests`` adapter used by default discovery."""
 
-    def __init__(self, session: requests.Session | None = None) -> None:
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        configured_timeout: tuple[float, float] | None = None,
+    ) -> None:
         self._owns_session = session is None
         self._session = session or requests.Session()
+        self._configured_timeout = configured_timeout
         if self._owns_session:
             self._session.headers.update(
                 {
@@ -83,7 +91,16 @@ class _RequestsHttpClient:
             )
 
     def get(self, url: str, *, timeout: float) -> _HttpResponse:
-        return cast("_HttpResponse", self._session.get(url, timeout=timeout))
+        effective_timeout: float | tuple[float, float] = timeout
+        if self._configured_timeout is not None:
+            effective_timeout = (
+                min(self._configured_timeout[0], timeout),
+                min(self._configured_timeout[1], timeout),
+            )
+        return cast(
+            "_HttpResponse",
+            self._session.get(url, timeout=effective_timeout),
+        )
 
     def close(self) -> None:
         if self._owns_session:
@@ -115,13 +132,23 @@ def _discover_pusher_key(http_client: _HttpClient) -> str | None:
     Returns:
         The discovered key, or ``None`` if no bundle contained it.
     """
-    homepage = http_client.get("https://kick.com/", timeout=10)
+    deadline = time.monotonic() + _DISCOVERY_TOTAL_TIMEOUT_SECONDS
+    try:
+        homepage = http_client.get(
+            "https://kick.com/",
+            timeout=_DISCOVERY_REQUEST_TIMEOUT_SECONDS,
+        )
+    except OSError:
+        return None
     if not homepage.ok:
         return None
 
     # Find all JS chunk URLs in the page (scan at most 15 chunks)
     script_urls = re.findall(r'<script[^>]*src="([^"]+\.js)"[^>]*>', homepage.text)
     for url in script_urls[:15]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
         abs_url = url if url.startswith("http") else "https://kick.com" + url
         # Only fetch scripts served over HTTPS from Kick's own domain.
         # Without this guard a tampered/MITM'd homepage could point the
@@ -130,7 +157,10 @@ def _discover_pusher_key(http_client: _HttpClient) -> str | None:
         if not _is_kick_origin(abs_url):
             continue
         try:
-            js_resp = http_client.get(abs_url, timeout=10)
+            js_resp = http_client.get(
+                abs_url,
+                timeout=min(_DISCOVERY_REQUEST_TIMEOUT_SECONDS, remaining),
+            )
         except OSError:
             continue
         if not js_resp.ok:
@@ -161,8 +191,9 @@ def resolve_pusher_key(
     frontend. This function fetches the homepage on first call to extract the
     current value, falling back to the compiled-in default if discovery fails.
 
-    Discovery scans at most 15 JS bundles with a per-bundle 10s timeout.
-    Once resolved the key is cached for the process lifetime.
+    Discovery scans at most 15 JS bundles within a ten-second total budget and
+    a three-second per-request timeout. Once resolved the key is cached for the
+    process lifetime.
 
     Args:
         force_discover: If True, skip the cache and re-discover from the live

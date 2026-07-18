@@ -120,6 +120,22 @@ def test_requests_adapter_reuses_downloader_session_without_closing() -> None:
     session.close.assert_not_called()
 
 
+def test_requests_adapter_caps_calls_to_downloader_timeouts() -> None:
+    session = MagicMock()
+    session.get.return_value = _FakeResponse(True, "")
+    adapter = pusher_discovery._RequestsHttpClient(
+        session,
+        configured_timeout=(1.0, 2.0),
+    )
+
+    adapter.get("https://kick.com/", timeout=3.0)
+
+    session.get.assert_called_once_with(
+        "https://kick.com/",
+        timeout=(1.0, 2.0),
+    )
+
+
 def test_resolve_pusher_key_discovers_key_from_bundle() -> None:
     client = _FakeClient(
         {
@@ -213,6 +229,35 @@ def test_resolve_pusher_key_falls_back_when_homepage_fails() -> None:
     key = resolve_pusher_key(http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
+
+
+def test_resolve_pusher_key_falls_back_when_homepage_request_raises() -> None:
+    client = _FakeClient({}, errors={"https://kick.com/"})
+
+    key = resolve_pusher_key(http_client=client)
+
+    assert key == _PUSHER_DEFAULT_KEY
+    assert client.closed
+
+
+def test_resolve_pusher_key_stops_scanning_when_budget_expires(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _FakeClient(
+        {
+            "https://kick.com/": _FakeResponse(
+                True,
+                '<script src="/app.js"></script>',
+            ),
+        }
+    )
+    monotonic = MagicMock(side_effect=[0.0, 11.0])
+    monkeypatch.setattr(pusher_discovery.time, "monotonic", monotonic)
+
+    key = resolve_pusher_key(http_client=client)
+
+    assert key == _PUSHER_DEFAULT_KEY
+    assert client.requested_urls == ["https://kick.com/"]
 
 
 def test_resolve_pusher_key_falls_back_when_no_bundle_matches() -> None:
