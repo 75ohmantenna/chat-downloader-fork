@@ -77,6 +77,7 @@ def test_innertube_bootstrap_extracts_primary_live_continuation() -> None:
     assert continuation_info["Top chat"].startswith("0ofMyAM")
     assert ytcfg["INNERTUBE_API_KEY"]
     assert ytcfg["INNERTUBE_CONTEXT"]["client"]["clientName"] == "WEB"
+    assert ytcfg["INNERTUBE_CONTEXT_CLIENT_NAME"] == 1
     assert ytcfg["INNERTUBE_CONTEXT"]["client"]["visitorData"]
     assert player_response["videoDetails"]["videoId"] == "IzopCEgh2G8"
     assert [call[1]["videoId"] for call in calls] == [
@@ -107,7 +108,9 @@ def test_innertube_bootstrap_extracts_mobile_chat_continuations(profile: str) ->
         "Live chat": "mobile-primary-live-token",
     }
     expected_client = "ANDROID" if profile == "youtube_android" else "IOS"
+    expected_client_id = 3 if profile == "youtube_android" else 5
     assert ytcfg["INNERTUBE_CONTEXT"]["client"]["clientName"] == expected_client
+    assert ytcfg["INNERTUBE_CONTEXT_CLIENT_NAME"] == expected_client_id
     assert ytcfg["INNERTUBE_CONTEXT"]["client"]["visitorData"]
 
 

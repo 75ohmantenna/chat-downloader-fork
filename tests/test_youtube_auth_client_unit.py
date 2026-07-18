@@ -23,6 +23,7 @@ _get_sid_cookies = _yt_auth._get_sid_cookies
 _extract_account_syncid = _yt_context._extract_account_syncid
 _generate_headers = _yt_context._generate_headers
 _get_innertube_context = _yt_context._get_innertube_context
+apply_request_profile_to_ytcfg = _yt_context.apply_request_profile_to_ytcfg
 _get_continuation_info = _yt_continuation._get_continuation_info
 _get_initial_info = _yt_initial._get_initial_info
 
@@ -82,13 +83,19 @@ def test_make_sid_authorization_supports_additional_parts() -> None:
         "sid-value",
         "https://www.youtube.com",
         123,
-        {"session_id": "user-session"},
+        {"u": "user-session"},
     )
 
     expected_hash = hashlib.sha1(
         b"user-session 123 sid-value https://www.youtube.com",
     ).hexdigest()
-    assert auth == f"SAPISIDHASH 123_{expected_hash}_user-session"
+    assert auth == f"SAPISIDHASH 123_{expected_hash}_u"
+
+
+def test_session_id_parts_uses_youtube_session_binding_key() -> None:
+    assert _yt_auth._session_id_parts({"DATASYNC_ID": "delegated||user-session"}) == {
+        "u": "user-session"
+    }
 
 
 def test_generate_sapisidhash_header_returns_none_without_sid_cookies() -> None:
@@ -140,21 +147,21 @@ def test_generate_sapisidhash_header_promotes_cookie_and_uses_datasync_id(
                 "threep",
                 "https://www.youtube.com",
                 1234,
-                {"session_id": "user-session"},
+                {"u": "user-session"},
             ),
             _make_sid_authorization(
                 "SAPISID1PHASH",
                 "onep",
                 "https://www.youtube.com",
                 1234,
-                {"session_id": "user-session"},
+                {"u": "user-session"},
             ),
             _make_sid_authorization(
                 "SAPISID3PHASH",
                 "threep",
                 "https://www.youtube.com",
                 1234,
-                {"session_id": "user-session"},
+                {"u": "user-session"},
             ),
         ],
     )
@@ -330,6 +337,28 @@ def test_get_innertube_context_handles_non_dict_and_missing_client() -> None:
             "utcOffsetMinutes": 0,
         },
     }
+
+
+def test_apply_request_profile_to_ytcfg_keeps_body_and_headers_aligned() -> None:
+    original = {
+        "INNERTUBE_CONTEXT_CLIENT_NAME": 1,
+        "INNERTUBE_CLIENT_VERSION": "old-web-version",
+        "INNERTUBE_CONTEXT": {
+            "client": {
+                "clientName": "WEB",
+                "clientVersion": "old-web-version",
+                "visitorData": "visitor",
+            },
+        },
+    }
+
+    updated = apply_request_profile_to_ytcfg(original, "youtube_android")
+
+    assert updated["INNERTUBE_CONTEXT_CLIENT_NAME"] == 3
+    assert updated["INNERTUBE_CLIENT_VERSION"] == "21.26.364"
+    assert updated["INNERTUBE_CONTEXT"]["client"]["clientName"] == "ANDROID"
+    assert updated["INNERTUBE_CONTEXT"]["client"]["visitorData"] == "visitor"
+    assert original["INNERTUBE_CONTEXT"]["client"]["clientName"] == "WEB"
 
 
 def test_get_continuation_info_logs_non_retriable_http_errors_without_json_body() -> (

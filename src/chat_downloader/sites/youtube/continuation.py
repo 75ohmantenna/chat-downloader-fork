@@ -35,6 +35,7 @@ from .client_context import (
     _generate_headers,
     _get_innertube_context,
     apply_request_profile_to_innertube_context,
+    apply_request_profile_to_ytcfg,
 )
 from .client_requests_continuation import _get_continuation_info
 from .constants_message import _MESSAGE_TYPES
@@ -321,6 +322,10 @@ class _ContinuationLoop:
             InvalidParameter: When an unknown message group is requested.
         """
         initial_info = self.initial_info
+        self.ytcfg = apply_request_profile_to_ytcfg(
+            self.ytcfg,
+            getattr(self.downloader, "_request_profile", None),
+        )
         ytcfg = self.ytcfg
         params = self.params
 
@@ -472,6 +477,7 @@ class _ContinuationLoop:
         Returns True if the loop should retry; False means the caller should
         re-raise the active IncompleteContinuationError.
         """
+        previous_profile = getattr(self.downloader, "_request_profile", None)
         if self.progress.register_fallback():
             log(
                 "warning",
@@ -482,8 +488,23 @@ class _ContinuationLoop:
             return False
         if not self._attempt_profile_fallback():
             return False
+        active_profile = getattr(self.downloader, "_request_profile", None)
+        self.ytcfg = apply_request_profile_to_ytcfg(
+            self.ytcfg,
+            active_profile,
+        )
         self.ctx.innertube_context = _profiled_innertube_context(
-            self.ytcfg, getattr(self.downloader, "_request_profile", None)
+            self.ytcfg, active_profile
+        )
+        if active_profile == previous_profile:
+            return True
+        self.downloader.update_session_headers(
+            _generate_headers(
+                self.ytcfg,
+                self.downloader,
+                _YT_HOME,
+                _generate_sapisidhash_header,
+            )
         )
         return True
 

@@ -90,7 +90,7 @@ def _make_sid_authorization(
 
     auth_parts = [str(time_now), sidhash]
     if additional_parts:
-        auth_parts.append("".join(additional_parts.values()))
+        auth_parts.append("".join(additional_parts))
 
     return f"{scheme} {'_'.join(auth_parts)}"
 
@@ -124,7 +124,7 @@ def _session_id_parts(ytcfg: JSONDict | None) -> dict[str, str] | None:
     if not datasync_id:
         return None
     _, user_session_id = _parse_data_sync_id(datasync_id)
-    return {"session_id": user_session_id} if user_session_id else None
+    return {"u": user_session_id} if user_session_id else None
 
 
 def _generate_sapisidhash_header(

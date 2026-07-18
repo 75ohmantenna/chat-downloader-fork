@@ -19,6 +19,13 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   Mobile InnerTube layouts now provide both Top and Live chat continuations,
   and modern mobile text-message elements are normalized with author, badge,
   avatar, message ID, and timestamp metadata.
+- **Kept YouTube InnerTube authentication and client metadata consistent.**
+  Account session binding now uses YouTube's expected SAPISIDHASH suffix, and
+  current web, Android, and iOS profile IDs, versions, bodies, and headers stay
+  aligned during bootstrap and automatic fallback.
+- **Prevented premature YouTube channel and playlist pagination stops.**
+  Discovery now follows modern continuation view models, sends API headers on
+  browse requests, and carries rotated visitor data into the next page.
 
 ### Documentation / tooling
 

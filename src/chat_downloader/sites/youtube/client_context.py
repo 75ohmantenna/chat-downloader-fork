@@ -8,6 +8,7 @@ import copy
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.request_profiles import (
+    get_request_profile_innertube_client_id,
     get_request_profile_innertube_context,
 )
 from chat_downloader.utils.dict_utils import multi_get
@@ -107,3 +108,27 @@ def apply_request_profile_to_innertube_context(
     client.update(profile_client)
     client.update({"hl": "en", "timeZone": "UTC", "utcOffsetMinutes": 0})
     return updated_context
+
+
+def apply_request_profile_to_ytcfg(
+    ytcfg: JSONDict,
+    profile_name: object,
+) -> JSONDict:
+    """Return ytcfg with matching profile context and API header metadata."""
+    profile_context = get_request_profile_innertube_context(profile_name)
+    profile_client = profile_context.get("client")
+    client_id = get_request_profile_innertube_client_id(profile_name)
+    if not isinstance(profile_client, dict) or client_id is None:
+        return copy.deepcopy(ytcfg)
+
+    updated_ytcfg = copy.deepcopy(ytcfg)
+    updated_context = apply_request_profile_to_innertube_context(
+        _get_innertube_context(updated_ytcfg),
+        profile_name,
+    )
+    updated_ytcfg["INNERTUBE_CONTEXT"] = updated_context
+    updated_ytcfg["INNERTUBE_CONTEXT_CLIENT_NAME"] = client_id
+    client_version = profile_client.get("clientVersion")
+    if isinstance(client_version, str):
+        updated_ytcfg["INNERTUBE_CLIENT_VERSION"] = client_version
+    return updated_ytcfg

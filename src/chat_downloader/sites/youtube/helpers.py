@@ -8,17 +8,24 @@ multiple YouTube modules after the large extractor refactor.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import copy
+from typing import TYPE_CHECKING
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import ParsingError
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_dict, get_str
 
+from .client_auth import _generate_sapisidhash_header
+from .client_context import _generate_headers
 from .client_requests_continuation import _get_continuation_info
+from .constants_patterns import _YT_HOME
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict, JSONList
+
+    from ._protocols import YouTubeDownloaderProto
 
 
 def require_innertube_api_key(ytcfg: JSONDict) -> str:
@@ -33,22 +40,75 @@ def require_innertube_api_key(ytcfg: JSONDict) -> str:
     return api_key
 
 
+def _extract_browse_continuation_token_from_item(item: object) -> str | None:
+    """Extract a token from legacy or view-model browse continuation items."""
+    if not isinstance(item, dict):
+        return None
+    token_candidates = (
+        multi_get(
+            item,
+            "continuationItemRenderer",
+            "continuationEndpoint",
+            "continuationCommand",
+            "token",
+        ),
+        multi_get(
+            item,
+            "continuationItemViewModel",
+            "continuationCommand",
+            "innertubeCommand",
+            "continuationCommand",
+            "token",
+        ),
+    )
+    for token in token_candidates:
+        if isinstance(token, str) and token:
+            return token
+    return None
+
+
 def _extract_browse_continuation_token(items: object) -> str | None:
     """Extract continuation token from a list of browse continuation items."""
     if not isinstance(items, list):
         return None
 
     for item in items:
-        token: str | None = multi_get(
-            item,
-            "continuationItemRenderer",
-            "continuationEndpoint",
-            "continuationCommand",
-            "token",
-        )
-        if token:
+        if token := _extract_browse_continuation_token_from_item(item):
             return token
     return None
+
+
+def _browse_api_headers(
+    downloader: YouTubeDownloaderProto,
+    ytcfg: JSONDict,
+    continuation_params: JSONDict,
+) -> dict[str, str]:
+    """Generate API headers from the same context used in the request body."""
+    request_ytcfg = copy.deepcopy(ytcfg)
+    context = get_dict(continuation_params, "context")
+    if context:
+        request_ytcfg["INNERTUBE_CONTEXT"] = copy.deepcopy(context)
+    return _generate_headers(
+        request_ytcfg,
+        downloader,
+        _YT_HOME,
+        _generate_sapisidhash_header,
+    )
+
+
+def _update_browse_visitor_data(
+    continuation_params: JSONDict,
+    yt_info: JSONDict,
+) -> None:
+    """Roll response visitor data into the next browse request context."""
+    visitor_data = get_str(get_dict(yt_info, "responseContext"), "visitorData")
+    if not visitor_data:
+        return
+    context = get_dict(continuation_params, "context")
+    client = get_dict(context, "client")
+    client["visitorData"] = visitor_data
+    context["client"] = client
+    continuation_params["context"] = context
 
 
 def _extract_menu_continuation_token(item: object) -> str | None:
@@ -147,10 +207,11 @@ def extract_chat_submenu_continuations(
 
 
 def _fetch_browse_continuation(
-    self: Any,
+    self: YouTubeDownloaderProto,
     continuation: str | None,
     continuation_url: str,
     continuation_params: JSONDict,
+    ytcfg: JSONDict,
     request: ChatRequest,
     seen_continuations: set[str],
 ) -> tuple[JSONList | None, JSONDict | None]:
@@ -168,13 +229,16 @@ def _fetch_browse_continuation(
     if continuation:
         seen_continuations.add(continuation)
     continuation_params["continuation"] = continuation
+    headers = _browse_api_headers(self, ytcfg, continuation_params)
     yt_info = _get_continuation_info(
         continuation_url,
         self._session_post,
         request,
         require_live_chat_continuation=False,
+        headers=headers,
         json=continuation_params,
     )
+    _update_browse_visitor_data(continuation_params, yt_info)
     items = multi_get(
         yt_info,
         "onResponseReceivedActions",

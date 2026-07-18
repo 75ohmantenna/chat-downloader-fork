@@ -18,6 +18,7 @@ from .constants_patterns import (
 )
 from .discovery import _get_rendered_content
 from .helpers import (
+    _extract_browse_continuation_token_from_item,
     _extract_browse_continuation_token_from_response,
     _fetch_browse_continuation,
     require_innertube_api_key,
@@ -42,16 +43,11 @@ def _extract_playlist_items(
         if not isinstance(item, dict):
             continue
         vid = item.get("playlistVideoRenderer")
-        cont_item = item.get("continuationItemRenderer")
+        continuation = _extract_browse_continuation_token_from_item(item)
         if vid:
             videos.append(_parse_video(vid))
-        elif cont_item:
-            token = multi_get(
-                cont_item,
-                "continuationEndpoint",
-                "continuationCommand",
-                "token",
-            )
+        elif continuation:
+            token = continuation
     return videos, token
 
 
@@ -103,6 +99,7 @@ class YouTubePlaylistDiscoveryMixin:
                 continuation,
                 continuation_url,
                 continuation_params,
+                ytcfg,
                 request,
                 seen_continuations,
             )

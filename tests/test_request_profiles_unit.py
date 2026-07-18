@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from chat_downloader.request_profiles import (
+    REQUEST_PROFILE_INNERTUBE_CONTEXTS,
     REQUEST_PROFILES,
     build_request_profile_headers,
     get_next_request_profile,
     get_request_profile_headers,
+    get_request_profile_innertube_client_id,
     normalize_request_profile,
 )
 
@@ -53,3 +55,20 @@ def test_get_next_request_profile_for_twitch_is_terminal() -> None:
 def test_get_next_request_profile_handles_unknown_site_and_wrong_sequence() -> None:
     assert get_next_request_profile("youtube_web", site="unknown") is None
     assert get_next_request_profile("twitch_web", site="youtube") == "youtube_android"
+
+
+def test_youtube_profiles_match_current_innertube_clients() -> None:
+    expected = {
+        "youtube_web": (1, "2.20260708.00.00"),
+        "youtube_android": (3, "21.26.364"),
+        "youtube_ios": (5, "21.26.4"),
+    }
+
+    for profile, (client_id, version) in expected.items():
+        assert get_request_profile_innertube_client_id(profile) == client_id
+        assert (
+            REQUEST_PROFILE_INNERTUBE_CONTEXTS[profile]["client"]["clientVersion"]
+            == version
+        )
+
+    assert get_request_profile_innertube_client_id("missing") is None

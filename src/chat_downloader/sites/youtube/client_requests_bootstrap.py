@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from chat_downloader.request_profiles import (
     REQUEST_PROFILE_INNERTUBE_CONTEXTS,
+    get_request_profile_innertube_client_id,
 )
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import dig, get_dict, get_list, get_str
@@ -31,7 +32,12 @@ _MOBILE_FILTER_LABELS = {
 
 
 def _fallback_profile(profile_name: object) -> str:
-    return profile_name if isinstance(profile_name, str) else _DEFAULT_FALLBACK_PROFILE
+    if (
+        isinstance(profile_name, str)
+        and profile_name in REQUEST_PROFILE_INNERTUBE_CONTEXTS
+    ):
+        return profile_name
+    return _DEFAULT_FALLBACK_PROFILE
 
 
 def _fallback_context(profile_name: object) -> JSONDict:
@@ -119,6 +125,7 @@ def _build_fallback_ytcfg(
     context: JSONDict,
     player_response: JSONDict,
     next_response: JSONDict,
+    request_profile: object = None,
 ) -> JSONDict:
     client = context.get("client") if isinstance(context, dict) else {}
     if not isinstance(client, dict):
@@ -134,7 +141,9 @@ def _build_fallback_ytcfg(
     return {
         "INNERTUBE_API_KEY": _DEFAULT_INNERTUBE_API_KEY,
         "INNERTUBE_CONTEXT": context,
-        "INNERTUBE_CONTEXT_CLIENT_NAME": client.get("clientName"),
+        "INNERTUBE_CONTEXT_CLIENT_NAME": get_request_profile_innertube_client_id(
+            _fallback_profile(request_profile)
+        ),
         "INNERTUBE_CLIENT_VERSION": client.get("clientVersion"),
     }
 
@@ -172,7 +181,12 @@ def get_innertube_video_bootstrap(
     next_response = _post_innertube_json(session_post, "next", payload)
 
     yt_initial_data = _build_fallback_initial_data(next_response)
-    ytcfg = _build_fallback_ytcfg(context, player_response, next_response)
+    ytcfg = _build_fallback_ytcfg(
+        context,
+        player_response,
+        next_response,
+        request_profile,
+    )
     return yt_initial_data, ytcfg, player_response
 
 

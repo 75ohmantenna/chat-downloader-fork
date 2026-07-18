@@ -22,6 +22,7 @@ from .constants_patterns import (
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
 from .helpers import (
+    _extract_browse_continuation_token_from_item,
     _extract_browse_continuation_token_from_response,
     _fetch_browse_continuation,
     require_innertube_api_key,
@@ -164,19 +165,13 @@ def _process_page_items(
         rich = get_dict(get_dict(item, "richItemRenderer"), "content")
         video = get_dict(rich, "videoRenderer")
         lockup = get_dict(rich, "lockupViewModel")
-        continuation_item = get_dict(item, "continuationItemRenderer")
+        continuation = _extract_browse_continuation_token_from_item(item)
         if video:
             videos.append(_parse_video(video))
         elif lockup:
             videos.append(_parse_video({"lockupViewModel": lockup}))
-        elif continuation_item:
-            candidate = multi_get(
-                continuation_item,
-                "continuationEndpoint",
-                "continuationCommand",
-                "token",
-            )
-            token = candidate if isinstance(candidate, str) and candidate else token
+        elif continuation:
+            token = continuation
     return videos, token
 
 
@@ -286,6 +281,7 @@ class YouTubeDiscoveryMixin:
                 continuation,
                 continuation_url,
                 continuation_params,
+                ytcfg,
                 request,
                 seen_continuations,
             )

@@ -1015,10 +1015,11 @@ def test_chat_iteration_switches_profile_after_incomplete_continuation(
 ) -> None:
     downloader = _DummyDownloader()
     call_state = {"count": 0}
+    generated_header_configs = []
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._generate_headers",
-        lambda *_args, **_kwargs: {},
+        lambda ytcfg, *_args, **_kwargs: generated_header_configs.append(ytcfg) or {},
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
@@ -1064,6 +1065,13 @@ def test_chat_iteration_switches_profile_after_incomplete_continuation(
     )
 
     assert downloader.applied_profiles == ["youtube_android"]
+    assert [
+        config["INNERTUBE_CONTEXT_CLIENT_NAME"] for config in generated_header_configs
+    ] == [1, 3]
+    assert (
+        generated_header_configs[-1]["INNERTUBE_CONTEXT"]["client"]["clientName"]
+        == "ANDROID"
+    )
 
 
 def test_chat_iteration_live_updates_offset_from_message_timestamps(

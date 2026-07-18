@@ -18,14 +18,13 @@ REQUEST_PROFILES: Final[dict[str, dict[str, str]]] = {
     },
     "youtube_android": {
         "User-Agent": (
-            "com.google.android.youtube/21.03.36"
-            "(Linux; U; Android 16; en_US; SM-S908E Build/TP1A.220624.014) gzip"
+            "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip"
         ),
         "Accept-Language": "en-US,en;q=0.9",
     },
     "youtube_ios": {
         "User-Agent": (
-            "com.google.ios.youtube/21.02.3(iPhone16,2; U; "
+            "com.google.ios.youtube/21.26.4 (iPhone16,2; U; "
             "CPU iOS 18_3_2 like Mac OS X; US)"
         ),
         "Accept-Language": "en-US,en;q=0.9",
@@ -50,23 +49,23 @@ REQUEST_PROFILE_INNERTUBE_CONTEXTS: Final[dict[str, dict[str, Any]]] = {
     "youtube_web": {
         "client": {
             "clientName": "WEB",
-            "clientVersion": "2.20260206.01.00",
+            "clientVersion": "2.20260708.00.00",
         },
     },
     "youtube_android": {
         "client": {
             "clientName": "ANDROID",
-            "clientVersion": "21.03.36",
-            "androidSdkVersion": 36,
+            "clientVersion": "21.26.364",
+            "androidSdkVersion": 30,
             "userAgent": REQUEST_PROFILES["youtube_android"]["User-Agent"],
             "osName": "Android",
-            "osVersion": "16",
+            "osVersion": "11",
         },
     },
     "youtube_ios": {
         "client": {
             "clientName": "IOS",
-            "clientVersion": "21.02.3",
+            "clientVersion": "21.26.4",
             "deviceMake": "Apple",
             "deviceModel": "iPhone16,2",
             "userAgent": REQUEST_PROFILES["youtube_ios"]["User-Agent"],
@@ -74,6 +73,12 @@ REQUEST_PROFILE_INNERTUBE_CONTEXTS: Final[dict[str, dict[str, Any]]] = {
             "osVersion": "18.3.2.22D82",
         },
     },
+}
+
+_YOUTUBE_PROFILE_INNERTUBE_CLIENT_IDS: Final[dict[str, int]] = {
+    "youtube_web": 1,
+    "youtube_android": 3,
+    "youtube_ios": 5,
 }
 
 
@@ -100,6 +105,14 @@ def get_request_profile_innertube_context(
     if profile is None:
         return {}
     return copy.deepcopy(REQUEST_PROFILE_INNERTUBE_CONTEXTS.get(profile, {}))
+
+
+def get_request_profile_innertube_client_id(profile_name: object) -> int | None:
+    """Return the numeric InnerTube client ID for a YouTube profile."""
+    profile = normalize_request_profile(profile_name)
+    if profile is None:
+        return None
+    return _YOUTUBE_PROFILE_INNERTUBE_CLIENT_IDS.get(profile)
 
 
 def build_request_profile_headers(

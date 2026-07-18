@@ -17,6 +17,14 @@ from chat_downloader.sites.youtube.discovery_playlists import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _disable_browse_cookie_auth(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.helpers._generate_sapisidhash_header",
+        lambda *_args, **_kwargs: None,
+    )
+
+
 class _DummyMatch:
     def __init__(self, match_id: str, match_type: str | None) -> None:
         self._groups = {"id": match_id, "type": match_type}
@@ -1207,6 +1215,30 @@ def test_playlist_item_processing_ignores_continuation_without_token(
     assert token is None
 
 
+def test_discovery_item_processing_supports_continuation_view_models() -> None:
+    from chat_downloader.sites.youtube.discovery import _process_page_items
+    from chat_downloader.sites.youtube.discovery_playlists import (
+        _extract_playlist_items,
+    )
+    from chat_downloader.sites.youtube.helpers import (
+        _extract_browse_continuation_token_from_item,
+    )
+
+    continuation = {
+        "continuationItemViewModel": {
+            "continuationCommand": {
+                "innertubeCommand": {
+                    "continuationCommand": {"token": "view-model-token"},
+                },
+            },
+        },
+    }
+
+    assert _process_page_items([continuation]) == ([], "view-model-token")
+    assert _extract_playlist_items([continuation]) == ([], "view-model-token")
+    assert _extract_browse_continuation_token_from_item("malformed") is None
+
+
 def test_playlist_item_processing_skips_unknown_items(monkeypatch) -> None:
     from chat_downloader.sites.youtube import discovery_playlists
     from chat_downloader.sites.youtube.discovery_playlists import (
@@ -1326,8 +1358,9 @@ def test_fetch_browse_continuation_passes_empty_token_without_marking_seen(
     calls = []
 
     def fake_get_continuation_info(*_args, **kwargs):
-        calls.append(kwargs["json"])
+        calls.append((kwargs["json"], kwargs["headers"]))
         return {
+            "responseContext": {"visitorData": "visitor-2"},
             "onResponseReceivedActions": [
                 {
                     "appendContinuationItemsAction": {
@@ -1340,19 +1373,38 @@ def test_fetch_browse_continuation_passes_empty_token_without_marking_seen(
         }
 
     monkeypatch.setattr(helpers, "_get_continuation_info", fake_get_continuation_info)
+    generated_configs = []
+    monkeypatch.setattr(
+        helpers,
+        "_generate_headers",
+        lambda ytcfg, *_args: generated_configs.append(ytcfg) or {"X-Test": "api"},
+    )
     seen: set[str] = set()
-    params = {}
+    params = {"context": {"client": {"visitorData": "visitor-1"}}}
 
     items, yt_info = _fetch_browse_continuation(
         type("Downloader", (), {"_session_post": object()})(),
         "",
         "https://www.youtube.com/youtubei/v1/browse?key=key",
         params,
+        {"INNERTUBE_CONTEXT": {"client": {"visitorData": "visitor-1"}}},
         ChatRequest(url="https://www.youtube.com/@example/videos"),
         seen,
     )
 
     assert items == [{"richItemRenderer": {"content": {}}}]
     assert yt_info is not None
-    assert calls == [{"continuation": ""}]
+    assert calls == [
+        (
+            {
+                "context": {"client": {"visitorData": "visitor-2"}},
+                "continuation": "",
+            },
+            {"X-Test": "api"},
+        )
+    ]
+    assert generated_configs[0]["INNERTUBE_CONTEXT"]["client"]["visitorData"] == (
+        "visitor-1"
+    )
+    assert params["context"]["client"]["visitorData"] == "visitor-2"
     assert seen == set()
