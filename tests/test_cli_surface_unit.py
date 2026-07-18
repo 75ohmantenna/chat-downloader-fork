@@ -142,6 +142,12 @@ EXPECTED_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+EXPECTED_HELP: dict[str, str] = {
+    "--message_receive_timeout": (
+        "IRC socket receive polling timeout in seconds (minimum 1 for Twitch)"
+    ),
+}
+
 
 def _normalize_default(value: object) -> object:
     if isinstance(value, SiteDefault):
@@ -175,3 +181,11 @@ def test_cli_argument_group_membership_is_stable() -> None:
     }
 
     assert group_members == EXPECTED_GROUP_MEMBERS
+
+
+def test_cli_option_help_is_stable() -> None:
+    parser = _build_arg_parser()
+
+    assert {
+        option: parser._option_string_actions[option].help for option in EXPECTED_HELP
+    } == EXPECTED_HELP
