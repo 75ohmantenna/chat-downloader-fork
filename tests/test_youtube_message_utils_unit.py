@@ -382,6 +382,47 @@ def test_apply_author_roles_ignores_unknown_badge_without_icons() -> None:
     assert author == {"badges": [{"icon_name": "custom"}]}
 
 
+def test_modern_element_adapter_handles_malformed_optional_fields() -> None:
+    from chat_downloader.sites.youtube.parsing import (
+        message_items_content_parser as _mcp,
+    )
+
+    assert (
+        _mcp._modern_author_badges(
+            {"authorName": {"attachmentRuns": [None]}},
+        )
+        == []
+    )
+    assert _mcp._modern_timestamp_usec({}) == ""
+    assert (
+        _mcp._modern_timestamp_usec(
+            {
+                "newElement": {
+                    "properties": {
+                        "identifierProperties": {
+                            "uniqueLoggingIdentifier": "x" * 19,
+                        },
+                    },
+                },
+            },
+        )
+        == ""
+    )
+
+    item = {
+        "elementRenderer": {
+            "newElement": {
+                "type": {
+                    "componentType": {
+                        "model": {"liveChatTextMessageModel": {}},
+                    },
+                },
+            },
+        },
+    }
+    assert _mcp._normalize_modern_element_item(item) is item
+
+
 def test_parse_item_merges_header_when_show_item_endpoint_has_no_renderer(
     monkeypatch,
 ) -> None:

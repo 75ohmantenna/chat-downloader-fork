@@ -16,7 +16,7 @@ from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
 from chat_downloader.utils.json_types import JSONDict, get_dict
 
 from .message_content_text_parser import _parse_runs
-from .message_items_content_parser import _parse_item
+from .message_items_content_parser import _normalize_modern_element_item, _parse_item
 
 
 def _handle_item_action(
@@ -27,6 +27,7 @@ def _handle_item_action(
 ) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle add item and ticker actions."""
     original_item = multi_get(action, original_action_type, _PATH_ITEM)
+    original_item = _normalize_modern_element_item(original_item)
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)

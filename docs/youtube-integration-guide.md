@@ -198,6 +198,14 @@ when constructing its `player` and `next` payloads. Continuation-loop profile
 fallback remains separate and still handles incomplete chat-poll responses
 after bootstrap has succeeded.
 
+Android and iOS `next` responses use mobile-specific `playerOverlays` and
+`engagementPanels` layouts rather than the desktop conversation bar. The
+bootstrap recognizes their filter-mode models to preserve distinct Top and
+Live chat selections. Mobile continuation responses may also wrap text
+messages in `elementRenderer`; these are normalized into the same text-message
+shape used by the web client, including author identity, membership badge,
+avatar, message ID, and timestamp fields.
+
 `client_auth.py` handles SAPISIDHASH-style authorization when suitable cookies
 are available. Header values are sanitized before they appear in debug logs.
 

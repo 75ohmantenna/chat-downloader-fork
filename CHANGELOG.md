@@ -13,6 +13,13 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - **Removed CSV file output.** File output now requires a `.jsonl` or `.txt`
   path; CSV, unknown, and extensionless paths are rejected before file creation.
 
+### Fixes
+
+- **Restored YouTube chat capture with Android and iOS request profiles.**
+  Mobile InnerTube layouts now provide both Top and Live chat continuations,
+  and modern mobile text-message elements are normalized with author, badge,
+  avatar, message ID, and timestamp metadata.
+
 ### Documentation / tooling
 
 - Consolidated maintenance guidance into a current backlog and compact design

@@ -1,0 +1,88 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "elementRenderer": {
+                "compatibilityOptions": {
+                  "liveChatAuthorExternalChannelId": "UC-sanitized-author",
+                  "liveChatId": "sanitized-message-id"
+                },
+                "newElement": {
+                  "properties": {
+                    "identifierProperties": {
+                      "identifier": "live_chat_text_message.eml-fe|sanitized",
+                      "uniqueLoggingIdentifier": "1784402103176311446"
+                    }
+                  },
+                  "type": {
+                    "componentType": {
+                      "model": {
+                        "liveChatTextMessageModel": {
+                          "messageData": {
+                            "attributedTextData": {
+                              "authorName": {
+                                "attachmentRuns": [
+                                  {
+                                    "element": {
+                                      "type": {
+                                        "imageType": {
+                                          "image": {
+                                            "sources": [
+                                              {
+                                                "height": 16,
+                                                "url": "https://img.example/member=s16",
+                                                "width": 16
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ],
+                                "content": "@fixture-viewer  "
+                              },
+                              "contentText": {
+                                "content": "Fixture mobile chat message"
+                              },
+                              "timestamp": {
+                                "content": "7:14 PM"
+                              }
+                            },
+                            "authorAvatar": {
+                              "image": {
+                                "sources": [
+                                  {
+                                    "height": 32,
+                                    "url": "https://img.example/avatar=s32",
+                                    "width": 32
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "trackingParams": "sanitized"
+              }
+            }
+          }
+        }
+      ],
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "continuation": "next-mobile-token",
+            "timeoutMs": 5000
+          }
+        }
+      ]
+    }
+  }
+}

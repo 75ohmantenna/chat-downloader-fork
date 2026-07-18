@@ -121,3 +121,59 @@ def test_IzopCEgh2G8_first_live_poll_fixture_parses_text_and_summary_banner() ->
     )
     assert summary["summary_id"].startswith("IzopCEgh2G8_")
     assert "Chat summary" in summary["message"]
+
+
+def test_mobile_element_chat_fixture_parses_through_real_pipeline() -> None:
+    payload = _load_payload("youtube-CH0uI-v2Cbc-mobile-element-chat.json")
+    result = parse_continuation_response(payload)
+    messages_filter = MessageFilter(
+        _MESSAGE_GROUPS,
+        groups_to_add=["messages"],
+        types_to_add=None,
+    )
+
+    pipeline_result = process_pipeline_action(
+        result.actions[0],
+        0,
+        messages_filter,
+        None,
+    )
+
+    assert result.next_continuation == "next-mobile-token"
+    assert result.timeout_ms == 5000
+    assert pipeline_result.disposition == "yield"
+    assert pipeline_result.message == {
+        "action_type": "add_chat_item",
+        "author": {
+            "badges": [
+                {
+                    "title": "Member",
+                    "icons": [
+                        {"url": "https://img.example/member", "id": "source"},
+                        {
+                            "url": "https://img.example/member=s16",
+                            "width": 16,
+                            "height": 16,
+                            "id": "16x16",
+                        },
+                    ],
+                },
+            ],
+            "id": "UC-sanitized-author",
+            "images": [
+                {"url": "https://img.example/avatar", "id": "source"},
+                {
+                    "url": "https://img.example/avatar=s32",
+                    "width": 32,
+                    "height": 32,
+                    "id": "32x32",
+                },
+            ],
+            "is_sponsor": True,
+            "name": "@fixture-viewer",
+        },
+        "message": "Fixture mobile chat message",
+        "message_id": "sanitized-message-id",
+        "message_type": "text_message",
+        "timestamp": 1784402103176311,
+    }

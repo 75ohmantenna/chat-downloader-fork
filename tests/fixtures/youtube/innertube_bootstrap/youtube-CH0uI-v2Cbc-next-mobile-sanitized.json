@@ -1,0 +1,105 @@
+{
+  "responseContext": {
+    "visitorData": "sanitized-mobile-visitor"
+  },
+  "contents": {
+    "singleColumnWatchNextResults": {}
+  },
+  "playerOverlays": {
+    "playerOverlayRenderer": {
+      "liveChatRenderer": {
+        "liveChatRenderer": {
+          "continuations": [
+            {
+              "reloadContinuationData": {
+                "continuation": "mobile-primary-live-token"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "engagementPanels": [
+    {
+      "engagementPanelSectionListRenderer": {
+        "header": {
+          "engagementPanelTitleHeaderRenderer": {
+            "actionButtons": [
+              {
+                "buttonRenderer": {
+                  "command": {
+                    "elementsCommand": {
+                      "showActionSheetCommand": {
+                        "listOption": [
+                          {
+                            "type": {
+                              "componentType": {
+                                "model": {
+                                  "liveChatFilterModeOptionModel": {
+                                    "optionText": "Top messages",
+                                    "filterMode": "LIVE_CHAT_FILTER_MODE_DEFAULT",
+                                    "unselectedCommand": {
+                                      "serialCommand": {
+                                        "commands": [
+                                          {
+                                            "innertubeCommand": {
+                                              "reloadLiveChatCommand": {
+                                                "continuation": {
+                                                  "reloadContinuationData": {
+                                                    "continuation": "mobile-top-token"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "type": {
+                              "componentType": {
+                                "model": {
+                                  "liveChatFilterModeOptionModel": {
+                                    "optionText": "All messages",
+                                    "filterMode": "LIVE_CHAT_FILTER_MODE_UNFILTERED",
+                                    "unselectedCommand": {
+                                      "serialCommand": {
+                                        "commands": [
+                                          {
+                                            "innertubeCommand": {
+                                              "reloadLiveChatCommand": {
+                                                "continuation": {
+                                                  "reloadContinuationData": {
+                                                    "continuation": "mobile-filter-live-token"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

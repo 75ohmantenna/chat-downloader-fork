@@ -85,6 +85,32 @@ def test_innertube_bootstrap_extracts_primary_live_continuation() -> None:
     ]
 
 
+@pytest.mark.parametrize("profile", ["youtube_android", "youtube_ios"])
+def test_innertube_bootstrap_extracts_mobile_chat_continuations(profile: str) -> None:
+    def session_post(url: str, **_kwargs):
+        if "/player?" in url:
+            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-player-web.json"))
+        if "/next?" in url:
+            return _JsonResponse(
+                _load_fixture("youtube-CH0uI-v2Cbc-next-mobile-sanitized.json")
+            )
+        raise AssertionError(f"unexpected URL: {url}")
+
+    yt_initial_data, ytcfg, _player_response = get_innertube_video_bootstrap(
+        "CH0uI-v2Cbc",
+        session_post,
+        profile,
+    )
+
+    assert yt_initial_data["_chat_downloader_continuation_info"] == {
+        "Top chat": "mobile-top-token",
+        "Live chat": "mobile-primary-live-token",
+    }
+    expected_client = "ANDROID" if profile == "youtube_android" else "IOS"
+    assert ytcfg["INNERTUBE_CONTEXT"]["client"]["clientName"] == expected_client
+    assert ytcfg["INNERTUBE_CONTEXT"]["client"]["visitorData"]
+
+
 def test_parse_video_data_falls_back_after_watch_challenge(monkeypatch) -> None:
     from chat_downloader.sites.youtube import client_requests_initial
 
@@ -183,3 +209,11 @@ def test_build_fallback_initial_data_omits_empty_continuation_metadata() -> None
     )
 
     assert _build_fallback_initial_data({"contents": {}}) == {"contents": {}}
+
+
+def test_extract_reload_continuation_ignores_malformed_entries() -> None:
+    from chat_downloader.sites.youtube.client_requests_bootstrap import (
+        _extract_reload_continuation,
+    )
+
+    assert _extract_reload_continuation({"continuations": [None]}) is None
