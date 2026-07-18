@@ -118,12 +118,18 @@ class TimedGenerator:
         return self
 
     def _timeout_reason(self, at_time: float | None = None) -> str | None:
-        if self._timeout_expired.is_set():
-            return "timeout"
-        if self._inactivity_expired.is_set():
-            return "inactivity"
-
-        now = time.monotonic() if at_time is None else at_time
+        if at_time is None:
+            if self._timeout_expired.is_set():
+                return "timeout"
+            if self._inactivity_expired.is_set():
+                return "inactivity"
+            now = time.monotonic()
+        else:
+            # Worker results carry their generation timestamp. A timer may fire
+            # while an already-generated item waits in the bounded queue, so
+            # deadline decisions for results must use that timestamp instead of
+            # the timer's current event state.
+            now = at_time
         if self._timeout_deadline is not None and now >= self._timeout_deadline:
             return "timeout"
         if self._inactivity_deadline is not None and now >= self._inactivity_deadline:

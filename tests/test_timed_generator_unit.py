@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+import threading
 import time
 from unittest.mock import patch
 
@@ -44,6 +45,7 @@ def test_timed_generator_timeout_path_raises_stop_iteration_and_calls_callback()
 
     def fake_start_timer(self) -> None:
         self.timer = _FakeTimer(alive=False)
+        self._timeout_deadline = 0.0
         self._timeout_expired.set()
 
     with patch.object(TimedGenerator, "start_timer", fake_start_timer):
@@ -111,6 +113,39 @@ def test_timed_generator_ignores_stale_inactivity_thread_when_item_arrives_in_ti
     assert called == []
 
 
+def test_timed_generator_delivers_item_generated_before_inactivity_deadline() -> None:
+    generated = threading.Event()
+    called = []
+
+    def gen():
+        generated.set()
+        yield "queued-before-deadline"
+
+    tg = TimedGenerator(
+        gen(),
+        inactivity_timeout=0.1,
+        on_inactivity_timeout=lambda: called.append("inactivity"),
+    )
+    assert generated.wait(timeout=1.0)
+    time.sleep(0.15)
+
+    assert next(tg) == "queued-before-deadline"
+    assert called == []
+    tg.close()
+
+
+def test_timeout_reason_uses_worker_completion_time_over_expiry_events() -> None:
+    tg = TimedGenerator(iter(()), timeout=10, inactivity_timeout=10)
+    tg._timeout_deadline = 20.0
+    tg._inactivity_deadline = 20.0
+    tg._timeout_expired.set()
+    tg._inactivity_expired.set()
+
+    assert tg._timeout_reason(19.0) is None
+    assert tg._timeout_reason(20.0) == "timeout"
+    tg.close()
+
+
 def test_timed_generator_inactivity_timeout_path_raises_stop_iteration_and_calls_callback() -> (  # noqa: E501
     None
 ):
@@ -122,6 +157,7 @@ def test_timed_generator_inactivity_timeout_path_raises_stop_iteration_and_calls
 
     def fake_start_inactivity_timer(self) -> None:
         self.inactivity_timer = _FakeTimer(alive=False)
+        self._inactivity_deadline = 0.0
         self._inactivity_expired.set()
 
     with patch.object(
