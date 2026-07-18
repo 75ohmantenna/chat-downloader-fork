@@ -25,7 +25,7 @@ from chat_downloader.utils.dict_utils import try_get_first_key
 from chat_downloader.utils.json_types import JSONDict, get_dict, get_list, get_str
 from chat_downloader.utils.string_utils import camel_case_split, remove_suffixes
 
-from .actions_handlers import (
+from .actions_handlers_parser import (
     _handle_add_banner_action,
     _handle_item_action,
     _handle_poll_action,

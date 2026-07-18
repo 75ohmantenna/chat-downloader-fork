@@ -76,27 +76,26 @@ The normal YouTube flow is:
 ### Continuation loop
 
 - `chat_streams.py`: site-level chat entry methods
-- `chat_streams_runtime_iteration.py`: main polling loop
+- `continuation.py`: cohesive live/replay polling loop, request-profile
+  fallback, response handling, and action iteration
+- `continuation_helpers.py`: pure state, timing, filter, and URL helpers
 - `chat_users_router.py` and `chat_users_retrieval.py`: optional chat-user
   lookup routing and retrieval helpers
 - `continuations.py`: continuation parsing models and utilities
-- `continuation_loop.py`, `continuation_loop_runtime.py`, and
-  `continuation_loop_state.py`: loop state and live timing helpers
 - `message_pipeline.py`: filtering and action-to-message pipeline boundary
 
 ### Parsing
 
-- `parsing/actions_router.py`, `parsing/actions_handlers.py`,
-  `parsing/actions_handlers_parser.py`, and
+- `parsing/actions_router.py`, `parsing/actions_handlers_parser.py`, and
   `parsing/actions_handlers_validation.py`: action routing, parsing, and
   validation
 - `parsing/message_content_badges.py`,
   `parsing/message_content_text_parser.py`,
 - `parsing/message_items_content_parser.py`,
-  `parsing/message_items_video.py`, `parsing/message_links.py`, and
-  `parsing/message_utils.py`: message content, links, video metadata, and
-  shared normalization helpers
-- `parsing/messages.py`: message-level parsing helpers
+  `parsing/message_items_video.py`, and `parsing/message_links.py`: message
+  content, links, video metadata, and shared normalization helpers
+- `parsing/__init__.py`: package-level parsing surface; focused modules own the
+  implementations directly
 
 ## Capture Behavior
 
@@ -186,7 +185,7 @@ does not expose replay chat for the target.
 
 When `auto_profile_fallback` is enabled, the continuation loop can rotate
 YouTube profiles after repeated incomplete continuation payloads. The fallback
-logic lives in `chat_streams_runtime_iteration.py`; profile headers and
+logic lives in `continuation.py`; profile headers and
 InnerTube context adjustments live in `client_context.py` and
 `request_profiles.py`.
 
@@ -325,7 +324,7 @@ When debugging YouTube breakage, inspect modules in this order:
 3. `client_context.py`
 4. `client_auth.py`
 5. `client_requests_continuation.py`
-6. `chat_streams_runtime_iteration.py`
+6. `continuation.py`
 7. `continuations.py`
 8. `parsing/`
 

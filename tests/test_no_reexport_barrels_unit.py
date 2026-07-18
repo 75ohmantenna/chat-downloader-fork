@@ -17,18 +17,7 @@ from pathlib import Path
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"
 
 # Non-__init__ modules that are intentionally thin facades. Add with a reason.
-ALLOWLIST: frozenset[str] = frozenset(
-    {
-        # Pre-existing public-symbol facades for the youtube parsing subpackage.
-        # They aggregate the subpackage's public API (a package-__init__-like
-        # role). Tracked in docs/maintenance-backlog.md as candidates to fold
-        # into package __init__ files; allowlisted so this guard blocks *new*
-        # barrels without forcing an out-of-scope parsing refactor here.
-        "sites/youtube/parsing/messages.py",
-        "sites/youtube/parsing/message_utils.py",
-        "sites/youtube/parsing/actions_handlers.py",
-    }
-)
+ALLOWLIST: frozenset[str] = frozenset()
 
 # ``__main__.py`` is a conventional CLI entry point, not a re-export barrel.
 _EXEMPT_NAMES = frozenset({"__init__.py", "__main__.py"})

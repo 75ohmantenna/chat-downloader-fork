@@ -17,7 +17,7 @@ from chat_downloader.errors import (
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_value
 from chat_downloader.utils.json_types import get_dict, get_str
 
-from .parsing.messages import _parse_runs
+from .parsing.message_content_text_parser import _parse_runs
 
 if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict

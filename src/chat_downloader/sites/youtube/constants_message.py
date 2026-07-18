@@ -196,24 +196,23 @@ def build_remapping() -> Mapping[str, Any]:
     """Build the full _REMAPPING dictionary with parsing functions.
 
     This function is called to create the complete remapping configuration that
-    includes references to parsing functions from the parsing.messages module.
+    includes references to the focused parsing modules.
 
     :return: Complete remapping dictionary
     :rtype: dict
     """
     from chat_downloader.utils.conversion_utils import int_or_none
 
-    from .parsing.messages import (
+    from .parsing.message_content_badges import _parse_badges, _parse_currency
+    from .parsing.message_content_text_parser import (
         _get_simple_text,
         _parse_action_button,
-        _parse_badges,
-        _parse_currency,
-        _parse_item,
-        _parse_navigation_endpoint,
         _parse_runs,
         _parse_text,
         _parse_thumbnails,
     )
+    from .parsing.message_items_content_parser import _parse_item
+    from .parsing.message_links import _parse_navigation_endpoint
 
     return MappingProxyType(
         {
@@ -300,12 +299,12 @@ def build_video_remapping() -> Mapping[str, Any]:
 
     This function is called to create the complete video remapping
     configuration that includes references to parsing functions from the
-    parsing.messages module.
+    focused parsing modules.
 
     :return: Complete video remapping dictionary
     :rtype: dict
     """
-    from .parsing.messages import _parse_runs, _parse_text
+    from .parsing.message_content_text_parser import _parse_runs, _parse_text
 
     return MappingProxyType(
         {

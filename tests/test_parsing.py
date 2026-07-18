@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from chat_downloader.sites.youtube.parsing.messages import (
+from chat_downloader.sites.youtube.parsing import (
     _get_simple_text,
     _get_source_image_url,
     _parse_navigation_endpoint,

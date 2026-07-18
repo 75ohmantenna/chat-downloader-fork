@@ -24,7 +24,7 @@ from .helpers import (
     _fetch_browse_continuation,
     require_innertube_api_key,
 )
-from .parsing.messages import _parse_video
+from .parsing.message_items_video import _parse_video
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
-from .parsing.actions_handlers import validate_and_finalize_message
+from .parsing.actions_handlers_validation import validate_and_finalize_message
 from .parsing.actions_router import ProcessedAction, process_action
 
 if TYPE_CHECKING:

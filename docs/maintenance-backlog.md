@@ -25,14 +25,6 @@ the full rationale behind deferred items.
 
 ## Active watchlist
 
-### YouTube parsing public-symbol facades
-**Status: open/allowlisted** — `sites/youtube/parsing/messages.py`,
-`message_utils.py`, and `actions_handlers.py` are re-export-only barrels that
-aggregate the parsing subpackage's public symbols. They are allowlisted in
-`tests/test_no_reexport_barrels_unit.py`. Candidate to fold into a
-`parsing/__init__.py` public surface; deferred to keep the continuation-loop
-consolidation focused. No behavior impact.
-
 ### Kick official Public API
 **Status: open/watch** — use as a schema and future-option reference; do not
 rewrite the live capture path without evidence that it can read public chat.
@@ -97,15 +89,14 @@ reasons; their `# noqa: C901` annotations carry inline justifications:
 - `sites/youtube/client_requests_initial.py:_get_initial_info` — HTTP
   status-code dispatch + retry loop; revisit only if a future edit raises its
   McCabe score above 10
-- `sites/youtube/chat_streams_runtime_iteration.py:_get_chat_messages` —
+- `sites/youtube/continuation.py:_ContinuationLoop.run` —
   live/replay branching, no-progress guard, and end-message injection are
   intrinsic; complexity reduced but remains above gate (see `maintenance-notes.md`)
 
 ### Allowlisted large modules
-**Status: closed** — reopen only if a future edit crosses 400 LOC.
-- `chat_downloader.py` (416 LOC) — thin API facade; size is docstring-dominated
-  (`get_chat` docstring alone is ~90 lines). No split: splitting harms the
-  single public entry point and there is no independent logic to move.
+**Status: closed** — revisit only if the module's responsibility changes.
+- `sites/youtube/continuation.py` — cohesive continuation loop reunified from
+  phase-based modules; pure helpers remain in `continuation_helpers.py`.
 - `sites/twitch/extractor.py` (394 LOC) — single-class site extractor,
   maximally delegated; GraphQL glue is `self`-bound. 6 lines under ceiling;
   stable. See `maintenance-notes.md § Round-07`.

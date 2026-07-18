@@ -16,7 +16,7 @@ from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
 from chat_downloader.utils.json_types import JSONDict, get_dict
 
 from .message_content_text_parser import _parse_runs
-from .messages import _parse_item
+from .message_items_content_parser import _parse_item
 
 
 def _handle_item_action(

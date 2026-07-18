@@ -182,7 +182,8 @@ Coverage reproducibility notes:
 - Use current YouTube boundaries: `video_initialization.py`,
   `client_context.py`, `client_requests_initial.py`,
   `client_requests_continuation.py`, `continuations.py`,
-  `chat_streams_runtime_iteration.py`, `message_pipeline.py`, and `parsing/`
+  `continuation.py`, `continuation_helpers.py`, `message_pipeline.py`, and
+  `parsing/`
 - Use current Kick boundaries: `api_client.py`, `websocket_transport.py`,
   `live_service.py`, `replay_service.py`, `constants.py`, and `parsing/`
 

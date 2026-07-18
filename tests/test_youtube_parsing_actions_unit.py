@@ -13,9 +13,6 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
 from chat_downloader.sites.youtube.constants_message import (
     build_video_remapping,
 )
-from chat_downloader.sites.youtube.parsing.actions_handlers import (
-    validate_and_finalize_message,
-)
 from chat_downloader.sites.youtube.parsing.actions_handlers_parser import (
     _handle_add_banner_action,
     _handle_item_action,
@@ -24,6 +21,9 @@ from chat_downloader.sites.youtube.parsing.actions_handlers_parser import (
     _handle_remove_banner_action,
     _handle_replace_action,
     _handle_tooltip_action,
+)
+from chat_downloader.sites.youtube.parsing.actions_handlers_validation import (
+    validate_and_finalize_message,
 )
 from chat_downloader.sites.youtube.parsing.actions_router import (
     _ACTION_HANDLERS,
