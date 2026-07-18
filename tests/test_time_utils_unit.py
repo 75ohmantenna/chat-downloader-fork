@@ -153,6 +153,12 @@ def test_ensure_seconds_with_invalid_input() -> None:
     result = ensure_seconds([1, 2, 3], default=456)
     assert result == 456
 
+    assert ensure_seconds("not-a-time", default=789) == 789
+    assert ensure_seconds("1:not-a-number", default=789) == 789
+    assert ensure_seconds(float("nan"), default=789) == 789
+    assert ensure_seconds(float("inf"), default=789) == 789
+    assert ensure_seconds(10**10_000, default=789) == 789
+
 
 def test_ensure_seconds_non_string_value_error() -> None:
     """Test ensure_seconds line 178: ValueError but value is not a string.

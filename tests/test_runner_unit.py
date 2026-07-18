@@ -85,6 +85,7 @@ def _make_error_downloader(error_to_raise: BaseException) -> type:
         (SiteNotSupported("no site"), "no site"),
         (RequestException("timeout"), "timeout"),
         (OSError("disk full"), "disk full"),
+        (ValueError("max_attempts must be positive"), "max_attempts"),
     ],
 )
 def test_classify_run_error_returns_correct_message(
@@ -104,6 +105,7 @@ def test_classify_run_error_returns_correct_message(
         (SiteNotSupported("no site"), "no site", False),
         (RequestException("timeout"), "timeout", False),
         (OSError("disk full"), "disk full", False),
+        (ValueError("max_attempts must be positive"), "max_attempts", False),
         (KeyboardInterrupt(), "Keyboard Interrupt", True),
     ],
 )

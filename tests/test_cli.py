@@ -78,6 +78,18 @@ def test_cli_no_exit_on_success() -> None:
         main([url])  # must not raise SystemExit
 
 
+def test_cli_invalid_request_exits_without_traceback(caplog) -> None:
+    url = "https://www.youtube.com/watch?v=jfKfPfyJRdk"
+    caplog.set_level("ERROR")
+
+    with pytest.raises(SystemExit) as exc_info:
+        main([url, "--max_attempts", "0"])
+
+    assert exc_info.value.code == 1
+    assert "max_attempts" in caplog.text
+    assert "Traceback" not in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # splitter()
 # ---------------------------------------------------------------------------

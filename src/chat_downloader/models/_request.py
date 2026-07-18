@@ -16,12 +16,61 @@ from chat_downloader.models._base import (
     _cli,
 )
 from chat_downloader.models._site_default import SiteDefault
+from chat_downloader.utils.time_utils import ensure_seconds
 
 
 class _SiteValueResolver(Protocol):
     """Structural interface for objects that resolve site-default values."""
 
     def get_site_value(self, value: object) -> object: ...
+
+
+def _validate_positive_integer(
+    name: str,
+    value: object,
+    *,
+    allow_none: bool = False,
+) -> None:
+    """Validate a positive integer request field."""
+    if value is None and allow_none:
+        return
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        suffix = " or None" if allow_none else ""
+        msg = f"{name} must be a positive integer{suffix}, got {value!r}"
+        raise ValueError(msg)
+
+
+def _validate_finite_number(
+    name: str,
+    value: object,
+    *,
+    positive: bool,
+    allow_none: bool,
+) -> None:
+    """Validate a finite numeric request field."""
+    if value is None and allow_none:
+        return
+    invalid = (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or (positive and value <= 0)
+    )
+    if invalid:
+        qualifier = "finite positive number" if positive else "finite number"
+        suffix = " or None" if allow_none else ""
+        msg = f"{name} must be a {qualifier}{suffix}, got {value!r}"
+        raise ValueError(msg)
+
+
+def _validate_time_bound(name: str, value: float | str | None) -> None:
+    """Validate a numeric or colon-separated replay time bound."""
+    if value is None:
+        return
+    invalid_time = object()
+    if isinstance(value, bool) or ensure_seconds(value, invalid_time) is invalid_time:
+        msg = f"{name} must be seconds or an hh:mm:ss value, got {value!r}"
+        raise ValueError(msg)
 
 
 @dataclass(slots=True)
@@ -216,38 +265,43 @@ class ChatRequest:
 
     def __post_init__(self) -> None:
         """Validate request fields that have constrained runtime values."""
-        if self.max_messages is not None and (
-            not isinstance(self.max_messages, int) or self.max_messages <= 0
-        ):
-            msg = (
-                "max_messages must be a positive integer or None, "
-                f"got {self.max_messages!r}"
-            )
-            raise ValueError(msg)
-        if self.max_attempts < 1:
-            msg = f"max_attempts must be >= 1, got {self.max_attempts!r}"
-            raise ValueError(msg)
-        if self.buffer_size <= 0:
-            msg = f"buffer_size must be positive, got {self.buffer_size!r}"
-            raise ValueError(msg)
+        _validate_positive_integer(
+            "max_messages",
+            self.max_messages,
+            allow_none=True,
+        )
+        _validate_positive_integer("max_attempts", self.max_attempts)
+        _validate_positive_integer("buffer_size", self.buffer_size)
         if self.chat_type not in ("live", "top"):
             msg = f"chat_type must be 'live' or 'top', got {self.chat_type!r}"
             raise ValueError(msg)
+        _validate_finite_number(
+            "retry_timeout",
+            self.retry_timeout,
+            positive=False,
+            allow_none=True,
+        )
         for name, value in (
             ("timeout", self.timeout),
             ("inactivity_timeout", self.inactivity_timeout),
         ):
-            if value is not None and (not math.isfinite(value) or value <= 0):
-                msg = f"{name} must be a finite positive number or None, got {value!r}"
-                raise ValueError(msg)
-        if not math.isfinite(self.message_receive_timeout) or (
-            self.message_receive_timeout <= 0
-        ):
-            msg = (
-                "message_receive_timeout must be a finite positive number, "
-                f"got {self.message_receive_timeout!r}"
+            _validate_finite_number(
+                name,
+                value,
+                positive=True,
+                allow_none=True,
             )
-            raise ValueError(msg)
+        _validate_finite_number(
+            "message_receive_timeout",
+            self.message_receive_timeout,
+            positive=True,
+            allow_none=False,
+        )
+        for time_name, time_value in (
+            ("start_time", self.start_time),
+            ("end_time", self.end_time),
+        ):
+            _validate_time_bound(time_name, time_value)
 
     @classmethod
     def from_kwargs(cls, *, strict: bool = False, **kwargs: Any) -> Self:

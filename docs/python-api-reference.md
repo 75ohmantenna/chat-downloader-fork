@@ -182,10 +182,11 @@ Additional fields are available for retry and transport tuning:
 - `message_receive_timeout`
 - `buffer_size`
 
-Validation raises `ValueError` for: non-positive `max_messages`; `max_attempts < 1`;
-non-positive `buffer_size`; `chat_type` outside `"live"` and `"top"`; non-positive
-`timeout` or `inactivity_timeout` when set (they may be `None`); non-positive
-`message_receive_timeout` when set.
+Validation raises `ValueError` for: non-positive or non-integer message/retry/buffer
+counts; malformed or non-finite start/end times; non-finite `retry_timeout`;
+`chat_type` outside `"live"` and `"top"`; non-positive or non-finite `timeout` or
+`inactivity_timeout` when set (they may be `None`); and non-positive or
+non-finite `message_receive_timeout`.
 
 Helpers:
 

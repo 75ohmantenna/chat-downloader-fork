@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -594,6 +595,48 @@ def test_buffer_size_positive_allowed() -> None:
 def test_buffer_size_invalid_raises(buffer_size: int) -> None:
     with pytest.raises(ValueError, match="buffer_size"):
         ChatRequest(buffer_size=buffer_size)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("max_messages", True),
+        ("max_attempts", 1.5),
+        ("max_attempts", True),
+        ("buffer_size", 1.5),
+        ("buffer_size", True),
+        ("retry_timeout", "manual"),
+        ("retry_timeout", True),
+        ("retry_timeout", float("nan")),
+        ("timeout", "forever"),
+        ("inactivity_timeout", True),
+        ("message_receive_timeout", "slow"),
+    ],
+)
+def test_request_numeric_fields_reject_wrong_runtime_values(
+    field_name: str,
+    value: Any,
+) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        ChatRequest(**{field_name: value})
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("start_time", "not-a-time"),
+        ("start_time", "1:not-a-number"),
+        ("start_time", True),
+        ("end_time", float("nan")),
+        ("end_time", float("inf")),
+    ],
+)
+def test_request_time_bounds_reject_malformed_values(
+    field_name: str,
+    value: Any,
+) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        ChatRequest(**{field_name: value})
 
 
 @pytest.mark.parametrize("chat_type", ["live", "top"])

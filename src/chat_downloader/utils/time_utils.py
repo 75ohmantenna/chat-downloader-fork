@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import datetime
+import math
 import re
 from typing import Any
 
@@ -168,14 +169,18 @@ def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any
         return default
 
     try:
-        return float(time)
+        seconds = float(time)
     except ValueError:
         # If float conversion fails, time must be a string timestamp
         if isinstance(time, str):
-            return time_to_seconds(time)
+            try:
+                return time_to_seconds(time)
+            except (TypeError, ValueError):
+                return default
         return default
-    except (TypeError, AttributeError):
+    except (TypeError, AttributeError, OverflowError):
         return default
+    return seconds if math.isfinite(seconds) else default
 
 
 def parse_timezone(

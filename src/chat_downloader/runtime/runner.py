@@ -159,7 +159,13 @@ def execute_run(
         result.success = True
         log("info", "Finished retrieving chat messages.")
 
-    except (ChatDownloaderError, RequestException, TestingException, OSError) as e:
+    except (
+        ChatDownloaderError,
+        RequestException,
+        TestingException,
+        OSError,
+        ValueError,
+    ) as e:
         primary_error = True
         result.error_message = _classify_run_error(e)
         log("error", result.error_message)
