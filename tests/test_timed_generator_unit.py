@@ -9,9 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from chat_downloader.debugging import TestingException as _TestingException
-from chat_downloader.debugging import TestingModes as _TestingModes
-from chat_downloader.debugging import debug_log, get_testing_mode, set_testing_mode
+import chat_downloader.debugging as _debugging
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 
@@ -38,20 +36,20 @@ def test_timed_generator_keyboard_interrupt_no_timers_propagates() -> None:
 
 
 def test_timed_generator_propagates_testing_context_to_worker() -> None:
-    original_mode = get_testing_mode()
+    original_mode = _debugging.get_testing_mode()
 
     def gen():
-        debug_log("unexpected worker data")
+        _debugging.debug_log("unexpected worker data")
         yield "continued"
 
     try:
-        set_testing_mode(_TestingModes.EXIT_ON_DEBUG)
+        _debugging.set_testing_mode(_debugging.TestingModes.EXIT_ON_DEBUG)
         tg = TimedGenerator(gen())
 
-        with pytest.raises(_TestingException):
+        with pytest.raises(_debugging.TestingException):
             next(tg)
     finally:
-        set_testing_mode(original_mode)
+        _debugging.set_testing_mode(original_mode)
 
 
 def test_timed_generator_timeout_path_raises_stop_iteration_and_calls_callback() -> (
