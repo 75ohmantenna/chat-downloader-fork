@@ -8,8 +8,8 @@ from chat_downloader.errors import ParsingError
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.chat_streams import YouTubeChatStreamsMixin
-from chat_downloader.sites.youtube.discovery_helpers import (
-    YouTubeDiscoveryHelpersMixin,
+from chat_downloader.sites.youtube.discovery import (
+    YouTubeDiscoveryMixin,
 )
 from chat_downloader.sites.youtube.video_status import (
     video_details_to_dict,
@@ -49,33 +49,45 @@ def test_video_details_to_dict_serializes_dataclass_fields() -> None:
     }
 
 
-def test_channel_discovery_mixin_coerces_typed_request_before_delegating() -> None:
+def test_channel_discovery_mixin_coerces_typed_request(monkeypatch) -> None:
     captured = []
 
-    class DummyDiscovery(YouTubeDiscoveryHelpersMixin):
+    class DummyDiscovery(YouTubeDiscoveryMixin):
+        _session_get = object()
+        _session_post = object()
+
         def _coerce_chat_request(self, params):
-            return {"coerced_from": params.url}
+            captured.append(params)
+            return params
 
-    def fake_get_user_videos(owner, **kwargs):
-        captured.append((owner, kwargs))
-        yield {"video_id": "one"}
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.discovery._get_initial_info",
+        lambda *_args, **_kwargs: (
+            {
+                "contents": {
+                    "twoColumnBrowseResultsRenderer": {
+                        "tabs": [
+                            {
+                                "tabRenderer": {
+                                    "selected": True,
+                                    "title": "Videos",
+                                    "content": {},
+                                }
+                            }
+                        ]
+                    }
+                }
+            },
+            {"INNERTUBE_API_KEY": "key"},
+            {},
+        ),
+    )
+    request = ChatRequest(url="https://www.youtube.com/channel/abc/videos")
 
-    import chat_downloader.sites.youtube.discovery_helpers as mod
+    result = list(DummyDiscovery().get_user_videos(channel_id="abc", params=request))
 
-    original = mod.get_user_videos
-    mod.get_user_videos = fake_get_user_videos
-    try:
-        request = ChatRequest(url="https://www.youtube.com/channel/abc/videos")
-        result = list(
-            DummyDiscovery().get_user_videos(channel_id="abc", params=request)
-        )
-    finally:
-        mod.get_user_videos = original
-
-    assert result == [{"video_id": "one"}]
-    assert captured[0][1]["params"] == {
-        "coerced_from": "https://www.youtube.com/channel/abc/videos",
-    }
+    assert result == []
+    assert captured == [request]
 
 
 def test_chat_streams_mixin_get_chat_messages_delegates_runtime_helper() -> None:

@@ -66,10 +66,11 @@ BASELINE: dict[str, int] = {
     "sites/youtube/parsing/message_items_content_parser.py": 10,
     "sites/youtube/parsing/actions_router.py": 9,
     "sites/youtube/helpers.py": 2,
-    "sites/youtube/discovery_channels_runtime_iteration.py": 9,
+    # Discovery's public kwargs/test-item boundary remains heterogeneous; raw
+    # provider pages use JSONAny/JSONDict/JSONList internally.
+    "sites/youtube/discovery.py": 5,
     "sites/youtube/video_metadata.py": 4,
     "sites/youtube/parsing/message_content_badges.py": 3,
-    "sites/youtube/discovery_helpers.py": 6,
     "sites/youtube/client_context.py": 6,
     "sites/youtube/video_status.py": 8,
     "sites/youtube/discovery_playlists.py": 8,

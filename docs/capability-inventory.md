@@ -11,6 +11,7 @@ large refactors, parser reshaping, or tooling changes.
 | Python API: `ChatDownloader`, `run`, dataclasses, exports | `chat_downloader.py`, `models/`, package `__init__.py` files | model tests, facade tests, public API snapshots, facade-param sync |
 | URL dispatch and site defaults | `runtime/site_dispatch.py`, `sites/base.py`, `models.SiteDefault` | site-dispatch, URL-matching, session tests, `SiteDefault` identity test |
 | YouTube bootstrap, live/replay/clip continuations, parsing | `sites/youtube/` | YouTube unit tests, live-event fixtures, continuation fixtures, drift harness |
+| YouTube channel, handle, and playlist discovery | `sites/youtube/discovery.py`, `discovery_playlists.py` | YouTube discovery unit and downloader-assembly tests |
 | Twitch live IRC | `sites/twitch/live_service.py`, `irc_transport.py`, `parsing/` | live-service, transport, IRC parser, drift harness tests |
 | Twitch VOD and clip replay | `sites/twitch/replay_service.py`, `_replay_vod_loop.py`, `replay_transport.py` | replay service, replay transport, VOD edge tests |
 | Twitch GraphQL hashes, badges, Client-ID | `graphql_client.py`, `constants.py`, `types.py`, `parsing/badges.py` | Twitch client, hash coverage, badge-purity tests |

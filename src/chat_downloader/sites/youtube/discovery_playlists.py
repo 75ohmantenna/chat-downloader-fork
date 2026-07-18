@@ -16,7 +16,7 @@ from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
-from .discovery_helpers import _get_rendered_content
+from .discovery import _get_rendered_content
 from .helpers import (
     _extract_browse_continuation_token_from_response,
     _fetch_browse_continuation,
@@ -39,6 +39,8 @@ def _extract_playlist_items(
     videos: list[dict[str, Any]] = []
     token: str | None = None
     for item in items:
+        if not isinstance(item, dict):
+            continue
         vid = item.get("playlistVideoRenderer")
         cont_item = item.get("continuationItemRenderer")
         if vid:
@@ -82,13 +84,14 @@ class YouTubePlaylistDiscoveryMixin:
         )
 
         page_contents = _get_rendered_content(yt_initial_data)
+        page_container = page_contents if isinstance(page_contents, dict) else {}
 
         api_key = require_innertube_api_key(ytcfg)
         continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
         continuation_params: dict[str, Any] = {"context": _get_innertube_context(ytcfg)}
 
         first_items: list[Any] = (
-            multi_get(page_contents, "playlistVideoListRenderer", "contents") or []
+            multi_get(page_container, "playlistVideoListRenderer", "contents") or []
         )
         videos, continuation = _extract_playlist_items(first_items)
         yield from videos

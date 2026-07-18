@@ -164,7 +164,8 @@ memory bounded independently of the number of fetched messages.
 |--------|---------|
 | `_protocols.py` | YouTube-specific Protocol definitions |
 | `chat_users_retrieval.py`, `chat_users_router.py` | Chat participant retrieval and routing |
-| `discovery_channels_runtime_iteration.py`, `discovery_helpers.py`, `discovery_playlists.py` | Channel and playlist discovery helpers |
+| `discovery.py` | `YouTubeDiscoveryMixin`: cohesive channel discovery, pagination, rendered-content traversal, and test URL generation |
+| `discovery_playlists.py` | Playlist discovery and pagination |
 | `extractor.py` | YouTube site extractor class wiring mixins together |
 | `helpers.py` | YouTube payload/navigation helpers |
 | `message_pipeline.py` | Message filtering/remapping pipeline |

@@ -24,7 +24,7 @@ from .client_auth import (
     _initialize_pref,
 )
 from .constants_patterns import _VALID_URLS
-from .discovery_helpers import YouTubeDiscoveryHelpersMixin
+from .discovery import YouTubeDiscoveryMixin
 from .discovery_playlists import YouTubePlaylistDiscoveryMixin
 from .video_initialization import YouTubeVideoInitializationMixin
 from .video_metadata import YouTubeVideoMetadataCoreMixin
@@ -41,7 +41,7 @@ _YOUTUBE_LIVE_FORMAT_OVERRIDES: dict[str, str] = {
 
 
 class YouTubeChatDownloader(
-    YouTubeDiscoveryHelpersMixin,
+    YouTubeDiscoveryMixin,
     YouTubePlaylistDiscoveryMixin,
     YouTubeVideoMetadataCoreMixin,
     YouTubeVideoInitializationMixin,
