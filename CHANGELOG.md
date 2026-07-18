@@ -6,7 +6,7 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
-## Unreleased
+## 2.0.0 — 2026-07-18
 
 ### Breaking changes
 
