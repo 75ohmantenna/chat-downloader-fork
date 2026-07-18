@@ -17,7 +17,7 @@ large refactors, parser reshaping, or tooling changes.
 | Twitch GraphQL hashes, badges, Client-ID | `graphql_client.py`, `constants.py`, `types.py`, `parsing/badges.py` | Twitch client, hash coverage, badge-purity tests |
 | Kick live Pusher chat | `sites/kick/live_service.py`, `websocket_transport.py`, `api_client.py`, `http_session.py`, `parsing/` | Kick live-service, transport, api-client, parsing unit tests |
 | Kick VOD replay | `sites/kick/replay_service.py`, `api_client.py` | Kick replay-service and api-client tests |
-| Kick Pusher key discovery, Cloudflare handling, event/group maps | `sites/kick/constants.py`, `api_client.py`, `parsing/events.py` | Kick extractor, api-client, parsing-events tests |
+| Kick Pusher key discovery, Cloudflare handling, event/group maps | `sites/kick/pusher_discovery.py`, `constants.py`, `api_client.py`, `parsing/events.py` | Kick pusher-discovery, extractor, api-client, parsing-events tests |
 | Output formats: JSONL and TXT; unsupported extensions rejected | `output/continuous_write.py`, `output/writers.py` | output writer, continuous-write, JSONL UTC, multiple-output tests |
 | Paid/ticker semantic dedup for formatted outputs; lossless raw output | `sites/_message_dedup.py`, `sites/output_dispatch.py`, `runtime/runner.py` | deduplication, chat-model, runner, and mixed-output tests |
 | Filtering, formatting, time windows | `sites/filters.py`, `formatting/format.py`, `runtime/chat_pipeline.py` | filtering, formatting, chat-pipeline tests |

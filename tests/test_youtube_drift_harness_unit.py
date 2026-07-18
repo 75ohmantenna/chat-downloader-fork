@@ -10,12 +10,12 @@ becomes a permanent regression anchor.
 
 Workflow for new drift
 ----------------------
-1. Run with ``CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1``; the captured JSON lands
-   in ``tests/fixtures/youtube/debug_samples/``.
+1. Run with ``CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`` and optionally set
+   ``CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR``; otherwise capture uses a temp directory.
 2. Identify the cause (unknown action, unknown message type, missing key).
 3. Fix the parsing code.
-4. Copy the captured raw continuation to ``tests/fixtures/youtube/live_events/``
-   and rename to ``*.json``.
+4. Review the capture, copy the raw continuation to
+   ``tests/fixtures/youtube/live_events/``, and rename it to ``*.json``.
 5. Run this harness — it must pass before merging.
 """
 

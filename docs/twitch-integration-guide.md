@@ -187,20 +187,31 @@ downloader exceptions such as:
 The default public Client-ID is defined in `constants.py`; callers can override
 it with `DownloaderConfig(twitch_client_id=...)` or `--twitch_client_id`.
 
-## Capture-and-Fix Workflow for Drift
+### GraphQL hash rotation
+
+When Twitch rotates a persisted-query hash:
+
+1. Update `OPERATION_HASHES` in `src/chat_downloader/sites/twitch/constants.py`.
+2. Run `tests/test_twitch_drift_harness_unit.py`. Its coverage and orphan
+   checks keep the table aligned with operation names used by the client.
+
+These are structural offline checks; no network access is required.
+
+## Capture and fix parser drift
 
 When a live IRC message or GraphQL response triggers `debug_log` with an
-unknown type, the runtime emits a sentinel and (with
-`CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`) saves a JSON snapshot in
-`tests/fixtures/twitch/debug_samples/`.
+unknown type, the runtime emits a sentinel and can save a sanitized snapshot.
+See [Debug sample capture](development-workflow-guide.md#debug-sample-capture)
+for capture configuration. Promote reviewed samples into
+`tests/fixtures/twitch/`.
 
 To turn a captured drift sample into a permanent regression anchor:
 
-1. **Reproduce** — run the failing stream with
+1. Reproduce the failure with
    `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1` and `--logging debug`.
-2. **Identify** — read the snapshot. The two sentinel phrases checked by the
+2. Read the snapshot. The two sentinel phrases checked by the
    harness are `"Unknown action type"` and `"Unknown message type"`.
-3. **Fix** — in order of what the message likely needs:
+3. Update the relevant parser contract:
    - New IRC action type → extend
      `parsing/message_irc_resolve.py::_resolve_irc_action_and_message_type`.
    - New IRC message type → extend
@@ -209,30 +220,15 @@ To turn a captured drift sample into a permanent regression anchor:
      known-key set in `validation_keys.py`.
    - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`;
      see GraphQL Hash Rotation below.
-4. **Capture raw IRC line** — add a `{"raw": "<irc line>\\r\\n"}` fixture to
+4. Add a `{"raw": "<irc line>\\r\\n"}` fixture to
    `tests/fixtures/twitch/live_events/` with a descriptive name.
-5. **Validate** — run the drift harness:
+5. Run the drift harness, then the canonical validation:
    ```bash
    uv run pytest -q tests/test_twitch_drift_harness_unit.py
+   make ci
    ```
    It replays every fixture and asserts no sentinel fires. A passing harness
    makes the fix a permanent regression anchor.
-6. **Full suite** — run `make ci` before committing.
-
-## GraphQL Hash Rotation
-
-Persisted GraphQL query hashes are the primary fragility point. When Twitch
-rotates a hash:
-
-1. Update `OPERATION_HASHES` in `src/chat_downloader/sites/twitch/constants.py`.
-2. The guard test `test_operation_hashes_covers_all_used_operations` (in
-   `tests/test_twitch_drift_harness_unit.py`) fails immediately offline if
-   any operationName used in the client code is missing from `OPERATION_HASHES`.
-3. The companion test `test_operation_hashes_has_no_orphaned_entries` flags any
-   entry in `OPERATION_HASHES` no longer referenced by the client, keeping the
-   table clean.
-
-No network access is required — these are structural offline checks.
 
 ## Common Failure Points
 

@@ -22,12 +22,12 @@ Minimal example:
 from chat_downloader import ChatDownloader
 
 downloader = ChatDownloader()
-chat = downloader.get_chat("https://www.youtube.com/watch?v=QBFiiEVBWvE")
-
-for message in chat:
-    print(message.get("author"), message.get("message"))
-
-downloader.close()
+try:
+    chat = downloader.get_chat("https://www.youtube.com/watch?v=QBFiiEVBWvE")
+    for message in chat:
+        print(message.get("author"), message.get("message"))
+finally:
+    downloader.close()
 ```
 
 ## Version
@@ -86,6 +86,19 @@ application that needs to handle interrupts itself.
 
 Unlike `ChatRequest.from_kwargs()`, `run()` rejects unknown keyword arguments.
 That keeps CLI/API drift visible when parameters move between dataclasses.
+
+`run()` returns `chat_downloader.runtime.RunResult`, a structured summary with
+these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `success` | Whether the run completed without a terminal error |
+| `message_count` | Number of messages processed |
+| `interrupted` | Whether execution ended through `KeyboardInterrupt` or `SIGTERM` |
+| `error_message` | Terminal error text, or `None` on success |
+
+`RunResult` is available from `chat_downloader.runtime`; it is not a top-level
+`chat_downloader` export.
 
 ## Typed Configuration Objects
 
@@ -249,8 +262,8 @@ The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
 output. JSON-array `.json` output is not supported.
 
-File writers are crash-resilient: each record is flushed to the OS on write and
-the file is `fsync`-ed periodically (about every 60 seconds). Datetime values
+File writers are crash-resilient: each record is flushed on write and the file
+is synchronized to disk periodically (about every 60 seconds). Datetime values
 serialized to JSONL output must be timezone-aware (UTC); a naive `datetime`
 raises `ValueError` at the output boundary to keep timestamps unambiguous.
 
@@ -334,7 +347,6 @@ from chat_downloader import (
     TwitchChatDownloader,
     TwitchError,
     URLNotProvided,
-    UnexpectedError,
     UserNotFound,
     VideoNotFound,
     VideoUnavailable,

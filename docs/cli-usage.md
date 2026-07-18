@@ -83,7 +83,7 @@ Other extensions, including `.json` and `.csv`, are unsupported. Output paths
 must end in `.jsonl` or `.txt`.
 
 File output is crash-resilient: every record is flushed to the OS as it is
-written, and the file is `fsync`-ed periodically (about every 60 seconds), so
+written, and the file is synchronized to disk periodically (about every 60 seconds), so
 captures survive process crashes and power loss with minimal data loss. Writers
 also perform a final `fsync` during normal shutdown; a flush or sync failure is
 reported as an output error instead of allowing the capture to appear successful.
@@ -127,8 +127,8 @@ Debug and automation:
 
 ## Troubleshooting
 
-- `403`, `429`, or `LoginRequired` errors usually mean the platform wants
-  cookies, a slower request pace, or both.
+- `403` or `LoginRequired` often means the platform requires cookies; `429`
+  means the client is rate-limited and should retry more slowly.
 - `CaptchaChallengeRequired` means a platform returned an explicit challenge
   response that the library cannot solve automatically. On Kick this is a
   Cloudflare bot-protection page; installing `cloudscraper` (a dependency) lets

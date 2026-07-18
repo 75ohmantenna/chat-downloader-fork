@@ -9,13 +9,9 @@ The Kick stack is split across two transport families:
 - Kick's public, unauthenticated `api/v2` JSON REST API for channel metadata,
   preloaded history, and VOD replay messages.
 
-Kick also publishes official developer documentation at
-<https://docs.kick.com/> and source docs at
-<https://github.com/KickEngineering/KickDevDocs>. That official Public API is
-OAuth-scoped and lives under `https://api.kick.com/public/v1/...`. The current
-downloader does **not** use it for capture, because the documented Chat API is
-for sending/deleting messages and the documented Events API is webhook-based;
-neither provides unauthenticated live chat replay or a public read-chat stream.
+Kick's OAuth-scoped official Public API is a useful schema reference, but it
+does not expose the unauthenticated read-chat or replay stream this tool needs.
+See [Official Public API reference](#official-public-api-reference).
 
 Unlike Twitch and YouTube, Kick exposes no private GraphQL/InnerTube layer; the
 fragility points are the Pusher application key, the WebSocket event payload
@@ -134,16 +130,18 @@ The Kick flow depends on the target type.
   normalization.
 - `parsing/pins.py`: pinned-message created/deleted normalization.
 - `parsing/hosts.py`: stream-host normalization.
-- `constants.py`: URL patterns, REST endpoints, Pusher config and key
-  discovery, Pusher/event name constants, event-to-message-type and
+- `constants.py`: URL patterns, REST endpoints, Pusher/event name constants,
+  event-to-message-type and
   message-type-to-group maps, emote patterns, and Cloudflare markers.
+- `pusher_discovery.py`: Pusher application-key discovery, injected/cache
+  ownership, and WebSocket URL construction.
 - `errors.py`: `KickError` and the retryable `KickServerError` subclass.
 
 There is no `client.py` facade in the Kick package. Import focused modules
 directly for patch points: `api_client.py` for REST, `websocket_transport.py`
 for the live feed, and `parsing/` for message shaping.
 
-## Official Public API Reference
+## Official Public API reference
 
 The official Kick Dev Docs are useful maintenance references, but they are not
 drop-in replacements for this tool's current capture path.
@@ -240,8 +238,9 @@ preloaded live history, not a dedicated replay API. `replay_service.py`:
 - reverses the collected messages into chronological order and applies
   `max_messages`
 
-Most of the VOD path carries `# pragma: no cover — network-dependent`; the
-classification helper is covered by unit tests.
+The VOD orchestration and spooled reverse-pagination path are covered by
+offline service tests. Coverage pragmas remain only on defensive or
+network-only branches with inline rationale.
 
 ## Message Groups and Types
 
@@ -263,14 +262,16 @@ events.
 ## Cloudflare Dependency
 
 The REST endpoints sit behind Cloudflare. `http_session.py` uses a three-tier
-session strategy for the client-owned transport:
+session strategy for the client-owned transport. Standard installations include
+all three dependencies; the fallbacks also keep degraded or partial
+environments diagnosable:
 
-1. **``curl-cffi`` with Chrome 124 TLS impersonation** — avoids Cloudflare
+1. **curl-cffi with Chrome 124 TLS impersonation** — avoids Cloudflare
    challenges at the TLS-fingerprint level before they are even presented.
-2. **``cloudscraper``** — JS-challenge solver for simpler challenges (falls
-   through if curl-cffi is unavailable).
-3. **Plain ``requests.Session``** with browser-like headers — last resort when
-   neither optional library is installed.
+2. **cloudscraper** — JS-challenge solver for simpler challenges (used if
+   curl-cffi cannot be imported or initialized).
+3. **Plain requests session** with browser-like headers — last resort when
+   neither specialized backend can be imported or initialized.
 
 When a response body looks like a challenge page (Cloudflare markers, or an HTML
 body where JSON was expected) or returns HTTP 403, the client raises
@@ -302,11 +303,11 @@ When debugging Kick breakage, inspect modules in this order:
 
 1. `api_client.py` — REST status mapping and challenge detection
 2. `http_session.py` — optional backend selection and session setup
-3. `constants.py` — endpoints, `resolve_pusher_key`, event/group maps
-4. `live_service.py` or `replay_service.py` — service-layer orchestration
-5. `websocket_transport.py` — Pusher framing, subscribe, reconnect signals
-6. `parsing/events.py` — event-name resolution and dispatch
-7. `parsing/messages.py` and the per-event parsers — field assembly
+3. `pusher_discovery.py` — Pusher-key discovery and fallback
+4. `constants.py` — endpoints and event/group maps
+5. `live_service.py` or `replay_service.py` — service-layer orchestration
+6. `websocket_transport.py` — Pusher framing, subscribe, reconnect signals
+7. `parsing/events.py` and per-event parsers — dispatch and field assembly
 
 ## Testing
 

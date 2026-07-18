@@ -16,4 +16,4 @@ Canonical references:
 
 - [`docs/twitch-integration-guide.md`](../../../../docs/twitch-integration-guide.md)
 - [`docs/capability-inventory.md`](../../../../docs/capability-inventory.md)
-- [`docs/maintenance-backlog.md`](../../../../docs/maintenance-backlog.md)
+- [`docs/maintenance-decisions.md`](../../../../docs/maintenance-decisions.md)

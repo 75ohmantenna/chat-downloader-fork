@@ -1,11 +1,23 @@
 # Changelog
 
+<!--
+Keep entries user-observable or release-relevant. Internal refactors, test
+churn, and documentation maintenance belong in Git history unless they change
+behavior, compatibility, packaging, validation, or contributor workflow.
+-->
+
 ## Unreleased
 
 ### Breaking changes
 
 - **Removed CSV file output.** File output now requires a `.jsonl` or `.txt`
   path; CSV, unknown, and extensionless paths are rejected before file creation.
+
+### Documentation / tooling
+
+- Consolidated maintenance guidance into a current backlog and compact design
+  decisions, retired completed refactor plans, corrected API and architecture
+  drift, and added documentation link/API/module-inventory contract tests.
 
 ## 1.6.5 — 2026-06-28
 

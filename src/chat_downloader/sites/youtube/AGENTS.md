@@ -17,4 +17,4 @@ Canonical references:
 
 - [`docs/youtube-integration-guide.md`](../../../../docs/youtube-integration-guide.md)
 - [`docs/capability-inventory.md`](../../../../docs/capability-inventory.md)
-- [`docs/maintenance-backlog.md`](../../../../docs/maintenance-backlog.md)
+- [`docs/maintenance-decisions.md`](../../../../docs/maintenance-decisions.md)

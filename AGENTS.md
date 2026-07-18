@@ -13,9 +13,10 @@ For deeper context use:
   preservation checklist
 - [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md) —
   local workflow and validation
-- [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md) and
-  [`docs/maintenance-notes.md`](docs/maintenance-notes.md) — live deferrals and
-  design-decision record
+- [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md) — open
+  maintainability work
+- [`docs/maintenance-decisions.md`](docs/maintenance-decisions.md) — durable
+  design rationale and reopen criteria
 
 ## Branch Safety
 
@@ -78,6 +79,8 @@ Key ratchets:
 | `tests/test_public_api_unit.py` | Public import surfaces stay intentional |
 | `tests/test_cli_surface_unit.py` | Observable CLI option strings, defaults, and groups stay intentional |
 | `tests/test_makefile_contract_unit.py` | Canonical Makefile validation target stays pinned |
+| `tests/test_architecture_doc_contract_unit.py` | Package inventories stay aligned with source modules |
+| `tests/test_documentation_contract_unit.py` | Local links and Python API docs stay aligned |
 
 ## Style
 
@@ -98,7 +101,7 @@ Split by cohesion, not by line count or test convenience. Concretely:
   temporal decomposition — the reader must reassemble the phases and their
   ordering. Keep a single behavior in one place.
 - **A module boundary must remove coupling.** A helper that takes its whole
-  parent object (`self: SomeProto`) and depends on a Protocol re-declaring most
+  parent object (`self: SomeProto`) and depends on a Protocol redeclaring most
   of the class is a split on the wrong axis — it belongs *on* the class as a
   method. Pure, genuinely-reusable helpers (no `self`, no I/O) are the right
   thing to extract to a sibling module.

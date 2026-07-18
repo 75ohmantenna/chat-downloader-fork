@@ -68,8 +68,12 @@ The normal YouTube flow is:
 ### Request construction
 
 - `client_context.py`: request headers and client context construction
+- `client_requests_bootstrap.py`: fallback InnerTube `player` and `next`
+  bootstrap requests
 - `client_requests_initial.py`: initial request helpers
 - `client_requests_continuation.py`: continuation request helpers
+- `client_requests_errors.py`: shared HTTP, JSON, captcha, and retry
+  classification for request helpers
 - `client_auth.py`: cookie initialization, SAPISID cookie parsing, and auth
   header derivation
 
@@ -253,22 +257,23 @@ The mapping from wire action key to output `action_type` and `message_type`
 lives in `_KNOWN_REMOVE_ACTION_TYPES` in
 `src/chat_downloader/sites/youtube/constants_actions_messages_core.py`.
 
-## Capture-and-Fix Workflow for Drift
+## Capture and fix parser drift
 
 When a real stream produces a new renderer or action type that the parser
-doesn't recognise, the runtime emits a `debug_log` and (with
-`CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`) saves a JSON snapshot in
-`tests/fixtures/youtube/debug_samples/`.
+doesn't recognize, the runtime emits a debug sentinel and can save a sanitized
+snapshot. See [Debug sample capture](development-workflow-guide.md#debug-sample-capture)
+for capture configuration. Promote reviewed samples into
+`tests/fixtures/youtube/`.
 
 To turn a captured drift sample into a permanent regression anchor:
 
-1. **Reproduce** — run the failing stream with
+1. Reproduce the failure with
    `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1` to confirm the snapshot file
    is written.
-2. **Identify** — read the snapshot.  The `"Unknown action"` variant has
+2. Read the snapshot. The `"Unknown action"` variant has
    `{"action": {...}, ...}`; the `"Missing keys"` variant has
    `{"original_item": {...}, ...}`.
-3. **Fix** — in order of what the message likely needs:
+3. Update the relevant parser contract:
    - New action type → add to the right constant set in
      `src/chat_downloader/sites/youtube/constants_actions_messages_core.py`.
    - New renderer → also ensure the derived `message_type` (strip `liveChat`
@@ -279,25 +284,23 @@ To turn a captured drift sample into a permanent regression anchor:
      `tests/test_youtube_remapping_invariants_unit.py`) will fail if you miss
      this step.
    - New field → add to `build_remapping()` in
-     `src/chat_downloader/sites/youtube/constants_message.py`; **do not** add
-     a matching entry to the static list that no longer exists — `known_keys()`
-     is now derived from `build_remapping()` automatically.
+     `src/chat_downloader/sites/youtube/constants_message.py`; `known_keys()`
+     is derived from that mapping.
    - New field to suppress → add to `_KEYS_TO_IGNORE` in the same file;
      `test_remapping_contributor_sets_are_disjoint` will catch any duplicate
      between `build_remapping()` and `_KEYS_TO_IGNORE`.
-4. **Capture raw continuation** — grab the raw InnerTube continuation JSON
-   that triggered the drift (e.g. save the HTTP response body).  Place it in
+4. Save the raw InnerTube continuation JSON that triggered the drift in
    `tests/fixtures/youtube/live_events/` with a descriptive name.
-5. **Validate** — run the drift harness:
-   ```
+5. Run the drift harness, then the canonical validation:
+   ```bash
    uv run pytest -q tests/test_youtube_drift_harness_unit.py
+   make ci
    ```
    It parametrizes over every `live_events/*.json` dict-shaped file and asserts
-   no drift sentinel fires.  If the harness passes, the fix is complete and the
+   no drift sentinel fires. If the harness passes, the fix is complete and the
    fixture is a permanent regression anchor.
-6. **Full suite** — run `make ci` before committing.
 
-The three sentinel phrases checked by the harness are `"Unknown action"`,
+The four sentinel phrases checked by the harness are `"Unknown action"`,
 `"Unknown message type"`, `"Missing keys found"`, and
 `"Parse of action returned empty"`.
 
@@ -312,8 +315,8 @@ The YouTube stack is most sensitive to changes in:
 - required request headers
 - auth and cookie behavior
 
-The initial watch-page fetch raises `RetriesExceeded` when all retry attempts
-are exhausted on 5xx responses (previously fell through silently).
+The initial watch-page fetch raises `RetriesExceeded` after all retry attempts
+on 5xx responses are exhausted.
 Invalid or negative continuation delay values from the InnerTube response use
 the 5 second polling fallback.
 
@@ -327,10 +330,3 @@ When debugging YouTube breakage, inspect modules in this order:
 6. `continuation.py`
 7. `continuations.py`
 8. `parsing/`
-
-## Compatibility Note
-
-YouTube functionality is exposed through the boundary modules listed in the
-Module Guide. When extending or debugging, import from those current boundaries
-rather than adding broad compatibility facades. Text, link, badge, action, and
-message-item parsing now lives in focused modules under `parsing/`.

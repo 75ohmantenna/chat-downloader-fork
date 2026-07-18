@@ -3,11 +3,9 @@
 High-level guide to `chat_downloader`'s module layout and layer contracts.
 For day-to-day development conventions see [`AGENTS.md`](../AGENTS.md);
 for deferred refactor decisions see
-[`docs/maintenance-notes.md`](maintenance-notes.md).
+[`docs/maintenance-decisions.md`](maintenance-decisions.md).
 For behavior-preservation coverage see
 [`docs/capability-inventory.md`](capability-inventory.md).
-
----
 
 ## Layer diagram
 
@@ -49,8 +47,6 @@ For behavior-preservation coverage see
 | `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, or `sites` |
 | Generic layers stay provider-neutral | `runtime`, `output`, and `formatting` must not import a concrete site package (`sites.youtube`/`twitch`/`kick`). The lone exception is the site registry `runtime.site_dispatch`, which imports the `sites` aggregate to enumerate downloaders. Provider-specific behavior (e.g. live-status classification, live-format overrides) lives behind capability methods on `BaseChatDownloader` (`is_live_status`, `resolve_live_format`) that sites override. |
 
----
-
 ## Network lifecycle
 
 | Transport | Open/read path | Retry/reconnect owner | Close path |
@@ -75,9 +71,14 @@ memory bounded independently of the number of fetched messages.
 
 ## Package inventory
 
+Each table catalogs a package's immediate Python modules. Subpackages such as
+`parsing/` are summarized as one row. A contract test ensures every immediate
+non-`__init__.py` module remains represented.
+
 ### Top-level
 | Module | Purpose |
 |--------|---------|
+| `__main__.py` | `python -m chat_downloader` entry-point shim |
 | `chat_downloader.py` | Thin facade; exposes `run()` and re-exports public types |
 | `cli.py` | Argument parsing entry point (`main()`), signal handler, arg-parser builder |
 | `cli_args.py` | Parser-construction machinery: `_ParamRegistrar`, all `_add_*_args` helpers, `splitter`/`parse_header`/`str2bool` converters |
@@ -103,9 +104,11 @@ memory bounded independently of the number of fetched messages.
 ### `runtime/`
 | Module | Purpose |
 |--------|---------|
+| `_protocols.py` | Runtime-facing structural interfaces used to avoid import cycles |
 | `cli_bridge.py` | Categorize `run()` kwargs into init / chat / run param groups |
 | `site_dispatch.py` | URL → site resolution and site-specific defaults |
 | `chat_pipeline.py` | Close-propagating limits, timeouts, format, output routing |
+| `config_guards.py` | Proxy and cookie safety validation |
 | `runner.py` | Top-level run loop and cleanup |
 | `session_lifecycle.py` | Cookie/session setup, cookie-domain validation |
 | `testing.py` | Test-mode helpers |
@@ -120,6 +123,7 @@ memory bounded independently of the number of fetched messages.
 | Module | Purpose |
 |--------|---------|
 | `base.py` | `BaseChatDownloader` ABC: URL matching, session setup, cookie handling |
+| `common.py` | Stateless site utilities for key validation and mapped-key discovery |
 | `session.py` | `ChatDownloaderSession`: HTTP session, proxy config, auth |
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
@@ -148,10 +152,10 @@ memory bounded independently of the number of fetched messages.
 | `client_context.py` | InnerTube context dict construction and request-profile application |
 | `client_requests_bootstrap.py` | Fallback InnerTube bootstrap requests (initial video data) |
 | `client_requests_continuation.py` | HTTP continuation polling: request dispatch, retry, error surfacing |
-| `client_requests_errors.py` | HTTP/JSON error classification, captcha detection, retry helpers (Round-07) |
+| `client_requests_errors.py` | HTTP/JSON error classification, captcha detection, and retry helpers |
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |
 
-#### Continuation loop (reunified)
+#### Continuation loop
 | Module | Purpose |
 |--------|---------|
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |
@@ -176,6 +180,7 @@ memory bounded independently of the number of fetched messages.
 ### `sites/twitch/`
 | Module | Purpose |
 |--------|---------|
+| `_protocols.py` | Twitch transport and downloader structural interfaces |
 | `constants.py` | Client-ID and GraphQL operation hashes |
 | `discovery.py` | Twitch URL discovery and GraphQL query construction |
 | `extractor.py` | Twitch site extractor class |
@@ -194,8 +199,10 @@ memory bounded independently of the number of fetched messages.
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
 | `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with dedup and reconnect |
+| `replay_service.py` | VOD metadata, reverse pagination, time-window filtering, and chronological spooled output |
 | `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, and VOD endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
+| `pusher_discovery.py` | Pusher application-key discovery, cache ownership, and WebSocket URL construction |
 | `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
 | `errors.py` | `KickError`, `KickServerError` |
@@ -209,7 +216,7 @@ memory bounded independently of the number of fetched messages.
 
 ---
 
-## Guardrails (added round 2, 2026-06)
+## Guardrails
 
 | Guardrail | Where |
 |-----------|-------|
@@ -220,4 +227,5 @@ memory bounded independently of the number of fetched messages.
 | 100% line coverage | `pyproject.toml [tool.coverage.report]`; enforced by `make coverage` / `make ci` |
 | Any-density ratchet | `tests/test_any_density_unit.py` — per-module baseline; lower as typing debt is paid; never raise |
 
-Remaining targets and deferred decisions: [`docs/maintenance-backlog.md`](maintenance-backlog.md).
+Current targets: [`docs/maintenance-backlog.md`](maintenance-backlog.md).
+Durable rationale: [`docs/maintenance-decisions.md`](maintenance-decisions.md).

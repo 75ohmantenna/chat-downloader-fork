@@ -1,16 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Contract: docs/architecture.md lists every top-level source module.
-
-The ``### Top-level`` table in ``docs/architecture.md`` claims to enumerate the
-top-level modules of ``src/chat_downloader``. This ratchet keeps that claim
-honest: a new or renamed top-level module must be added to the table in the same
-change, mechanically enforcing the doc-sync policy in ``AGENTS.md``.
-
-Scope is deliberately limited to top-level modules. The doc intentionally
-summarizes the deeper tree (e.g. one ``parsing/`` row), so it is not enumerated
-here.
-"""
+"""Contract: the architecture guide inventories immediate source modules."""
 
 from __future__ import annotations
 
@@ -21,27 +11,44 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "chat_downloader"
 ARCHITECTURE_DOC = ROOT / "docs" / "architecture.md"
 
+INVENTORIES: dict[str, Path] = {
+    "### Top-level": SRC,
+    "### `models/`": SRC / "models",
+    "### `runtime/`": SRC / "runtime",
+    "### `output/`": SRC / "output",
+    "### `sites/` (shared)": SRC / "sites",
+    "### `sites/youtube/`": SRC / "sites" / "youtube",
+    "### `sites/twitch/`": SRC / "sites" / "twitch",
+    "### `sites/kick/`": SRC / "sites" / "kick",
+}
 
-def _top_level_section() -> str:
-    """Return the ``### Top-level`` section text, up to the next ``### `` heading."""
-    text = ARCHITECTURE_DOC.read_text(encoding="utf-8")
+
+def _section(text: str, heading: str) -> str:
+    """Return a level-three architecture section through the next peer."""
     match = re.search(
-        r"^### Top-level\b.*?(?=^### )",
+        rf"^{re.escape(heading)}\s*$.*?(?=^###\s|\Z)",
         text,
         flags=re.DOTALL | re.MULTILINE,
     )
-    assert match is not None, "architecture.md is missing a '### Top-level' section"
+    assert match is not None, f"architecture.md is missing {heading!r}"
     return match.group(0)
 
 
-def test_architecture_doc_lists_all_top_level_modules() -> None:
-    section = _top_level_section()
-    offenders = [
-        path.name
-        for path in sorted(SRC.glob("*.py"))
-        if not path.name.startswith("__") and f"`{path.name}`" not in section
-    ]
+def test_architecture_doc_lists_immediate_modules() -> None:
+    """Require every immediate non-package module in its package section."""
+    text = ARCHITECTURE_DOC.read_text(encoding="utf-8")
+    offenders: list[str] = []
+
+    for heading, directory in INVENTORIES.items():
+        section = _section(text, heading)
+        for path in sorted(directory.glob("*.py")):
+            if path.name == "__init__.py":
+                continue
+            if f"`{path.name}`" not in section:
+                rel = path.relative_to(SRC).as_posix()
+                offenders.append(f"{heading}: {rel}")
+
     assert not offenders, (
-        "top-level modules missing from the architecture.md Top-level table:\n"
+        "source modules missing from architecture.md inventories:\n"
         + "\n".join(offenders)
     )

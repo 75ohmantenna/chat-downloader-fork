@@ -22,7 +22,7 @@ DEFAULT_CAP = 2
 # Files at DEFAULT_CAP or below are omitted — they are implicitly capped.
 # Every entry above DEFAULT_CAP is a genuine payload/accumulator boundary;
 # do not raise these values. Tighten opportunistically alongside typing work.
-# See docs/maintenance-notes.md "Round-03 — Typing pass" for context.
+# See docs/maintenance-decisions.md "Distinguish raw JSON from assembled output".
 BASELINE: dict[str, int] = {
     # Format spec objects loaded from JSON config files (dict[str,Any] is the
     # stable boundary between the JSON loader and the formatter internals).

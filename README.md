@@ -1,15 +1,14 @@
 # chat-downloader-fork
 
-An up to date, enhanced YouTube, Twitch, and Kick livestream chat logging and
-retrieval tool. Personal fork of
+Maintained YouTube, Twitch, and Kick livestream-chat CLI and Python API. This is
+a personal fork of
 [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader),
-targeting Python 3.12+ (CI validates 3.12, 3.13, and 3.14) with improved typing, test coverage, and documentation.
+targeting Python 3.12+; CI validates Python 3.12, 3.13, and 3.14.
 
 ## Personal Fork — No Support
 
-This is a personal fork I've maintained for my own personal use for some time.
-I am sharing it in the hopes that someone else gets some use out of it. That
-being said:
+I maintain this fork for my own use and publish it in case it is useful to
+others. Accordingly:
 
 - **No support is offered.** Issues, pull requests, and feature requests are
   not accepted.
@@ -48,14 +47,14 @@ pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git
 
 ## Updating
 
-Reinstall the latest version from GitHub (works whether you first installed with
-`uv tool install` or `pipx install`):
+Use the same tool that owns the existing installation. For an installation
+managed by `uv`:
 
 ```bash
 uv tool install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git
 ```
 
-Or with pipx:
+For an installation managed by pipx:
 
 ```bash
 pipx install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git
@@ -74,8 +73,8 @@ which chat_downloader
 chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE"
 ```
 
-Full CLI examples, output-format details, options, and troubleshooting located
-in [`docs/cli-usage.md`](docs/cli-usage.md).
+Full CLI examples, output-format details, options, and troubleshooting are in
+[`docs/cli-usage.md`](docs/cli-usage.md).
 
 ## Documentation
 

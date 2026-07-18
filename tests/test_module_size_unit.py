@@ -5,7 +5,7 @@
 The line budget is a *smell signal, not a splitting trigger*: split by cohesion,
 not to duck under the ceiling. Cohesive units that legitimately exceed it are
 allowlisted with a rationale rather than fragmented by phase. See
-docs/maintenance-notes.md and the "Decomposition policy" in AGENTS.md.
+docs/maintenance-decisions.md and the "Decomposition policy" in AGENTS.md.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 
 MAX_LINES = 400
 # Intentionally large data tables and cohesive single-purpose modules;
-# see docs/maintenance-notes.md for rationale.
+# See docs/maintenance-decisions.md for the governing rationale.
 ALLOWLIST: frozenset[str] = frozenset(
     {
         # Data tables — line counts are dominated by literal mappings.
