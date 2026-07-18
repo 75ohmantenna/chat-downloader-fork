@@ -7,6 +7,7 @@ from __future__ import annotations
 import queue as _queue
 import threading
 import time
+from contextvars import copy_context
 from typing import TYPE_CHECKING, Any, NoReturn, Self
 
 if TYPE_CHECKING:
@@ -68,7 +69,12 @@ class TimedGenerator:
         self._result_queue: _queue.Queue[tuple[str, Any, float]] = _queue.Queue(
             maxsize=1
         )
-        self._worker = threading.Thread(target=self._worker_loop, daemon=True)
+        worker_context = copy_context()
+        self._worker = threading.Thread(
+            target=worker_context.run,
+            args=(self._worker_loop,),
+            daemon=True,
+        )
         self._worker.start()
 
     def start_timer(self) -> None:
