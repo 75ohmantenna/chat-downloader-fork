@@ -27,6 +27,7 @@ from chat_downloader.errors import ParsingError, RetriesExceeded
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import retry
 from chat_downloader.utils.json_types import JSONDict, JSONList, get_dict, get_list
+from chat_downloader.utils.time_utils import ensure_seconds
 
 from .constants import is_numeric_id
 from .errors import KickError, KickServerError
@@ -143,9 +144,10 @@ def get_vod_chat(
         lambda: api_client.fetch_video_metadata(video_id),
         request,
     )
-    channel_id, _chatroom_id, title, start_dt, end_dt = _resolve_vod_window(
+    channel_id, _chatroom_id, title, vod_start_dt, vod_end_dt = _resolve_vod_window(
         video_data, username
     )
+    start_dt, end_dt = _apply_request_window(vod_start_dt, vod_end_dt, request)
 
     log("info", f"VOD time window: {start_dt} to {end_dt}")
 
@@ -160,7 +162,27 @@ def get_vod_chat(
         title=title,
         status="completed",
         video_type="video",
+        start_time=(start_dt - vod_start_dt).total_seconds(),
+        duration=max(0.0, (end_dt - start_dt).total_seconds()),
         id=video_id,
+    )
+
+
+def _apply_request_window(
+    vod_start_dt: datetime,
+    vod_end_dt: datetime,
+    request: ChatRequest,
+) -> tuple[datetime, datetime]:
+    """Apply request-relative offsets to a VOD's absolute time window."""
+    duration = max(0.0, (vod_end_dt - vod_start_dt).total_seconds())
+    start_offset = cast("float", ensure_seconds(request.start_time, 0.0))
+    end_offset = cast("float", ensure_seconds(request.end_time, duration))
+
+    bounded_start = min(max(start_offset, 0.0), duration)
+    bounded_end = min(max(end_offset, 0.0), duration)
+    return (
+        vod_start_dt + timedelta(seconds=bounded_start),
+        vod_start_dt + timedelta(seconds=bounded_end),
     )
 
 

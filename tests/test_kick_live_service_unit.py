@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from chat_downloader.errors import CaptchaChallengeRequired, RetriesExceeded
+from chat_downloader.errors import (
+    CaptchaChallengeRequired,
+    InvalidParameter,
+    RetriesExceeded,
+)
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import live_service
 from chat_downloader.sites.kick.constants import CHAT_MESSAGE_EVENT
@@ -238,6 +242,19 @@ def test_open_subscribed_transport_unreachable_guard() -> None:
         )
 
 
+def test_open_subscribed_transport_preserves_terminal_connection_error() -> None:
+    with pytest.raises(
+        RetriesExceeded,
+        match="Last Kick websocket error: fake connect failure",
+    ):
+        live_service._open_subscribed_transport(
+            FakeDownloader(),
+            "1",
+            _request(max_attempts=1),
+            lambda: FakeTransport(connect_errors=5),
+        )
+
+
 # ── end-to-end via get_chat_by_channel ────────────────────────────────────────
 
 
@@ -447,6 +464,22 @@ def test_get_chat_by_channel_offline_succeeds_with_offline_title() -> None:
         )
         assert chat.title == "examplechannel"
         assert chat.status == "idle"
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"start_time": 10},
+        {"end_time": "00:00:20"},
+    ],
+)
+def test_get_chat_by_channel_rejects_replay_time_bounds(bounds: dict[str, Any]) -> None:
+    with pytest.raises(InvalidParameter, match="Kick live chat does not support"):
+        live_service.get_chat_by_channel(
+            FakeDownloader(),
+            "examplechannel",
+            _request(**bounds),
+        )
 
 
 @pytest.mark.parametrize(

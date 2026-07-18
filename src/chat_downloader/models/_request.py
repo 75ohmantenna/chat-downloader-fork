@@ -251,8 +251,9 @@ class ChatRequest:
         default=DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
         metadata={
             "cli": _cli(
-                "IRC socket receive polling timeout in seconds (minimum 1 for Twitch)",
-                group="twitch",
+                "Live socket receive polling timeout in seconds "
+                "(minimum 1 for Twitch and Kick)",
+                group="live_transport",
             ),
         },
     )

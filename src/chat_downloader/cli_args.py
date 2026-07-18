@@ -264,8 +264,10 @@ def _add_format_site_output_args(
     reg.chat(youtube_group, "--chat_type", choices=["live", "top"])
     reg.chat(youtube_group, "--ignore", type=splitter)
 
+    live_transport_group = parser.add_argument_group("Live Transport Arguments")
+    reg.chat(live_transport_group, "--message_receive_timeout", type=float)
+
     twitch_group = parser.add_argument_group("[Site Specific] Twitch Arguments")
-    reg.chat(twitch_group, "--message_receive_timeout", type=float)
     reg.chat(twitch_group, "--buffer_size", type=int)
 
     output_group = parser.add_argument_group("Output Arguments")

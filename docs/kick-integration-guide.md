@@ -83,11 +83,13 @@ The Kick flow depends on the target type.
 2. Fetch video metadata from `api/v1/video/{video_id}`.
 3. Derive the channel id and the VOD time window (`start_time` plus
    `duration`).
-4. Page through `api/v2/channels/{id}/messages` (newest-first) using the
+4. Narrow the metadata window with request-relative `start_time` and
+   `end_time` offsets when supplied.
+5. Page through `api/v2/channels/{id}/messages` (newest-first) using the
    timestamp cursor.
-5. Keep messages whose `created_at` falls inside the VOD window; stop once
+6. Keep messages whose `created_at` falls inside the selected window; stop once
    messages predate the window start.
-6. Reverse into chronological order, apply `max_messages`, and yield.
+7. Reverse into chronological order, apply `max_messages`, and yield.
 
 ## Module Guide
 
@@ -200,6 +202,11 @@ The transport:
 - answers Pusher `ping` frames with `pong` inside `read_frames`
 - treats timed-out or malformed reads as skippable (`None`)
 - raises `ConnectionError` on a closed socket, which drives reconnect
+
+Kick live channel URLs reject `start_time` and `end_time` because the public
+Pusher feed and short preloaded history cannot seek. Use a Kick VOD URL for
+bounded replay; VOD offsets are relative to the recording start and clamped to
+its duration.
 
 ### Pusher application key discovery
 

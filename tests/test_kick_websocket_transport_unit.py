@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from websocket import (
+    WebSocketBadStatusException,
     WebSocketConnectionClosedException,
     WebSocketException,
     WebSocketTimeoutException,
@@ -123,6 +124,15 @@ def test_connect_failure_raises_connection_error() -> None:
 
     transport = KickPusherTransport(connector=boom)
     with pytest.raises(ConnectionError):
+        transport.connect(1.0)
+
+
+def test_connect_http_403_recommends_proxy() -> None:
+    def blocked(_url: str, _timeout: float | None, **_kwargs: Any) -> Any:
+        raise WebSocketBadStatusException("forbidden", 403)
+
+    transport = KickPusherTransport(connector=blocked)
+    with pytest.raises(ConnectionError, match=r"HTTP 403.*try --proxy"):
         transport.connect(1.0)
 
 

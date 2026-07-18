@@ -19,7 +19,11 @@ from typing import TYPE_CHECKING, Any
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log, logger
-from chat_downloader.errors import CaptchaChallengeRequired
+from chat_downloader.errors import (
+    CaptchaChallengeRequired,
+    InvalidParameter,
+    RetriesExceeded,
+)
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
@@ -154,6 +158,13 @@ def get_chat_by_channel(
     Returns:
         A configured :class:`Chat` whose generator yields normalized messages.
     """
+    if request.start_time is not None or request.end_time is not None:
+        msg = (
+            "Kick live chat does not support --start_time or --end_time. "
+            "Use a Kick VOD URL to retrieve a bounded replay."
+        )
+        raise InvalidParameter(msg)
+
     data = _fetch_channel_with_retry(downloader, username, request)
     channel_id, chatroom_id, title = _resolve_channel(data, username)
     status = "live" if _is_live_status(data) else "idle"
@@ -220,7 +231,11 @@ def _open_subscribed_transport(
             )
         except ConnectionError as error:
             transport.close()
-            downloader.retry(attempt_number, error=error, request=request)
+            try:
+                downloader.retry(attempt_number, error=error, request=request)
+            except RetriesExceeded as exhausted:
+                msg = f"{exhausted} Last Kick websocket error: {error}"
+                raise RetriesExceeded(msg) from error
         else:
             return transport
     msg = "unreachable: retry should have raised RetriesExceeded"

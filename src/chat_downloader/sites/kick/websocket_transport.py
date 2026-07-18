@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Protocol, cast
 from urllib.parse import urlparse
 
 from websocket import (
+    WebSocketBadStatusException,
     WebSocketConnectionClosedException,
     WebSocketException,
     WebSocketTimeoutException,
@@ -66,6 +67,17 @@ class _PusherConnector(Protocol):
 
 _IDLE_WATCHDOG_SECONDS = 180.0
 _MIN_RECEIVE_TIMEOUT_SECONDS = 1.0
+
+
+def _connect_error_message(error: WebSocketException | OSError) -> str:
+    """Return an actionable, credential-free WebSocket connection error."""
+    if isinstance(error, WebSocketBadStatusException):
+        status = error.status_code
+        hint = ""
+        if status == 403:
+            hint = " The endpoint may be blocking this IP; try --proxy."
+        return f"Kick websocket handshake returned HTTP {status}.{hint}"
+    return f"Unable to open Kick websocket connection ({type(error).__name__})."
 
 
 def _default_connector(
@@ -163,7 +175,7 @@ class KickPusherTransport:
                 proxy_url=self._proxy_url,
             )
         except (WebSocketException, OSError) as error:
-            msg = "Unable to open Kick websocket connection."
+            msg = _connect_error_message(error)
             raise ConnectionError(msg) from error
         if websocket is None:
             msg = "Kick websocket connector returned no connection."

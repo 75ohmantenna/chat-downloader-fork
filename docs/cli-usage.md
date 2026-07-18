@@ -121,6 +121,9 @@ Request control:
   and replay requests.
 - `--user-agent`, `--header "Name: Value"` (repeatable) — request headers.
 
+Kick accepts `--start_time` and `--end_time` for VOD replay URLs. Kick live
+channel URLs reject these bounds because the public live feed cannot seek.
+
 Debug and automation:
 
 - `--logging debug`, `--verbose` — transport and parser debugging.

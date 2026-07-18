@@ -482,6 +482,60 @@ class TestGetVodChat:
             "msg-2",
         ]
 
+    def test_applies_request_relative_time_bounds(self) -> None:
+        video_meta = {
+            "livestream": {
+                "session_title": "Bounded VOD",
+                "start_time": "2026-01-01T00:00:00+00:00",
+                "duration": 3600000,
+                "channel": {"id": 3150403},
+            }
+        }
+        page = {
+            "data": {
+                "messages": [
+                    _make_raw_msg("after", "2026-01-01T00:30:00Z"),
+                    _make_raw_msg("inside", "2026-01-01T00:20:00Z"),
+                    _make_raw_msg("before", "2026-01-01T00:10:00Z"),
+                ],
+                "cursor": None,
+            }
+        }
+        api_client = Mock()
+        api_client.fetch_video_metadata.return_value = video_meta
+        api_client.fetch_message_page.return_value = page
+        request = ChatRequest(
+            start_time="00:15:00",
+            end_time=1500,
+            max_attempts=1,
+            interruptible_retry=False,
+        )
+
+        chat = replay_service.get_vod_chat(
+            "testuser",
+            "vid-1",
+            request,
+            api_client=api_client,
+        )
+
+        assert chat.start_time == 900
+        assert chat.duration == 600
+        assert [message["message_id"] for message in chat] == ["inside"]
+
+
+def test_apply_request_window_clamps_offsets_to_vod_duration() -> None:
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    end = start + timedelta(hours=1)
+
+    selected_start, selected_end = replay_service._apply_request_window(
+        start,
+        end,
+        ChatRequest(start_time=-10, end_time=7200),
+    )
+
+    assert selected_start == start
+    assert selected_end == end
+
 
 def _make_raw_msg(msg_id: str, created_at: str) -> dict[str, Any]:
     """Return a minimal raw message dict that ``parse_chat_message`` accepts."""

@@ -116,10 +116,8 @@ EXPECTED_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
     ),
     "Format Arguments": ("format", "format_file"),
     "[Site Specific] YouTube Arguments": ("chat_type", "ignore"),
-    "[Site Specific] Twitch Arguments": (
-        "message_receive_timeout",
-        "buffer_size",
-    ),
+    "Live Transport Arguments": ("message_receive_timeout",),
+    "[Site Specific] Twitch Arguments": ("buffer_size",),
     "Output Arguments": ("output", "overwrite", "sort_keys"),
     "Debugging/Testing Arguments": (
         "pause_on_debug",
@@ -144,7 +142,7 @@ EXPECTED_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
 
 EXPECTED_HELP: dict[str, str] = {
     "--message_receive_timeout": (
-        "IRC socket receive polling timeout in seconds (minimum 1 for Twitch)"
+        "Live socket receive polling timeout in seconds (minimum 1 for Twitch and Kick)"
     ),
 }
 

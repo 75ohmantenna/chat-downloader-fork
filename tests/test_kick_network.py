@@ -13,8 +13,13 @@ from __future__ import annotations
 import os
 
 import pytest
+from websocket import WebSocketBadStatusException
 
-from chat_downloader.errors import CaptchaChallengeRequired, UserNotFound
+from chat_downloader.errors import (
+    CaptchaChallengeRequired,
+    RetriesExceeded,
+    UserNotFound,
+)
 from chat_downloader.sites.kick.errors import KickError
 from chat_downloader.sites.kick.extractor import KickChatDownloader
 
@@ -22,6 +27,19 @@ pytestmark = pytest.mark.network
 
 # Override with KICK_TEST_CHANNEL to point at a channel that is live right now.
 _CHANNEL = os.environ.get("KICK_TEST_CHANNEL", "xqc")
+
+
+def _caused_by_websocket_http(error: BaseException, status: int) -> bool:
+    """Return whether an exception chain contains the given handshake status."""
+    current: BaseException | None = error
+    while current is not None:
+        if (
+            isinstance(current, WebSocketBadStatusException)
+            and current.status_code == status
+        ):
+            return True
+        current = current.__cause__
+    return False
 
 
 def test_live_channel_streams_or_reports_clearly() -> None:
@@ -41,6 +59,13 @@ def test_live_channel_streams_or_reports_clearly() -> None:
     except KickError as error:
         # Offline channel or incomplete metadata: not a code failure.
         pytest.skip(f"Kick channel unavailable for live test: {error}")
+    except RetriesExceeded as error:
+        if _caused_by_websocket_http(error, 403):
+            pytest.skip(
+                "Kick Pusher rejected this runner IP with HTTP 403; "
+                "retry through a different network or --proxy."
+            )
+        raise
     except UserNotFound:
         pytest.skip(f"Kick channel {_CHANNEL!r} not found; set KICK_TEST_CHANNEL.")
     else:
