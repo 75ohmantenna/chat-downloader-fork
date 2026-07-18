@@ -155,13 +155,20 @@ Provider-specific diagnosis and fixture-promotion steps live in the
 [Twitch](twitch-integration-guide.md), and
 [Kick](kick-integration-guide.md) integration guides.
 
-## Version bumps
+## Release procedure
 
-1. Update `src/chat_downloader/metadata.py::__version__`.
-2. Add the new version as the topmost numbered `CHANGELOG.md` release heading.
-3. Leave `pyproject.toml` unchanged; setuptools reads the version dynamically.
+1. Confirm `master` is clean and synchronized with `origin/master`.
+2. Select the next semantic version from the user-visible changes since the
+   latest `v*` tag.
+3. Update `src/chat_downloader/metadata.py::__version__` and add that version as
+   the topmost numbered `CHANGELOG.md` release heading. Leave `pyproject.toml`
+   unchanged; setuptools reads the version dynamically.
 4. Run `uv lock`, `uv lock --check`, `uv sync --locked`, and `make ci`.
 5. Inspect the built wheel metadata and confirm the expected version.
+6. Create and verify the signed release commit, then create the annotated
+   `v<version>` tag at that commit.
+7. Push `master` and the new tag, then confirm both remote refs resolve to the
+   expected commits.
 
 `tests/test_release_metadata_unit.py` enforces agreement between the package
 version and the topmost numbered changelog release.

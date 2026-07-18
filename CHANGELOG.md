@@ -6,12 +6,7 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
-## 2.0.0 — 2026-07-18
-
-### Breaking changes
-
-- **Removed CSV file output.** File output now requires a `.jsonl` or `.txt`
-  path; CSV, unknown, and extensionless paths are rejected before file creation.
+## 2.0.1 — 2026-07-18
 
 ### Fixes
 
@@ -26,6 +21,22 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - **Prevented premature YouTube channel and playlist pagination stops.**
   Discovery now follows modern continuation view models, sends API headers on
   browse requests, and carries rotated visitor data into the next page.
+- **Recognized Twitch social-sharing badge notices.** These USERNOTICE events
+  now map to the existing badge message type instead of being reported as
+  unknown IRC actions.
+- **Clarified live receive-timeout behavior.** CLI help now explains that
+  Twitch and Kick enforce a one-second minimum while still delivering messages
+  immediately when data arrives.
+- **Made Kick replay bounds and proxy failures actionable.** Kick VOD replay
+  honors bounded `start_time` and `end_time` offsets, live channels reject
+  unsupported seeking, and WebSocket proxy failures identify the proxy path.
+
+## 2.0.0 — 2026-07-18
+
+### Breaking changes
+
+- **Removed CSV file output.** File output now requires a `.jsonl` or `.txt`
+  path; CSV, unknown, and extensionless paths are rejected before file creation.
 
 ### Documentation / tooling
 

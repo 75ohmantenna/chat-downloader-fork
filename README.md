@@ -29,9 +29,9 @@ audit and do not replace your own review. **Use at your own risk.**
 
 | Platform | Current focus |
 | --- | --- |
-| YouTube | Live chat and replay chat (text, paid messages, memberships) |
-| Twitch  | Live IRC chat with broad event coverage; VOD and clip chat replay (text messages) |
-| Kick    | Live Pusher chat with full event coverage (text, subs, gifts, bans, pins, hosts) |
+| YouTube | Live and replay chat, including paid messages and memberships |
+| Twitch | Live IRC events plus text-message replay for VODs and clips |
+| Kick | Live Pusher events plus bounded, chronological VOD chat replay |
 
 ## Installation
 

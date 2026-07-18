@@ -151,8 +151,8 @@ Common fields:
 | Field | Default | Description |
 | --- | --- | --- |
 | `url` | `""` | Stream, video, or clip URL |
-| `start_time` | `None` | Replay start offset |
-| `end_time` | `None` | Replay end offset |
+| `start_time` | `None` | Replay start offset; supported by YouTube, Twitch replay, and Kick VOD URLs |
+| `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD URLs |
 | `max_messages` | `None` | Stop after this many messages |
 | `message_groups` | site default | High-level message filtering |
 | `message_types` | `None` | Explicit message-type filtering |
@@ -181,6 +181,10 @@ Additional fields are available for retry and transport tuning:
 - `ignore`
 - `message_receive_timeout`
 - `buffer_size`
+
+Kick VOD offsets are relative to the recording start and are clamped to its
+duration. Kick live channel URLs reject `start_time` and `end_time` because the
+public live feed cannot seek.
 
 Validation raises `ValueError` for: non-positive or non-integer message/retry/buffer
 counts; malformed or non-finite start/end times; non-finite `retry_timeout`;

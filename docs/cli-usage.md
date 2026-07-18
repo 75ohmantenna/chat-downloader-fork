@@ -83,15 +83,15 @@ Other extensions, including `.json` and `.csv`, are unsupported. Output paths
 must end in `.jsonl` or `.txt`.
 
 File output is crash-resilient: every record is flushed to the OS as it is
-written, and the file is synchronized to disk periodically (about every 60 seconds), so
-captures survive process crashes and power loss with minimal data loss. Writers
-also perform a final `fsync` during normal shutdown; a flush or sync failure is
-reported as an output error instead of allowing the capture to appear successful.
-When appending to JSONL, a crash-truncated final record is removed before new
-records are written; a complete final record missing only its newline is kept and
-terminated. Text append mode similarly terminates an existing final line before
-writing the next record. Equivalent output paths that resolve to the same file are
-deduplicated so each message is written once.
+written, and the file is synchronized to disk periodically (about every 60
+seconds), so captures survive process crashes and power loss with minimal data
+loss. Writers also perform a final `fsync` during normal shutdown; a flush or
+sync failure is reported as an output error instead of allowing the capture to
+appear successful. When appending to JSONL, a crash-truncated final record is
+removed before new records are written; a complete final record missing only
+its newline is kept and terminated. Text append mode similarly terminates an
+existing final line before writing the next record. Equivalent output paths
+that resolve to the same file are deduplicated so each message is written once.
 
 ## Common Flags
 
