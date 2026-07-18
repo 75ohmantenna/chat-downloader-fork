@@ -282,12 +282,8 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
     assert any("writer two failed" in message for message in logs)
 
 
-def test_pre_initialised_writer_receives_emit_callback() -> None:
-    """An already-initialised writer must still receive emitted items.
-
-    Its callback must be installed even though _initialise_writers
-    skips the writer.initialize() call.
-    """
+def test_pre_initialised_writer_receives_emitted_item() -> None:
+    """An already-initialised writer must still receive emitted items."""
     received: list[Any] = []
 
     class PreInitWriter:
@@ -316,8 +312,8 @@ def test_pre_initialised_writer_receives_emit_callback() -> None:
     assert received[0] == {"message": "hello"}
 
 
-def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
-    """Multiple emit() calls must not install the callback more than once."""
+def test_pre_initialised_writer_receives_each_emit_once() -> None:
+    """Multiple emit() calls must each dispatch once."""
     received: list[Any] = []
 
     class PreInitWriter:
@@ -346,14 +342,141 @@ def test_pre_initialised_writer_callback_not_duplicated_across_emits() -> None:
     assert len(received) == 2
 
 
+def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
+    """Every formatted writer receives the accepted semantic message."""
+    formatted_a: list[Any] = []
+    formatted_b: list[Any] = []
+    raw_items: list[Any] = []
+    format_calls: list[dict[str, Any]] = []
+
+    class Writer:
+        file_name = "x"
+
+        def __init__(self, output_mode: str, received: list[Any]) -> None:
+            self.output_mode = output_mode
+            self.received = received
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            raise AssertionError("already initialized")
+
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+            assert flush is True
+            self.received.append(item)
+
+        def close(self) -> None:
+            pass
+
+    chat = Chat(iter(()), title="Example")
+
+    def format_item(item: dict[str, Any]) -> str:
+        format_calls.append(item)
+        return f"{item['message_type']}:{item['message_id']}"
+
+    chat.set_formatter(format_item)
+    dispatcher = _ChatOutputDispatcher(chat)
+    dispatcher.attach_writer(Writer("formatted", formatted_a))
+    dispatcher.attach_writer(Writer("raw", raw_items))
+    dispatcher.attach_writer(Writer("formatted", formatted_b))
+    paid = {"message_type": "paid_message", "message_id": "paid-1"}
+    ticker = {
+        "message_type": "ticker_paid_message_item",
+        "message_id": "paid-1",
+    }
+
+    dispatcher.emit(paid)
+    dispatcher.emit(ticker)
+
+    assert formatted_a == ["paid_message:paid-1"]
+    assert formatted_b == ["paid_message:paid-1"]
+    assert raw_items == [paid, ticker]
+    assert format_calls == [paid]
+
+
+def test_raw_only_output_does_not_populate_formatted_dedup_cache() -> None:
+    """A formatted writer attached later can accept its first semantic event."""
+    raw_items: list[Any] = []
+    formatted_items: list[Any] = []
+
+    class Writer:
+        file_name = "x"
+
+        def __init__(self, output_mode: str, received: list[Any]) -> None:
+            self.output_mode = output_mode
+            self.received = received
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            raise AssertionError("already initialized")
+
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+            self.received.append(item)
+
+        def close(self) -> None:
+            pass
+
+    chat = Chat(iter(()), title="Example")
+    chat.set_formatter(lambda item: str(item["message_type"]))
+    dispatcher = _ChatOutputDispatcher(chat)
+    dispatcher.attach_writer(Writer("raw", raw_items))
+    dispatcher.emit({"message_type": "paid_message", "message_id": "paid-1"})
+    dispatcher.attach_writer(Writer("formatted", formatted_items))
+    dispatcher.emit(
+        {"message_type": "ticker_paid_message_item", "message_id": "paid-1"}
+    )
+
+    assert len(raw_items) == 2
+    assert formatted_items == ["ticker_paid_message_item"]
+
+
+def test_attaching_same_writer_twice_is_idempotent() -> None:
+    writes: list[Any] = []
+
+    class Writer:
+        file_name = "x"
+        output_mode = "raw"
+
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            raise AssertionError("already initialized")
+
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+            writes.append(item)
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    chat = Chat(iter(()), title="Example")
+    dispatcher = _ChatOutputDispatcher(chat)
+    writer = Writer()
+    dispatcher.attach_writer(writer)
+    dispatcher.attach_writer(writer)
+
+    dispatcher.emit({"message": "once"})
+    dispatcher.close()
+
+    assert len(dispatcher.writers) == 1
+    assert writes == [{"message": "once"}]
+    assert writer.close_calls == 1
+
+
 def test_emit_without_writers_is_a_noop() -> None:
-    """emit() returns early and installs no callbacks when no writers exist."""
+    """emit() returns early when no writers exist."""
     chat = Chat(iter(()), title="Example")
     dispatcher = _ChatOutputDispatcher(chat)
 
     dispatcher.emit({"message": "ignored"})
 
-    assert dispatcher.callbacks == []
+    assert dispatcher.writers == []
 
 
 @pytest.mark.parametrize(

@@ -17,8 +17,7 @@ from chat_downloader.errors import (
     ParsingError,
 )
 from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
-from chat_downloader.sites._seen_cache import _SeenMessageCache
-from chat_downloader.sites.output_dispatch import SUPERCHAT_DEDUP_TYPES
+from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
 
 from .cli_bridge import categorize_parameters
 from .testing import setup_testing_mode
@@ -110,18 +109,11 @@ def create_message_callback(
     if quiet:
         return lambda _: None
 
-    cache = _SeenMessageCache(max_seen_message_ids)
+    deduplicator = _FormattedMessageDeduplicator(max_seen_message_ids)
 
     def deduplicating_callback(message: dict[str, Any]) -> None:
-        message_type = message.get("message_type")
-        message_id = message.get("message_id")
-
-        if message_type in SUPERCHAT_DEDUP_TYPES and message_id:
-            is_new, _ = cache.register(message_id)
-            if not is_new:
-                return
-
-        chat.print_formatted(message)
+        if deduplicator.should_emit(message):
+            chat.print_formatted(message)
 
     return deduplicating_callback
 

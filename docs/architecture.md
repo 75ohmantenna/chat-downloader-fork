@@ -124,9 +124,10 @@ memory bounded independently of the number of fetched messages.
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output/dedup are delegated to `_ChatOutputDispatcher` |
-| `output_dispatch.py` | `ChatOutputWriter` Protocol, `_ChatOutputDispatcher` (writer setup, callback dispatch, superchat/ticker **deduplication**, shutdown), `SUPERCHAT_DEDUP_TYPES` |
+| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: writer setup, grouped raw/formatted item dispatch, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
-| `_seen_cache.py` | `_SeenMessageCache`: bounded LRU dedup cache |
+| `_message_dedup.py` | Shared formatted-message policy: paid/ticker semantic deduplication for console and formatted files |
+| `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO dedup cache |
 | `_protocols.py` | Shared Protocol definitions |
 
 ### `sites/youtube/`

@@ -1,31 +1,16 @@
 # SPDX-License-Identifier: MIT
 
-"""Writer setup, callback dispatch, and shutdown for a Chat's outputs."""
+"""Writer setup, item dispatch, and shutdown for a Chat's outputs."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
-from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.utils.filename_utils import sanitize_filename_component
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-# Message types that should be deduplicated (superchat-related messages
-# that appear in both chat and ticker)
-SUPERCHAT_DEDUP_TYPES = frozenset(
-    {
-        "paid_message",
-        "ticker_paid_message_item",
-        "paid_sticker",
-        "ticker_paid_sticker_item",
-        "membership_item",
-        "ticker_sponsor_item",
-    },
-)
+from ._message_dedup import _FormattedMessageDeduplicator
 
 
 class ChatOutputWriter(Protocol):
@@ -77,70 +62,19 @@ class _ChatOutputDispatcher:
     ) -> None:
         self._chat = chat
         self.writers: list[ChatOutputWriter] = []
-        self.callbacks: list[Callable[[dict[str, Any]], None]] = []
-        self._writers_with_callbacks: set[int] = set()
+        self._attached_writer_ids: set[int] = set()
+        self._initialised_writer_ids: set[int] = set()
         self._write_error_count: int = 0
         self.closed = False
-
-        # Bounded dedup cache for superchat/ticker items (see class docstring).
-        normalized = (
-            int(max_seen_message_ids)
-            if max_seen_message_ids is not None and max_seen_message_ids > 0
-            else 0
+        self._formatted_deduplicator = _FormattedMessageDeduplicator(
+            max_seen_message_ids,
         )
-        self._seen_message_cache = _SeenMessageCache(normalized)
-
-    def _register_seen_message_id(self, message_id: str) -> bool:
-        """Register a message ID for dedup; return True if newly seen."""
-        added, evicted_message_id = self._seen_message_cache.register(message_id)
-
-        if not added:
-            return False
-
-        if evicted_message_id is not None:
-            log(
-                "debug",
-                f"Dedup cache limit reached "
-                f"({self._seen_message_cache.limit}); "
-                f"evicting message_id={evicted_message_id!r}.",
-            )
-        return True
-
-    def _build_formatted_callback(
-        self, writer: ChatOutputWriter
-    ) -> Callable[[dict[str, Any]], None]:
-        """Create a callback that formats output before writing."""
-
-        def callback(item: dict[str, Any]) -> None:
-            message_type = item.get("message_type")
-            message_id = item.get("message_id")
-
-            if (
-                message_type in SUPERCHAT_DEDUP_TYPES
-                and message_id
-                and not self._register_seen_message_id(message_id)
-            ):
-                return
-
-            writer.write(self._chat.format(item), flush=True)
-
-        return callback
-
-    @staticmethod
-    def _build_raw_callback(
-        writer: ChatOutputWriter,
-    ) -> Callable[[dict[str, Any]], None]:
-        """Create a callback that writes raw message dictionaries."""
-
-        def callback(item: dict[str, Any]) -> None:
-            writer.write(item, flush=True)
-
-        return callback
 
     def _initialise_writers(self) -> None:
-        """Initialise attached writers once and install their callbacks."""
+        """Initialise each attached writer once before dispatch begins."""
         for writer in self.writers:
-            if id(writer) in self._writers_with_callbacks:
+            writer_id = id(writer)
+            if writer_id in self._initialised_writer_ids:
                 continue
 
             if not writer.is_initialised():
@@ -155,17 +89,15 @@ class _ChatOutputDispatcher:
                 log("debug", f"Writing to file: {writer.file_name}")
                 writer.initialize()
 
-            callback = (
-                self._build_formatted_callback(writer)
-                if writer.output_mode == "formatted"
-                else self._build_raw_callback(writer)
-            )
-            self.callbacks.append(callback)
-            self._writers_with_callbacks.add(id(writer))
+            self._initialised_writer_ids.add(writer_id)
 
     def attach_writer(self, writer: ChatOutputWriter) -> None:
-        """Attach a writer to the chat."""
+        """Attach a writer to the chat, ignoring repeated object attachment."""
+        writer_id = id(writer)
+        if writer_id in self._attached_writer_ids:
+            return
         self.writers.append(writer)
+        self._attached_writer_ids.add(writer_id)
 
     def emit(self, item: dict[str, Any]) -> None:
         """Write a chat item to all configured outputs."""
@@ -173,8 +105,20 @@ class _ChatOutputDispatcher:
             return
 
         self._initialise_writers()
-        for callback in self.callbacks:
-            callback(item)
+        formatted_item: str | None = None
+        emit_formatted: bool | None = None
+        for writer in self.writers:
+            if writer.output_mode != "formatted":
+                writer.write(item, flush=True)
+                continue
+
+            if emit_formatted is None:
+                emit_formatted = self._formatted_deduplicator.should_emit(item)
+            if not emit_formatted:
+                continue
+            if formatted_item is None:
+                formatted_item = self._chat.format(item)
+            writer.write(formatted_item, flush=True)
 
     def close(self) -> None:
         """Close all attached writers once and log any cleanup failures."""

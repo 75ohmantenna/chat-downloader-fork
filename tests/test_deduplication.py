@@ -12,8 +12,11 @@ import os
 import tempfile
 
 from chat_downloader.output.continuous_write import ContinuousWriter
+from chat_downloader.sites._message_dedup import (
+    SUPERCHAT_DEDUP_TYPES,
+    _FormattedMessageDeduplicator,
+)
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.output_dispatch import SUPERCHAT_DEDUP_TYPES
 
 
 def test_superchat_dedup_types_constant() -> None:
@@ -29,6 +32,19 @@ def test_superchat_dedup_types_constant() -> None:
     assert expected_types == SUPERCHAT_DEDUP_TYPES
     # Verify it's a frozenset (immutable)
     assert isinstance(SUPERCHAT_DEDUP_TYPES, frozenset)
+
+
+def test_formatted_deduplicator_ignores_missing_empty_and_non_string_ids() -> None:
+    deduplicator = _FormattedMessageDeduplicator()
+
+    items = [
+        {"message_type": "paid_message"},
+        {"message_type": "paid_message", "message_id": ""},
+        {"message_type": "paid_message", "message_id": 123},
+        {"message_type": "paid_message", "message_id": 123},
+    ]
+
+    assert all(deduplicator.should_emit(item) for item in items)
 
 
 def test_deduplication_in_formatted_output() -> None:
@@ -356,11 +372,12 @@ def test_superchat_dedup_cache_none_uses_default_limit() -> None:
     Dedup lives on the output dispatcher (its only consumer); Chat forwards the
     configured size when the dispatcher is created.
     """
-    from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
+    deduplicator = _FormattedMessageDeduplicator(None)
 
-    chat = Chat(chat=iter(()), title="Test", id="test123", max_seen_message_ids=None)
-    dispatcher = _ChatOutputDispatcher(chat, chat._max_seen_message_ids)
-
-    assert dispatcher._seen_message_cache.limit > 0
-    assert dispatcher._register_seen_message_id("msg1")
-    assert not dispatcher._register_seen_message_id("msg1")
+    assert deduplicator._seen_message_cache.limit > 0
+    assert deduplicator.should_emit(
+        {"message_type": "paid_message", "message_id": "msg1"}
+    )
+    assert not deduplicator.should_emit(
+        {"message_type": "ticker_paid_message_item", "message_id": "msg1"}
+    )

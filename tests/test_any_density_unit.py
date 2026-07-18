@@ -31,9 +31,8 @@ BASELINE: dict[str, int] = {
     "sites/base.py": 12,
     "sites/common.py": 3,
     "sites/models.py": 13,
-    # Dispatcher callbacks/writer protocol — dict[str,Any] is the chat-item
-    # boundary (moved from sites/models.py in Round-04.1).
-    "sites/output_dispatch.py": 9,
+    # Dispatcher writer protocol — dict[str,Any] is the chat-item boundary.
+    "sites/output_dispatch.py": 4,
     "sites/session.py": 7,
     "sites/remap.py": 10,
     "sites/filters.py": 3,
