@@ -181,6 +181,8 @@ version and the topmost numbered changelog release.
 GitHub Actions is the only supported hosted CI platform. The workflow validates
 Python 3.12, 3.13, and 3.14 on pushes to every branch, pull requests targeting
 `master`, and manual dispatch. It uses locked dependencies, read-only contents
-permission, concurrency cancellation, and a job timeout.
+permission, concurrency cancellation, and a job timeout. The checkout retains
+full Git history so the fork-history issue-reference guard can inspect every
+commit after its recorded baseline.
 
 Do not add Gitea, Forgejo, Codeberg, or Woodpecker CI configuration.
