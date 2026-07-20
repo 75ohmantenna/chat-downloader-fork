@@ -1,114 +1,51 @@
 # SPDX-License-Identifier: MIT
 
-"""Session and cookie lifecycle helpers for ``ChatDownloader``."""
+"""Downloader-owned site-session and cookie lifecycle."""
 
 from __future__ import annotations
 
-import contextlib
-import dataclasses
-from http.cookiejar import Cookie
+from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.sites.base import BaseChatDownloader
-from chat_downloader.sites.session import (
-    _validate_cookie_domain,
-)
+from chat_downloader.sites.session import CookieSpec, build_cookie
 
 if TYPE_CHECKING:
     from chat_downloader.models import DownloaderConfig
-    from chat_downloader.runtime._protocols import ChatDownloaderProto
 
 
-def build_cookie(
-    *,
-    domain: str,
-    name: str,
-    value: str,
-    expire_time: int | None = None,
-    port: str | None = None,
-    path: str = "/",
-    secure: bool = False,
-    discard: bool = False,
-    rest: dict[str, Any] | None = None,
-) -> Cookie:
-    """Build a ``Cookie`` using the downloader's compatibility shape."""
-    _validate_cookie_domain(domain)
-    cookie_rest = {} if rest is None else rest
-    return Cookie(
-        version=0,
-        name=name,
-        value=value,
-        port=port,
-        port_specified=port is not None,
-        domain=domain,
-        domain_specified=True,
-        domain_initial_dot=domain.startswith("."),
-        path=path,
-        path_specified=True,
-        secure=secure,
-        expires=expire_time,
-        discard=discard,
-        comment=None,
-        comment_url=None,
-        rest=cookie_rest,
-    )
+class _SiteSessionPool:
+    """Own cached site downloaders and cookies shared between them."""
 
+    def __init__(self, config: DownloaderConfig) -> None:
+        self.config = config
+        self.sessions: dict[str, BaseChatDownloader] = {}
+        self._cookie_jar = MozillaCookieJar()
 
-def clear_all_cookies(owner: ChatDownloaderProto) -> None:
-    """Clear the local cookie jar and all existing site sessions."""
-    owner._cookie_jar.clear()
-    for session in owner.sessions.values():
-        session.clear_cookies()
-    _disable_configured_cookie_source(owner)
+    def clear_cookies(self) -> None:
+        """Clear current cookies and prevent future cookie-file reloads."""
+        self._cookie_jar.clear()
+        for session in self.sessions.values():
+            session.clear_cookies()
+        self.config.cookies = None
 
-
-def _disable_configured_cookie_source(owner: ChatDownloaderProto) -> None:
-    """Prevent future sessions from reloading cookies from the original file."""
-    config = getattr(owner, "config", None)
-    if config is None or not hasattr(config, "cookies"):
-        return
-
-    if dataclasses.is_dataclass(config) and not isinstance(config, type):
-        owner.config = cast(
-            "DownloaderConfig", dataclasses.replace(config, cookies=None)
-        )
-        return
-
-    with contextlib.suppress(AttributeError):
-        config.cookies = None
-
-
-def propagate_cookie(
-    owner: ChatDownloaderProto,
-    *,
-    domain: str,
-    name: str,
-    value: str,
-    expire_time: int | None = None,
-    port: str | None = None,
-    path: str = "/",
-    secure: bool = False,
-    discard: bool = False,
-    rest: dict[str, Any] | None = None,
-) -> None:
-    """Store a cookie locally and mirror it to existing site sessions."""
-    cookie_rest = {} if rest is None else rest
-    cookie = build_cookie(
-        domain=domain,
-        name=name,
-        value=value,
-        expire_time=expire_time,
-        port=port,
-        path=path,
-        secure=secure,
-        discard=discard,
-        rest=cookie_rest,
-    )
-    owner._cookie_jar.set_cookie(cookie)
-
-    for session in owner.sessions.values():
-        session.set_cookie_value(
+    def set_cookie(
+        self,
+        *,
+        domain: str,
+        name: str,
+        value: str,
+        expire_time: int | None = None,
+        port: str | None = None,
+        path: str = "/",
+        secure: bool = False,
+        discard: bool = False,
+        rest: dict[str, Any] | None = None,
+    ) -> None:
+        """Store a cookie locally and mirror it to current site sessions."""
+        cookie_rest = {} if rest is None else rest
+        spec = CookieSpec(
             domain=domain,
             name=name,
             value=value,
@@ -119,77 +56,84 @@ def propagate_cookie(
             discard=discard,
             rest=cookie_rest,
         )
-
-
-def get_cookie_value(owner: ChatDownloaderProto, name: str, default: Any = None) -> Any:
-    """Return a cookie value from the local jar or existing site sessions."""
-    cookies_dict = {cookie.name: cookie.value for cookie in owner._cookie_jar}
-    if name in cookies_dict:
-        return cookies_dict[name]
-
-    for session in owner.sessions.values():
-        value = session.get_cookie_value(name, default=None)
-        if value is not None:
-            return value
-
-    return default
-
-
-def create_session(
-    owner: ChatDownloaderProto,
-    chat_downloader_class: type[BaseChatDownloader],
-    *,
-    overwrite: bool = False,
-) -> BaseChatDownloader:
-    """Create or retrieve a site downloader session."""
-    if not issubclass(chat_downloader_class, BaseChatDownloader):
-        msg = (  # type: ignore[unreachable]
-            f"Unable to create session, class must extend "
-            f"BaseChatDownloader. Class given: "
-            f"{chat_downloader_class}"
-        )
-        raise TypeError(msg)
-    if chat_downloader_class == BaseChatDownloader:
-        msg = "Unable to create session, class may not be BaseChatDownloader."
-        raise TypeError(
-            msg,
-        )
-
-    session_name = chat_downloader_class.__name__
-    existing_session = owner.sessions.get(session_name)
-    if existing_session is not None and getattr(
-        existing_session, "_session_closed", False
-    ):
-        overwrite = True
-    if existing_session is not None and not overwrite:
-        log("debug", f"Reusing existing {session_name} session.")
-        return existing_session
-
-    if overwrite and existing_session is not None:
-        try:
-            existing_session.close()
-        except (OSError, ConnectionError, RuntimeError) as error:
-            log(
-                "warning",
-                "Error closing existing "
-                f"{session_name} session during overwrite: "
-                f"{error}",
+        self._cookie_jar.set_cookie(build_cookie(spec))
+        for session in self.sessions.values():
+            session.set_cookie_value(
+                domain=domain,
+                name=name,
+                value=value,
+                expire_time=expire_time,
+                port=port,
+                path=path,
+                secure=secure,
+                discard=discard,
+                rest=cast("dict[str, str]", cookie_rest),
             )
 
-    log("debug", f"Created {session_name} session.")
-    session = chat_downloader_class(**owner.config.as_dict())
-    owner.sessions[session_name] = session
-    for cookie in owner._cookie_jar:
-        session.session.cookies.set_cookie(cookie)
+    def get_cookie(self, name: str, default: Any = None) -> Any:
+        """Return a local or site-session cookie value."""
+        local = {cookie.name: cookie.value for cookie in self._cookie_jar}
+        if name in local:
+            return local[name]
+        for session in self.sessions.values():
+            value = session.get_cookie_value(name, default=None)
+            if value is not None:
+                return value
+        return default
 
-    return session
+    def create(
+        self,
+        chat_downloader_class: type[BaseChatDownloader],
+        *,
+        overwrite: bool = False,
+    ) -> BaseChatDownloader:
+        """Create or reuse a site downloader session."""
+        if not issubclass(chat_downloader_class, BaseChatDownloader):
+            msg = (  # type: ignore[unreachable]
+                "Unable to create session, class must extend BaseChatDownloader. "
+                f"Class given: {chat_downloader_class}"
+            )
+            raise TypeError(msg)
+        if chat_downloader_class == BaseChatDownloader:
+            msg = "Unable to create session, class may not be BaseChatDownloader."
+            raise TypeError(msg)
 
+        session_name = chat_downloader_class.__name__
+        existing = self.sessions.get(session_name)
+        if existing is not None and existing._session_closed:
+            overwrite = True
+        if existing is not None and not overwrite:
+            log("debug", f"Reusing existing {session_name} session.")
+            return existing
 
-def close_sessions(owner: ChatDownloaderProto) -> None:
-    """Close all active site sessions and clear the cache."""
-    for session in owner.sessions.values():
-        try:
-            session.close()
-        except (OSError, ConnectionError, RuntimeError) as error:
-            log("warning", f"Error closing session: {error}")
-    owner.sessions = {}
+        if existing is not None:
+            try:
+                existing.close()
+            except (OSError, ConnectionError, RuntimeError) as error:
+                log(
+                    "warning",
+                    f"Error closing existing {session_name} session during "
+                    f"overwrite: {error}",
+                )
+
+        log("debug", f"Created {session_name} session.")
+        session = chat_downloader_class(**self.config.as_dict())
+        self.sessions[session_name] = session
+        for cookie in self._cookie_jar:
+            session.session.cookies.set_cookie(cookie)
+        return session
+
+    def get(
+        self, chat_downloader_class: type[BaseChatDownloader]
+    ) -> BaseChatDownloader | None:
+        """Return a cached site downloader, if present."""
+        return self.sessions.get(chat_downloader_class.__name__)
+
+    def close(self) -> None:
+        """Close every cached site downloader and empty the pool."""
+        for session in self.sessions.values():
+            try:
+                session.close()
+            except (OSError, ConnectionError, RuntimeError) as error:
+                log("warning", f"Error closing session: {error}")
+        self.sessions.clear()

@@ -105,7 +105,7 @@ BASELINE: dict[str, int] = {
     "utils/string_utils.py": 6,
     "utils/time_utils.py": 3,
     # Runtime layer — orchestration and CLI glue.
-    "runtime/session_lifecycle.py": 5,
+    "runtime/session_lifecycle.py": 4,
     "runtime/runner.py": 4,
     "runtime/cli_bridge.py": 5,
     "runtime/chat_pipeline.py": 5,

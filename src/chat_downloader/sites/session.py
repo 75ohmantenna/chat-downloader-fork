@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Shared HTTP session and cookie helpers for site downloaders."""
+"""Shared HTTP session ownership for site downloaders."""
 
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from chat_downloader._timeout_defaults import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_READ_TIMEOUT,
 )
-from chat_downloader.debugging import log
 from chat_downloader.errors import CookieError, InvalidParameter
 from chat_downloader.request_profiles import (
     build_request_profile_headers,
@@ -25,9 +24,9 @@ from chat_downloader.request_profiles import (
 )
 
 if TYPE_CHECKING:
-    from chat_downloader.utils.json_types import JSONAny
+    from collections.abc import Callable
 
-    from ._protocols import SessionOwnerProto
+    from chat_downloader.utils.json_types import JSONAny
 
 _ALLOWED_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks5", "socks5h"})
 
@@ -44,49 +43,6 @@ def _validate_cookie_domain(domain: str) -> None:
         raise InvalidParameter(msg)
 
 
-def init_session_state(owner: SessionOwnerProto, **kwargs: Any) -> None:
-    """Initialize HTTP session, headers, proxies, cookies, and timeout state."""
-    owner.session = requests.Session()
-    owner._session_closed = False
-
-    connect_timeout = float(kwargs.get("connect_timeout", DEFAULT_CONNECT_TIMEOUT))
-    read_timeout = float(kwargs.get("read_timeout", DEFAULT_READ_TIMEOUT))
-    owner._http_timeout = (connect_timeout, read_timeout)
-
-    provided_headers = kwargs.get("headers")
-    request_profile = normalize_request_profile(kwargs.get("request_profile"))
-    merged_headers = _build_session_headers(provided_headers, request_profile)
-    owner.session.headers.clear()
-    owner.session.headers.update(merged_headers)
-    owner._request_profile = request_profile
-    owner._auto_profile_fallback = bool(kwargs.get("auto_profile_fallback", True))
-    owner._twitch_client_id = kwargs.get("twitch_client_id")
-
-    proxy = kwargs.get("proxy")
-    if proxy is not None:
-        if proxy == "":
-            owner.session.trust_env = False
-            proxies = {}
-        else:
-            _validate_proxy_url(proxy)
-            proxies = {"http": proxy, "https": proxy}
-        owner.session.proxies.update(proxies)
-
-    cookies = kwargs.get("cookies")
-    cookie_jar = MozillaCookieJar(cookies) if cookies else MozillaCookieJar()
-
-    if cookies:
-        if Path(cookies).exists():
-            cookie_jar.load(ignore_discard=True, ignore_expires=True)
-        else:
-            msg = f'The file "{cookies}" could not be found.'
-            raise CookieError(msg)
-
-    cast("Any", owner.session).cookies = cookie_jar
-    owner._has_initial_auth_cookies = owner._has_auth_cookies
-    owner._cookie_rotation_warned = False
-
-
 def _validate_proxy_url(proxy: str) -> None:
     parsed = urlparse(proxy)
     scheme = parsed.scheme.lower()
@@ -96,52 +52,11 @@ def _validate_proxy_url(proxy: str) -> None:
         raise InvalidParameter(msg)
 
 
-def check_cookie_rotation(owner: SessionOwnerProto) -> None:
-    """Warn once if auth cookies present at startup have been rotated away."""
-    if (
-        owner._has_initial_auth_cookies
-        and not owner._has_auth_cookies
-        and not owner._cookie_rotation_warned
-    ):
-        log(
-            "warning",
-            "The provided authentication cookies are no longer valid. "
-            "They may have been rotated by your browser as a security measure. "
-            "Try exporting fresh cookies from your browser.",
-        )
-        owner._cookie_rotation_warned = True
-
-
-def get_session_headers(owner: SessionOwnerProto, key: str) -> str | None:
-    """Return a session header value."""
-    return owner.session.headers.get(key)
-
-
-def update_session_headers(
-    owner: SessionOwnerProto, new_headers: dict[str, str]
-) -> None:
-    """Update session headers in place."""
-    owner.session.headers.update(new_headers)
-
-
-def apply_request_profile(owner: SessionOwnerProto, profile_name: str) -> bool:
-    """Apply a request profile to session headers; return True on success."""
-    profile_headers = get_request_profile_headers(profile_name)
-    if not profile_headers:
-        return False
-    session_headers = cast("dict[str, str]", dict(owner.session.headers))
-    merged_headers = build_request_profile_headers(profile_name, session_headers)
-    owner.session.headers.clear()
-    owner.session.headers.update(merged_headers)
-    owner._request_profile = profile_name
-    return True
-
-
 def _build_session_headers(
     provided_headers: dict[str, str] | None,
     request_profile: str | None,
 ) -> dict[str, str]:
-    """Return the initial session headers after applying profile policy."""
+    """Return initial headers after applying request-profile policy."""
     headers = dict(provided_headers) if provided_headers is not None else {}
     if not headers:
         headers = {
@@ -155,42 +70,9 @@ def _build_session_headers(
     return build_request_profile_headers(request_profile, headers)
 
 
-def clear_cookies(owner: SessionOwnerProto) -> None:
-    """Clear the session cookie jar."""
-    owner.session.cookies.clear()
-
-
-def get_cookies_dict(owner: SessionOwnerProto) -> dict[str, str]:
-    """Return the current cookie jar as a plain dictionary."""
-    return {
-        cookie.name: cookie.value
-        for cookie in owner.session.cookies
-        if cookie.value is not None
-    }
-
-
 @dataclass(slots=True)
 class CookieSpec:
-    """All fields required to construct a single ``http.cookiejar.Cookie``.
-
-    This dataclass gathers the ten cookie parameters that appear in every
-    ``set_cookie_value`` call-site into one named object.  It is intentionally
-    internal to the session layer; external callers should use
-    :meth:`BaseChatDownloader.set_cookie_value` or
-    :meth:`ChatDownloader.set_cookie_value` instead.
-
-    Attributes:
-        domain: Cookie domain (e.g. ``".twitch.tv"``).
-        name: Cookie name.
-        value: Cookie value string.
-        expire_time: Unix timestamp for expiry, or ``None`` for session
-            lifetime.
-        port: Port restriction string (e.g. ``"443"``), or ``None``.
-        path: URL path scope; defaults to ``"/"``.
-        secure: Whether the cookie must only be sent over HTTPS.
-        discard: Whether this is a session (non-persistent) cookie.
-        rest: Additional unrecognised cookie attributes dict, or ``None``.
-    """
+    """Values required to construct one ``http.cookiejar.Cookie``."""
 
     domain: str
     name: str
@@ -200,19 +82,14 @@ class CookieSpec:
     path: str = "/"
     secure: bool = False
     discard: bool = False
-    rest: dict[str, str] | None = field(default=None)
+    rest: dict[str, Any] | None = field(default=None)
 
 
-def _set_cookie_from_spec(owner: SessionOwnerProto, spec: CookieSpec) -> None:
-    """Add a cookie described by *spec* to *owner*'s session cookie jar.
-
-    Args:
-        owner: An object that holds a ``session`` with a ``cookies``
-            ``CookieJar``.
-        spec: The fully-specified cookie to add.
-    """
-    cookie_rest: dict[str, str] = {} if spec.rest is None else spec.rest
-    cookie = Cookie(
+def build_cookie(spec: CookieSpec) -> Cookie:
+    """Build a validated cookie from ``spec``."""
+    _validate_cookie_domain(spec.domain)
+    cookie_rest: dict[str, Any] = {} if spec.rest is None else spec.rest
+    return Cookie(
         version=0,
         name=spec.name,
         value=spec.value,
@@ -230,84 +107,120 @@ def _set_cookie_from_spec(owner: SessionOwnerProto, spec: CookieSpec) -> None:
         comment_url=None,
         rest=cookie_rest,
     )
-    cast("Any", owner.session.cookies).set_cookie(cookie)
 
 
-def set_cookie_value(
-    owner: SessionOwnerProto,
-    domain: str,
-    name: str,
-    value: str,
-    *,
-    expire_time: int | None = None,
-    port: str | None = None,
-    path: str = "/",
-    secure: bool = False,
-    discard: bool = False,
-    rest: dict[str, str] | None = None,
-) -> None:
-    """Set a cookie value on the session cookie jar."""
-    _validate_cookie_domain(domain)
-    _set_cookie_from_spec(
-        owner,
-        CookieSpec(
-            domain=domain,
-            name=name,
-            value=value,
-            expire_time=expire_time,
-            port=port,
-            path=path,
-            secure=secure,
-            discard=discard,
-            rest=rest,
-        ),
-    )
+class ChatDownloaderSession:
+    """Own one site's HTTP state behind a cohesive interface."""
 
+    def __init__(
+        self,
+        *,
+        headers: dict[str, str] | None = None,
+        cookies: str | None = None,
+        proxy: str | None = None,
+        connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
+        read_timeout: float = DEFAULT_READ_TIMEOUT,
+        request_profile: str | None = None,
+        auto_profile_fallback: bool = True,
+        twitch_client_id: str | None = None,
+        session_factory: Callable[[], requests.Session] | None = None,
+    ) -> None:
+        """Initialize one requests adapter and all shared HTTP policy state."""
+        self.session = (session_factory or requests.Session)()
+        self.closed = False
+        self.timeout = (float(connect_timeout), float(read_timeout))
+        self.request_profile = normalize_request_profile(request_profile)
+        self.auto_profile_fallback = bool(auto_profile_fallback)
+        self.twitch_client_id = twitch_client_id
 
-def get_cookie_value(
-    owner: SessionOwnerProto, name: str, default: str | None = None
-) -> str | None:
-    """Return a cookie value if present, otherwise default."""
-    return get_cookies_dict(owner).get(name, default)
+        merged_headers = _build_session_headers(headers, self.request_profile)
+        self.session.headers.clear()
+        self.session.headers.update(merged_headers)
 
+        if proxy is not None:
+            if proxy == "":
+                self.session.trust_env = False
+                proxies: dict[str, str] = {}
+            else:
+                _validate_proxy_url(proxy)
+                proxies = {"http": proxy, "https": proxy}
+            self.session.proxies.update(proxies)
 
-def close_session(owner: SessionOwnerProto) -> None:
-    """Close the underlying requests session."""
-    if owner._session_closed:
-        return
-    try:
-        owner.session.close()
-    finally:
-        owner._session_closed = True
-    log("debug", "Session closed.")
+        cookie_jar = MozillaCookieJar(cookies) if cookies else MozillaCookieJar()
+        if cookies:
+            if Path(cookies).exists():
+                cookie_jar.load(ignore_discard=True, ignore_expires=True)
+            else:
+                msg = f'The file "{cookies}" could not be found.'
+                raise CookieError(msg)
+        cast("Any", self.session).cookies = cookie_jar
 
+    def get_header(self, key: str) -> str | None:
+        """Return a session header value."""
+        return self.session.headers.get(key)
 
-def _require_open_session(owner: SessionOwnerProto) -> None:
-    if owner._session_closed:
-        msg = "HTTP session is closed; create a new downloader session."
-        raise RuntimeError(msg)
+    def update_headers(self, new_headers: dict[str, str]) -> None:
+        """Merge headers into the active session."""
+        self.session.headers.update(new_headers)
 
+    def apply_request_profile(self, profile_name: str) -> bool:
+        """Apply a named request profile; return whether it exists."""
+        profile_headers = get_request_profile_headers(profile_name)
+        if not profile_headers:
+            return False
+        session_headers = cast("dict[str, str]", dict(self.session.headers))
+        merged_headers = build_request_profile_headers(profile_name, session_headers)
+        self.session.headers.clear()
+        self.session.headers.update(merged_headers)
+        self.request_profile = profile_name
+        return True
 
-def session_post(
-    owner: SessionOwnerProto, url: str, **kwargs: Any
-) -> requests.Response:
-    """Make a POST request using the configured session."""
-    _require_open_session(owner)
-    kwargs.setdefault("timeout", owner._http_timeout)
-    response = owner.session.post(url, **kwargs)
-    check_cookie_rotation(owner)
-    return response
+    def clear_cookies(self) -> None:
+        """Clear the session cookie jar."""
+        self.session.cookies.clear()
 
+    def cookies_dict(self) -> dict[str, str]:
+        """Return the current cookie jar as a plain dictionary."""
+        return {
+            cookie.name: cookie.value
+            for cookie in self.session.cookies
+            if cookie.value is not None
+        }
 
-def session_get(owner: SessionOwnerProto, url: str, **kwargs: Any) -> requests.Response:
-    """Make a GET request using the configured session."""
-    _require_open_session(owner)
-    kwargs.setdefault("timeout", owner._http_timeout)
-    response = owner.session.get(url, **kwargs)
-    check_cookie_rotation(owner)
-    return response
+    def set_cookie(self, spec: CookieSpec) -> None:
+        """Add a validated cookie to the session."""
+        self.session.cookies.set_cookie(build_cookie(spec))
 
+    def get_cookie(self, name: str, default: str | None = None) -> str | None:
+        """Return a cookie value if present."""
+        return self.cookies_dict().get(name, default)
 
-def session_get_json(owner: SessionOwnerProto, url: str, **kwargs: Any) -> JSONAny:
-    """Make a GET request and parse the response as JSON."""
-    return cast("JSONAny", session_get(owner, url, **kwargs).json())
+    def _require_open(self) -> None:
+        if self.closed:
+            msg = "HTTP session is closed; create a new downloader session."
+            raise RuntimeError(msg)
+
+    def post(self, url: str, **kwargs: Any) -> requests.Response:
+        """POST with the configured default timeout."""
+        self._require_open()
+        kwargs.setdefault("timeout", self.timeout)
+        return self.session.post(url, **kwargs)
+
+    def get(self, url: str, **kwargs: Any) -> requests.Response:
+        """GET with the configured default timeout."""
+        self._require_open()
+        kwargs.setdefault("timeout", self.timeout)
+        return self.session.get(url, **kwargs)
+
+    def get_json(self, url: str, **kwargs: Any) -> JSONAny:
+        """GET and parse a JSON response."""
+        return cast("JSONAny", self.get(url, **kwargs).json())
+
+    def close(self) -> None:
+        """Close the underlying session once."""
+        if self.closed:
+            return
+        try:
+            self.session.close()
+        finally:
+            self.closed = True

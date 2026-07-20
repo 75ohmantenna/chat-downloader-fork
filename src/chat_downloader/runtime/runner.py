@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
@@ -32,7 +32,9 @@ if TYPE_CHECKING:
 
     from chat_downloader.sites.models import Chat
 
-    from ._protocols import ChatDownloaderProto
+
+class _ClosableDownloader(Protocol):
+    def close(self) -> None: ...
 
 
 def _classify_run_error(e: Exception) -> str:
@@ -53,7 +55,7 @@ def _classify_run_error(e: Exception) -> str:
 
 def _finalize_run(
     chat: Chat | None,
-    downloader: ChatDownloaderProto | None,
+    downloader: _ClosableDownloader | None,
     *,
     primary_error: bool,
 ) -> None:

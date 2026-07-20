@@ -90,3 +90,21 @@ only after useful traffic.
 **Revisit when:** a provider-independent lifecycle primitive can replace
 duplicated mechanism without absorbing provider-specific policy.
 
+## Keep orchestration and session ownership deep
+
+**Decision:** Runtime callers cross two orchestration interfaces:
+`dispatch_chat` constructs a configured chat, while `configure_chat` applies
+the provider-neutral pipeline. URL correction, site-default resolution,
+wrapper ordering, formatting, and writer setup remain implementation details.
+Tests drive these interfaces instead of treating each stage as a separate
+caller surface.
+
+Shared provider HTTP state belongs to `ChatDownloaderSession`, while cached
+site instances and explicitly propagated cookies belong to `_SiteSessionPool`.
+Neither module accepts its whole owning downloader or a protocol that
+redeclares it. Provider-specific authentication checks and retry policy remain
+with the provider and `BaseChatDownloader`.
+
+**Revisit when:** a second production caller requires an existing internal
+stage independently, or a new session implementation demonstrates a real seam
+that cannot be expressed by the current internal adapter factory.

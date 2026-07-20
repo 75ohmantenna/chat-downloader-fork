@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 from chat_downloader.models import ChatRequest
-from chat_downloader.runtime.site_dispatch import execute_chat_generator
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.chat_streams import YouTubeChatStreamsMixin
@@ -15,31 +14,6 @@ from chat_downloader.sites.youtube.chat_users_retrieval import (
 from chat_downloader.sites.youtube.continuation import (
     _get_chat_messages as iterate_chat_messages,
 )
-
-
-def test_execute_chat_generator_uses_site_prepared_request_shape() -> None:
-    request = ChatRequest(url="https://www.youtube.com/watch?v=abc")
-
-    class FakeSite:
-        def __init__(self) -> None:
-            self.seen_request = None
-
-        def get_chat_by_video_id(self, match, incoming_request) -> str:
-            self.seen_request = incoming_request
-            return "chat-object"
-
-    site = FakeSite()
-
-    result = execute_chat_generator(
-        site,
-        "get_chat_by_video_id",
-        match=None,
-        request=request,
-        site_name="YouTubeChatDownloader",
-    )
-
-    assert result == "chat-object"
-    assert site.seen_request is request
 
 
 def test_youtube_video_entry_accepts_chat_request_and_bridges_later() -> None:

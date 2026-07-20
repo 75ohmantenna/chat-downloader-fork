@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, cast
+from unittest.mock import MagicMock
 
 from chat_downloader.chat_downloader import ChatDownloader, run
 from chat_downloader.models import (
@@ -18,36 +18,20 @@ def test_chat_downloader_session_helpers_delegate_to_runtime_helpers(
     monkeypatch,
 ) -> None:
     downloader = ChatDownloader()
-    calls: list[tuple[Any, ...]] = []
-
-    def fake_create_runtime_session(owner, cls, overwrite=False) -> str:
-        calls.append(("create", owner, cls, overwrite))
-        return "created"
-
-    def fake_close_sessions(owner) -> None:
-        calls.append(("close", owner))
-
-    monkeypatch.setattr(
-        "chat_downloader.chat_downloader.create_runtime_session",
-        fake_create_runtime_session,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.chat_downloader.close_sessions",
-        fake_close_sessions,
-    )
+    pool = downloader._session_pool
+    pool.create = MagicMock(return_value="created")
+    pool.get = MagicMock(return_value="existing-session")
+    pool.close = MagicMock()
 
     class FakeSite:
         __name__ = "FakeSite"
 
-    downloader.sessions["FakeSite"] = cast("Any", "existing-session")
-
     assert downloader.create_session(FakeSite, overwrite=True) == "created"
     assert downloader.get_session(FakeSite) == "existing-session"
-
     downloader.close()
-
-    assert calls[0] == ("create", downloader, FakeSite, True)
-    assert calls[1] == ("close", downloader)
+    pool.create.assert_called_once_with(FakeSite, overwrite=True)
+    pool.get.assert_called_once_with(FakeSite)
+    pool.close.assert_called_once_with()
 
 
 def test_chat_downloader_init_defaults_are_canonical_model_defaults() -> None:
@@ -132,60 +116,6 @@ def test_chat_downloader_init_logs_sanitized_cookies(monkeypatch) -> None:
     assert "<redacted>" in init_log
 
 
-def test_run_time_program_parameters_log_is_sanitized(monkeypatch) -> None:
-    from chat_downloader.runtime.site_dispatch import create_chat_for_site
-    from chat_downloader.sites.models import Chat
-
-    logged_messages: list[str] = []
-
-    class FakeSite:
-        _NAME = "example.invalid"
-
-        def get_site_value(self, value):
-            return value
-
-        def get_chat_by_id(self, _match, _request):
-            return Chat(iter(()), title="Example title", status="live", id="abc")
-
-    class FakeOwner:
-        def __init__(self) -> None:
-            self.sessions = {}
-
-        def create_session(self, site):
-            session = site()
-            self.sessions[site.__name__] = session
-            return session
-
-    def fake_log(level: str, message: str) -> None:
-        if level == "debug":
-            logged_messages.append(message)
-
-    monkeypatch.setattr("chat_downloader.runtime.site_dispatch.log", fake_log)
-    monkeypatch.setattr(
-        ChatRequest,
-        "as_dict",
-        lambda self: {
-            "url": self.url,
-            "headers": {"Authorization": "Bearer secret"},
-            "proxy": "http://user:pass@example.invalid:8080",
-        },
-    )
-
-    create_chat_for_site(
-        FakeOwner(),
-        FakeSite,
-        ("get_chat_by_id", None),
-        ChatRequest(url="https://example.invalid/watch?id=abc"),
-    )
-
-    program_log = next(
-        msg for msg in logged_messages if msg.startswith("Program parameters:")
-    )
-    assert "Bearer secret" not in program_log
-    assert "user:pass@example.invalid" not in program_log
-    assert "<redacted>" in program_log
-
-
 def test_get_chat_signature_matches_chat_request_fields() -> None:
     sig = inspect.signature(ChatDownloader.get_chat)
     params = set(sig.parameters) - {"self"}
@@ -219,39 +149,15 @@ def test_get_chat_builds_chat_request_and_delegates(monkeypatch) -> None:
     assert seen[0].buffer_size == 123
 
 
-def test_get_chat_request_returns_site_chat_when_supported(monkeypatch) -> None:
+def test_get_chat_request_delegates_to_deep_dispatch_interface(monkeypatch) -> None:
     downloader = ChatDownloader()
     request = ChatRequest(url="https://example.invalid/watch?v=1")
     chat = object()
-
+    calls: list[tuple[ChatDownloader, ChatRequest]] = []
     monkeypatch.setattr(
-        "chat_downloader.chat_downloader.validate_url", lambda _url: None
-    )
-    monkeypatch.setattr(
-        "chat_downloader.chat_downloader.try_create_chat_from_sites",
-        lambda _owner, _url, _request: chat,
+        "chat_downloader.chat_downloader.dispatch_chat",
+        lambda owner, incoming: calls.append((owner, incoming)) or chat,
     )
 
     assert downloader.get_chat_request(request) is chat
-
-
-def test_get_chat_request_falls_back_to_unsupported_handler(
-    monkeypatch,
-) -> None:
-    downloader = ChatDownloader()
-    request = ChatRequest(url="https://example.invalid/watch?v=1")
-    handled = object()
-
-    monkeypatch.setattr(
-        "chat_downloader.chat_downloader.validate_url", lambda _url: None
-    )
-    monkeypatch.setattr(
-        "chat_downloader.chat_downloader.try_create_chat_from_sites",
-        lambda _owner, _url, _request: None,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.chat_downloader.handle_unsupported_url",
-        lambda _owner, _url, _request: handled,
-    )
-
-    assert downloader.get_chat_request(request) is handled
+    assert calls == [(downloader, request)]

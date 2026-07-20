@@ -6,6 +6,21 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
+## 2.0.2 — 2026-07-20
+
+### Architecture / compatibility
+
+- **Deepened runtime orchestration without changing the documented API.**
+  Chat dispatch and pipeline configuration now each expose one cohesive
+  interface, while URL normalization, site defaults, wrapper ordering, and
+  output setup remain internal. Undocumented orchestration helpers are no
+  longer re-exported from `chat_downloader.runtime`; `RunResult` remains the
+  stable runtime export.
+- **Concentrated HTTP and provider-session ownership.**
+  `ChatDownloaderSession` now owns shared HTTP state, and `_SiteSessionPool`
+  owns provider reuse, explicit-cookie propagation, replacement, and shutdown.
+  Broad owner-shaped protocols and forwarding helper clusters were removed.
+
 ## 2.0.1 — 2026-07-18
 
 ### Fixes

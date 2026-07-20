@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+from chat_downloader.debugging import log
 from chat_downloader.errors import (
     InvalidURL,
     SiteNotSupported,
@@ -15,33 +16,7 @@ from chat_downloader.errors import (
 from chat_downloader.models import SiteDefault
 
 from .retry import retry as perform_retry
-from .session import (
-    apply_request_profile as apply_session_request_profile,
-)
-from .session import (
-    check_cookie_rotation,
-    close_session,
-    get_cookies_dict,
-    init_session_state,
-    session_get,
-    session_get_json,
-    session_post,
-)
-from .session import (
-    clear_cookies as clear_session_cookies,
-)
-from .session import (
-    get_cookie_value as get_session_cookie_value,
-)
-from .session import (
-    get_session_headers as session_header,
-)
-from .session import (
-    set_cookie_value as set_session_cookie_value,
-)
-from .session import (
-    update_session_headers as update_headers,
-)
+from .session import ChatDownloaderSession, CookieSpec
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -55,14 +30,8 @@ if TYPE_CHECKING:
 class BaseChatDownloader:
     """Base class for site-specific chat downloaders."""
 
-    session: requests.Session
-    _http_timeout: tuple[float, float]
     _has_initial_auth_cookies: bool
     _cookie_rotation_warned: bool
-    _request_profile: str | None
-    _auto_profile_fallback: bool
-    _twitch_client_id: str | None
-    _session_closed: bool
 
     _NAME: str | None = None
 
@@ -126,7 +95,34 @@ class BaseChatDownloader:
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialise session state for the downloader instance."""
-        init_session_state(self, **kwargs)
+        self._http = ChatDownloaderSession(**kwargs)
+        self._has_initial_auth_cookies = self._has_auth_cookies
+        self._cookie_rotation_warned = False
+
+    @property
+    def session(self) -> requests.Session:
+        """Expose the underlying requests session for compatible site adapters."""
+        return self._http.session
+
+    @property
+    def _http_timeout(self) -> tuple[float, float]:
+        return self._http.timeout
+
+    @property
+    def _request_profile(self) -> str | None:
+        return self._http.request_profile
+
+    @property
+    def _auto_profile_fallback(self) -> bool:
+        return self._http.auto_profile_fallback
+
+    @property
+    def _twitch_client_id(self) -> str | None:
+        return self._http.twitch_client_id
+
+    @property
+    def _session_closed(self) -> bool:
+        return self._http.closed
 
     @property
     def _has_auth_cookies(self) -> bool:
@@ -135,26 +131,37 @@ class BaseChatDownloader:
 
     def _check_cookie_rotation(self) -> None:
         """Warn once if the auth cookies have rotated away."""
-        check_cookie_rotation(self)
+        if (
+            self._has_initial_auth_cookies
+            and not self._has_auth_cookies
+            and not self._cookie_rotation_warned
+        ):
+            log(
+                "warning",
+                "The provided authentication cookies are no longer valid. "
+                "They may have been rotated by your browser as a security measure. "
+                "Try exporting fresh cookies from your browser.",
+            )
+            self._cookie_rotation_warned = True
 
     def get_session_headers(self, key: str) -> str | None:
         """Return the current value of the named HTTP session header."""
-        return session_header(self, key)
+        return self._http.get_header(key)
 
     def update_session_headers(self, new_headers: dict[str, str]) -> None:
         """Merge ``new_headers`` into the active HTTP session headers."""
-        update_headers(self, new_headers)
+        self._http.update_headers(new_headers)
 
     def apply_request_profile(self, profile_name: str) -> bool:
         """Apply a named request profile to this session's headers."""
-        return apply_session_request_profile(self, profile_name)
+        return self._http.apply_request_profile(profile_name)
 
     def clear_cookies(self) -> None:
         """Remove all cookies from the active HTTP session."""
-        clear_session_cookies(self)
+        self._http.clear_cookies()
 
     def _get_cookies_dict(self) -> dict[str, str]:
-        return get_cookies_dict(self)
+        return self._http.cookies_dict()
 
     def set_cookie_value(
         self,
@@ -182,35 +189,43 @@ class BaseChatDownloader:
             discard: Whether the cookie is a session cookie.
             rest: Additional cookie attributes.
         """
-        set_session_cookie_value(
-            self,
-            domain=domain,
-            name=name,
-            value=value,
-            expire_time=expire_time,
-            port=port,
-            path=path,
-            secure=secure,
-            discard=discard,
-            rest=rest,
+        self._http.set_cookie(
+            CookieSpec(
+                domain=domain,
+                name=name,
+                value=value,
+                expire_time=expire_time,
+                port=port,
+                path=path,
+                secure=secure,
+                discard=discard,
+                rest=rest,
+            ),
         )
 
     def get_cookie_value(self, name: str, default: str | None = None) -> str | None:
         """Return the value of cookie ``name``, or ``default`` if absent."""
-        return get_session_cookie_value(self, name, default)
+        return self._http.get_cookie(name, default)
 
     def close(self) -> None:
         """Close the HTTP session and release associated resources."""
-        close_session(self)
+        was_closed = self._http.closed
+        self._http.close()
+        if not was_closed:
+            log("debug", "Session closed.")
 
     def _session_post(self, url: str, **kwargs: Any) -> requests.Response:
-        return session_post(self, url, **kwargs)
+        response = self._http.post(url, **kwargs)
+        self._check_cookie_rotation()
+        return response
 
     def _session_get(self, url: str, **kwargs: Any) -> requests.Response:
-        return session_get(self, url, **kwargs)
+        response = self._http.get(url, **kwargs)
+        self._check_cookie_rotation()
+        return response
 
     def _session_get_json(self, url: str, **kwargs: Any) -> JSONAny:
-        return session_get_json(self, url, **kwargs)
+        return cast("JSONAny", self._session_get(url, **kwargs).json())
 
     def get_site_value(self, value: Any) -> Any:
         """Resolve a ``SiteDefault`` marker to its concrete value.

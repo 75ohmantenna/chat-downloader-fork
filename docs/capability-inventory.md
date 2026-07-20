@@ -9,7 +9,7 @@ large refactors, parser reshaping, or tooling changes.
 | --- | --- | --- |
 | CLI parsing, generated help, logging/testing flags, headers | `cli.py`, `cli_args.py`, `models/` metadata | `tests/test_cli.py`, `tests/test_cli_help_unit.py`, `tests/test_cli_bridge_unit.py`, signal-handler tests |
 | Python API: `ChatDownloader`, `run`, dataclasses, exports | `chat_downloader.py`, `models/`, package `__init__.py` files | model tests, facade tests, public API snapshots, facade-param sync |
-| URL dispatch and site defaults | `runtime/site_dispatch.py`, `sites/base.py`, `models.SiteDefault` | site-dispatch, URL-matching, session tests, `SiteDefault` identity test |
+| URL dispatch and site defaults | `runtime/site_dispatch.py` (`dispatch_chat`), `sites/base.py`, `models.SiteDefault` | dispatch composition, URL matching, session lifecycle, `SiteDefault` identity |
 | YouTube bootstrap, live/replay/clip continuations, parsing | `sites/youtube/` | YouTube unit tests, live-event fixtures, continuation fixtures, drift harness |
 | YouTube channel, handle, and playlist discovery | `sites/youtube/discovery.py`, `discovery_playlists.py` | YouTube discovery unit and downloader-assembly tests |
 | Twitch live IRC | `sites/twitch/live_service.py`, `irc_transport.py`, `parsing/` | live-service, transport, IRC parser, drift harness tests |
@@ -20,8 +20,8 @@ large refactors, parser reshaping, or tooling changes.
 | Kick Pusher key discovery, Cloudflare handling, event/group maps | `sites/kick/pusher_discovery.py`, `constants.py`, `api_client.py`, `parsing/events.py` | Kick pusher-discovery, extractor, api-client, parsing-events tests |
 | Output formats: JSONL and TXT; unsupported extensions rejected | `output/continuous_write.py`, `output/writers.py` | output writer, continuous-write, JSONL UTC, multiple-output tests |
 | Paid/ticker semantic dedup for formatted outputs; lossless raw output | `sites/_message_dedup.py`, `sites/output_dispatch.py`, `runtime/runner.py` | deduplication, chat-model, runner, and mixed-output tests |
-| Filtering, formatting, time windows | `sites/filters.py`, `formatting/format.py`, `runtime/chat_pipeline.py` | filtering, formatting, chat-pipeline tests |
-| Cookies, sessions, auth, proxy safety | `chat_downloader.py`, `runtime/session_lifecycle.py`, `sites/session.py`, `sites/proxy.py`, YouTube auth | session, proxy-transport, lifecycle, auth-client, facade redaction tests |
+| Filtering, formatting, time windows | `sites/filters.py`, `formatting/format.py`, `runtime/chat_pipeline.py` (`configure_chat`) | filtering, formatting, configured-chat composition |
+| Cookies, sessions, auth, proxy safety | `ChatDownloader`, `_SiteSessionPool`, `ChatDownloaderSession`, `sites/proxy.py`, YouTube auth | HTTP adapter, downloader lifecycle, proxy transport, auth, facade redaction |
 | Retry, timeout, interruption, cleanup | `sites/retry.py`, `utils/retry_utils.py`, `runtime/runner.py`, `Chat.close`, `TimedGenerator` | retry, network-retry, runner, chat-model, live-service, timed-generator tests |
 | Debug logging, redaction, debug sample capture | `debugging.py`, `redaction.py`, `debug_sample_utils.py` | debugging, redaction, debug-sample tests |
 | Build, install, smoke, import boundaries | `Makefile`, `pyproject.toml`, GitHub Actions | `tests/test_makefile_contract_unit.py`, import-linter, release metadata, `make ci` |

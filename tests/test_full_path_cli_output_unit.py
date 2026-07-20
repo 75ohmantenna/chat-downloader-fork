@@ -2,10 +2,9 @@
 
 """End-to-end offline path: CLI args → dispatch → Chat → output file → close.
 
-Unit tests cover each seam in isolation (arg parsing, ChatRequest construction,
-site dispatch, chat_pipeline output wiring, writers, runner). This test wires
-them together through the real ``cli.main`` entry point with a fake site, so a
-regression in how the seams connect is caught even when each unit still passes.
+Focused tests cover the deep dispatch and configured-chat interfaces. This test
+wires them together through the real ``cli.main`` entry point with only the
+remote site replaced, so a regression in their composition is caught.
 """
 
 from __future__ import annotations

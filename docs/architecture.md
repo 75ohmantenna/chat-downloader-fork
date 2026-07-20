@@ -15,7 +15,7 @@ For behavior-preservation coverage see
 └─────────────────────────┬────────────────────────────────┘
                           │
 ┌─────────────────────────▼────────────────────────────────┐
-│  chat_downloader.py              (thin facade: run())     │
+│  chat_downloader.py              (public facade)          │
 └─────────────────────────┬────────────────────────────────┘
                           │
 ┌─────────────────────────▼────────────────────────────────┐
@@ -47,11 +47,25 @@ For behavior-preservation coverage see
 | `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, or `sites` |
 | Generic layers stay provider-neutral | `runtime`, `output`, and `formatting` must not import a concrete site package (`sites.youtube`/`twitch`/`kick`). The lone exception is the site registry `runtime.site_dispatch`, which imports the `sites` aggregate to enumerate downloaders. Provider-specific behavior (e.g. live-status classification, live-format overrides) lives behind capability methods on `BaseChatDownloader` (`is_live_status`, `resolve_live_format`) that sites override. |
 
+### Core interfaces
+
+| Interface | Responsibility |
+| --- | --- |
+| `ChatDownloader.get_chat_request()` | Stable typed facade for one retrieval request |
+| `dispatch_chat()` | Resolve and normalize the URL, acquire the provider, resolve site defaults, and return a configured `Chat` |
+| `configure_chat()` | Apply limits, timeouts, formatting, and output writers in lifecycle-safe order |
+| `ChatDownloaderSession` | Own one provider's shared HTTP adapter and policy state |
+| `_SiteSessionPool` | Own provider reuse, explicit-cookie propagation, replacement, and shutdown |
+
+The stage helpers behind these interfaces are implementation details. Tests may
+use narrow internal seams for adapter mechanics, but composition tests cross the
+same interfaces as production callers.
+
 ## Network lifecycle
 
 | Transport | Open/read path | Retry/reconnect owner | Close path |
 |-----------|----------------|-----------------------|------------|
-| Shared HTTP (YouTube and Twitch) | `sites/session.py` injects configured connect/read timeouts into every request | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; closed cached site sessions are replaced rather than reused |
+| Shared HTTP (YouTube and Twitch) | `ChatDownloaderSession` owns the requests adapter, headers, cookies, proxy state, and configured connect/read timeouts | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, and a 180-second idle watchdog | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
 | Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
 | Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, then deduplicates a recent-history backfill | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
@@ -81,7 +95,7 @@ non-`__init__.py` module remains represented.
 | Module | Purpose |
 |--------|---------|
 | `__main__.py` | `python -m chat_downloader` entry-point shim |
-| `chat_downloader.py` | Thin facade; exposes `run()` and re-exports public types |
+| `chat_downloader.py` | Thin public facade; delegates dispatch and session ownership, and exposes `run()` |
 | `cli.py` | Argument parsing entry point (`main()`), signal handler, arg-parser builder |
 | `cli_args.py` | Parser-construction machinery: `_ParamRegistrar`, all `_add_*_args` helpers, `splitter`/`parse_header`/`str2bool` converters |
 | `debugging.py` | Logging setup (colorlog/plain handler), testing modes, colour detection |
@@ -106,13 +120,12 @@ non-`__init__.py` module remains represented.
 ### `runtime/`
 | Module | Purpose |
 |--------|---------|
-| `_protocols.py` | Runtime-facing structural interfaces used to avoid import cycles |
 | `cli_bridge.py` | Categorize `run()` kwargs into init / chat / run param groups |
-| `site_dispatch.py` | URL → site resolution and site-specific defaults |
-| `chat_pipeline.py` | Close-propagating limits, timeouts, format, output routing |
+| `site_dispatch.py` | `dispatch_chat`: URL normalization, site resolution, defaults, provider invocation, and configured-chat assembly |
+| `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, and output routing |
 | `config_guards.py` | Proxy and cookie safety validation |
 | `runner.py` | Top-level run loop and cleanup |
-| `session_lifecycle.py` | Cookie/session setup, cookie-domain validation |
+| `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
 | `testing.py` | Test-mode helpers |
 
 ### `output/`
@@ -126,7 +139,7 @@ non-`__init__.py` module remains represented.
 |--------|---------|
 | `base.py` | `BaseChatDownloader` ABC: URL matching, session setup, cookie handling |
 | `common.py` | Stateless site utilities for key validation and mapped-key discovery |
-| `session.py` | `ChatDownloaderSession`: HTTP session, proxy config, auth |
+| `session.py` | `ChatDownloaderSession`: cohesive HTTP adapter, timeout, proxy, header/profile, cookie, and close ownership |
 | `proxy.py` | Shared proxy resolution and TLS tunneling for live transports |
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
@@ -135,7 +148,6 @@ non-`__init__.py` module remains represented.
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_message_dedup.py` | Shared formatted-message policy: paid/ticker semantic deduplication for console and formatted files |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO dedup cache |
-| `_protocols.py` | Shared Protocol definitions |
 
 ### `sites/youtube/`
 
