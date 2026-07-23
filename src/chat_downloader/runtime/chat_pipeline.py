@@ -6,11 +6,13 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.continuous_write import ContinuousWriter
+from chat_downloader.sites.output_dispatch import _expand_output_file_name
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
@@ -150,16 +152,27 @@ def _configure_output_writer(
         return
 
     outputs = request.output if isinstance(request.output, list) else [request.output]
-    seen: set[str] = set()
+    seen: set[tuple[object, ...]] = set()
     for output_file in outputs:
-        canonical_path = os.path.normcase(os.path.realpath(output_file))
-        if canonical_path in seen:
+        expanded_path = _expand_output_file_name(
+            output_file,
+            title=getattr(chat, "title", None),
+            video_id=getattr(chat, "id", None),
+        )
+        canonical_path = os.path.normcase(os.path.realpath(expanded_path))
+        try:
+            file_stat = Path(canonical_path).stat()
+        except OSError:
+            identity: tuple[object, ...] = ("path", canonical_path)
+        else:
+            identity = ("inode", file_stat.st_dev, file_stat.st_ino)
+        if identity in seen:
             log(
                 "warning",
                 f"Duplicate output path '{output_file}' — skipping.",
             )
             continue
-        seen.add(canonical_path)
+        seen.add(identity)
         chat.attach_writer(_build_output_writer(output_file, request, writer_factory))
 
 

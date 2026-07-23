@@ -368,6 +368,29 @@ def test_configure_output_writer_alias_writes_each_item_once(tmp_path) -> None:
     assert output_path.read_text(encoding="utf-8") == "existing\nhello\n"
 
 
+def test_configure_output_writer_deduplicates_expanded_template_paths(
+    tmp_path,
+) -> None:
+    output_path = tmp_path / "same.jsonl"
+    output_path.write_text('{"old": true}\n', encoding="utf-8")
+    request = ChatRequest(
+        url="https://www.youtube.com/watch?v=abc",
+        output=[str(tmp_path / "{title}.jsonl"), str(output_path)],
+        overwrite=False,
+    )
+    chat = Chat(
+        iter([{"message_type": "text_message", "message": "hello"}]),
+        title="same",
+    )
+
+    configure_output_writer(chat, request)
+    assert len(chat._output_dispatcher.writers) == 1
+    assert next(chat)["message"] == "hello"
+    chat.close()
+
+    assert len(output_path.read_text(encoding="utf-8").splitlines()) == 2
+
+
 def test_configure_output_writer_rejects_json_output(tmp_path) -> None:
     request = ChatRequest(
         url="https://www.youtube.com/watch?v=abc",
