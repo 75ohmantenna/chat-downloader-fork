@@ -8,6 +8,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.0.3 — 2026-07-23
+
 ### Fixes
 
 - **Applied cookie-authentication safety checks to effective proxies.** Explicit
