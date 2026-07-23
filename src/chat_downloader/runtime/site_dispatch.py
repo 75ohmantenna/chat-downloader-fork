@@ -122,7 +122,9 @@ def dispatch_chat(owner: _SiteSessionOwner, request: ChatRequest) -> Chat:
 
     effective_request = request
     parsed = urlparse(request.url)
-    if not parsed.scheme:
+    if request.url.startswith("//"):
+        effective_request = request.with_updates(url="https:" + request.url)
+    elif not parsed.scheme:
         effective_request = request.with_updates(url="https://" + request.url)
 
     chat = _match_site(owner, effective_request)

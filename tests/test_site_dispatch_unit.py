@@ -70,10 +70,19 @@ def test_dispatch_chat_rejects_missing_malformed_and_unknown_urls(monkeypatch) -
         dispatch_chat(owner, ChatRequest(url="https://www.example.com/watch"))
 
 
-def test_dispatch_chat_normalizes_scheme_and_configures_typed_chat(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    "url",
+    [
+        "example.invalid/watch/abc",
+        "//example.invalid/watch/abc",
+    ],
+)
+def test_dispatch_chat_normalizes_scheme_and_configures_typed_chat(
+    monkeypatch, url: str
+) -> None:
     _install_sites(monkeypatch, _GoodSite)
     request = ChatRequest(
-        url="example.invalid/watch/abc",
+        url=url,
         max_messages=1,
     )
 
