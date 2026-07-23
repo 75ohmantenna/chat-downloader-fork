@@ -14,7 +14,7 @@ from chat_downloader.errors import (
 )
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import live_service
-from chat_downloader.sites.kick.constants import CHAT_MESSAGE_EVENT
+from chat_downloader.sites.kick.constants import CHAT_MESSAGE_EVENT, PUSHER_ERROR
 from chat_downloader.sites.kick.errors import KickError
 from tests.kick_helpers import (
     FakeDownloader,
@@ -383,6 +383,73 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
         assert ids == ["a", "b"]
     assert len(created) == 2  # reconnected once
     assert created[0].close_count >= 1
+
+
+def test_get_chat_by_channel_rediscovers_key_after_pusher_error() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    created: list[FakeTransport] = []
+
+    def factory() -> FakeTransport:
+        transport = FakeTransport()
+        created.append(transport)
+        return transport
+
+    live_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {"id": "after-refresh", "content": "restored"},
+    )
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            downloader,
+            transport_factory=factory,
+            frame_iterator=make_frame_iterator(
+                [
+                    [pusher_frame(PUSHER_ERROR, {"message": "stale key"})],
+                    [live_frame],
+                ]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == ["after-refresh"]
+
+    assert len(created) == 2
+    assert created[0].force_discover is False
+    assert created[1].force_discover is True
+
+
+def test_get_chat_by_channel_repeated_pusher_error_is_terminal() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    error_frame = pusher_frame(PUSHER_ERROR, {"message": "rejected"})
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        pytest.raises(KickError, match="protocol failure"),
+    ):
+        chat = _build_chat(
+            downloader,
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([[error_frame], [error_frame]]),
+        )
+        list(chat.chat)
 
 
 def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> None:

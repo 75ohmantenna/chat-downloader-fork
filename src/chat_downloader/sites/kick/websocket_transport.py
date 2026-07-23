@@ -155,11 +155,17 @@ class KickPusherTransport:
         self._pusher_http_client = pusher_http_client
         self._ws: _WebSocketConnection | None = None
 
-    def connect(self, timeout: float | None) -> None:
+    def connect(
+        self,
+        timeout: float | None,
+        *,
+        force_discover: bool = False,
+    ) -> None:
         """Open the websocket connection.
 
         Args:
             timeout: Initial socket timeout in seconds, or ``None`` to block.
+            force_discover: Bypass the cached Pusher key before connecting.
 
         Raises:
             ConnectionError: If the underlying connection attempt fails.
@@ -167,6 +173,7 @@ class KickPusherTransport:
         self.close()
         try:
             url = self._url or get_pusher_ws_url(
+                force_discover=force_discover,
                 http_client=self._pusher_http_client,
             )
             websocket = self._connector(

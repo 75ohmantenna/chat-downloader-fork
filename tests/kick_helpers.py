@@ -159,10 +159,12 @@ class FakeTransport:
         self.subscribed_to: str | None = None
         self.connect_timeout: float | None = None
         self.receive_timeout: float | None = None
+        self.force_discover = False
         self.close_count = 0
 
-    def connect(self, timeout: float | None) -> None:
+    def connect(self, timeout: float | None, *, force_discover: bool = False) -> None:
         self.connect_timeout = timeout
+        self.force_discover = force_discover
         if self._connect_errors > 0:
             self._connect_errors -= 1
             msg = "fake connect failure"
