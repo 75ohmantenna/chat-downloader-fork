@@ -60,6 +60,7 @@ def test_client_copies_proxy_and_header_configuration(monkeypatch: Any) -> None:
     assert captured == {
         "proxy": {"https": "http://proxy.example:8080"},
         "extra_headers": {"Authorization": "secret"},
+        "trust_env": True,
     }
 
 

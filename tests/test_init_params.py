@@ -13,6 +13,21 @@ from chat_downloader.models import DownloaderConfig
 from chat_downloader.sites.base import BaseChatDownloader
 
 YOUTUBE_NETWORK_TEST_URL = "https://www.youtube.com/watch?v=wXspodtIxYU"
+_PROXY_ENV_NAMES = (
+    "ALL_PROXY",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "all_proxy",
+    "https_proxy",
+    "http_proxy",
+    "NO_PROXY",
+    "no_proxy",
+)
+
+
+def _clear_proxy_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _PROXY_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
 
 
 def _get_one_message(expected_error=None, **init_params) -> None:
@@ -35,6 +50,33 @@ def test_proxy_with_cookies_raises() -> None:
 
     with pytest.raises(InvalidParameter, match="cookie"):
         ChatDownloader(proxy="http://proxy.example.com:8080", cookies="cookies.txt")
+
+
+def test_environment_proxy_with_cookies_raises(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cookie safety applies to the proxy Requests selects from the environment."""
+    from chat_downloader.errors import InvalidParameter
+
+    _clear_proxy_environment(monkeypatch)
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    with pytest.raises(InvalidParameter, match="cookie"):
+        ChatDownloader(cookies=str(cookie_file))
+
+
+def test_empty_proxy_disables_environment_cookie_proxy_check(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_proxy_environment(monkeypatch)
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    downloader = ChatDownloader(proxy="", cookies=str(cookie_file))
+    downloader.close()
 
 
 @pytest.mark.parametrize(

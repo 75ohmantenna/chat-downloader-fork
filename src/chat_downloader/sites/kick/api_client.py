@@ -44,12 +44,14 @@ class KickApiClient:
         proxy: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
         timeout: tuple[float, float] = _DEFAULT_TIMEOUT,
+        trust_env: bool = True,
         session: _KickSession | None = None,
     ) -> None:
         """Create a client that owns either the supplied or a new session."""
         self._session = session or create_kick_session(
             proxy=dict(proxy) if proxy else None,
             extra_headers=dict(extra_headers) if extra_headers else None,
+            trust_env=trust_env,
         )
         self._timeout = tuple(timeout)
         self._closed = False

@@ -69,6 +69,7 @@ class KickChatDownloader(BaseChatDownloader):
                 proxy=proxies,
                 extra_headers=dict(self.session.headers),
                 timeout=self._http_timeout,
+                trust_env=self.session.trust_env,
             )
         except BaseException:
             super().close()

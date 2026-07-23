@@ -7,8 +7,15 @@ from __future__ import annotations
 import ipaddress
 from urllib.parse import urlparse
 
+import requests
+
 from chat_downloader.debugging import log
 from chat_downloader.errors import InvalidParameter
+
+_COOKIE_AUTH_TARGETS = (
+    "https://www.youtube.com/",
+    "https://www.twitch.tv/",
+)
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -41,11 +48,19 @@ def check_proxy_cookie_safety(proxy: str | None, cookies: str | None) -> None:
     Raises:
         InvalidParameter: If a non-loopback proxy is used with cookies.
     """
-    if not (proxy and cookies is not None):
+    if cookies is None or proxy == "":
         return
 
-    host = urlparse(proxy).hostname or ""
-    if _is_loopback_host(host):
+    effective_proxies = {proxy} if proxy is not None else _environment_proxies()
+    if not effective_proxies:
+        return
+
+    remote_proxies = [
+        proxy_url
+        for proxy_url in effective_proxies
+        if not _is_loopback_host(urlparse(proxy_url).hostname or "")
+    ]
+    if not remote_proxies:
         log(
             "warning",
             "Using a local proxy with cookie authentication; "
@@ -58,3 +73,14 @@ def check_proxy_cookie_safety(proxy: str | None, cookies: str | None) -> None:
         "credentials would be exposed to the proxy."
     )
     raise InvalidParameter(msg)
+
+
+def _environment_proxies() -> set[str]:
+    """Return environment proxies effective for cookie-authenticated sites."""
+    proxies: set[str] = set()
+    for target_url in _COOKIE_AUTH_TARGETS:
+        environment = requests.utils.get_environ_proxies(target_url)
+        selected = requests.utils.select_proxy(target_url, environment)
+        if selected:
+            proxies.add(selected)
+    return proxies
