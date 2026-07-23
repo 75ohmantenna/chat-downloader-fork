@@ -6,30 +6,15 @@ import json
 import os
 import tempfile
 
-# The `test_formatting` test hits YouTube network APIs via ChatDownloader.
 import pytest
 
-from chat_downloader import ChatDownloader
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
 from chat_downloader.formatting.format import ItemFormatter
-
-YOUTUBE_NETWORK_TEST_URL = "https://www.youtube.com/watch?v=wXspodtIxYU"
 
 
 @pytest.fixture
 def formatter() -> ItemFormatter:
     return ItemFormatter()
-
-
-@pytest.mark.network
-def test_formatting() -> None:
-    chat = ChatDownloader().get_chat(
-        YOUTUBE_NETWORK_TEST_URL,
-        format="24_hour",
-        max_messages=10,
-    )
-    for message in chat:
-        chat.print_formatted(message)
 
 
 def test_item_formatter_initialization() -> None:

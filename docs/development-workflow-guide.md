@@ -50,9 +50,12 @@ describe the local change without an issue reference instead. Hooks use
 4. Run the standard validation appropriate to the changed surface.
 5. Update the document that owns any changed behavior or public contract.
 
-Network tests are opt-in. New live-network tests require
-`@pytest.mark.network`; parser and transport regressions should normally use
-curated fixtures under `tests/fixtures/`.
+Network tests remain opt-in locally. Every external check carries
+`@pytest.mark.network`, one scope marker (`network_replay`, `network_live`, or
+`network_environment`), and a hard timeout. Parser and transport regressions
+should normally use curated fixtures under `tests/fixtures/`. GitHub Actions
+runs the stable `network_replay` contracts weekly and on manual dispatch;
+volatile live and environment checks do not gate pushes or pull requests.
 
 ## Commands
 
@@ -81,6 +84,16 @@ uv run lint-imports
 Opt-in network tests:
 
 ```bash
+# Stable replay and immutable-resource contracts
+uv run pytest -v -m network_replay --run-network
+
+# Volatile live-channel and websocket smoke checks
+uv run pytest -v -m network_live --run-network
+
+# Proxy, header, and cookie integration checks
+uv run pytest -v -m network_environment --run-network
+
+# Every external check
 uv run pytest -v -m network --run-network
 ```
 

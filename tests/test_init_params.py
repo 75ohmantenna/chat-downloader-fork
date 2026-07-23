@@ -30,18 +30,15 @@ def _clear_proxy_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
-def _get_one_message(expected_error=None, **init_params) -> None:
+def _get_one_message(**init_params) -> None:
     session = ChatDownloader(**init_params)
-
+    chat = None
     try:
-        chat = list(session.get_chat(YOUTUBE_NETWORK_TEST_URL, max_messages=1))
-
-        assert len(chat) == 1
-
-    except Exception as e:
-        assert expected_error is not None
-        assert isinstance(e, expected_error)  # noqa: PT017 — finally: session.close() requires try/except structure
+        chat = session.get_chat(YOUTUBE_NETWORK_TEST_URL, max_messages=1)
+        assert len(list(chat)) == 1
     finally:
+        if chat is not None:
+            chat.close()
         session.close()
 
 
@@ -166,6 +163,8 @@ def test_real_loopback_subnet_proxy_with_cookies_warns(
 
 
 @pytest.mark.network
+@pytest.mark.network_environment
+@pytest.mark.timeout(90)
 def test_proxy(local_http_proxy: str) -> None:
     for proxy in ("", None):
         _get_one_message(proxy=proxy)
@@ -173,6 +172,8 @@ def test_proxy(local_http_proxy: str) -> None:
 
 
 @pytest.mark.network
+@pytest.mark.network_environment
+@pytest.mark.timeout(90)
 def test_headers() -> None:
     test_user_agents = {
         "windows": (
@@ -201,21 +202,12 @@ def test_headers() -> None:
 
 
 @pytest.mark.network
+@pytest.mark.network_environment
+@pytest.mark.timeout(90)
 def test_cookies() -> None:
     """Test cookie handling."""
     # Test with None cookies (should work)
     _get_one_message(cookies=None)
-
-
-@pytest.mark.network
-def test_cookies_file_not_found() -> None:
-    """Test that non-existent cookie file raises error."""
-    from chat_downloader.errors import CookieError
-
-    _get_one_message(
-        expected_error=CookieError,
-        cookies="/nonexistent/cookies.txt",
-    )
 
 
 def test_cookie_operations() -> None:

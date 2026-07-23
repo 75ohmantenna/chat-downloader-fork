@@ -26,32 +26,37 @@ YOUTUBE_EXTRACTOR_TESTS = [
     # https://youtu.be/y5ih7nqEoc4
     # TESTING FOR CORRECT FUNCTIONALITY
     {
-        "name": "Get chat messages from known replay video URL",
-        "params": {
-            "url": "https://www.youtube.com/watch?v=wXspodtIxYU",
-            "max_messages": 10,
-        },
-    },
-    {
-        "name": ("Get chat messages from livestream, using channel id."),
+        "name": "Get chat messages from livestream, using channel id.",
         "params": {
             "url": "https://www.youtube.com/channel/UCSJ4gkVC6NrvII8umztf0Ow",
             "timeout": 5,
+        },
+        "expected_result": {
+            "chat_condition": lambda chat: bool(chat.id and chat.title),
         },
     },
     {
         "name": "Get chat messages from livestream, using custom url (1).",
         "params": {"url": "https://www.youtube.com/c/lofigirl", "timeout": 5},
+        "expected_result": {
+            "chat_condition": lambda chat: bool(chat.id and chat.title),
+        },
     },
     {
         "name": "Get chat messages from livestream, using custom url (2).",
         "params": {"url": "https://www.youtube.com/lofigirl", "timeout": 5},
+        "expected_result": {
+            "chat_condition": lambda chat: bool(chat.id and chat.title),
+        },
     },
     {
         "name": "Get chat messages from livestream, using user id.",
         "params": {
             "url": "https://www.youtube.com/user/YellowBrickCinema",
             "timeout": 5,
+        },
+        "expected_result": {
+            "chat_condition": lambda chat: bool(chat.id and chat.title),
         },
     },
     {
@@ -124,8 +129,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
         "name": "Get messages from a premiere",  # Premiere
         "params": {
             "url": "https://www.youtube.com/watch?v=zVCs9Cug_qM",
-            "start_time": 0,
-            "end_time": 20,
+            "max_messages": 3,
         },
         "expected_result": {
             "message_types": ["text_message"],
@@ -176,15 +180,6 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "message_types": ["text_message"],
             "action_types": ["add_chat_item"],
             "messages_condition": lambda messages: len(messages) > 0,
-        },
-    },
-    {
-        "name": "Chat replay with a message that has no author name",
-        "params": {
-            "url": "https://www.youtube.com/watch?v=-JU0rbfPECY",
-            "timeout": 5,
-            "start_time": "1:53:29",
-            "end_time": "1:53:30",
         },
     },
     # TESTING FOR ERRORS

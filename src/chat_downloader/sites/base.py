@@ -53,6 +53,9 @@ class BaseChatDownloader:
                 "inactivity_timeout": 5,
                 "timeout": 20,
             },
+            "expected_result": {
+                "chat_condition": lambda chat: bool(chat.id and chat.title),
+            },
         },
         {
             "name": "Get a certain number of messages from a livestream.",
@@ -62,7 +65,7 @@ class BaseChatDownloader:
                 "timeout": 60,
             },
             "expected_result": {
-                "messages_condition": lambda messages: len(messages) <= 10,
+                "messages_condition": lambda messages: 0 < len(messages) <= 10,
             },
         },
         {
@@ -73,7 +76,7 @@ class BaseChatDownloader:
                 "timeout": 60,
             },
             "expected_result": {
-                "messages_condition": lambda messages: len(messages) <= 10,
+                "messages_condition": lambda messages: 0 < len(messages) <= 10,
             },
         },
         {

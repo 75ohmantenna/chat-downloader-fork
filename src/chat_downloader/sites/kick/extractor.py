@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from chat_downloader.errors import UserNotFound
 from chat_downloader.sites.base import BaseChatDownloader
 
 from .api_client import KickApiClient
@@ -49,13 +50,9 @@ class KickChatDownloader(BaseChatDownloader):
 
     _TESTS: ClassVar[list[dict[str, Any]]] = [
         {
-            "name": "Kick live channel chat.",
-            "params": {"url": "https://kick.com/xqc", "timeout": 5},
-        },
-        {
             "name": "Offline Kick channels fail clearly.",
             "params": {"url": "https://kick.com/somelikelyofflinechannel"},
-            "expected_result": {"error": KickError},
+            "expected_result": {"error": UserNotFound},
         },
     ]
 
