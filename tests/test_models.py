@@ -98,6 +98,12 @@ def test_downloader_config_explicit_values() -> None:
     assert cfg.proxy == "socks5://127.0.0.1:1080"
 
 
+@pytest.mark.parametrize("profile", ["unknown", "YOUTUBE_WEB", 7])
+def test_downloader_config_rejects_invalid_request_profile(profile: object) -> None:
+    with pytest.raises(ValueError, match="request_profile must be one of"):
+        DownloaderConfig(request_profile=profile)  # type: ignore[arg-type]
+
+
 def test_downloader_config_as_dict_keys() -> None:
     d = DownloaderConfig().as_dict()
     assert set(d.keys()) == {
