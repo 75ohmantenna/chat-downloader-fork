@@ -1,7 +1,8 @@
 # Maintenance Backlog
 
-Current, evidence-backed maintainability work only. Completed work and standing
-design choices do not belong here; their durable rationale is in
+This file contains only current, evidence-backed maintainability work.
+Completed work and standing design choices do not belong here; their durable
+rationale is in
 [`maintenance-decisions.md`](maintenance-decisions.md), while implementation
 history remains available through Git and `CHANGELOG.md`.
 
@@ -22,10 +23,10 @@ code are authoritative for line counts, complexity, coverage, and `Any` floors.
 
 ### Kick official Public API
 
-**Status: watch.** Use the official API as a schema reference and possible
-future authenticated option. Do not replace the current read-only capture path
-until Kick exposes a documented read-chat, replay-chat, or equivalent event
-stream that covers it.
+**Status: watch; no implementation work is currently justified.** Use the
+official API as a schema reference and possible future authenticated option.
+Do not replace the current read-only capture path until Kick exposes a
+documented read-chat, replay-chat, or equivalent event stream that covers it.
 
 - Official documentation: <https://docs.kick.com/>
 - Documentation source: <https://github.com/KickEngineering/KickDevDocs>
@@ -35,4 +36,3 @@ stream that covers it.
   chat history or provide an unauthenticated live read stream.
 - Revisit when the official API adds a read surface that can preserve current
   live, offline-channel, preloaded-history, and VOD behavior.
-

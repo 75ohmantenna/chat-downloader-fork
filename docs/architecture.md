@@ -65,10 +65,10 @@ same interfaces as production callers.
 
 | Transport | Open/read path | Retry/reconnect owner | Close path |
 |-----------|----------------|-----------------------|------------|
-| Shared HTTP (YouTube and Twitch) | `ChatDownloaderSession` owns the requests adapter, headers, cookies, proxy state, and configured connect/read timeouts | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
+| Shared HTTP (YouTube and Twitch) | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, and a 180-second idle watchdog | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
-| Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
-| Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, then deduplicates a recent-history backfill | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
+| Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` and preserves explicit/environment proxy policy | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
+| Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures; the first `pusher:error` forces key discovery and one reconnect, while a repeated error is terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
 
 `Chat.close()` propagates closure through message-limit and timeout wrappers to
 the provider generator before output writers are finalized. This is the common
@@ -79,7 +79,9 @@ JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing
 record (or adds a missing newline to a valid record) before writing new data;
 text append mode also terminates an existing final line before appending. Output
-path aliases resolving to the same file are attached only once.
+path aliases resolving to the same file are attached only once. Writer targets
+are compared after `{title}`/`{id}` expansion; existing hard links are compared
+by device and inode.
 Kick VOD reverse pagination spills to a temporary file after 1 MiB, keeping replay
 memory bounded independently of the number of fetched messages.
 
@@ -99,10 +101,10 @@ non-`__init__.py` module remains represented.
 | `cli.py` | Argument parsing entry point (`main()`), signal handler, arg-parser builder |
 | `cli_args.py` | Parser-construction machinery: `_ParamRegistrar`, all `_add_*_args` helpers, `splitter`/`parse_header`/`str2bool` converters |
 | `debugging.py` | Logging setup (colorlog/plain handler), testing modes, colour detection |
-| `redaction.py` | Token redaction (`sanitize_for_log`, `REDACTED`), opt-in debug-sample capture (`capture_debug_sample`) |
+| `redaction.py` | Recursive secret and authentication-header redaction (`sanitize_for_log`, `REDACTED`), opt-in debug-sample capture (`capture_debug_sample`) |
 | `errors.py` | Public exception hierarchy |
 | `metadata.py` | `__version__`, `__program__`, `__summary__` |
-| `request_profiles.py` | Named HTTP request profiles (headers presets) |
+| `request_profiles.py` | Canonical named HTTP request-profile presets used by validation and session setup |
 | `debug_sample_utils.py` | Debug-sample naming and fixture-hint helpers |
 | `_shared_defaults.py` | Leaf constant (`DEFAULT_MAX_SEEN_MESSAGE_IDS`) shared by runtime and site layers |
 | `_timeout_defaults.py` | Leaf HTTP-timeout constants (`DEFAULT_CONNECT_TIMEOUT`, `DEFAULT_READ_TIMEOUT`) shared by models and session helpers |
@@ -121,9 +123,9 @@ non-`__init__.py` module remains represented.
 | Module | Purpose |
 |--------|---------|
 | `cli_bridge.py` | Categorize `run()` kwargs into init / chat / run param groups |
-| `site_dispatch.py` | `dispatch_chat`: URL normalization, site resolution, defaults, provider invocation, and configured-chat assembly |
-| `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, and output routing |
-| `config_guards.py` | Proxy and cookie safety validation |
+| `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
+| `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
+| `config_guards.py` | Explicit/environment proxy and cookie-authentication safety validation |
 | `runner.py` | Top-level run loop and cleanup |
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
 | `testing.py` | Test-mode helpers |
@@ -144,7 +146,7 @@ non-`__init__.py` module remains represented.
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output/dedup are delegated to `_ChatOutputDispatcher` |
-| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: writer setup, grouped raw/formatted item dispatch, and shutdown |
+| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted item dispatch, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_message_dedup.py` | Shared formatted-message policy: paid/ticker semantic deduplication for console and formatted files |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO dedup cache |
@@ -213,7 +215,7 @@ non-`__init__.py` module remains represented.
 | Module | Purpose |
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
-| `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with dedup and reconnect |
+| `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with dedup, bounded reconnect, and rejected-key recovery |
 | `replay_service.py` | VOD metadata, reverse pagination, time-window filtering, and chronological spooled output |
 | `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, and VOD endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |

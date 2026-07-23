@@ -87,8 +87,25 @@ Early termination must propagate `close()` through runtime wrappers before
 writers are finalized. Reconnect loops remain bounded and reset failure streaks
 only after useful traffic.
 
+Provider-specific credential refresh is bounded too. In particular, a rejected
+Kick Pusher application key may force one fresh discovery and reconnect, but a
+repeated rejection is terminal. This keeps recovery close to the protocol that
+defines the signal and prevents infinite reconnect loops.
+
 **Revisit when:** a provider-independent lifecycle primitive can replace
 duplicated mechanism without absorbing provider-specific policy.
+
+## Compare output destinations after expansion
+
+**Decision:** Output identity is evaluated only after `{title}` and `{id}`
+metadata placeholders are expanded and the path is canonicalized. Existing
+files are also compared by device and inode so hard-link aliases cannot attach
+multiple writers to the same destination. Filename expansion itself remains
+owned by the output dispatcher, while the runtime pipeline owns writer
+selection and duplicate suppression.
+
+**Revisit when:** output targets grow beyond local files or a writer backend
+provides a stronger destination-identity contract.
 
 ## Keep orchestration and session ownership deep
 

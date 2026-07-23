@@ -6,6 +6,28 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
+## Unreleased
+
+### Fixes
+
+- **Applied cookie-authentication safety checks to effective proxies.** Explicit
+  proxies and proxies selected from the environment now follow the same policy;
+  `proxy=""` remains the explicit opt-out from system proxy settings.
+- **Accepted protocol-relative input URLs.** Inputs beginning with `//` are now
+  normalized to HTTPS before site dispatch.
+- **Recovered automatically from a rejected Kick Pusher key.** The live service
+  performs one forced key discovery and reconnect before treating a repeated
+  Pusher error as terminal.
+- **Expanded debug-log redaction for custom authentication headers.** Header
+  names containing authentication, token, secret, credential, or API-key
+  markers, and standard authentication-scheme values, are now sanitized.
+- **Deduplicated output aliases after metadata expansion.** Paths that become
+  identical after `{title}` or `{id}` substitution, including existing hard
+  links, attach only one writer.
+- **Rejected unknown request profiles at configuration time.**
+  `DownloaderConfig` now raises `ValueError` unless `request_profile` is one of
+  the documented presets or `None`.
+
 ## 2.0.2 — 2026-07-20
 
 ### Architecture / compatibility

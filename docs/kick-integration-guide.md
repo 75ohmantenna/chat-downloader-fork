@@ -75,7 +75,9 @@ The Kick flow depends on the target type.
    stream live frames.
 6. Dispatch each frame to a typed parser, deduplicate against preloaded and
    recent message ids, filter by message groups/types, and yield.
-7. On disconnect, reconnect and resubscribe.
+7. On disconnect, reconnect and resubscribe. If Pusher rejects the application
+   key, force one fresh discovery before treating a repeated rejection as
+   terminal.
 
 ### VODs
 
@@ -216,9 +218,12 @@ read-only subscription to public chatrooms. `pusher_discovery.py::resolve_pusher
 fetches the homepage, scans the JS chunks for the key, caches it, and falls back
 to the compiled-in default if discovery fails, including homepage transport
 errors. Discovery uses the downloader's HTTP session and timeout policy, with a
-three-second per-request limit and a ten-second total scan budget. Pass
-`force_discover=True` to re-discover when a `pusher:error` suggests the key has
-rotated.
+three-second per-request limit and a ten-second total scan budget. The live
+service normally uses the cached/default key first. If Pusher returns
+`pusher:error`, it closes the transport, forces discovery, and reconnects once.
+A second Pusher error is terminal, preventing an invalid key from causing an
+unbounded reconnect loop. `force_discover=True` remains an internal test and
+maintenance seam on the transport.
 
 ### Dedup and filtering
 
@@ -232,7 +237,8 @@ Before yielding, the live service:
 
 The receive loop runs under a reconnect wrapper: a `ConnectionError` closes the
 transport, reopens it, and resubscribes, retrying per the request's retry
-policy. The loop carries `# noqa: C901` for its intrinsic branchiness.
+policy. A Pusher error gets the separate one-shot forced-discovery recovery
+described above. The loop carries `# noqa: C901` for its intrinsic branchiness.
 
 ## Replay Capture Details
 
@@ -295,6 +301,11 @@ Status mapping in `api_client.py::_check_status`:
 - `403` / challenge body → `CaptchaChallengeRequired`
 - `429` / `5xx` → `KickServerError` (transient, retried)
 - other non-`200` → `KickError`
+
+The isolated REST transport follows the downloader's proxy configuration. With
+no explicit proxy it also preserves the backend's normal environment-proxy
+behavior; `proxy=""` disables that behavior. Cookie authentication is checked
+against the same effective-proxy safety policy before provider setup.
 
 ## Common Failure Points
 
