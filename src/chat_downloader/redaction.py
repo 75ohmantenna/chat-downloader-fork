@@ -33,6 +33,17 @@ _SENSITIVE_LOG_KEYS = frozenset(
         "x-youtube-identity-token",
     },
 )
+_SENSITIVE_HEADER_NAME_PARTS = frozenset(
+    {
+        "auth",
+        "authorization",
+        "credential",
+        "credentials",
+        "secret",
+        "token",
+    }
+)
+_AUTH_HEADER_VALUE_RE = re.compile(r"(?i)^\s*(?:basic|bearer|oauth|sapisidhash)\s+\S+")
 
 # Defense-in-depth: even after key-based redaction, raw token-like strings
 # embedded in serialized payload values (e.g. an Authorization header
@@ -66,6 +77,21 @@ def _scrub_token_like_strings(serialized: str) -> str:
     return serialized
 
 
+def _is_sensitive_header(name: object, value: object) -> bool:
+    """Return whether a header name or authentication value carries a secret."""
+    if isinstance(name, str):
+        normalized = name.lower().replace("_", "-")
+        parts = frozenset(normalized.split("-"))
+        if (
+            normalized in _SENSITIVE_LOG_KEYS
+            or normalized in {"api-key", "apikey"}
+            or normalized.endswith("-api-key")
+            or parts & _SENSITIVE_HEADER_NAME_PARTS
+        ):
+            return True
+    return isinstance(value, str) and _AUTH_HEADER_VALUE_RE.match(value) is not None
+
+
 def sanitize_for_log(value: Any) -> Any:
     """Return a log-safe copy of ``value`` with sensitive fields redacted."""
     if isinstance(value, dict):
@@ -74,11 +100,7 @@ def sanitize_for_log(value: Any) -> Any:
             normalized_key = key.lower() if isinstance(key, str) else key
             if normalized_key == "headers" and isinstance(item, dict):
                 sanitized[key] = {
-                    k: (
-                        REDACTED
-                        if isinstance(k, str) and k.lower() in _SENSITIVE_LOG_KEYS
-                        else v
-                    )
+                    k: REDACTED if _is_sensitive_header(k, v) else v
                     for k, v in item.items()
                 }
             elif (

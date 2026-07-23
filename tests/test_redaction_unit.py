@@ -76,6 +76,21 @@ def test_non_sensitive_headers_are_not_redacted() -> None:
     assert result["headers"]["Cookie"] == red.REDACTED
 
 
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("X-Auth-Token", "secret-token"),
+        ("Api-Key", "secret-key"),
+        ("X-Service-Credential", "credential"),
+        ("X-Custom", "Bearer embedded-secret"),
+        ("X-Custom", "Basic dXNlcjpwYXNz"),
+    ],
+)
+def test_redacts_custom_authentication_headers(name: str, value: str) -> None:
+    result = red.sanitize_for_log({"headers": {name: value}})
+    assert result == {"headers": {name: red.REDACTED}}
+
+
 def test_redacts_nested_sensitive_keys_in_sequences() -> None:
     assert red.sanitize_for_log(
         ({"authorization": "Bearer token"}, [{"cookie": "sid=abc"}])
