@@ -8,6 +8,21 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Tooling
+
+- Raise the `mypy` dev-dependency floor from `>=1.15,<2.0` to `>=2.3,<3.0`. The
+  `<2.0` cap dated from the original `pyproject.toml` migration and carried no
+  recorded rationale; mypy 2.3 type-checks the tree clean under the existing
+  `strict = True` / `warn_unreachable = True` settings with no source changes.
+  The pre-push hook runs `uv run --locked mypy .`, so it tracks the new major
+  automatically
+- Refresh `uv.lock` to current releases: `ruff` 0.15.15 → 0.16.0, `pytest`
+  9.0.3 → 9.1.1, `coverage` 7.14.1 → 7.15.2, `import-linter` 2.11 → 2.13,
+  `pre-commit` 4.6.0 → 4.6.1, `colorlog` 6.10.1 → 6.12.0, plus transitive
+  updates
+- Parenthesize an implicit string concatenation in `tests/test_runner_unit.py`
+  flagged by ruff 0.16's `ISC004`; the two-part log message is unchanged
+
 ## 2.0.3 — 2026-07-23
 
 ### Fixes

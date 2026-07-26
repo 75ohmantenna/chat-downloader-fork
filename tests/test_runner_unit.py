@@ -425,8 +425,10 @@ def test_execute_run_logs_error_message_for_generator_and_testing_errors(
     assert logged == [
         (
             "error",
-            f"{error_to_raise}. This usually means the site response "
-            "changed. Re-run with --logging debug for details.",
+            (
+                f"{error_to_raise}. This usually means the site response "
+                "changed. Re-run with --logging debug for details."
+            ),
         ),
     ]
 

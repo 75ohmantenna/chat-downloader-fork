@@ -40,7 +40,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.15,<1.0",
-    "mypy>=1.15,<2.0",
+    "mypy>=2.3,<3.0",
     "pytest>=9.0,<10.0",
     "pytest-timeout>=2.4,<3.0",
     "coverage>=7.0,<8.0",
