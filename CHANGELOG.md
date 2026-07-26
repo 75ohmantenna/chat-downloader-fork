@@ -8,6 +8,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.0.4 — 2026-07-26
+
 ### Tooling
 
 - Raise the `mypy` dev-dependency floor from `>=1.15,<2.0` to `>=2.3,<3.0`. The
