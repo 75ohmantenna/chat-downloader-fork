@@ -14,6 +14,8 @@ from chat_downloader.debugging import logger
 class _KickSession(Protocol):
     """Minimal session interface owned by :class:`KickApiClient`."""
 
+    trust_env: bool
+
     def get(self, url: str, **kwargs: object) -> requests.Response: ...
 
     def close(self) -> None: ...
@@ -23,6 +25,7 @@ def create_kick_session(
     *,
     proxy: dict[str, str] | None = None,
     extra_headers: dict[str, str] | None = None,
+    trust_env: bool = True,
 ) -> _KickSession:  # pragma: no cover — live optional-dependency path
     """Create a dedicated Kick API session with challenge-aware fallbacks."""
     session = _try_curl_cffi()
@@ -30,6 +33,7 @@ def create_kick_session(
         session = _try_cloudscraper()
     if session is None:
         session = _make_plain_session()
+    session.trust_env = trust_env
     if proxy:
         session.proxies.update(proxy)
     if extra_headers:

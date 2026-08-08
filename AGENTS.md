@@ -164,3 +164,20 @@ Subject format: `[topic] short imperative summary`. Topic is one of `build`,
 `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`,
 or `test`. Aim for about 50 characters; 72 max; no trailing period. Bodies use
 `- ` bullets, one per logical change, wrapped at 72 columns.
+
+No commit message may contain a bare `#123` issue reference, because GitHub
+renders one as a link that can notify the upstream tracker.
+`scripts/check_issue_references.py` enforces this across all history reachable
+from `HEAD`, and `make ci` fails while an offending commit stays reachable.
+
+This applies to merge commits, where GitHub appends a `(#N)` suffix to the
+default subject. Always pass an explicit subject when merging a pull request:
+
+```bash
+gh pr merge <N> --merge --subject "[topic] short imperative summary"
+```
+
+Prefer a merge commit over squash or rebase when the branch carries a release
+tag, so the tagged commit stays reachable from `master`. A violating merge
+commit cannot be fixed by reverting — the original stays reachable — so amend
+the subject and force-push before anyone builds on it.

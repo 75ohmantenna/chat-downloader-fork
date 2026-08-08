@@ -5,6 +5,9 @@ a personal fork of
 [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader),
 targeting Python 3.12+; CI validates Python 3.12, 3.13, and 3.14.
 
+The supported file formats are JSON Lines (`.jsonl`) and formatted text
+(`.txt`). Network tests are opt-in; the default suite is fully offline.
+
 ## Personal Fork — No Support
 
 I maintain this fork for my own use and publish it in case it is useful to
@@ -92,6 +95,11 @@ Full CLI examples, output-format details, options, and troubleshooting are in
   Kick Pusher live capture and VOD replay flow
 - [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md) —
   development workflow and validation commands
+- [`docs/architecture.md`](docs/architecture.md) — package ownership,
+  lifecycle, and dependency rules
+- [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md) and
+  [`docs/maintenance-decisions.md`](docs/maintenance-decisions.md) — current
+  watch items and durable design rationale
 
 ## Credit
 

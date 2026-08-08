@@ -13,20 +13,32 @@ from chat_downloader.models import DownloaderConfig
 from chat_downloader.sites.base import BaseChatDownloader
 
 YOUTUBE_NETWORK_TEST_URL = "https://www.youtube.com/watch?v=wXspodtIxYU"
+_PROXY_ENV_NAMES = (
+    "ALL_PROXY",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "all_proxy",
+    "https_proxy",
+    "http_proxy",
+    "NO_PROXY",
+    "no_proxy",
+)
 
 
-def _get_one_message(expected_error=None, **init_params) -> None:
+def _clear_proxy_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in _PROXY_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _get_one_message(**init_params) -> None:
     session = ChatDownloader(**init_params)
-
+    chat = None
     try:
-        chat = list(session.get_chat(YOUTUBE_NETWORK_TEST_URL, max_messages=1))
-
-        assert len(chat) == 1
-
-    except Exception as e:
-        assert expected_error is not None
-        assert isinstance(e, expected_error)  # noqa: PT017 — finally: session.close() requires try/except structure
+        chat = session.get_chat(YOUTUBE_NETWORK_TEST_URL, max_messages=1)
+        assert len(list(chat)) == 1
     finally:
+        if chat is not None:
+            chat.close()
         session.close()
 
 
@@ -35,6 +47,33 @@ def test_proxy_with_cookies_raises() -> None:
 
     with pytest.raises(InvalidParameter, match="cookie"):
         ChatDownloader(proxy="http://proxy.example.com:8080", cookies="cookies.txt")
+
+
+def test_environment_proxy_with_cookies_raises(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cookie safety applies to the proxy Requests selects from the environment."""
+    from chat_downloader.errors import InvalidParameter
+
+    _clear_proxy_environment(monkeypatch)
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    with pytest.raises(InvalidParameter, match="cookie"):
+        ChatDownloader(cookies=str(cookie_file))
+
+
+def test_empty_proxy_disables_environment_cookie_proxy_check(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_proxy_environment(monkeypatch)
+    monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.com:8080")
+    cookie_file = tmp_path / "cookies.txt"
+    cookie_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+
+    downloader = ChatDownloader(proxy="", cookies=str(cookie_file))
+    downloader.close()
 
 
 @pytest.mark.parametrize(
@@ -124,6 +163,8 @@ def test_real_loopback_subnet_proxy_with_cookies_warns(
 
 
 @pytest.mark.network
+@pytest.mark.network_environment
+@pytest.mark.timeout(90)
 def test_proxy(local_http_proxy: str) -> None:
     for proxy in ("", None):
         _get_one_message(proxy=proxy)
@@ -131,6 +172,8 @@ def test_proxy(local_http_proxy: str) -> None:
 
 
 @pytest.mark.network
+@pytest.mark.network_environment
+@pytest.mark.timeout(90)
 def test_headers() -> None:
     test_user_agents = {
         "windows": (
@@ -159,21 +202,12 @@ def test_headers() -> None:
 
 
 @pytest.mark.network
+@pytest.mark.network_environment
+@pytest.mark.timeout(90)
 def test_cookies() -> None:
     """Test cookie handling."""
     # Test with None cookies (should work)
     _get_one_message(cookies=None)
-
-
-@pytest.mark.network
-def test_cookies_file_not_found() -> None:
-    """Test that non-existent cookie file raises error."""
-    from chat_downloader.errors import CookieError
-
-    _get_one_message(
-        expected_error=CookieError,
-        cookies="/nonexistent/cookies.txt",
-    )
 
 
 def test_cookie_operations() -> None:

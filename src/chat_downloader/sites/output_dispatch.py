@@ -47,6 +47,18 @@ class _ChatHost(Protocol):
         ...
 
 
+def _expand_output_file_name(
+    file_name: str,
+    *,
+    title: str | None,
+    video_id: str | None,
+) -> str:
+    """Expand output placeholders with safe single-component metadata."""
+    safe_title = sanitize_filename_component(title).replace("..", "_")
+    safe_id = sanitize_filename_component(video_id).replace("..", "_")
+    return file_name.format(title=safe_title, id=safe_id)
+
+
 class _ChatOutputDispatcher:
     """Manage writer setup, callback dispatch, dedup, and shutdown for a chat.
 
@@ -78,13 +90,10 @@ class _ChatOutputDispatcher:
                 continue
 
             if not writer.is_initialised():
-                safe_title = sanitize_filename_component(self._chat.title).replace(
-                    "..", "_"
-                )
-                safe_id = sanitize_filename_component(self._chat.id).replace("..", "_")
-                writer.file_name = writer.file_name.format(
-                    title=safe_title,
-                    id=safe_id,
+                writer.file_name = _expand_output_file_name(
+                    writer.file_name,
+                    title=self._chat.title,
+                    video_id=self._chat.id,
                 )
                 log("debug", f"Writing to file: {writer.file_name}")
                 writer.initialize()

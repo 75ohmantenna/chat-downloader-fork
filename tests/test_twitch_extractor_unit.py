@@ -330,9 +330,8 @@ def test_twitch_extractor_wrappers_pass_configured_client_id(
     monkeypatch,
 ) -> None:
 
-    downloader = TwitchChatDownloader()
+    downloader = TwitchChatDownloader(twitch_client_id="client-123")
     downloader._session_post = object()
-    downloader._twitch_client_id = "client-123"
 
     monkeypatch.setattr(
         "chat_downloader.sites.twitch.extractor._download_base_gql",
@@ -376,9 +375,8 @@ def test_twitch_update_badge_info_passes_configured_client_id(
 ) -> None:
     from typing import Any
 
-    downloader = TwitchChatDownloader()
+    downloader = TwitchChatDownloader(twitch_client_id="client-123")
     downloader._session_post = object()
-    downloader._twitch_client_id = "client-123"
     calls: list[tuple[Any, ...]] = []
 
     monkeypatch.setattr(

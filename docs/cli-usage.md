@@ -82,6 +82,11 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
 Other extensions, including `.json` and `.csv`, are unsupported. Output paths
 must end in `.jsonl` or `.txt`.
 
+Output names may contain `{title}` and `{id}` placeholders. Metadata is
+sanitized before substitution. Duplicate targets are removed after expansion,
+path resolution, and existing-file identity checks, so aliases and hard links
+do not receive the same message twice.
+
 File output is crash-resilient: every record is flushed to the OS as it is
 written, and the file is synchronized to disk periodically (about every 60
 seconds), so captures survive process crashes and power loss with minimal data
@@ -113,8 +118,13 @@ Request control:
 - `--message_receive_timeout` — live socket receive polling timeout; Twitch and
   Kick enforce a one-second minimum to avoid idle CPU churn (messages are still
   delivered immediately when data arrives).
-- `--proxy`, `--cookies` — proxy and cookie jar.
-- `--request_profile` — Grayjay-inspired request header presets.
+- `--proxy`, `--cookies` — proxy and cookie jar. When `--proxy` is omitted,
+  standard proxy environment variables apply. Cookie authentication rejects an
+  effective remote proxy and warns for a loopback proxy; pass `--proxy ""` to
+  disable environment proxies explicitly.
+- `--request_profile` — request-header preset: `youtube_web`,
+  `youtube_android`, `youtube_ios`, or `twitch_web`. Unknown names fail during
+  configuration.
 - `--auto_profile_fallback` — rotate YouTube request profiles when
   continuation payloads are repeatedly incomplete.
 - `--twitch_client_id` — override the public Twitch Client-ID for GraphQL
@@ -134,6 +144,9 @@ Debug and automation:
 
 - `403` or `LoginRequired` often means the platform requires cookies; `429`
   means the client is rate-limited and should retry more slowly.
+- A cookie/proxy safety error can come from `HTTP_PROXY`, `HTTPS_PROXY`, or
+  `ALL_PROXY` even when `--proxy` was not supplied. Remove the remote proxy or
+  pass `--proxy ""` if direct connections are intended.
 - `CaptchaChallengeRequired` means a platform returned an explicit challenge
   response that the library cannot solve automatically. On Kick this is a
   Cloudflare bot-protection page; installing `cloudscraper` (a dependency) lets

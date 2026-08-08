@@ -2,307 +2,133 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any, NoReturn, cast
 from unittest.mock import MagicMock
 
 import pytest
 
+from chat_downloader import ChatDownloader
 from chat_downloader.errors import InvalidParameter
-from chat_downloader.runtime.session_lifecycle import (
-    build_cookie,
-    clear_all_cookies,
-    close_sessions,
-    create_session,
-    propagate_cookie,
-)
-from chat_downloader.runtime.session_lifecycle import (
-    get_cookie_value as get_session_cookie_value,
-)
 from chat_downloader.sites.base import BaseChatDownloader
 
 
-def test_create_session_reuses_cached_session_and_copies_cookie_jar() -> None:
-    owner = SimpleNamespace(
-        config=SimpleNamespace(as_dict=dict),
-        sessions={},
-        _cookie_jar=[build_cookie(domain=".example.com", name="sid", value="abc")],
-    )
+class _FakeSite(BaseChatDownloader):
+    created = 0
 
-    class FakeSite(BaseChatDownloader):
-        def __init__(self, **kwargs) -> None:
-            self.session = SimpleNamespace(
-                cookies=SimpleNamespace(set_cookie=MagicMock()),
-            )
-
-    first = create_session(owner, FakeSite)
-    second = create_session(owner, FakeSite)
-
-    assert first is second
-    first.session.cookies.set_cookie.assert_called_once()
+    def __init__(self, **kwargs: Any) -> None:
+        type(self).created += 1
+        self.instance_id = type(self).created
+        self.kwargs = kwargs
+        super().__init__(**kwargs)
 
 
-def test_create_session_logs_reuse_without_claiming_creation(
-    monkeypatch,
-) -> None:
-    logs: list[tuple[str, str]] = []
-    owner = SimpleNamespace(
-        config=SimpleNamespace(as_dict=dict),
-        sessions={},
-        _cookie_jar=[],
-    )
+def test_downloader_reuses_overwrites_and_replaces_closed_sessions() -> None:
+    _FakeSite.created = 0
+    downloader = ChatDownloader(headers={"User-Agent": "UA"})
 
-    class FakeSite(BaseChatDownloader):
-        def __init__(self, **kwargs) -> None:
-            self.session = SimpleNamespace(
-                cookies=SimpleNamespace(set_cookie=MagicMock()),
-            )
+    first = downloader.create_session(_FakeSite)
+    assert downloader.create_session(_FakeSite) is first
+    assert downloader.get_session(_FakeSite) is first
 
-    monkeypatch.setattr(
-        "chat_downloader.runtime.session_lifecycle.log",
-        lambda level, message: logs.append((level, str(message))),
-    )
+    second = downloader.create_session(_FakeSite, overwrite=True)
+    assert second is not first
+    assert first._session_closed is True
+    assert cast("_FakeSite", second).kwargs["headers"] == {"User-Agent": "UA"}
 
-    create_session(owner, FakeSite)
-    create_session(owner, FakeSite)
-
-    assert logs == [
-        ("debug", "Created FakeSite session."),
-        ("debug", "Reusing existing FakeSite session."),
-    ]
+    second.close()
+    third = downloader.create_session(_FakeSite)
+    assert third is not second
+    assert cast("_FakeSite", third).instance_id == 3
 
 
-def test_propagate_cookie_updates_local_jar_and_existing_sessions() -> None:
-    session = MagicMock()
-    owner = SimpleNamespace(
-        _cookie_jar=MagicMock(),
-        sessions={"Site": session},
-    )
+def test_downloader_cookie_state_precedes_and_propagates_to_sessions() -> None:
+    downloader = ChatDownloader()
+    first = downloader.create_session(_FakeSite)
 
-    propagate_cookie(owner, domain=".example.com", name="sid", value="abc")
+    downloader.set_cookie_value(".example.com", "sid", "local", rest={"x": "1"})
+    assert downloader.get_cookie_value("sid") == "local"
+    assert first.get_cookie_value("sid") == "local"
 
-    owner._cookie_jar.set_cookie.assert_called_once()
-    session.set_cookie_value.assert_called_once()
-    assert session.set_cookie_value.call_args.kwargs["rest"] == {}
+    second = downloader.create_session(_FakeSite, overwrite=True)
+    assert second.get_cookie_value("sid") == "local"
 
 
 @pytest.mark.parametrize("domain", ["", ".", "localhost", " example.com"])
-def test_propagate_cookie_rejects_invalid_domain(domain: str) -> None:
-    owner = SimpleNamespace(_cookie_jar=MagicMock(), sessions={})
-
+def test_downloader_cookie_rejects_invalid_domain(domain: str) -> None:
     with pytest.raises(InvalidParameter, match="Invalid cookie domain"):
-        propagate_cookie(owner, domain=domain, name="sid", value="abc")
+        ChatDownloader().set_cookie_value(domain, "sid", "abc")
 
 
-def test_get_cookie_value_checks_local_jar_before_sessions() -> None:
-    owner = SimpleNamespace(
-        _cookie_jar=[SimpleNamespace(name="sid", value="local")],
-        sessions={"Site": MagicMock()},
-    )
+def test_downloader_cookie_lookup_falls_back_across_site_sessions() -> None:
+    downloader = ChatDownloader()
+    first = MagicMock()
+    first.get_cookie_value.return_value = None
+    second = MagicMock()
+    second.get_cookie_value.return_value = "from-second"
+    downloader.sessions.update({"first": first, "second": second})
 
-    assert get_session_cookie_value(owner, "sid") == "local"
-    owner.sessions["Site"].get_cookie_value.assert_not_called()
-
-
-def test_get_cookie_value_falls_back_to_existing_sessions() -> None:
-    session = MagicMock()
-    session.get_cookie_value.return_value = "from-session"
-    owner = SimpleNamespace(
-        _cookie_jar=[],
-        sessions={"Site": session},
-    )
-
-    assert get_session_cookie_value(owner, "sid", default="missing") == "from-session"
-    session.get_cookie_value.assert_called_once_with("sid", default=None)
+    assert downloader.get_cookie_value("sid", "missing") == "from-second"
+    first.get_cookie_value.assert_called_once_with("sid", default=None)
+    second.get_cookie_value.assert_called_once_with("sid", default=None)
 
 
-def test_get_cookie_value_checks_later_sessions_after_miss() -> None:
-    first_session = MagicMock()
-    first_session.get_cookie_value.return_value = None
-    second_session = MagicMock()
-    second_session.get_cookie_value.return_value = "from-second"
-    owner = SimpleNamespace(
-        _cookie_jar=[],
-        sessions={"First": first_session, "Second": second_session},
-    )
+def test_clear_cookies_disables_source_and_close_empties_compatibility_state() -> None:
+    downloader = ChatDownloader(cookies=None)
+    session = downloader.create_session(_FakeSite)
+    downloader.set_cookie_value(".example.com", "sid", "abc")
 
-    assert get_session_cookie_value(owner, "sid", default="missing") == "from-second"
-    first_session.get_cookie_value.assert_called_once_with("sid", default=None)
-    second_session.get_cookie_value.assert_called_once_with("sid", default=None)
+    downloader.clear_cookies()
+    assert downloader.config.cookies is None
+    assert downloader.get_cookie_value("sid") is None
+    assert session.get_cookie_value("sid") is None
 
-
-def test_clear_all_cookies_and_close_sessions_delegate_to_all_sessions() -> None:
-    session = MagicMock()
-    owner = SimpleNamespace(
-        _cookie_jar=MagicMock(),
-        config=SimpleNamespace(cookies="/tmp/cookies.txt"),
-        sessions={"Site": session},
-    )
-
-    clear_all_cookies(owner)
-    close_sessions(owner)
-
-    owner._cookie_jar.clear.assert_called_once_with()
-    session.clear_cookies.assert_called_once_with()
-    session.close.assert_called_once_with()
-    assert owner.config.cookies is None
-    assert owner.sessions == {}
+    downloader.close()
+    assert downloader.sessions == {}
+    downloader.close()
 
 
-def test_close_sessions_continues_and_logs_if_a_close_fails() -> None:
-    good_session = MagicMock()
-    failing_session = MagicMock()
-    failing_session.close.side_effect = RuntimeError("session failed")
-    owner = SimpleNamespace(
-        _cookie_jar=MagicMock(),
-        config=SimpleNamespace(cookies="/tmp/cookies.txt"),
-        sessions={"good": good_session, "bad": failing_session},
-    )
-
-    logs: list[tuple[str, str]] = []
-    from chat_downloader.runtime import session_lifecycle
-
-    original_log = session_lifecycle.log
-    try:
-        session_lifecycle.log = lambda level, message: logs.append(
-            (level, str(message))
-        )
-        close_sessions(owner)
-    finally:
-        session_lifecycle.log = original_log
-
-    good_session.close.assert_called_once_with()
-    failing_session.close.assert_called_once_with()
-    assert any(
-        level == "warning" and "session failed" in message for level, message in logs
-    )
-
-
-def test_create_session_rejects_invalid_session_class() -> None:
-    owner = SimpleNamespace(
-        config=SimpleNamespace(as_dict=dict),
-        sessions={},
-        _cookie_jar=[],
-    )
-
+def test_pool_rejects_invalid_and_base_site_classes() -> None:
+    downloader = ChatDownloader()
     with pytest.raises(TypeError, match="must extend BaseChatDownloader"):
-        create_session(owner, cast("Any", object))
-
-
-def test_create_session_rejects_base_session_class() -> None:
-    owner = SimpleNamespace(
-        config=SimpleNamespace(as_dict=dict),
-        sessions={},
-        _cookie_jar=[],
-    )
-
+        downloader.create_session(cast("Any", object))
     with pytest.raises(TypeError, match="may not be BaseChatDownloader"):
-        create_session(owner, BaseChatDownloader)
+        downloader.create_session(BaseChatDownloader)
 
 
-def test_create_session_overwrite_replaces_existing_session() -> None:
-    owner = SimpleNamespace(
-        config=SimpleNamespace(as_dict=lambda: {"headers": {"User-Agent": "UA"}}),
-        sessions={},
-        _cookie_jar=[],
-    )
-
-    class FakeSite(BaseChatDownloader):
-        counter = 0
-
-        def __init__(self, **kwargs) -> None:
-            FakeSite.counter += 1
-            self.instance_id = FakeSite.counter
-            self.closed = False
-            self.kwargs = kwargs
-            self.session = SimpleNamespace(
-                cookies=SimpleNamespace(set_cookie=MagicMock()),
-            )
-
-        def close(self) -> None:
-            self.closed = True
-
-    first = create_session(owner, FakeSite)
-    second = create_session(owner, FakeSite, overwrite=True)
-
-    assert first is not second
-    assert cast("Any", first).closed is True
-    assert cast("Any", second).closed is False
-    assert cast("Any", second).instance_id == 2
-    assert cast("Any", second).kwargs == {"headers": {"User-Agent": "UA"}}
-
-
-def test_create_session_overwrite_warns_and_replaces_when_existing_close_fails(
-    monkeypatch,
-) -> None:
+def test_overwrite_logs_close_failure_and_still_replaces(monkeypatch) -> None:
+    downloader = ChatDownloader()
+    first = downloader.create_session(_FakeSite)
     logs: list[tuple[str, str]] = []
-    owner = SimpleNamespace(
-        config=SimpleNamespace(as_dict=lambda: {"headers": {"User-Agent": "UA"}}),
-        sessions={},
-        _cookie_jar=[],
-    )
-
-    class FakeSite(BaseChatDownloader):
-        counter = 0
-
-        def __init__(self, **kwargs) -> None:
-            FakeSite.counter += 1
-            self.instance_id = FakeSite.counter
-            self.closed = False
-            self.kwargs = kwargs
-            self.session = SimpleNamespace(
-                cookies=SimpleNamespace(set_cookie=MagicMock()),
-            )
-
-        def close(self) -> None:
-            self.closed = True
-
-    first = create_session(owner, FakeSite)
 
     def bad_close() -> NoReturn:
         raise RuntimeError("existing close failed")
 
     first.close = bad_close
-
     monkeypatch.setattr(
         "chat_downloader.runtime.session_lifecycle.log",
         lambda level, message: logs.append((level, str(message))),
     )
 
-    second = create_session(owner, FakeSite, overwrite=True)
-
-    assert first is not second
-    assert first.closed is False
-    assert any(
-        level == "warning" and "existing close failed" in message
-        for level, message in logs
-    )
-    assert cast("Any", second).instance_id == 2
-    assert cast("Any", second).kwargs == {"headers": {"User-Agent": "UA"}}
-
-
-def test_create_session_replaces_closed_cached_session() -> None:
-    owner = SimpleNamespace(
-        config=SimpleNamespace(as_dict=lambda: {"headers": {"User-Agent": "UA"}}),
-        sessions={},
-        _cookie_jar=[],
-    )
-
-    class FakeSite(BaseChatDownloader):
-        def __init__(self, **_kwargs) -> None:
-            self._session_closed = False
-            self.close_calls = 0
-            self.session = SimpleNamespace(
-                cookies=SimpleNamespace(set_cookie=MagicMock()),
-            )
-
-        def close(self) -> None:
-            self.close_calls += 1
-            self._session_closed = True
-
-    first = create_session(owner, FakeSite)
-    first._session_closed = True
-    second = create_session(owner, FakeSite)
-
+    second = downloader.create_session(_FakeSite, overwrite=True)
     assert second is not first
-    assert first.close_calls == 1
+    assert any("existing close failed" in message for _, message in logs)
+
+
+def test_close_continues_after_one_site_failure(monkeypatch) -> None:
+    downloader = ChatDownloader()
+    good = MagicMock()
+    bad = MagicMock()
+    bad.close.side_effect = RuntimeError("session failed")
+    downloader.sessions.update({"good": good, "bad": bad})
+    logs: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.session_lifecycle.log",
+        lambda level, message: logs.append((level, str(message))),
+    )
+
+    downloader.close()
+
+    good.close.assert_called_once_with()
+    bad.close.assert_called_once_with()
+    assert downloader.sessions == {}
+    assert any("session failed" in message for _, message in logs)

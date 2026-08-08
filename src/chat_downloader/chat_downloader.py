@@ -8,7 +8,6 @@ Orchestrates chat retrieval from streaming platforms.
 from __future__ import annotations
 
 import sys
-from http.cookiejar import MozillaCookieJar
 from typing import TYPE_CHECKING, Any, Literal
 
 from .debugging import log
@@ -24,23 +23,10 @@ from .models import (
     SiteDefault,
 )
 from .redaction import sanitize_for_log
-from .runtime import (
-    RunResult,
-    check_proxy_cookie_safety,
-    clear_all_cookies,
-    close_sessions,
-    execute_run,
-    handle_unsupported_url,
-    propagate_cookie,
-    try_create_chat_from_sites,
-    validate_url,
-)
-from .runtime import (
-    create_session as create_runtime_session,
-)
-from .runtime import (
-    get_cookie_value as get_runtime_cookie_value,
-)
+from .runtime.config_guards import check_proxy_cookie_safety
+from .runtime.runner import RunResult, execute_run
+from .runtime.session_lifecycle import _SiteSessionPool
+from .runtime.site_dispatch import dispatch_chat
 
 # Module-level sentinel defaults for get_chat() keyword arguments.
 # Using module-level singletons avoids the B008 lint warning about
@@ -135,15 +121,21 @@ class ChatDownloader:
             f"Initialisation parameters: {sanitize_for_log(self.config.as_dict())}",
         )
 
-        # Session cache: {site_class_name: site_instance}
-        self.sessions: dict[str, BaseChatDownloader] = {}
-        # Local cookie jar to support setting cookies before any site session
-        # exists.
-        self._cookie_jar = MozillaCookieJar()
+        self._session_pool = _SiteSessionPool(self.config)
+
+    @property
+    def sessions(self) -> dict[str, BaseChatDownloader]:
+        """Expose cached site sessions while the pool retains ownership."""
+        return self._session_pool.sessions
+
+    @sessions.setter
+    def sessions(self, value: dict[str, BaseChatDownloader]) -> None:
+        """Replace compatibility cache state through the owning pool."""
+        self._session_pool.sessions = value
 
     def clear_cookies(self) -> None:
         """Clear cookies for this downloader and all its site sessions."""
-        clear_all_cookies(self)
+        self._session_pool.clear_cookies()
 
     def set_cookie_value(
         self,
@@ -163,8 +155,7 @@ class ChatDownloader:
         This mirrors BaseChatDownloader.set_cookie_value so callers can set
         cookies before any site session is created.
         """
-        propagate_cookie(
-            self,
+        self._session_pool.set_cookie(
             domain=domain,
             name=name,
             value=value,
@@ -182,7 +173,7 @@ class ChatDownloader:
         Falls back to checking existing sessions if the local jar doesn't have
         it.
         """
-        return get_runtime_cookie_value(self, name, default)
+        return self._session_pool.get_cookie(name, default)
 
     def get_chat(
         self,
@@ -306,17 +297,7 @@ class ChatDownloader:
 
     def get_chat_request(self, request: ChatRequest) -> Chat:
         """Typed entry point for chat retrieval via :class:`ChatRequest`."""
-        validate_url(request.url)
-
-        # URL dispatch flow:
-        # 1. Try to match URL against all registered sites
-        # 2. If match found, create site session and get chat
-        # 3. If no match, attempt URL correction (add https://) or raise error
-        chat = try_create_chat_from_sites(self, request.url, request)
-        if chat:
-            return chat
-
-        return handle_unsupported_url(self, request.url, request)
+        return dispatch_chat(self, request)
 
     def create_session(
         self,
@@ -332,7 +313,7 @@ class ChatDownloader:
         :return: The session instance
         :raises TypeError: if class is invalid
         """
-        return create_runtime_session(self, chat_downloader_class, overwrite=overwrite)
+        return self._session_pool.create(chat_downloader_class, overwrite=overwrite)
 
     def get_session(
         self,
@@ -343,11 +324,11 @@ class ChatDownloader:
         :param chat_downloader_class: The ChatDownloader class
         :return: The session instance or None if not found
         """
-        return self.sessions.get(chat_downloader_class.__name__)
+        return self._session_pool.get(chat_downloader_class)
 
     def close(self) -> None:
         """Close all sessions associated with the object."""
-        close_sessions(self)
+        self._session_pool.close()
 
 
 # ===== Module-Level Functions =====

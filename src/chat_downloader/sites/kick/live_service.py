@@ -202,6 +202,7 @@ def _open_subscribed_transport(
     *,
     proxy_url: str | None = None,
     pusher_http_client: _HttpClient | None = None,
+    force_discover: bool = False,
 ) -> KickPusherTransport:
     """Open a transport and subscribe to the chatroom, retrying failures.
 
@@ -212,6 +213,7 @@ def _open_subscribed_transport(
         transport_factory: Factory producing a fresh transport.
         proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
         pusher_http_client: HTTP client used for Pusher-key discovery.
+        force_discover: Whether to bypass the cached Pusher application key.
 
     Returns:
         A connected, subscribed transport.
@@ -221,7 +223,13 @@ def _open_subscribed_transport(
         transport._proxy_url = proxy_url
         transport._pusher_http_client = pusher_http_client
         try:
-            transport.connect(downloader._http_timeout[0])
+            if force_discover:
+                transport.connect(
+                    downloader._http_timeout[0],
+                    force_discover=True,
+                )
+            else:
+                transport.connect(downloader._http_timeout[0])
             transport.subscribe(chatroom_id)
             transport.set_timeout(
                 max(
@@ -240,6 +248,45 @@ def _open_subscribed_transport(
             return transport
     msg = "unreachable: retry should have raised RetriesExceeded"
     raise RuntimeError(msg)
+
+
+def _recover_pusher_transport(
+    downloader: KickChatDownloader,
+    transport: KickPusherTransport,
+    chatroom_id: str,
+    request: ChatRequest,
+    transport_factory: Callable[[], KickPusherTransport],
+    error: KickError,
+    recovery_count: int,
+    *,
+    proxy_url: str | None,
+    pusher_http_client: _HttpClient | None,
+) -> KickPusherTransport:
+    """Reconnect once with a freshly discovered Pusher application key."""
+    transport.close()
+    if recovery_count > 1:
+        raise error
+    wait_for_reconnect(
+        recovery_count,
+        error=error,
+        request=request,
+        provider="Kick Pusher protocol",
+    )
+    refreshed = _open_subscribed_transport(
+        downloader,
+        chatroom_id,
+        request,
+        transport_factory,
+        proxy_url=proxy_url,
+        pusher_http_client=pusher_http_client,
+        force_discover=True,
+    )
+    log(
+        "warning",
+        "Kick Pusher rejected the cached application key; "
+        "reconnected with a freshly discovered key.",
+    )
+    return refreshed
 
 
 def _iter_preloaded_messages(
@@ -267,7 +314,7 @@ def _iter_preloaded_messages(
             yield message
 
 
-def _iter_chat_messages(
+def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths are intrinsic to the stream loop
     downloader: KickChatDownloader,
     username: str,
     channel_id: str,
@@ -325,6 +372,7 @@ def _iter_chat_messages(
         pusher_http_client=pusher_http_client,
     )
     consecutive_connection_failures = 0
+    pusher_error_recoveries = 0
     try:
         while True:
             try:
@@ -333,8 +381,10 @@ def _iter_chat_messages(
                     # progress, even when it is not a chat-message event.
                     consecutive_connection_failures = 0
                     live_message = dispatch_event(frame)
-                    if live_message is not None and emit(live_message):
-                        yield live_message
+                    if live_message is not None:
+                        pusher_error_recoveries = 0
+                        if emit(live_message):
+                            yield live_message
             except ConnectionError as error:
                 logger.debug("Kick websocket disconnected; reconnecting: %s", error)
                 transport.close()
@@ -357,6 +407,25 @@ def _iter_chat_messages(
                     "debug",
                     "Kick websocket reconnected; checking recent history for "
                     "messages missed during the outage.",
+                )
+                yield from _iter_preloaded_messages(
+                    downloader,
+                    channel_id,
+                    username,
+                    emit,
+                )
+            except KickError as error:
+                pusher_error_recoveries += 1
+                transport = _recover_pusher_transport(
+                    downloader,
+                    transport,
+                    chatroom_id,
+                    request,
+                    transport_factory,
+                    error,
+                    pusher_error_recoveries,
+                    proxy_url=proxy_url,
+                    pusher_http_client=pusher_http_client,
                 )
                 yield from _iter_preloaded_messages(
                     downloader,

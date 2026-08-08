@@ -6,6 +6,62 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
+## Unreleased
+
+## 2.0.4 — 2026-07-26
+
+### Tooling
+
+- Raise the `mypy` dev-dependency floor from `>=1.15,<2.0` to `>=2.3,<3.0`. The
+  `<2.0` cap dated from the original `pyproject.toml` migration and carried no
+  recorded rationale; mypy 2.3 type-checks the tree clean under the existing
+  `strict = True` / `warn_unreachable = True` settings with no source changes.
+  The pre-push hook runs `uv run --locked mypy .`, so it tracks the new major
+  automatically
+- Refresh `uv.lock` to current releases: `ruff` 0.15.15 → 0.16.0, `pytest`
+  9.0.3 → 9.1.1, `coverage` 7.14.1 → 7.15.2, `import-linter` 2.11 → 2.13,
+  `pre-commit` 4.6.0 → 4.6.1, `colorlog` 6.10.1 → 6.12.0, plus transitive
+  updates
+- Parenthesize an implicit string concatenation in `tests/test_runner_unit.py`
+  flagged by ruff 0.16's `ISC004`; the two-part log message is unchanged
+
+## 2.0.3 — 2026-07-23
+
+### Fixes
+
+- **Applied cookie-authentication safety checks to effective proxies.** Explicit
+  proxies and proxies selected from the environment now follow the same policy;
+  `proxy=""` remains the explicit opt-out from system proxy settings.
+- **Accepted protocol-relative input URLs.** Inputs beginning with `//` are now
+  normalized to HTTPS before site dispatch.
+- **Recovered automatically from a rejected Kick Pusher key.** The live service
+  performs one forced key discovery and reconnect before treating a repeated
+  Pusher error as terminal.
+- **Expanded debug-log redaction for custom authentication headers.** Header
+  names containing authentication, token, secret, credential, or API-key
+  markers, and standard authentication-scheme values, are now sanitized.
+- **Deduplicated output aliases after metadata expansion.** Paths that become
+  identical after `{title}` or `{id}` substitution, including existing hard
+  links, attach only one writer.
+- **Rejected unknown request profiles at configuration time.**
+  `DownloaderConfig` now raises `ValueError` unless `request_profile` is one of
+  the documented presets or `None`.
+
+## 2.0.2 — 2026-07-20
+
+### Architecture / compatibility
+
+- **Deepened runtime orchestration without changing the documented API.**
+  Chat dispatch and pipeline configuration now each expose one cohesive
+  interface, while URL normalization, site defaults, wrapper ordering, and
+  output setup remain internal. Undocumented orchestration helpers are no
+  longer re-exported from `chat_downloader.runtime`; `RunResult` remains the
+  stable runtime export.
+- **Concentrated HTTP and provider-session ownership.**
+  `ChatDownloaderSession` now owns shared HTTP state, and `_SiteSessionPool`
+  owns provider reuse, explicit-cookie propagation, replacement, and shutdown.
+  Broad owner-shaped protocols and forwarding helper clusters were removed.
+
 ## 2.0.1 — 2026-07-18
 
 ### Fixes

@@ -65,6 +65,21 @@ def test_downloader_close_releases_both_http_sessions(monkeypatch: Any) -> None:
     assert base_session is downloader.session
 
 
+def test_empty_proxy_disables_environment_for_kick_client(monkeypatch: Any) -> None:
+    captured: dict[str, Any] = {}
+
+    def build_client(**kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(extractor, "KickApiClient", build_client)
+    downloader = KickChatDownloader(proxy="")
+    try:
+        assert captured["trust_env"] is False
+    finally:
+        downloader.close()
+
+
 def test_client_construction_failure_closes_base_session(monkeypatch: Any) -> None:
     closed: list[Any] = []
 

@@ -27,6 +27,11 @@ ALLOWLIST: frozenset[str] = frozenset(
         # {,_runtime,_state}); reunified for locality. Pure helpers that don't
         # need the loop's state live in continuation_helpers.py.
         "sites/youtube/continuation.py",
+        # Cohesive Kick live service: metadata resolution, preloaded-history
+        # assembly, and the bounded WebSocket/key-refresh loop form one stream
+        # lifecycle. Splitting those phases would obscure their shared retry,
+        # deduplication, and transport-close invariants.
+        "sites/kick/live_service.py",
     }
 )
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"

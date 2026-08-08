@@ -185,7 +185,8 @@ does not expose replay chat for the target.
 
 `request_profile` can select `youtube_web`, `youtube_android`, or
 `youtube_ios`. The CLI and Python API both carry this through
-`DownloaderConfig`.
+`DownloaderConfig`. Any other profile name raises `ValueError` during
+configuration.
 
 When `auto_profile_fallback` is enabled, the continuation loop can rotate
 YouTube profiles after repeated incomplete continuation payloads. The fallback
@@ -208,6 +209,9 @@ avatar, message ID, and timestamp fields.
 
 `client_auth.py` handles SAPISIDHASH-style authorization when suitable cookies
 are available. Header values are sanitized before they appear in debug logs.
+Cookie-authenticated sessions reject effective remote proxies, including
+proxies inherited from the environment. A loopback proxy emits a warning;
+`proxy=""` explicitly disables environment proxies.
 
 ## Observed Live Message Types
 
@@ -338,3 +342,9 @@ When debugging YouTube breakage, inspect modules in this order:
 6. `continuation.py`
 7. `continuations.py`
 8. `parsing/`
+
+## Testing
+
+Bootstrap, continuation, discovery, and parser coverage is offline by default.
+Reviewed drift fixtures live under `tests/fixtures/youtube/`; live-network
+tests must carry `@pytest.mark.network` and require `--run-network`.

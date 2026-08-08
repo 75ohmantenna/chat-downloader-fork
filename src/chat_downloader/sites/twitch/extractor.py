@@ -70,6 +70,9 @@ class TwitchChatDownloader(BaseChatDownloader):
         {
             "name": "Livestream",
             "params": {"url": "https://www.twitch.tv/xenova", "timeout": 5},
+            "expected_result": {
+                "chat_condition": lambda chat: bool(chat.id and chat.title),
+            },
         },
         # Past broadcasts
         {

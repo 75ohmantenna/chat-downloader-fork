@@ -50,9 +50,12 @@ describe the local change without an issue reference instead. Hooks use
 4. Run the standard validation appropriate to the changed surface.
 5. Update the document that owns any changed behavior or public contract.
 
-Network tests are opt-in. New live-network tests require
-`@pytest.mark.network`; parser and transport regressions should normally use
-curated fixtures under `tests/fixtures/`.
+Network tests remain opt-in locally. Every external check carries
+`@pytest.mark.network`, one scope marker (`network_replay`, `network_live`, or
+`network_environment`), and a hard timeout. Parser and transport regressions
+should normally use curated fixtures under `tests/fixtures/`. GitHub Actions
+runs the stable `network_replay` contracts weekly and on manual dispatch;
+volatile live and environment checks do not gate pushes or pull requests.
 
 ## Commands
 
@@ -81,6 +84,16 @@ uv run lint-imports
 Opt-in network tests:
 
 ```bash
+# Stable replay and immutable-resource contracts
+uv run pytest -v -m network_replay --run-network
+
+# Volatile live-channel and websocket smoke checks
+uv run pytest -v -m network_live --run-network
+
+# Proxy, header, and cookie integration checks
+uv run pytest -v -m network_environment --run-network
+
+# Every external check
 uv run pytest -v -m network --run-network
 ```
 
@@ -153,6 +166,12 @@ Snapshots default to a temporary directory. Set
 before promoting them into `tests/fixtures/`; captured data is evidence, not an
 automatically trusted fixture.
 
+Capture sanitization recursively removes known cookie, proxy, token, and API
+key fields. It also treats custom header names containing authentication,
+credential, secret, or token markers—and values using common authentication
+schemes—as sensitive. Review remains mandatory because provider payloads can
+introduce new secret-bearing shapes.
+
 Provider-specific diagnosis and fixture-promotion steps live in the
 [YouTube](youtube-integration-guide.md),
 [Twitch](twitch-integration-guide.md), and
@@ -163,8 +182,9 @@ Provider-specific diagnosis and fixture-promotion steps live in the
 1. Confirm `master` is clean and synchronized with `origin/master`.
 2. Select the next semantic version from the user-visible changes since the
    latest `v*` tag.
-3. Update `src/chat_downloader/metadata.py::__version__` and add that version as
-   the topmost numbered `CHANGELOG.md` release heading. Leave `pyproject.toml`
+3. Move relevant `Unreleased` entries under a new numbered release heading,
+   update `src/chat_downloader/metadata.py::__version__`, and keep that version
+   as the topmost numbered `CHANGELOG.md` heading. Leave `pyproject.toml`
    unchanged; setuptools reads the version dynamically.
 4. Run `uv lock`, `uv lock --check`, `uv sync --locked`, and `make ci`.
 5. Inspect the built wheel metadata and confirm the expected version.

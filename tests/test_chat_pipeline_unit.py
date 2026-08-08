@@ -9,15 +9,15 @@ from unittest.mock import MagicMock
 import pytest
 
 from chat_downloader.models import ChatRequest
-from chat_downloader.runtime.chat_pipeline import (
-    apply_message_limit,
-    build_output_writer,
-    configure_chat,
-    configure_formatter,
-    configure_output_writer,
-    configure_timeouts,
-)
+from chat_downloader.runtime import chat_pipeline
 from chat_downloader.sites.models import Chat
+
+apply_message_limit = chat_pipeline._apply_message_limit
+build_output_writer = chat_pipeline._build_output_writer
+configure_chat = chat_pipeline.configure_chat
+configure_formatter = chat_pipeline._configure_formatter
+configure_output_writer = chat_pipeline._configure_output_writer
+configure_timeouts = chat_pipeline._configure_timeouts
 
 
 class _FakeWriter:
@@ -368,6 +368,29 @@ def test_configure_output_writer_alias_writes_each_item_once(tmp_path) -> None:
     assert output_path.read_text(encoding="utf-8") == "existing\nhello\n"
 
 
+def test_configure_output_writer_deduplicates_expanded_template_paths(
+    tmp_path,
+) -> None:
+    output_path = tmp_path / "same.jsonl"
+    output_path.write_text('{"old": true}\n', encoding="utf-8")
+    request = ChatRequest(
+        url="https://www.youtube.com/watch?v=abc",
+        output=[str(tmp_path / "{title}.jsonl"), str(output_path)],
+        overwrite=False,
+    )
+    chat = Chat(
+        iter([{"message_type": "text_message", "message": "hello"}]),
+        title="same",
+    )
+
+    configure_output_writer(chat, request)
+    assert len(chat._output_dispatcher.writers) == 1
+    assert next(chat)["message"] == "hello"
+    chat.close()
+
+    assert len(output_path.read_text(encoding="utf-8").splitlines()) == 2
+
+
 def test_configure_output_writer_rejects_json_output(tmp_path) -> None:
     request = ChatRequest(
         url="https://www.youtube.com/watch?v=abc",
@@ -394,43 +417,29 @@ def test_build_output_writer_copies_request_output_settings() -> None:
     assert writer.lazy_initialise is True
 
 
-def test_configure_chat_applies_pipeline_helpers(monkeypatch) -> None:
-    calls: list[tuple[Any, ...]] = []
-    chat = SimpleNamespace(chat=iter(()), site=None)
-    request = ChatRequest(url="https://www.youtube.com/watch?v=abc")
-    site = object()
+def test_configure_chat_composes_real_limit_formatter_and_writer(tmp_path) -> None:
+    output = tmp_path / "chat.jsonl"
+    chat = Chat(
+        iter(
+            [
+                {"message_id": "one", "message_type": "text_message"},
+                {"message_id": "two", "message_type": "text_message"},
+            ]
+        ),
+        status="live",
+        title="Example",
+        id="abc",
+    )
+    request = ChatRequest(
+        url="https://www.youtube.com/watch?v=abc",
+        max_messages=1,
+        output=str(output),
+    )
+    site = _FakeSite()
 
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.apply_message_limit",
-        lambda current_chat, max_messages: calls.append(
-            ("limit", current_chat, max_messages),
-        ),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.configure_timeouts",
-        lambda current_chat, timeout, inactivity_timeout: calls.append(
-            ("timeouts", current_chat, timeout, inactivity_timeout),
-        ),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.configure_formatter",
-        lambda current_chat, format_file, format_name: calls.append(
-            ("formatter", current_chat, format_file, format_name),
-        ),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.configure_output_writer",
-        lambda current_chat, current_request: calls.append(
-            ("writer", current_chat, current_request),
-        ),
-    )
+    configure_chat(chat, request, cast("Any", site))
 
-    configure_chat(chat, request, site)
-
-    assert calls == [
-        ("limit", chat, request.max_messages),
-        ("timeouts", chat, request.timeout, request.inactivity_timeout),
-        ("formatter", chat, request.format_file, request.format),
-        ("writer", chat, request),
-    ]
     assert chat.site is site
+    assert list(chat) == [{"message_id": "one", "message_type": "text_message"}]
+    assert '"message_id": "one"' in output.read_text(encoding="utf-8")
+    assert "two" not in output.read_text(encoding="utf-8")

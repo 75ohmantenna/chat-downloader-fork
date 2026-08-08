@@ -143,6 +143,22 @@ def test_connect_rejects_missing_websocket_object() -> None:
         transport.connect(1.0)
 
 
+def test_connect_can_force_pusher_key_rediscovery(monkeypatch: Any) -> None:
+    ws = FakeWebSocket()
+    resolver = MagicMock(return_value="wss://fresh.example/app/key")
+    monkeypatch.setattr(wt, "get_pusher_ws_url", resolver)
+    transport = KickPusherTransport(
+        connector=lambda _url, _timeout, **_kwargs: ws,
+    )
+
+    transport.connect(1.0, force_discover=True)
+
+    resolver.assert_called_once_with(
+        force_discover=True,
+        http_client=None,
+    )
+
+
 def test_set_timeout_noop_before_connect() -> None:
     transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
     # No connection yet: must not raise.

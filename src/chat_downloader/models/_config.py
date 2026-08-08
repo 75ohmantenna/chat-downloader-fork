@@ -14,6 +14,7 @@ from chat_downloader._timeout_defaults import (
     DEFAULT_READ_TIMEOUT,
 )
 from chat_downloader.models._base import _cli
+from chat_downloader.request_profiles import REQUEST_PROFILES
 
 
 @dataclass(slots=True)
@@ -89,7 +90,7 @@ class DownloaderConfig:
     )
 
     def __post_init__(self) -> None:
-        """Validate timeout fields."""
+        """Validate session configuration fields."""
         for name, value in (
             ("connect_timeout", self.connect_timeout),
             ("read_timeout", self.read_timeout),
@@ -97,6 +98,16 @@ class DownloaderConfig:
             if not math.isfinite(value) or value <= 0:
                 msg = f"{name} must be a finite positive number, got {value!r}"
                 raise ValueError(msg)
+        if self.request_profile is not None and (
+            not isinstance(self.request_profile, str)
+            or self.request_profile not in REQUEST_PROFILES
+        ):
+            available = ", ".join(sorted(REQUEST_PROFILES))
+            msg = (
+                f"request_profile must be one of {{{available}}} or None, "
+                f"got {self.request_profile!r}"
+            )
+            raise ValueError(msg)
 
     def as_dict(self) -> dict[str, Any]:
         """Return all fields as a plain ``dict``.

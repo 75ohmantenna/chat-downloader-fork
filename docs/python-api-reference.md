@@ -111,10 +111,10 @@ these fields:
 | --- | --- | --- |
 | `headers` | `None` | Custom HTTP headers |
 | `cookies` | `None` | Path to a Netscape-format cookies file |
-| `proxy` | `None` | HTTP, HTTPS, or SOCKS proxy URL; `InvalidParameter` raised for unknown schemes or missing host. Using `proxy` together with `cookies` raises `InvalidParameter` for remote proxies; loopback proxies (`127.x.x.x`, `::1`, `localhost`) emit a warning instead. |
+| `proxy` | `None` | HTTP, HTTPS, or SOCKS proxy URL; `InvalidParameter` is raised for unknown schemes or a missing host. `None` permits standard environment proxies; `""` disables them. With `cookies`, any effective remote proxy raises `InvalidParameter`, while loopback proxies (`127.0.0.0/8`, `::1`, `localhost`) emit a warning. |
 | `connect_timeout` | `10.0` | TCP connect timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `read_timeout` | `30.0` | HTTP read timeout in seconds; must be finite and positive (`ValueError` otherwise) |
-| `request_profile` | `None` | Optional request-header preset (`youtube_web`, `youtube_android`, `youtube_ios`, `twitch_web`) |
+| `request_profile` | `None` | Optional request-header preset (`youtube_web`, `youtube_android`, `youtube_ios`, `twitch_web`); any other value raises `ValueError` during configuration |
 | `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after repeated incomplete continuation responses |
 | `twitch_client_id` | `None` | Optional Twitch Client-ID override for GraphQL and VOD comment requests |
 
@@ -167,7 +167,8 @@ Common fields:
 
 URL dispatch matches the complete input. Normal query strings and fragments are
 accepted, while URLs embedded in unrelated text, reserved site routes, and
-trailing non-URL text are rejected.
+trailing non-URL text are rejected. Host/path inputs without a scheme and
+protocol-relative inputs beginning with `//` are normalized to HTTPS.
 
 For YouTube live chats, the site default text format renders absolute
 timestamps before elapsed replay offsets. Replay chats keep the standard
@@ -271,6 +272,11 @@ The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
 output. JSON-array `.json` output is not supported.
 
+Output paths support `{title}` and `{id}` placeholders. The substituted values
+are sanitized as single filename components. Targets are deduplicated after
+placeholder expansion and canonical path resolution; existing hard links are
+also treated as one destination.
+
 File writers are crash-resilient: each record is flushed on write and the file
 is synchronized to disk periodically (about every 60 seconds). Datetime values
 serialized to JSONL output must be timezone-aware (UTC); a naive `datetime`
@@ -281,8 +287,9 @@ raises `ValueError` at the output boundary to keep timestamps unambiguous.
 `chat_downloader.debugging` provides:
 
 - `log(...)` and `debug_log(...)` for package logging
-- `sanitize_for_log(...)` for redacting cookies, headers, auth, proxy, and API
-  key-like values before logging or capture
+- `sanitize_for_log(...)` for redacting cookies, proxies, known secret fields,
+  custom header names containing auth/token/secret/credential markers, API-key
+  headers, and Basic/Bearer/OAuth/SAPISIDHASH values before logging or capture
 - `capture_debug_sample(label, payload)` for opt-in sanitized sample capture
 
 `capture_debug_sample()` writes only when debug logging is enabled and

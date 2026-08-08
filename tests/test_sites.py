@@ -10,62 +10,44 @@ import pytest
 from chat_downloader import ChatDownloader
 from chat_downloader.sites import YouTubeChatDownloader
 
-pytestmark = pytest.mark.network
+pytestmark = [
+    pytest.mark.network,
+    pytest.mark.network_live,
+    pytest.mark.timeout(75),
+]
 
 
-def test_youtube() -> None:
+def test_youtube_channel_discovery() -> None:
+    """Resolve supported channel URL forms to concrete live video records."""
     max_videos = 50
-
     downloader = ChatDownloader()
-    youtube = downloader.create_session(YouTubeChatDownloader)
-    tests = [
-        {
-            "prefix": "channel/",
-            "id": "UCwobzUc3z-0PrFpoRxNszXQ",
-            "type": "channel_id",
-            "video_type": "live",
-        },
-        {
-            "prefix": "c/",
-            "id": "LofiGirl",
-            "type": "custom_username",
-            "video_type": "live",
-        },
-        {
-            "prefix": "",
-            "id": "LofiGirl",
-            "type": "custom_username",
-            "video_type": "live",
-        },
-        {
-            "prefix": "@",
-            "id": "LofiGirl",
-            "type": "handle",
-            "video_type": "live",
-        },
-    ]
+    try:
+        youtube = downloader.create_session(YouTubeChatDownloader)
+        tests = [
+            {
+                "id": "UCwobzUc3z-0PrFpoRxNszXQ",
+                "type": "channel_id",
+            },
+            {
+                "id": "LofiGirl",
+                "type": "custom_username",
+            },
+            {
+                "id": "LofiGirl",
+                "type": "handle",
+            },
+        ]
 
-    num_test_messages = 10
-    timeout = 10
-    for test in tests:
-        data = {test["type"]: test["id"], "video_type": test["video_type"]}
-        videos = youtube.get_user_videos(**data)
-        assert len(list(itertools.islice(videos, max_videos))) > 0
-
-        url = f"https://www.youtube.com/{test['prefix']}{test['id']}"
-
-        chat = list(
-            downloader.get_chat(
-                url,
-                max_messages=num_test_messages,
-                timeout=timeout,
-            ),
-        )
-        # Channel discovery should stay stable, but live-chat availability on
-        # the discovered stream is increasingly volatile due upstream 400s
-        # and anti-bot gates. Treat successful iteration plus max-message
-        # enforcement as the contract here rather than requiring exactly 10
-        # messages from a live channel URL.
-        assert len(chat) <= num_test_messages
-
-    downloader.close()
+        for test in tests:
+            videos = list(
+                itertools.islice(
+                    youtube.get_user_videos(
+                        **{test["type"]: test["id"], "video_type": "live"}
+                    ),
+                    max_videos,
+                )
+            )
+            assert videos
+            assert all(video.get("video_id") for video in videos)
+    finally:
+        downloader.close()

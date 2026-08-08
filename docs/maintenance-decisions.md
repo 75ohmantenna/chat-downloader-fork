@@ -87,6 +87,41 @@ Early termination must propagate `close()` through runtime wrappers before
 writers are finalized. Reconnect loops remain bounded and reset failure streaks
 only after useful traffic.
 
+Provider-specific credential refresh is bounded too. In particular, a rejected
+Kick Pusher application key may force one fresh discovery and reconnect, but a
+repeated rejection is terminal. This keeps recovery close to the protocol that
+defines the signal and prevents infinite reconnect loops.
+
 **Revisit when:** a provider-independent lifecycle primitive can replace
 duplicated mechanism without absorbing provider-specific policy.
 
+## Compare output destinations after expansion
+
+**Decision:** Output identity is evaluated only after `{title}` and `{id}`
+metadata placeholders are expanded and the path is canonicalized. Existing
+files are also compared by device and inode so hard-link aliases cannot attach
+multiple writers to the same destination. Filename expansion itself remains
+owned by the output dispatcher, while the runtime pipeline owns writer
+selection and duplicate suppression.
+
+**Revisit when:** output targets grow beyond local files or a writer backend
+provides a stronger destination-identity contract.
+
+## Keep orchestration and session ownership deep
+
+**Decision:** Runtime callers cross two orchestration interfaces:
+`dispatch_chat` constructs a configured chat, while `configure_chat` applies
+the provider-neutral pipeline. URL correction, site-default resolution,
+wrapper ordering, formatting, and writer setup remain implementation details.
+Tests drive these interfaces instead of treating each stage as a separate
+caller surface.
+
+Shared provider HTTP state belongs to `ChatDownloaderSession`, while cached
+site instances and explicitly propagated cookies belong to `_SiteSessionPool`.
+Neither module accepts its whole owning downloader or a protocol that
+redeclares it. Provider-specific authentication checks and retry policy remain
+with the provider and `BaseChatDownloader`.
+
+**Revisit when:** a second production caller requires an existing internal
+stage independently, or a new session implementation demonstrates a real seam
+that cannot be expressed by the current internal adapter factory.

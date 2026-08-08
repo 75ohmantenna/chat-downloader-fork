@@ -175,6 +175,10 @@ The default request profile support also includes `twitch_web`. Request profile
 headers are built before CLI/user header overrides, so `--user-agent` and
 repeatable `--header` values can replace profile defaults.
 
+Request-profile names are validated when `DownloaderConfig` is created;
+unknown values fail with `ValueError` instead of silently falling back to
+generic headers.
+
 The integration maps several GraphQL failure classes into clearer
 downloader exceptions such as:
 
@@ -186,6 +190,11 @@ downloader exceptions such as:
 
 The default public Client-ID is defined in `constants.py`; callers can override
 it with `DownloaderConfig(twitch_client_id=...)` or `--twitch_client_id`.
+
+Twitch HTTP and IRC transports share the configured proxy policy. When no
+explicit proxy is supplied, standard environment proxy variables may apply.
+Combining cookies with an effective remote proxy is rejected before a session
+is created; `proxy=""` explicitly opts out of environment proxies.
 
 ### GraphQL hash rotation
 
@@ -248,3 +257,9 @@ When debugging Twitch breakage, inspect modules in this order:
 5. `parsing/message_irc_resolve.py` — IRC action/message-type resolution
 6. `parsing/message_emotes.py` — emote parsing and image-list assembly
 7. `parsing/messages.py` — high-level orchestration and field assembly
+
+## Testing
+
+Parser, GraphQL, replay, and IRC transport tests are offline by default.
+Reviewed drift fixtures live under `tests/fixtures/twitch/`; live-network tests
+must carry `@pytest.mark.network` and require `--run-network`.
