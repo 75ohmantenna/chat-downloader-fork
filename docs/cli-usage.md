@@ -106,9 +106,9 @@ in `src/chat_downloader/models/`.
 
 Filtering and output:
 
-- `--message_groups` selects predefined site groups; `--message_types` selects
-  explicit event types and takes precedence when both options are supplied,
-  including when `--message_groups all` is used.
+- `--message_groups` and `--message_types` are mutually exclusive CLI filters.
+  In typed API requests, an explicit `ChatRequest.message_types` value overrides
+  `message_groups`, including the `all` group.
 - `--format` or `--format_file` — change rendered text output.
 - `--output` — write one or more files (repeatable).
 - `--max_messages`, `--start_time`, `--end_time` — bound the capture.
