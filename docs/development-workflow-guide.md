@@ -113,6 +113,7 @@ uv run pytest -v -m network --run-network
 | `make smoke` | Build and install the wheel in an isolated environment |
 | `make check` | Run the fast local lint, format, type, and test path |
 | `make ci` | Run the complete canonical validation path |
+| `make clean` | Remove caches, coverage data, build output, and package metadata |
 
 `make ci` runs `lock-check`, `lint`, `fmt-check`, `typecheck`, `coverage`, and
 `smoke`. GitHub Actions invokes this exact target after `uv sync --locked`.

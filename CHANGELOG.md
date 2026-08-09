@@ -8,6 +8,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.0.5 — 2026-08-09
+
 ### Security / hardening
 
 - Sanitize project log records at the handler boundary, including URL

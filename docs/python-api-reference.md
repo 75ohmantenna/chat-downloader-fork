@@ -155,7 +155,7 @@ Common fields:
 | `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD URLs |
 | `max_messages` | `None` | Stop after this many messages |
 | `message_groups` | site default | High-level message filtering |
-| `message_types` | `None` | Explicit message-type filtering |
+| `message_types` | `None` | Explicit message-type filtering; overrides `message_groups` when supplied |
 | `output` | `None` | Output path or list of paths |
 | `format` | site default | Output format override |
 | `format_file` | `None` | Custom formatter definition |
@@ -292,10 +292,17 @@ raises `ValueError` at the output boundary to keep timestamps unambiguous.
   headers, and Basic/Bearer/OAuth/SAPISIDHASH values before logging or capture
 - `capture_debug_sample(label, payload)` for opt-in sanitized sample capture
 
+Project log handlers sanitize structured values, exception text, stack
+information, URL credentials, sensitive query parameters, and terminal control
+characters before rendering records.
+
 `capture_debug_sample()` writes only when debug logging is enabled and
 `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES` is truthy. The target directory defaults
 to a temporary directory and can be overridden with
-`CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`.
+`CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. On POSIX systems, custom capture directories
+must be owned by the current user with mode `0700`; sample files use mode
+`0600`. Capture rejects symbolic links, unexpected file types, foreign
+ownership, and broader permissions.
 
 `chat_downloader.debug_sample_utils` contains naming helpers used to turn
 captured samples into stable fixture names.

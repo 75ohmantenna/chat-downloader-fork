@@ -215,11 +215,12 @@ its duration.
 The Pusher app key is shipped in Kick's public Next.js JS bundle
 (`NEXT_PUBLIC_PUSHER_KEY`) and is not a secret — it grants only anonymous,
 read-only subscription to public chatrooms. `pusher_discovery.py::resolve_pusher_key`
-fetches the homepage, scans the JS chunks for the key, caches it, and falls back
-to the compiled-in default if discovery fails, including homepage transport
-errors. Discovery uses the downloader's HTTP session and timeout policy, with a
-three-second per-request limit and a ten-second total scan budget. The live
-service normally uses the cached/default key first. If Pusher returns
+fetches the homepage without following redirects, scans the JS chunks for the
+key, caches it, and falls back to the compiled-in default if discovery fails,
+including homepage transport errors or redirect responses. Discovery uses the
+downloader's HTTP session and timeout policy, with a three-second per-request
+limit and a ten-second total scan budget.
+The live service normally uses the cached/default key first. If Pusher returns
 `pusher:error`, it closes the transport, forces discovery, and reconnects once.
 A second Pusher error is terminal, preventing an invalid key from causing an
 unbounded reconnect loop. `force_discover=True` remains an internal test and

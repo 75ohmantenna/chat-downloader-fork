@@ -106,7 +106,9 @@ in `src/chat_downloader/models/`.
 
 Filtering and output:
 
-- `--message_groups` or `--message_types` — filter events.
+- `--message_groups` selects predefined site groups; `--message_types` selects
+  explicit event types and takes precedence when both options are supplied,
+  including when `--message_groups all` is used.
 - `--format` or `--format_file` — change rendered text output.
 - `--output` — write one or more files (repeatable).
 - `--max_messages`, `--start_time`, `--end_time` — bound the capture.
