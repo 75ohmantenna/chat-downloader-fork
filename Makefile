@@ -50,4 +50,5 @@ check: lint fmt-check typecheck test
 
 clean:
 	find . -type d -name '__pycache__' -exec rm -rf {} +
-	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage htmlcov dist *.egg-info
+	rm -rf .import_linter_cache .mypy_cache .pytest_cache .ruff_cache .coverage build htmlcov \
+		dist src/chat_downloader.egg-info *.egg-info

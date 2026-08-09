@@ -46,6 +46,7 @@ dev = [
     "coverage>=7.0,<8.0",
     "pre-commit>=4.0,<5.0",
     "import-linter>=2.11",
+    "pyyaml>=6.0,<7.0",
 ]
 
 [project.scripts]
@@ -171,7 +172,6 @@ show_missing = true
 fail_under = 100
 exclude_also = [
     "if TYPE_CHECKING:",
-    "\\.\\.\\.",
 ]
 
 [tool.importlinter]
@@ -241,10 +241,4 @@ markers = [
 filterwarnings = [
     "error::DeprecationWarning",
     "error::PendingDeprecationWarning",
-]
-
-[tool.codespell]
-skip = [
-    "./tests/fixtures/youtube/innertube_bootstrap/youtube-IzopCEgh2G8-player-web.json",
-    "./tests/fixtures/youtube/live_events/youtube-IzopCEgh2G8-live-chat-first.json",
 ]

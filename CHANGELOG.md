@@ -26,6 +26,14 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Reject site-session cache collisions between distinct downloader classes
   with the same class name.
 
+### Tooling
+
+- Fetch full Git history in hosted validation so the issue-reference guard can
+  inspect every reachable commit.
+- Expand `make clean` to remove all generated project artifacts, count ellipsis
+  statements in coverage, and align documented commit subjects with the
+  `topic: summary` convention.
+
 ## 2.0.4 — 2026-07-26
 
 ### Tooling

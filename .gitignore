@@ -3,6 +3,7 @@ testing/
 cookies.txt
 data/
 .claude/
+/.omp/
 .sbx/
 
 # Python bytecode
