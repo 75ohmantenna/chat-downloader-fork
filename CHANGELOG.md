@@ -8,11 +8,30 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.0.6 — 2026-08-09
+
+### Security / hardening
+
+- Redact secrets embedded in quoted JSON and Python mapping strings before
+  rendering project log records.
+- Refuse debug-sample capture when secure directory-relative, no-follow file
+  creation is unavailable instead of using a race-prone path fallback.
+- Require successful 2xx responses for Kick Pusher-key discovery; redirect
+  responses now fall back to the compiled key without parsing their bodies.
+
 ### Fixes
 
 - Parse YouTube Jewels gift attribution widgets as
   `gift_message_view_model` events, preserving gifter identity, gift artwork,
   accessibility text, and combo count instead of reporting an unknown action.
+- Skip incomplete Jewels attributions without emitting empty message identities,
+  and omit optional fields that are absent from valid widgets.
+
+### Tooling
+
+- Replace Coverage's built-in ellipsis exclusion so bare ellipsis statements
+  count toward the 100% line-coverage ratchet; structural protocol declarations
+  remain explicitly exempt.
 
 ## 2.0.5 — 2026-08-09
 
