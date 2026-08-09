@@ -90,6 +90,13 @@ _KNOWN_POLL_ACTION_TYPES: dict[str, list[str]] = {
     "closeLiveChatActionPanelAction": ["pollClosedEvent"],
 }
 
+
+_KNOWN_INTERACTIVITY_WIDGET_ACTION_TYPES = {
+    "updateOrAddInteractivityWidgetAction": [
+        "giftMessageViewModel",
+    ],
+}
+
 _KNOWN_IGNORE_ACTION_TYPES: dict[str, list[str]] = {
     "addInteractivityWidgetAction": [],
     "liveChatReportModerationStateCommand": [],
@@ -104,5 +111,6 @@ _KNOWN_ACTION_TYPES = {
     **_KNOWN_REMOVE_BANNER_TYPES,
     **_KNOWN_TOOLTIP_ACTION_TYPES,
     **_KNOWN_POLL_ACTION_TYPES,
+    **_KNOWN_INTERACTIVITY_WIDGET_ACTION_TYPES,
     **_KNOWN_IGNORE_ACTION_TYPES,
 }

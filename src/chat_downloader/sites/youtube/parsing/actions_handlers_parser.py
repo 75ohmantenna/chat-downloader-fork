@@ -13,7 +13,13 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _RENDERER_BANNER_CHAT_SUMMARY,
 )
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
-from chat_downloader.utils.json_types import JSONDict, get_dict
+from chat_downloader.utils.json_types import (
+    JSONDict,
+    get_dict,
+    get_int,
+    get_list,
+    get_str,
+)
 
 from .message_content_text_parser import _parse_runs
 from .message_items_content_parser import _normalize_modern_element_item, _parse_item
@@ -31,6 +37,64 @@ def _handle_item_action(
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)
+
+
+def _image_sources_as_thumbnails(image: JSONDict) -> JSONDict:
+    """Adapt a modern image source list for the shared thumbnail parser."""
+    sources = get_list(image, "sources")
+    return {"thumbnails": sources} if sources else {}
+
+
+def _handle_interactivity_widget_action(
+    action: JSONDict,
+    original_action_type: str,
+    data: JSONDict,
+    offset: float,
+) -> tuple[JSONDict, JSONDict, str | None, str]:
+    """Normalize a Jewels gift widget into the existing gift message shape."""
+    action_data = get_dict(action, original_action_type)
+    widget_renderer = get_dict(action_data, "widgetRenderer")
+    widget = get_dict(widget_renderer, "interactivityWidgetRenderer")
+    content = get_dict(widget, "content")
+    attribution = get_dict(content, "giftAttributionItemViewModel")
+    if not attribution:
+        return (data, {}, None, original_action_type)
+
+    element = get_dict(attribution, "elementRenderer")
+    compatibility = get_dict(element, "compatibilityOptions")
+    gift_item: JSONDict = {
+        "id": get_str(attribution, "id") or get_str(compatibility, "liveChatId"),
+        "authorExternalChannelId": get_str(
+            compatibility,
+            "liveChatAuthorExternalChannelId",
+        ),
+        "authorName": get_dict(attribution, "authorName"),
+        "text": get_dict(attribution, "detailText"),
+        "comboCount": get_int(attribution, "comboCount"),
+    }
+
+    gift_label = get_str(attribution, "giftA11yLabel")
+    if gift_label:
+        gift_item["giftImageA11yLabel"] = gift_label
+
+    author_avatar = get_dict(attribution, "authorAvatar")
+    avatar_view_model = get_dict(author_avatar, "avatarViewModel")
+    author_photo = _image_sources_as_thumbnails(get_dict(avatar_view_model, "image"))
+    if author_photo:
+        gift_item["authorPhoto"] = author_photo
+
+    gift_image = _image_sources_as_thumbnails(get_dict(attribution, "attributionImage"))
+    if gift_image:
+        gift_item["giftImage"] = gift_image
+
+    original_item: JSONDict = {"giftMessageViewModel": gift_item}
+    data = _parse_item(original_item, data, offset)
+    return (
+        data,
+        original_item,
+        "giftMessageViewModel",
+        original_action_type,
+    )
 
 
 def _handle_remove_action(

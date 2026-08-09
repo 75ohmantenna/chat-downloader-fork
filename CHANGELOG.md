@@ -8,6 +8,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Fixes
+
+- Parse YouTube Jewels gift attribution widgets as
+  `gift_message_view_model` events, preserving gifter identity, gift artwork,
+  accessibility text, and combo count instead of reporting an unknown action.
+
 ## 2.0.5 — 2026-08-09
 
 ### Security / hardening

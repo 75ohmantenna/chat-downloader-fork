@@ -173,8 +173,6 @@ _KEYS_TO_IGNORE = [
     "image",
     "imageA11yLabel",
     "authorAvatar",
-    "giftImage",
-    "giftImageA11yLabel",
     # ticker UI state metadata (not chat content)
     "dynamicStateData",
     # paid sticker purchase/logging metadata
@@ -267,6 +265,9 @@ def build_remapping() -> Mapping[str, Any]:
             "bannerType": "banner_type",
             "bannerProperties": "banner_properties",
             "headerOverlayImage": r("header_overlay_image", _parse_thumbnails),
+            "giftImage": r("gift_images", _parse_thumbnails),
+            "giftImageA11yLabel": "gift_image_a11y_label",
+            "comboCount": "combo_count",
             # hearted message
             "creatorHeartButton": "creator_heart_button",
             # paid message metadata (2026+)

@@ -1,0 +1,97 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "updateOrAddInteractivityWidgetAction": {
+            "widgetRenderer": {
+              "interactivityWidgetRenderer": {
+                "id": "gift-event-001",
+                "position": {
+                  "width": "INTERACTIVITY_WIDGET_LAYOUT_CONSTRAINT_WRAP_CONTENT",
+                  "height": "INTERACTIVITY_WIDGET_LAYOUT_CONSTRAINT_WRAP_CONTENT",
+                  "specialPlacement": "SPECIAL_PLACEMENT_BELOW_ANCHOR_START_ALIGNED"
+                },
+                "timeoutMs": 3000,
+                "enterAnimation": "INTERACTIVITY_WIDGET_ANIMATION_TYPE_SLIDE_DOWN_AND_FADE_IN_CLIPPED",
+                "exitAnimation": "INTERACTIVITY_WIDGET_ANIMATION_TYPE_SLIDE_UP_AND_FADE_OUT",
+                "content": {
+                  "giftAttributionItemViewModel": {
+                    "id": "gift-event-001",
+                    "authorAvatar": {
+                      "avatarViewModel": {
+                        "image": {
+                          "sources": [
+                            {
+                              "url": "https://example.com/avatar-32.png",
+                              "width": 32,
+                              "height": 32
+                            },
+                            {
+                              "url": "https://example.com/avatar-64.png",
+                              "width": 64,
+                              "height": 64
+                            }
+                          ]
+                        },
+                        "avatarImageSize": "AVATAR_SIZE_XS"
+                      }
+                    },
+                    "authorName": {
+                      "content": "@gift_sender"
+                    },
+                    "detailText": {
+                      "content": "Sent a gift"
+                    },
+                    "attributionImage": {
+                      "sources": [
+                        {
+                          "url": "https://example.com/gift-80.png",
+                          "width": 80,
+                          "height": 80
+                        },
+                        {
+                          "url": "https://example.com/gift-160.png",
+                          "width": 160,
+                          "height": 160
+                        }
+                      ]
+                    },
+                    "giftA11yLabel": "@gift_sender sent a gift, Image of a star",
+                    "comboCount": 3,
+                    "rendererContext": {
+                      "loggingContext": {
+                        "loggingDirectives": {
+                          "trackingParams": "fixture-tracking-params"
+                        }
+                      }
+                    },
+                    "elementRenderer": {
+                      "compatibilityOptions": {
+                        "liveChatId": "gift-event-001",
+                        "liveChatAuthorExternalChannelId": "UC-gift-sender"
+                      },
+                      "trackingParams": "fixture-element-tracking-params"
+                    }
+                  }
+                },
+                "preloadImages": [],
+                "type": "INTERACTIVITY_WIDGET_TYPE_GIFT",
+                "priority": 0
+              }
+            },
+            "displayImmediately": false
+          }
+        }
+      ],
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutMs": 10000,
+            "continuation": "NEXT_GIFT_FIXTURE_TOKEN"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -15,6 +16,7 @@ from chat_downloader.sites.youtube.constants_message import (
 )
 from chat_downloader.sites.youtube.parsing.actions_handlers_parser import (
     _handle_add_banner_action,
+    _handle_interactivity_widget_action,
     _handle_item_action,
     _handle_poll_action,
     _handle_remove_action,
@@ -29,6 +31,9 @@ from chat_downloader.sites.youtube.parsing.actions_router import (
     _ACTION_HANDLERS,
     process_action,
 )
+
+if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
 
 
 def _renderer_with_timestamp(usec: str = "1234567890") -> dict:
@@ -56,6 +61,7 @@ def test_action_handlers_table_maps_families_in_order() -> None:
     """Verify the dispatch table binds the right handler to each family."""
     expected = [
         _handle_item_action,
+        _handle_interactivity_widget_action,
         _handle_remove_action,
         _handle_replace_action,
         _handle_tooltip_action,
@@ -134,6 +140,16 @@ def test_process_action_add_chat_item_action() -> None:
     assert finalized["action_type"] == "add_chat_item"
     assert finalized["message_type"] == "text_message"
     assert finalized["timestamp"] == 1
+
+
+def test_process_action_empty_interactivity_widget_is_skipped() -> None:
+    action: JSONDict = {
+        "updateOrAddInteractivityWidgetAction": {
+            "widgetRenderer": {},
+        },
+    }
+
+    assert _finalize(process_action(action)) is None
 
 
 def test_process_action_gift_message_view_model(monkeypatch) -> None:

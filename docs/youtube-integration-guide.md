@@ -234,6 +234,12 @@ message types:
 - `ban_user` (confirmed via `remove_chat_item` action; see Moderation Actions
   below for the full mapping)
 
+`gift_message_view_model` covers both regular `giftMessageViewModel` chat items
+and Jewels-powered `updateOrAddInteractivityWidgetAction` gift attributions.
+The widget form preserves the gifter identity, gift image and accessibility
+label, and `combo_count`; repeated widget updates keep their shared message ID
+so consumers can track a growing gift combo.
+
 `ban_user` is the normalized `message_type` for three distinct wire actions:
 `remove_chat_item`, `remove_chat_item_by_author`, and
 `mark_chat_items_by_author_as_deleted`. All three appeared in fixture captures

@@ -177,3 +177,48 @@ def test_mobile_element_chat_fixture_parses_through_real_pipeline() -> None:
         "message_type": "text_message",
         "timestamp": 1784402103176311,
     }
+
+
+def test_jewels_gift_fixture_parses_through_real_pipeline() -> None:
+    payload = _load_payload("youtube-MLmJY7SeISw-jewels-gift-event.json")
+    result = parse_continuation_response(payload)
+    superchat_filter = MessageFilter(
+        _MESSAGE_GROUPS,
+        groups_to_add=["superchat"],
+        types_to_add=None,
+    )
+
+    pipeline_result = process_pipeline_action(
+        result.actions[0],
+        0,
+        superchat_filter,
+        None,
+    )
+
+    assert result.next_continuation == "NEXT_GIFT_FIXTURE_TOKEN"
+    assert pipeline_result.disposition == "yield"
+    assert pipeline_result.message is not None
+    assert pipeline_result.message["action_type"] == (
+        "update_or_add_interactivity_widget"
+    )
+    assert pipeline_result.message["message_type"] == "gift_message_view_model"
+    assert pipeline_result.message["message_id"] == "gift-event-001"
+    assert pipeline_result.message["message"] == "Sent a gift"
+    assert pipeline_result.message["combo_count"] == 3
+    assert pipeline_result.message["gift_image_a11y_label"] == (
+        "@gift_sender sent a gift, Image of a star"
+    )
+    assert pipeline_result.message["gift_images"][1] == {
+        "url": "https://example.com/gift-80.png",
+        "width": 80,
+        "height": 80,
+        "id": "80x80",
+    }
+    assert pipeline_result.message["author"]["id"] == "UC-gift-sender"
+    assert pipeline_result.message["author"]["name"] == "@gift_sender"
+    assert pipeline_result.message["author"]["images"][1] == {
+        "url": "https://example.com/avatar-32.png",
+        "width": 32,
+        "height": 32,
+        "id": "32x32",
+    }

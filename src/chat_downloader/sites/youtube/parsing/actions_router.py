@@ -15,6 +15,7 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_ADD_BANNER_TYPES,
     _KNOWN_ADD_TICKER_TYPES,
     _KNOWN_IGNORE_ACTION_TYPES,
+    _KNOWN_INTERACTIVITY_WIDGET_ACTION_TYPES,
     _KNOWN_POLL_ACTION_TYPES,
     _KNOWN_REMOVE_ACTION_TYPES,
     _KNOWN_REMOVE_BANNER_TYPES,
@@ -27,6 +28,7 @@ from chat_downloader.utils.string_utils import camel_case_split, remove_suffixes
 
 from .actions_handlers_parser import (
     _handle_add_banner_action,
+    _handle_interactivity_widget_action,
     _handle_item_action,
     _handle_poll_action,
     _handle_remove_action,
@@ -48,6 +50,10 @@ _ActionHandler = Callable[
 
 _ACTION_HANDLERS: tuple[tuple[dict[str, list[str]], _ActionHandler], ...] = (
     (_KNOWN_ITEM_ACTION_TYPES, _handle_item_action),
+    (
+        _KNOWN_INTERACTIVITY_WIDGET_ACTION_TYPES,
+        _handle_interactivity_widget_action,
+    ),
     (_KNOWN_REMOVE_ACTION_TYPES, _handle_remove_action),
     (_KNOWN_REPLACE_ACTION_TYPES, _handle_replace_action),
     (_KNOWN_TOOLTIP_ACTION_TYPES, _handle_tooltip_action),
