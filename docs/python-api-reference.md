@@ -299,10 +299,12 @@ characters before rendering records.
 `capture_debug_sample()` writes only when debug logging is enabled and
 `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES` is truthy. The target directory defaults
 to a temporary directory and can be overridden with
-`CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. On POSIX systems, custom capture directories
-must be owned by the current user with mode `0700`; sample files use mode
-`0600`. Capture rejects symbolic links, unexpected file types, foreign
-ownership, and broader permissions.
+`CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. On supported POSIX systems, custom capture
+directories must be owned by the current user with mode `0700`; sample files
+use mode `0600`. Capture rejects symbolic links, unexpected file types, foreign
+ownership, and broader permissions. Platforms without secure
+directory-relative no-follow creation refuse capture rather than use a
+path-based fallback.
 
 `chat_downloader.debug_sample_utils` contains naming helpers used to turn
 captured samples into stable fixture names.

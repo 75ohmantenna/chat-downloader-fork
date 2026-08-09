@@ -167,12 +167,12 @@ Snapshots default to a temporary directory. Set
 before promoting them into `tests/fixtures/`; captured data is evidence, not an
 automatically trusted fixture.
 
-On POSIX systems, the capture directory must be owned by the current user with
-mode `0700`; sample files use mode `0600`. Capture rejects symbolic links,
-unexpected file types, foreign ownership, and broader permissions rather than
-risk exposing or redirecting diagnostic data. Platforms without portable
-directory-relative no-follow operations still use validated directories and
-exclusive file creation.
+On supported POSIX systems, the capture directory must be owned by the current
+user with mode `0700`; sample files use mode `0600`. Capture rejects symbolic
+links, unexpected file types, foreign ownership, and broader permissions rather
+than risk exposing or redirecting diagnostic data. If secure directory-relative
+no-follow creation is unavailable, capture fails closed and logs a warning
+instead of writing through a path-based fallback.
 
 Capture sanitization recursively removes known cookie, proxy, token, and API
 key fields. It also treats custom header names containing authentication,

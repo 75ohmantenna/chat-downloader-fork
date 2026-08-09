@@ -51,6 +51,19 @@ _LABELED_VALUE_RE = re.compile(
     r"(?i)\b([A-Za-z][A-Za-z0-9_-]*)\s*([:=])\s*"
     r"((?:bearer\s+)?[^\s,;]+)"
 )
+_QUOTED_FIELD_RE = re.compile(
+    r"""(?ix)
+    (?P<prefix>
+        (?P<key_quote>["'])
+        (?P<key>[A-Za-z][A-Za-z0-9_-]*)
+        (?P=key_quote)
+        \s*:\s*
+    )
+    (?P<value_quote>["'])
+    (?:\\.|(?!(?P=value_quote)).)*
+    (?P=value_quote)
+    """,
+)
 _CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 # Defense-in-depth: even after key-based redaction, raw token-like strings
@@ -155,8 +168,17 @@ def _redact_labeled_values(value: str) -> str:
     return value
 
 
+def _redact_quoted_field(match: re.Match[str]) -> str:
+    """Redact a sensitive value in serialized JSON or Python mapping syntax."""
+    if not _is_sensitive_key(match.group("key")):
+        return match.group()
+    quote = match.group("value_quote")
+    return f"{match.group('prefix')}{quote}{REDACTED}{quote}"
+
+
 def _sanitize_secret_string(value: str) -> str:
     """Redact secrets without altering non-sensitive payload characters."""
+    value = _QUOTED_FIELD_RE.sub(_redact_quoted_field, value)
     value = _URL_RE.sub(_redact_url, value)
     value = _APPARENT_USERINFO_RE.sub(f"{REDACTED}@", value)
     return _redact_labeled_values(value)
@@ -254,7 +276,7 @@ def _require_private_sample_entry(
         raise OSError(message)
 
 
-def _prepare_sample_directory(sample_dir: Path) -> int | None:
+def _prepare_sample_directory(sample_dir: Path) -> int:
     """Create and validate the sample directory, returning a secure POSIX fd."""
     sample_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     _require_private_sample_entry(sample_dir.lstat(), sample_dir, directory=True)
@@ -266,9 +288,8 @@ def _prepare_sample_directory(sample_dir: Path) -> int | None:
         and os.open in os.supports_dir_fd
     )
     if not secure_dir_fd:
-        # Windows lacks portable no-follow, directory-relative open semantics.
-        # The fallback still rejects links before using atomic O_EXCL creation.
-        return None
+        message = "Secure debug sample creation is unavailable on this platform"
+        raise OSError(message)
 
     descriptor = os.open(
         sample_dir,
@@ -286,35 +307,26 @@ def _prepare_sample_directory(sample_dir: Path) -> int | None:
     return descriptor
 
 
-def _existing_sample_stat(path: Path, directory_fd: int | None) -> os.stat_result:
+def _existing_sample_stat(path: Path, directory_fd: int) -> os.stat_result:
     """Inspect an existing sample without following its final path component."""
-    if directory_fd is None:
-        return path.lstat()
     return os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
 
 
-def _unlink_created_sample(path: Path, directory_fd: int | None) -> None:
+def _unlink_created_sample(path: Path, directory_fd: int) -> None:
     """Best-effort removal of a sample created by the current capture call."""
     with suppress(OSError):
-        if directory_fd is None:
-            path.unlink()
-        else:
-            os.unlink(path.name, dir_fd=directory_fd)
+        os.unlink(path.name, dir_fd=directory_fd)
 
 
 def _write_or_validate_sample(
     path: Path,
     serialized: str,
-    directory_fd: int | None,
+    directory_fd: int,
 ) -> None:
     """Create a private sample atomically or validate the existing sample."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-    target: str | Path = path if directory_fd is None else path.name
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
     try:
-        if directory_fd is None:
-            descriptor = os.open(target, flags, 0o600)
-        else:
-            descriptor = os.open(target, flags, 0o600, dir_fd=directory_fd)
+        descriptor = os.open(path.name, flags, 0o600, dir_fd=directory_fd)
     except FileExistsError:
         _require_private_sample_entry(
             _existing_sample_stat(path, directory_fd),
@@ -376,8 +388,7 @@ def capture_debug_sample(label: str, payload: Any) -> str | None:
             path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
             _write_or_validate_sample(path, serialized, directory_fd)
         finally:
-            if directory_fd is not None:
-                os.close(directory_fd)
+            os.close(directory_fd)
         hint = describe_debug_sample(path)
         logger.debug(
             "Captured debug sample: path=%s suggested_fixture_site=%s "

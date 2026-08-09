@@ -149,6 +149,20 @@ def test_structured_redaction_preserves_control_characters() -> None:
     assert red.render_for_log(value) == r"a\nb\tc\x00"
 
 
+@pytest.mark.parametrize(
+    "serialized",
+    [
+        '{"Authorization": "Bearer LOG_SECRET"}',
+        "{'Authorization': 'Bearer LOG_SECRET'}",
+    ],
+)
+def test_render_for_log_redacts_quoted_serialized_fields(serialized: str) -> None:
+    rendered = red.render_for_log(serialized)
+
+    assert "LOG_SECRET" not in rendered
+    assert red.REDACTED in rendered
+
+
 def test_logging_filter_redacts_urls_and_visitor_data_and_escapes_controls() -> None:
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
@@ -540,7 +554,7 @@ def test_capture_debug_sample_rejects_foreign_owned_directory(
     assert sample_path is None
 
 
-def test_capture_debug_sample_uses_validated_portable_fallback(
+def test_capture_debug_sample_fails_closed_without_secure_directory_fd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sample_dir = tmp_path / "samples"
@@ -549,11 +563,10 @@ def test_capture_debug_sample_uses_validated_portable_fallback(
     monkeypatch.setattr("chat_downloader.redaction.os.supports_dir_fd", set())
     dbg.set_log_level("debug")
 
-    first_path = red.capture_debug_sample("fallback-probe", {"value": "sample"})
-    second_path = red.capture_debug_sample("fallback-probe", {"value": "sample"})
+    sample_path = red.capture_debug_sample("fallback-probe", {"value": "sample"})
 
-    assert first_path is not None
-    assert second_path == first_path
+    assert sample_path is None
+    assert list(sample_dir.iterdir()) == []
 
 
 @pytest.mark.skipif(os.name == "nt", reason="secure directory fds are POSIX-only")
@@ -607,11 +620,10 @@ def test_capture_debug_sample_closes_rejected_new_file(
     assert list(sample_dir.iterdir()) == []
 
 
-@pytest.mark.parametrize("portable_fallback", [False, True])
+@pytest.mark.skipif(os.name == "nt", reason="secure directory fds are POSIX-only")
 def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    portable_fallback: bool,
 ) -> None:
     class FailingSampleFile:
         def __init__(self, descriptor: int) -> None:
@@ -634,8 +646,6 @@ def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
         return FailingSampleFile(descriptor)
 
     sample_dir = tmp_path / "samples"
-    if portable_fallback:
-        monkeypatch.setattr("chat_downloader.redaction.os.supports_dir_fd", set())
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
     monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
     dbg.set_log_level("debug")
