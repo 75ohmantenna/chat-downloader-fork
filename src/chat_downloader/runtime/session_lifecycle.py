@@ -100,6 +100,13 @@ class _SiteSessionPool:
 
         session_name = chat_downloader_class.__name__
         existing = self.sessions.get(session_name)
+        if existing is not None and type(existing) is not chat_downloader_class:
+            msg = (
+                f"Session name collision for {session_name}: "
+                f"{type(existing).__module__}.{type(existing).__qualname__} is already "
+                "cached."
+            )
+            raise TypeError(msg)
         if existing is not None and existing._session_closed:
             overwrite = True
         if existing is not None and not overwrite:
@@ -126,8 +133,10 @@ class _SiteSessionPool:
     def get(
         self, chat_downloader_class: type[BaseChatDownloader]
     ) -> BaseChatDownloader | None:
-        """Return a cached site downloader, if present."""
-        return self.sessions.get(chat_downloader_class.__name__)
+        existing = self.sessions.get(chat_downloader_class.__name__)
+        if existing is None or type(existing) is not chat_downloader_class:
+            return None
+        return existing
 
     def close(self) -> None:
         """Close every cached site downloader and empty the pool."""

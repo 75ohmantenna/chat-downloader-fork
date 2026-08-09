@@ -44,11 +44,14 @@ def _validate_cookie_domain(domain: str) -> None:
 
 
 def _validate_proxy_url(proxy: str) -> None:
-    parsed = urlparse(proxy)
+    allowed = ", ".join(sorted(_ALLOWED_PROXY_SCHEMES))
+    msg = f"Invalid proxy URL; expected scheme in {{{allowed}}}"
+    try:
+        parsed = urlparse(proxy)
+    except ValueError:
+        raise InvalidParameter(msg) from None
     scheme = parsed.scheme.lower()
     if scheme not in _ALLOWED_PROXY_SCHEMES or not parsed.netloc:
-        allowed = ", ".join(sorted(_ALLOWED_PROXY_SCHEMES))
-        msg = f"Invalid proxy URL {proxy!r}; expected scheme in {{{allowed}}}"
         raise InvalidParameter(msg)
 
 

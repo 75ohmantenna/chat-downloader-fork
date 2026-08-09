@@ -9,41 +9,49 @@ import json
 import logging
 import os
 import re
+import stat
 import tempfile
+from contextlib import suppress
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, unquote_plus, urlencode, urlsplit, urlunsplit
 
 from .debug_sample_utils import describe_debug_sample, slugify_debug_label
-from .debugging import logger
 
 REDACTED = "<redacted>"
 _DEBUG_SAMPLE_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES"
 _DEBUG_SAMPLE_DIR_ENV = "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
-_SENSITIVE_LOG_KEYS = frozenset(
+_SENSITIVE_KEY_COMPONENTS = frozenset(
     {
+        "auth",
+        "authentication",
         "authorization",
         "cookie",
         "cookies",
-        "id_token",
-        "proxy",
-        "proxy-authorization",
-        "set-cookie",
-        "x-api-key",
-        "x-youtube-identity-token",
-    },
-)
-_SENSITIVE_HEADER_NAME_PARTS = frozenset(
-    {
-        "auth",
-        "authorization",
         "credential",
         "credentials",
+        "password",
+        "passwords",
+        "proxy",
         "secret",
         "token",
     }
 )
+_COMPACT_SENSITIVE_KEYS = frozenset({"apikey", "authuser", "visitordata"})
+_KEY_COMPONENT_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|[0-9]+")
 _AUTH_HEADER_VALUE_RE = re.compile(r"(?i)^\s*(?:basic|bearer|oauth|sapisidhash)\s+\S+")
+_URL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>]+")
+_APPARENT_USERINFO_RE = re.compile(
+    r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+:[^@\s/'\"<>]+@"
+)
+_QUERY_PAIR_RE = re.compile(r"([?&])([^=\s&#]+)(=)([^&#\s'\"<>]*)")
+_LABELED_VALUE_RE = re.compile(
+    r"(?i)\b([A-Za-z][A-Za-z0-9_-]*)\s*([:=])\s*"
+    r"((?:bearer\s+)?[^\s,;]+)"
+)
+_CONTROL_CHARACTER_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 # Defense-in-depth: even after key-based redaction, raw token-like strings
 # embedded in serialized payload values (e.g. an Authorization header
@@ -77,19 +85,88 @@ def _scrub_token_like_strings(serialized: str) -> str:
     return serialized
 
 
+def _key_components(key: str) -> tuple[str, ...]:
+    """Split a key on case transitions and non-alphanumeric separators."""
+    return tuple(part.lower() for part in _KEY_COMPONENT_RE.findall(key))
+
+
+def _is_sensitive_key(key: str) -> bool:
+    """Return whether a structured, header, or query key carries a secret."""
+    components = _key_components(key)
+    if components == ("visitor",) or set(components) & _SENSITIVE_KEY_COMPONENTS:
+        return True
+    compact = "".join(components)
+    if compact in _COMPACT_SENSITIVE_KEYS:
+        return True
+    pairs = set(pairwise(components))
+    return bool(pairs & {("api", "key"), ("visitor", "data"), ("visitor", "id")})
+
+
+def _redact_query_pair(match: re.Match[str]) -> str:
+    """Redact a query-pair value when its decoded key is sensitive."""
+    if not _is_sensitive_key(unquote_plus(match.group(2))):
+        return match.group()
+    return f"{match.group(1)}{match.group(2)}={REDACTED}"
+
+
+def _redact_malformed_url(url: str) -> str:
+    """Conservatively redact an URL that cannot be parsed structurally."""
+    url = _APPARENT_USERINFO_RE.sub(f"{REDACTED}@", url)
+    return _QUERY_PAIR_RE.sub(_redact_query_pair, url)
+
+
+def _redact_url(match: re.Match[str]) -> str:
+    """Redact URL credentials and sensitive query values in a log message."""
+    url = match.group()
+    try:
+        parsed = urlsplit(url)
+        netloc = parsed.netloc.rsplit("@", 1)[-1]
+        if "@" in parsed.netloc:
+            netloc = f"{REDACTED}@{netloc}"
+        query = urlencode(
+            [
+                (key, REDACTED if _is_sensitive_key(key) else value)
+                for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+            ],
+            doseq=True,
+        )
+        return urlunsplit((parsed.scheme, netloc, parsed.path, query, parsed.fragment))
+    except ValueError:
+        return _redact_malformed_url(url)
+
+
+def _escape_control_character(match: re.Match[str]) -> str:
+    """Render a terminal control character visibly rather than emitting it."""
+    character = match.group()
+    names = {"\n": r"\n", "\r": r"\r", "\t": r"\t"}
+    return names.get(character, f"\\x{ord(character):02x}")
+
+
+def _redact_labeled_values(value: str) -> str:
+    """Redact sensitive scalars even when a non-sensitive label precedes them."""
+    offset = 0
+    while match := _LABELED_VALUE_RE.search(value, offset):
+        if not _is_sensitive_key(match.group(1)):
+            offset = match.start() + 1
+            continue
+        replacement = f"{match.group(1)}{match.group(2)}{REDACTED}"
+        value = f"{value[: match.start()]}{replacement}{value[match.end() :]}"
+        offset = match.start() + len(replacement)
+    return value
+
+
+def _sanitize_secret_string(value: str) -> str:
+    """Redact secrets without altering non-sensitive payload characters."""
+    value = _URL_RE.sub(_redact_url, value)
+    value = _APPARENT_USERINFO_RE.sub(f"{REDACTED}@", value)
+    return _redact_labeled_values(value)
+
+
 def _is_sensitive_header(name: object, value: object) -> bool:
     """Return whether a header name or authentication value carries a secret."""
-    if isinstance(name, str):
-        normalized = name.lower().replace("_", "-")
-        parts = frozenset(normalized.split("-"))
-        if (
-            normalized in _SENSITIVE_LOG_KEYS
-            or normalized in {"api-key", "apikey"}
-            or normalized.endswith("-api-key")
-            or parts & _SENSITIVE_HEADER_NAME_PARTS
-        ):
-            return True
-    return isinstance(value, str) and _AUTH_HEADER_VALUE_RE.match(value) is not None
+    return (isinstance(name, str) and _is_sensitive_key(name)) or (
+        isinstance(value, str) and _AUTH_HEADER_VALUE_RE.match(value) is not None
+    )
 
 
 def sanitize_for_log(value: Any) -> Any:
@@ -97,16 +174,16 @@ def sanitize_for_log(value: Any) -> Any:
     if isinstance(value, dict):
         sanitized: dict[Any, Any] = {}
         for key, item in value.items():
-            normalized_key = key.lower() if isinstance(key, str) else key
-            if normalized_key == "headers" and isinstance(item, dict):
+            if (
+                isinstance(key, str)
+                and key.lower() == "headers"
+                and isinstance(item, dict)
+            ):
                 sanitized[key] = {
-                    k: REDACTED if _is_sensitive_header(k, v) else v
+                    k: REDACTED if _is_sensitive_header(k, v) else sanitize_for_log(v)
                     for k, v in item.items()
                 }
-            elif (
-                isinstance(normalized_key, str)
-                and normalized_key in _SENSITIVE_LOG_KEYS
-            ):
+            elif isinstance(key, str) and _is_sensitive_key(key):
                 sanitized[key] = REDACTED if item is not None else None
             else:
                 sanitized[key] = sanitize_for_log(item)
@@ -118,15 +195,145 @@ def sanitize_for_log(value: Any) -> Any:
     if isinstance(value, tuple):
         return tuple(sanitize_for_log(item) for item in value)
 
+    if isinstance(value, str):
+        return _sanitize_secret_string(value)
+
     return value
+
+
+def render_for_log(value: object) -> str:
+    """Redact secrets, then render terminal control characters visibly."""
+    rendered = str(sanitize_for_log(value))
+    return _CONTROL_CHARACTER_RE.sub(_escape_control_character, rendered)
+
+
+def _get_logger() -> logging.Logger:
+    """Import the configured logger lazily to avoid a module import cycle."""
+    from .debugging import logger
+
+    return logger
 
 
 def _debug_sample_capture_enabled() -> bool:
     """Return ``True`` when debug sample capture is explicitly enabled."""
     env_value = os.environ.get(_DEBUG_SAMPLE_CAPTURE_ENV, "")
     return (
-        logger.isEnabledFor(logging.DEBUG) and env_value.lower() in _TRUTHY_ENV_VALUES
+        _get_logger().isEnabledFor(logging.DEBUG)
+        and env_value.lower() in _TRUTHY_ENV_VALUES
     )
+
+
+def _is_private_sample_entry(
+    entry: os.stat_result,
+    *,
+    directory: bool,
+) -> bool:
+    """Return whether a sample entry has the expected kind, owner, and mode."""
+    expected_kind = stat.S_ISDIR if directory else stat.S_ISREG
+    if not expected_kind(entry.st_mode):
+        return False
+    if os.name != "nt":
+        if hasattr(os, "getuid") and entry.st_uid != os.getuid():
+            return False
+        expected_mode = 0o700 if directory else 0o600
+        if stat.S_IMODE(entry.st_mode) != expected_mode:
+            return False
+    return True
+
+
+def _require_private_sample_entry(
+    entry: os.stat_result,
+    path: Path,
+    *,
+    directory: bool,
+) -> None:
+    """Reject sample entries that could expose or redirect captured data."""
+    if not _is_private_sample_entry(entry, directory=directory):
+        kind = "directory" if directory else "file"
+        message = f"Unsafe debug sample {kind}: {path}"
+        raise OSError(message)
+
+
+def _prepare_sample_directory(sample_dir: Path) -> int | None:
+    """Create and validate the sample directory, returning a secure POSIX fd."""
+    sample_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    _require_private_sample_entry(sample_dir.lstat(), sample_dir, directory=True)
+
+    secure_dir_fd = (
+        os.name != "nt"
+        and hasattr(os, "O_DIRECTORY")
+        and hasattr(os, "O_NOFOLLOW")
+        and os.open in os.supports_dir_fd
+    )
+    if not secure_dir_fd:
+        # Windows lacks portable no-follow, directory-relative open semantics.
+        # The fallback still rejects links before using atomic O_EXCL creation.
+        return None
+
+    descriptor = os.open(
+        sample_dir,
+        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+    )
+    try:
+        _require_private_sample_entry(
+            os.fstat(descriptor),
+            sample_dir,
+            directory=True,
+        )
+    except OSError:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _existing_sample_stat(path: Path, directory_fd: int | None) -> os.stat_result:
+    """Inspect an existing sample without following its final path component."""
+    if directory_fd is None:
+        return path.lstat()
+    return os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
+
+
+def _unlink_created_sample(path: Path, directory_fd: int | None) -> None:
+    """Best-effort removal of a sample created by the current capture call."""
+    with suppress(OSError):
+        if directory_fd is None:
+            path.unlink()
+        else:
+            os.unlink(path.name, dir_fd=directory_fd)
+
+
+def _write_or_validate_sample(
+    path: Path,
+    serialized: str,
+    directory_fd: int | None,
+) -> None:
+    """Create a private sample atomically or validate the existing sample."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    target: str | Path = path if directory_fd is None else path.name
+    try:
+        if directory_fd is None:
+            descriptor = os.open(target, flags, 0o600)
+        else:
+            descriptor = os.open(target, flags, 0o600, dir_fd=directory_fd)
+    except FileExistsError:
+        _require_private_sample_entry(
+            _existing_sample_stat(path, directory_fd),
+            path,
+            directory=False,
+        )
+        return
+
+    try:
+        _require_private_sample_entry(os.fstat(descriptor), path, directory=False)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as sample_file:
+            descriptor = -1
+            sample_file.write(serialized + "\n")
+    except BaseException:
+        if descriptor >= 0:
+            with suppress(OSError):
+                os.close(descriptor)
+        _unlink_created_sample(path, directory_fd)
+        raise
 
 
 def capture_debug_sample(label: str, payload: Any) -> str | None:
@@ -140,6 +347,7 @@ def capture_debug_sample(label: str, payload: Any) -> str | None:
     if not _debug_sample_capture_enabled():
         return None
 
+    logger = _get_logger()
     try:
         sanitized = sanitize_for_log(payload)
         serialized = json.dumps(
@@ -163,22 +371,26 @@ def capture_debug_sample(label: str, payload: Any) -> str | None:
         sample_dir = Path(
             os.environ.get(_DEBUG_SAMPLE_DIR_ENV, default_sample_dir),
         )
-        sample_dir.mkdir(parents=True, exist_ok=True)
-        path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
-        if not path.exists():
-            path.write_text(serialized + "\n", encoding="utf-8")
+        directory_fd = _prepare_sample_directory(sample_dir)
+        try:
+            path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
+            _write_or_validate_sample(path, serialized, directory_fd)
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
         hint = describe_debug_sample(path)
         logger.debug(
-            "Captured debug sample: "
-            f"path={path} "
-            f"suggested_fixture_site={hint.site} "
-            f"suggested_fixture_group={hint.group} "
-            f"suggested_fixture_name={hint.fixture_name}",
+            "Captured debug sample: path=%s suggested_fixture_site=%s "
+            "suggested_fixture_group=%s suggested_fixture_name=%s",
+            path,
+            hint.site,
+            hint.group,
+            hint.fixture_name,
         )
         return str(path)
     except (OSError, TypeError, ValueError) as exc:
-        logger.warning(f"Unable to capture debug sample for {label!r}: {exc}")
+        logger.warning("Unable to capture debug sample for %r: %s", label, exc)
         return None
 
 
-__all__ = ["REDACTED", "capture_debug_sample", "sanitize_for_log"]
+__all__ = ["REDACTED", "capture_debug_sample", "render_for_log", "sanitize_for_log"]

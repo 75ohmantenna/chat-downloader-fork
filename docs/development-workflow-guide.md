@@ -166,11 +166,23 @@ Snapshots default to a temporary directory. Set
 before promoting them into `tests/fixtures/`; captured data is evidence, not an
 automatically trusted fixture.
 
+On POSIX systems, the capture directory must be owned by the current user with
+mode `0700`; sample files use mode `0600`. Capture rejects symbolic links,
+unexpected file types, foreign ownership, and broader permissions rather than
+risk exposing or redirecting diagnostic data. Platforms without portable
+directory-relative no-follow operations still use validated directories and
+exclusive file creation.
+
 Capture sanitization recursively removes known cookie, proxy, token, and API
 key fields. It also treats custom header names containing authentication,
 credential, secret, or token markers—and values using common authentication
 schemes—as sensitive. Review remains mandatory because provider payloads can
 introduce new secret-bearing shapes.
+
+The logging handler applies the same structured and string redaction to project
+messages, exception text, and stack information. It redacts credentials in
+URLs and sensitive query or labeled values, then renders control characters
+visibly to prevent forged terminal output.
 
 Provider-specific diagnosis and fixture-promotion steps live in the
 [YouTube](youtube-integration-guide.md),

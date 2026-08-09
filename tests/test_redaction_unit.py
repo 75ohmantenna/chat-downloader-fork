@@ -4,15 +4,21 @@
 
 from __future__ import annotations
 
+import io
 import json
+import logging
 import os
+import stat
 import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 import chat_downloader.debugging as dbg
 import chat_downloader.redaction as red
+from chat_downloader.runtime.runner import execute_run
+from chat_downloader.sites.session import ChatDownloaderSession
 
 
 @pytest.fixture(autouse=True)
@@ -97,6 +103,175 @@ def test_redacts_nested_sensitive_keys_in_sequences() -> None:
     ) == ({"authorization": red.REDACTED}, [{"cookie": red.REDACTED}])
 
 
+@pytest.mark.parametrize(
+    "key",
+    ["accessToken", "feedbackToken", "refresh_token", "password"],
+)
+def test_sensitive_key_classifier_redacts_structured_values_and_headers(
+    key: str,
+) -> None:
+    assert red.sanitize_for_log(
+        {
+            key: "STRUCTURED_SECRET",
+            "headers": {key: "HEADER_SECRET"},
+        }
+    ) == {
+        key: red.REDACTED,
+        "headers": {key: red.REDACTED},
+    }
+
+
+@pytest.mark.parametrize("key", ["x-api-key", "x-goog-visitor-id"])
+def test_sensitive_key_classifier_redacts_valid_url_queries(key: str) -> None:
+    rendered = red.render_for_log(f"https://example.invalid/?{key}=QUERY_SECRET")
+
+    assert "QUERY_SECRET" not in rendered
+    assert "redacted" in rendered
+
+
+@pytest.mark.parametrize("key", ["author", "authority", "tokenizer", "monkey"])
+def test_sensitive_key_classifier_avoids_substring_false_positives(key: str) -> None:
+    value = {
+        key: "VISIBLE",
+        "headers": {key: "VISIBLE"},
+    }
+
+    assert red.sanitize_for_log(value) == value
+    assert f"{key}=VISIBLE" in red.render_for_log(
+        f"https://example.invalid/?{key}=VISIBLE"
+    )
+
+
+def test_structured_redaction_preserves_control_characters() -> None:
+    value = "a\nb\tc\x00"
+
+    assert red.sanitize_for_log(value) == value
+    assert red.render_for_log(value) == r"a\nb\tc\x00"
+
+
+def test_logging_filter_redacts_urls_and_visitor_data_and_escapes_controls() -> None:
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    dbg.logger.addHandler(handler)
+    try:
+        dbg.set_log_level("debug")
+        child_logger = logging.getLogger("chat_downloader.sites.logging_boundary")
+        child_logger.setLevel(logging.DEBUG)
+        child_logger.debug(
+            "url=https://user:URL_SECRET@example.invalid/watch?"
+            "token=TOKEN_SECRET&visitorData=VISITOR_SECRET "
+            "visitor=VISITOR_SECRET title=first\nforged\x1b[31mred\x00",
+        )
+    finally:
+        dbg.logger.removeHandler(handler)
+
+    output = stream.getvalue()
+    for secret in ("URL_SECRET", "TOKEN_SECRET", "VISITOR_SECRET"):
+        assert secret not in output
+    assert "\\n" in output
+    assert "\\x1b" in output
+    assert "\\x00" in output
+
+
+def test_logging_filter_redacts_exceptions_and_stack_information() -> None:
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    handler.addFilter(dbg._SafeLogFilter())
+    logger = logging.Logger("chat_downloader.sites.exception_boundary", logging.DEBUG)
+    logger.addHandler(handler)
+
+    def fail_request() -> None:
+        raise ValueError("token=EXCEPTION_SECRET")
+
+    try:
+        fail_request()
+    except ValueError:
+        logger.exception("request failed")
+
+    record = logger.makeRecord(
+        logger.name,
+        logging.ERROR,
+        __file__,
+        1,
+        "stack failed",
+        (),
+        None,
+    )
+    record.stack_info = "Stack:\n token=STACK_SECRET"
+    record.exc_text = "ValueError: token=PREFORMATTED_SECRET"
+    logger.handle(record)
+
+    output = stream.getvalue()
+    assert "request failed" in output
+    assert "stack failed" in output
+    assert "EXCEPTION_SECRET" not in output
+    assert "STACK_SECRET" not in output
+    assert "PREFORMATTED_SECRET" not in output
+    assert red.REDACTED in output
+
+
+def test_logging_filter_handles_malformed_urls_without_leaking_secrets() -> None:
+    messages = (
+        "url=http://[broken",
+        "url=https://user:SECRET@[broken",
+        "url=bad://user:SECRET@",
+        "url=https://example.invalid/?token=SECRET%",
+        "url=http://[broken/path?author=VISIBLE&token=SECRET",
+    )
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    handler.addFilter(dbg._SafeLogFilter())
+    logger = logging.Logger("chat_downloader.sites.malformed_url_boundary")
+    logger.addHandler(handler)
+    for message in messages:
+        logger.warning(message)
+
+    output = stream.getvalue()
+    assert output.count("[WARNING]") == len(messages)
+    assert "SECRET" not in output
+    assert red.REDACTED in output
+
+
+def test_proxy_validation_runtime_logging_redacts_malformed_credentials() -> None:
+    class ProxyValidationDownloader:
+        def __init__(self, *, proxy: str | None = None, **_: object) -> None:
+            self.session: ChatDownloaderSession = ChatDownloaderSession(proxy=proxy)
+
+        def get_chat(self, **_: object) -> tuple[()]:
+            return ()
+
+        def close(self) -> None:
+            self.session.close()
+
+    proxy_values = (
+        "user:PROXY_SECRET@example.invalid:8080",
+        "http:///user:PROXY_SECRET@example.invalid",
+        "https://user:PROXY_SECRET@example.invalid",
+        "bad://user:PROXY_SECRET@",
+        "http://user:PROXY_SECRET@example.invalid\uff0fx",
+    )
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.addFilter(dbg._SafeLogFilter())
+    dbg.logger.addHandler(handler)
+    try:
+        results = [
+            execute_run(ProxyValidationDownloader, proxy=proxy)
+            for proxy in proxy_values
+        ]
+        dbg.logger.warning("contact=user@example.invalid")
+    finally:
+        dbg.logger.removeHandler(handler)
+
+    output = stream.getvalue()
+    assert [result.success for result in results] == [False, False, True, False, False]
+    assert all("PROXY_SECRET" not in (result.error_message or "") for result in results)
+    assert "PROXY_SECRET" not in output
+    assert "contact=user@example.invalid" in output
+
+
 # ---------------------------------------------------------------------------
 # capture_debug_sample()
 # ---------------------------------------------------------------------------
@@ -121,6 +296,7 @@ def test_capture_debug_sample_writes_sanitized_json_deterministically() -> None:
                 "authorization": "secret",
                 "headers": {"Authorization": "Bearer secret"},
                 "value": 7,
+                "text": "a\nb\tc",
             },
         )
         path2 = red.capture_debug_sample(
@@ -129,6 +305,7 @@ def test_capture_debug_sample_writes_sanitized_json_deterministically() -> None:
                 "authorization": "secret",
                 "headers": {"Authorization": "Bearer secret"},
                 "value": 7,
+                "text": "a\nb\tc",
             },
         )
 
@@ -140,6 +317,7 @@ def test_capture_debug_sample_writes_sanitized_json_deterministically() -> None:
             "authorization": red.REDACTED,
             "headers": {"Authorization": red.REDACTED},
             "value": 7,
+            "text": "a\nb\tc",
         }
 
 
@@ -164,11 +342,12 @@ def test_capture_debug_sample_logs_fixture_hint() -> None:
 
         assert path is not None
         mock_debug.assert_called_with(
-            "Captured debug sample: "
-            f"path={path} "
-            "suggested_fixture_site=youtube "
-            "suggested_fixture_group=continuations "
-            "suggested_fixture_name=youtube-unknown-continuation-heartbeat",
+            "Captured debug sample: path=%s suggested_fixture_site=%s "
+            "suggested_fixture_group=%s suggested_fixture_name=%s",
+            Path(path),
+            "youtube",
+            "continuations",
+            "youtube-unknown-continuation-heartbeat",
         )
 
 
@@ -265,3 +444,217 @@ def test_capture_debug_sample_oserror_returns_none(tmp_path, monkeypatch) -> Non
         assert result is None
     finally:
         dbg.logger.setLevel(original_level)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission modes required")
+def test_capture_debug_sample_uses_private_directory_and_file_modes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    previous_umask = os.umask(0o022)
+    try:
+        dbg.set_log_level("debug")
+        sample_path = red.capture_debug_sample("mode-probe", {"value": "sample"})
+    finally:
+        os.umask(previous_umask)
+
+    assert sample_path is not None
+    assert sample_dir.stat().st_mode & 0o777 == 0o700
+    assert Path(sample_path).stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink creation is not portable")
+def test_capture_debug_sample_rejects_existing_symlink(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_dir = tmp_path / "samples"
+    victim = tmp_path / "victim.json"
+    victim.write_text("original", encoding="utf-8")
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    dbg.set_log_level("debug")
+    original_path = red.capture_debug_sample("symlink-probe", {"value": "sample"})
+    assert original_path is not None
+    Path(original_path).unlink()
+    Path(original_path).symlink_to(victim)
+
+    sample_path = red.capture_debug_sample("symlink-probe", {"value": "sample"})
+
+    assert sample_path is None
+    assert victim.read_text(encoding="utf-8") == "original"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink creation is not portable")
+def test_capture_debug_sample_rejects_symlinked_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_directory = tmp_path / "real-samples"
+    real_directory.mkdir(mode=0o700)
+    sample_dir = tmp_path / "samples"
+    sample_dir.symlink_to(real_directory, target_is_directory=True)
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    dbg.set_log_level("debug")
+
+    sample_path = red.capture_debug_sample("directory-probe", {"value": "sample"})
+
+    assert sample_path is None
+    assert list(real_directory.iterdir()) == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission modes required")
+def test_capture_debug_sample_rejects_insecure_existing_file_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    dbg.set_log_level("debug")
+    original_path = red.capture_debug_sample("mode-probe", {"value": "sample"})
+    assert original_path is not None
+    Path(original_path).chmod(0o644)
+
+    sample_path = red.capture_debug_sample("mode-probe", {"value": "sample"})
+
+    assert sample_path is None
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="ownership checks unavailable")
+def test_capture_debug_sample_rejects_foreign_owned_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    current_uid = os.getuid()
+    monkeypatch.setattr(
+        "chat_downloader.redaction.os.getuid",
+        lambda: current_uid + 1,
+    )
+    dbg.set_log_level("debug")
+
+    sample_path = red.capture_debug_sample("owner-probe", {"value": "sample"})
+
+    assert sample_path is None
+
+
+def test_capture_debug_sample_uses_validated_portable_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    monkeypatch.setattr("chat_downloader.redaction.os.supports_dir_fd", set())
+    dbg.set_log_level("debug")
+
+    first_path = red.capture_debug_sample("fallback-probe", {"value": "sample"})
+    second_path = red.capture_debug_sample("fallback-probe", {"value": "sample"})
+
+    assert first_path is not None
+    assert second_path == first_path
+
+
+@pytest.mark.skipif(os.name == "nt", reason="secure directory fds are POSIX-only")
+def test_capture_debug_sample_rechecks_opened_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    original_fstat = os.fstat
+
+    def insecure_directory_mode(descriptor: int) -> os.stat_result:
+        entry = original_fstat(descriptor)
+        if stat.S_ISDIR(entry.st_mode):
+            values = list(entry)
+            values[0] = (entry.st_mode & ~0o777) | 0o755
+            return os.stat_result(values)
+        return entry
+
+    monkeypatch.setattr("chat_downloader.redaction.os.fstat", insecure_directory_mode)
+    dbg.set_log_level("debug")
+
+    sample_path = red.capture_debug_sample("directory-fd-probe", {"value": "sample"})
+
+    assert sample_path is None
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission modes required")
+def test_capture_debug_sample_closes_rejected_new_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    original_fstat = os.fstat
+
+    def insecure_file_mode(descriptor: int) -> os.stat_result:
+        entry = original_fstat(descriptor)
+        if stat.S_ISREG(entry.st_mode):
+            values = list(entry)
+            values[0] = (entry.st_mode & ~0o777) | 0o644
+            return os.stat_result(values)
+        return entry
+
+    monkeypatch.setattr("chat_downloader.redaction.os.fstat", insecure_file_mode)
+    dbg.set_log_level("debug")
+
+    sample_path = red.capture_debug_sample("file-fd-probe", {"value": "sample"})
+
+    assert sample_path is None
+    assert list(sample_dir.iterdir()) == []
+
+
+@pytest.mark.parametrize("portable_fallback", [False, True])
+def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    portable_fallback: bool,
+) -> None:
+    class FailingSampleFile:
+        def __init__(self, descriptor: int) -> None:
+            self.descriptor: int = descriptor
+
+        def __enter__(self) -> FailingSampleFile:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            os.close(self.descriptor)
+
+        def write(self, _value: str) -> int:
+            raise OSError("forced sample write failure")
+
+    def failing_fdopen(
+        descriptor: int,
+        *_: object,
+        **_kwargs: object,
+    ) -> FailingSampleFile:
+        return FailingSampleFile(descriptor)
+
+    sample_dir = tmp_path / "samples"
+    if portable_fallback:
+        monkeypatch.setattr("chat_downloader.redaction.os.supports_dir_fd", set())
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    dbg.set_log_level("debug")
+    with monkeypatch.context() as failure_patch:
+        failure_patch.setattr(
+            "chat_downloader.redaction.os.fdopen",
+            failing_fdopen,
+        )
+        failed_path = red.capture_debug_sample(
+            "write-failure",
+            {"value": "sample"},
+        )
+
+    assert failed_path is None
+    assert list(sample_dir.iterdir()) == []
+
+    retry_path = red.capture_debug_sample("write-failure", {"value": "sample"})
+
+    assert retry_path is not None
+    assert json.loads(Path(retry_path).read_text(encoding="utf-8")) == {
+        "value": "sample"
+    }

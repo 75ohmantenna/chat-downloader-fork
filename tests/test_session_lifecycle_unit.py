@@ -41,6 +41,19 @@ def test_downloader_reuses_overwrites_and_replaces_closed_sessions() -> None:
     assert cast("_FakeSite", third).instance_id == 3
 
 
+def test_downloader_rejects_same_name_different_site_class() -> None:
+    first_class = type("SameNameSite", (BaseChatDownloader,), {})
+    second_class = type("SameNameSite", (BaseChatDownloader,), {})
+    downloader = ChatDownloader()
+    first = downloader.create_session(first_class)
+
+    with pytest.raises(TypeError, match="Session name collision"):
+        downloader.create_session(second_class)
+
+    assert downloader.get_session(second_class) is None
+    assert downloader.get_session(first_class) is first
+
+
 def test_downloader_cookie_state_precedes_and_propagates_to_sessions() -> None:
     downloader = ChatDownloader()
     first = downloader.create_session(_FakeSite)

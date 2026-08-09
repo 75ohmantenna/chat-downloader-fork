@@ -21,28 +21,23 @@ class MessageFilter:
         """Build the allowed message-type set from groups and explicit types."""
         self._valid_types: set[str] | None = None
 
-        if (groups_to_add and "all" in groups_to_add) or (
-            types_to_add and "all" in types_to_add
-        ):
+        if types_to_add:
+            if "all" in types_to_add:
+                return
+            self._valid_types = set(types_to_add)
             return
 
-        types: set[str] = set()
-        has_filter = False
-
-        if types_to_add:
-            has_filter = True
-            types.update(types_to_add)
+        if groups_to_add and "all" in groups_to_add:
+            return
 
         if groups_to_add:
+            types: set[str] = set()
             invalid_groups = set(groups_to_add) - message_groups_dict.keys()
             if "all" not in groups_to_add and invalid_groups:
                 msg = f"Invalid groups specified: {invalid_groups}"
                 raise InvalidParameter(msg)
-            has_filter = True
             for group_name in groups_to_add:
                 types.update(message_groups_dict.get(group_name, []))
-
-        if has_filter:
             self._valid_types = types
 
     def should_add(self, item: dict[str, Any]) -> bool:

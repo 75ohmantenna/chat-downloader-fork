@@ -11,7 +11,8 @@ from contextvars import ContextVar
 from enum import Enum
 from typing import Any
 
-from .metadata import __name__ as logger_name
+from .metadata import __program__ as logger_name
+from .redaction import render_for_log, sanitize_for_log
 from .utils.console_utils import pause
 
 
@@ -151,6 +152,28 @@ def supports_colour() -> bool:
     )
 
 
+_exception_formatter = logging.Formatter()
+
+
+class _SafeLogFilter(logging.Filter):
+    """Sanitize every project log record before a handler renders it."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.msg = sanitize_for_log(record.msg)
+        record.args = sanitize_for_log(record.args)
+        record.msg = render_for_log(record.getMessage())
+        record.args = ()
+        if record.exc_info:
+            record.exc_text = render_for_log(
+                _exception_formatter.formatException(record.exc_info)
+            )
+        elif record.exc_text:
+            record.exc_text = render_for_log(record.exc_text)
+        if record.stack_info:
+            record.stack_info = render_for_log(record.stack_info)
+        return True
+
+
 if supports_colour():
     import colorlog
 
@@ -171,6 +194,8 @@ if supports_colour():
 else:  # fallback support
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+
+handler.addFilter(_SafeLogFilter())
 
 # Create logger object for this module
 logger = logging.getLogger(logger_name)

@@ -53,13 +53,13 @@ def test_must_add_item_with_all_keyword() -> None:
     assert _must_add(item, types=["all"])
 
 
-def test_message_types_and_groups_combined() -> None:
+def test_message_types_override_groups() -> None:
     assert _must_add(
         {"message_type": "paid_message"},
         groups=["messages"],
         types=["paid_message"],
     )
-    assert _must_add(
+    assert not _must_add(
         {"message_type": "text_message"},
         groups=["messages"],
         types=["paid_message"],
@@ -147,13 +147,13 @@ def test_filter_by_groups() -> None:
     assert not f.should_add({"message_type": "text_message"})
 
 
-def test_types_and_groups_are_additive() -> None:
+def test_types_override_groups_including_all_group() -> None:
     f = MessageFilter(
         _FILTER_GROUPS,
-        groups_to_add=["messages"],
+        groups_to_add=["all"],
         types_to_add=["paid_message"],
     )
-    assert f.should_add({"message_type": "text_message"})
+    assert not f.should_add({"message_type": "text_message"})
     assert f.should_add({"message_type": "paid_message"})
     assert not f.should_add({"message_type": "paid_sticker"})
 

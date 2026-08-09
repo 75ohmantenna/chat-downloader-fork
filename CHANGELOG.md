@@ -8,6 +8,24 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Security / hardening
+
+- Sanitize project log records at the handler boundary, including URL
+  credentials, sensitive query parameters, exception text, stack information,
+  and terminal control characters.
+- Create debug-sample directories and files with private permissions, reject
+  unsafe ownership, modes, and symbolic links, and use atomic no-follow file
+  creation where the platform supports it.
+- Disable automatic redirects while discovering Kick's Pusher key, and avoid
+  echoing potentially credential-bearing proxy URLs in validation errors.
+
+### Fixes
+
+- Make explicit `message_types` override `message_groups`, including the
+  otherwise unrestricted `all` group.
+- Reject site-session cache collisions between distinct downloader classes
+  with the same class name.
+
 ## 2.0.4 — 2026-07-26
 
 ### Tooling

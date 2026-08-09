@@ -38,8 +38,10 @@ class _FakeClient:
         self.closed = False
         self.requested_urls: list[str] = []
 
-    def get(self, url: str, *, timeout: float) -> _FakeResponse:
-        del timeout
+    def get(
+        self, url: str, *, timeout: float, allow_redirects: bool = False
+    ) -> _FakeResponse:
+        del timeout, allow_redirects
         self.requested_urls.append(url)
         if url in self.errors:
             msg = f"Unreachable URL: {url}"
@@ -86,8 +88,10 @@ def test_resolve_pusher_key_uses_requests_adapter_by_default(
         def __init__(self) -> None:
             self.headers: dict[str, str] = {}
 
-        def get(self, url: str, *, timeout: float) -> _FakeResponse:
-            del timeout
+        def get(
+            self, url: str, *, timeout: float, allow_redirects: bool = False
+        ) -> _FakeResponse:
+            del timeout, allow_redirects
             calls.append(url)
             if url == "https://kick.com/":
                 return _FakeResponse(
@@ -133,7 +137,20 @@ def test_requests_adapter_caps_calls_to_downloader_timeouts() -> None:
     session.get.assert_called_once_with(
         "https://kick.com/",
         timeout=(1.0, 2.0),
+        allow_redirects=False,
     )
+
+
+def test_requests_adapter_disables_automatic_redirects() -> None:
+    session = MagicMock()
+    session.get.return_value = _FakeResponse(True, "")
+
+    pusher_discovery._RequestsHttpClient(session).get(
+        "https://kick.com/app.js",
+        timeout=3.0,
+    )
+
+    assert session.get.call_args.kwargs["allow_redirects"] is False
 
 
 def test_resolve_pusher_key_discovers_key_from_bundle() -> None:

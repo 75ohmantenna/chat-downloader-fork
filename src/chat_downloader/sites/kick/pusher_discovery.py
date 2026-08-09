@@ -63,7 +63,9 @@ class _HttpResponse(Protocol):
 class _HttpClient(Protocol):
     """Minimal HTTP client shape required by Pusher-key discovery."""
 
-    def get(self, url: str, *, timeout: float) -> _HttpResponse: ...
+    def get(
+        self, url: str, *, timeout: float, allow_redirects: bool = False
+    ) -> _HttpResponse: ...
     def close(self) -> None: ...
 
 
@@ -90,7 +92,9 @@ class _RequestsHttpClient:
                 }
             )
 
-    def get(self, url: str, *, timeout: float) -> _HttpResponse:
+    def get(
+        self, url: str, *, timeout: float, allow_redirects: bool = False
+    ) -> _HttpResponse:
         effective_timeout: float | tuple[float, float] = timeout
         if self._configured_timeout is not None:
             effective_timeout = (
@@ -99,7 +103,11 @@ class _RequestsHttpClient:
             )
         return cast(
             "_HttpResponse",
-            self._session.get(url, timeout=effective_timeout),
+            self._session.get(
+                url,
+                timeout=effective_timeout,
+                allow_redirects=allow_redirects,
+            ),
         )
 
     def close(self) -> None:
@@ -137,6 +145,7 @@ def _discover_pusher_key(http_client: _HttpClient) -> str | None:
         homepage = http_client.get(
             "https://kick.com/",
             timeout=_DISCOVERY_REQUEST_TIMEOUT_SECONDS,
+            allow_redirects=False,
         )
     except OSError:
         return None
@@ -160,6 +169,7 @@ def _discover_pusher_key(http_client: _HttpClient) -> str | None:
             js_resp = http_client.get(
                 abs_url,
                 timeout=min(_DISCOVERY_REQUEST_TIMEOUT_SECONDS, remaining),
+                allow_redirects=False,
             )
         except OSError:
             continue
