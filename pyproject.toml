@@ -170,7 +170,8 @@ omit = [
 precision = 2
 show_missing = true
 fail_under = 100
-exclude_also = [
+exclude_lines = [
+    "pragma: no cover",
     "if TYPE_CHECKING:",
 ]
 
