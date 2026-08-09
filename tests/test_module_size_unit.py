@@ -32,6 +32,11 @@ ALLOWLIST: frozenset[str] = frozenset(
         # lifecycle. Splitting those phases would obscure their shared retry,
         # deduplication, and transport-close invariants.
         "sites/kick/live_service.py",
+        # Cohesive security boundary: structured/string redaction and secure
+        # debug-sample creation share the same secret-classification rules.
+        # Splitting file creation from sanitization would duplicate or weaken
+        # the invariant that captured payloads are scrubbed before persistence.
+        "redaction.py",
     }
 )
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"

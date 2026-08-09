@@ -21,19 +21,19 @@ class ChatOutputWriter(Protocol):
 
     def is_initialised(self) -> bool:
         """Return True if the writer has been initialized."""
-        ...
+        ...  # pragma: no cover — structural typing declaration
 
     def initialize(self) -> None:
         """Initialize the writer, creating files and resources as needed."""
-        ...
+        ...  # pragma: no cover — structural typing declaration
 
     def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
         """Write a chat item to the output target."""
-        ...
+        ...  # pragma: no cover — structural typing declaration
 
     def close(self) -> None:
         """Close the writer and release any held resources."""
-        ...
+        ...  # pragma: no cover — structural typing declaration
 
 
 class _ChatHost(Protocol):
@@ -44,7 +44,7 @@ class _ChatHost(Protocol):
 
     def format(self, item: dict[str, Any]) -> str:
         """Render one chat item with the currently configured formatter."""
-        ...
+        ...  # pragma: no cover — structural typing declaration
 
 
 def _expand_output_file_name(

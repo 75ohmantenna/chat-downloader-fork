@@ -163,6 +163,12 @@ def test_render_for_log_redacts_quoted_serialized_fields(serialized: str) -> Non
     assert red.REDACTED in rendered
 
 
+def test_render_for_log_preserves_non_sensitive_quoted_fields() -> None:
+    serialized = '{"author": "VISIBLE"}'
+
+    assert red.render_for_log(serialized) == serialized
+
+
 def test_logging_filter_redacts_urls_and_visitor_data_and_escapes_controls() -> None:
     stream = io.StringIO()
     handler = logging.StreamHandler(stream)
