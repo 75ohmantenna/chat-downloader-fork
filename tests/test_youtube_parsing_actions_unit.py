@@ -42,6 +42,20 @@ def _renderer_with_timestamp(usec: str = "1234567890") -> dict:
     return {"timestampUsec": usec}
 
 
+def _jewels_action(attribution: JSONDict) -> JSONDict:
+    return {
+        "updateOrAddInteractivityWidgetAction": {
+            "widgetRenderer": {
+                "interactivityWidgetRenderer": {
+                    "content": {
+                        "giftAttributionItemViewModel": attribution,
+                    },
+                },
+            },
+        },
+    }
+
+
 def _finalize(result):
     assert result is not None
     return validate_and_finalize_message(
@@ -150,6 +164,46 @@ def test_process_action_empty_interactivity_widget_is_skipped() -> None:
     }
 
     assert _finalize(process_action(action)) is None
+
+
+@pytest.mark.parametrize(
+    "attribution",
+    [
+        {"unexpected": True},
+        {
+            "id": "gift-1",
+            "authorName": {"content": "@sender"},
+        },
+        {
+            "id": "gift-1",
+            "detailText": {"content": "Sent a gift"},
+        },
+    ],
+)
+def test_process_action_incomplete_jewels_widget_is_skipped(
+    attribution: JSONDict,
+) -> None:
+    assert _finalize(process_action(_jewels_action(attribution))) is None
+
+
+def test_process_action_minimal_jewels_widget_omits_optional_fields() -> None:
+    finalized = _finalize(
+        process_action(
+            _jewels_action(
+                {
+                    "id": "gift-1",
+                    "authorName": {"content": "@sender"},
+                    "detailText": {"content": "Sent a gift"},
+                }
+            )
+        )
+    )
+
+    assert finalized is not None
+    assert finalized["message_id"] == "gift-1"
+    assert finalized["message"] == "Sent a gift"
+    assert finalized["author"]["name"] == "@sender"
+    assert "combo_count" not in finalized
 
 
 def test_process_action_gift_message_view_model(monkeypatch) -> None:

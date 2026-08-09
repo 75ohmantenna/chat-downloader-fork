@@ -17,10 +17,18 @@ from chat_downloader.sites.kick.pusher_discovery import (
 class _FakeResponse:
     """Stub response satisfying the discovery HTTP-response protocol."""
 
-    __slots__ = ("ok", "text")
+    __slots__ = ("status_code", "text")
 
-    def __init__(self, ok: bool, text: str) -> None:
-        self.ok = ok
+    def __init__(
+        self,
+        ok: bool,
+        text: str,
+        *,
+        status_code: int | None = None,
+    ) -> None:
+        self.status_code = (
+            status_code if status_code is not None else 200 if ok else 500
+        )
         self.text = text
 
 
@@ -248,6 +256,27 @@ def test_resolve_pusher_key_falls_back_when_homepage_fails() -> None:
     assert key == _PUSHER_DEFAULT_KEY
 
 
+def test_resolve_pusher_key_rejects_homepage_redirect_response() -> None:
+    client = _FakeClient(
+        {
+            "https://kick.com/": _FakeResponse(
+                True,
+                '<script src="/app.js"></script>',
+                status_code=302,
+            ),
+            "https://kick.com/app.js": _FakeResponse(
+                True,
+                'NEXT_PUBLIC_PUSHER_KEY={default("redirectedbad")}',
+            ),
+        }
+    )
+
+    key = resolve_pusher_key(http_client=client)
+
+    assert key == _PUSHER_DEFAULT_KEY
+    assert client.requested_urls == ["https://kick.com/"]
+
+
 def test_resolve_pusher_key_falls_back_when_homepage_request_raises() -> None:
     client = _FakeClient({}, errors={"https://kick.com/"})
 
@@ -285,6 +314,26 @@ def test_resolve_pusher_key_falls_back_when_no_bundle_matches() -> None:
                 '<script src="/app.js"></script>',
             ),
             "https://kick.com/app.js": _FakeResponse(True, "no key here"),
+        }
+    )
+
+    key = resolve_pusher_key(http_client=client)
+
+    assert key == _PUSHER_DEFAULT_KEY
+
+
+def test_resolve_pusher_key_rejects_bundle_redirect_response() -> None:
+    client = _FakeClient(
+        {
+            "https://kick.com/": _FakeResponse(
+                True,
+                '<script src="/app.js"></script>',
+            ),
+            "https://kick.com/app.js": _FakeResponse(
+                True,
+                'NEXT_PUBLIC_PUSHER_KEY={default("redirectedbad")}',
+                status_code=302,
+            ),
         }
     )
 

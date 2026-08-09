@@ -56,7 +56,7 @@ _pusher_key_cache = PusherKeyCache()
 class _HttpResponse(Protocol):
     """Minimal response shape required by Pusher-key discovery."""
 
-    ok: bool
+    status_code: int
     text: str
 
 
@@ -101,14 +101,12 @@ class _RequestsHttpClient:
                 min(self._configured_timeout[0], timeout),
                 min(self._configured_timeout[1], timeout),
             )
-        return cast(
-            "_HttpResponse",
-            self._session.get(
-                url,
-                timeout=effective_timeout,
-                allow_redirects=allow_redirects,
-            ),
+        response = self._session.get(
+            url,
+            timeout=effective_timeout,
+            allow_redirects=allow_redirects,
         )
+        return cast("_HttpResponse", cast("object", response))
 
     def close(self) -> None:
         if self._owns_session:
@@ -149,7 +147,7 @@ def _discover_pusher_key(http_client: _HttpClient) -> str | None:
         )
     except OSError:
         return None
-    if not homepage.ok:
+    if not 200 <= homepage.status_code < 300:
         return None
 
     # Find all JS chunk URLs in the page (scan at most 15 chunks)
@@ -173,7 +171,7 @@ def _discover_pusher_key(http_client: _HttpClient) -> str | None:
             )
         except OSError:
             continue
-        if not js_resp.ok:
+        if not 200 <= js_resp.status_code < 300:
             continue
         try:
             match = re.search(

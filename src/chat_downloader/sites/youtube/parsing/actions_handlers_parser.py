@@ -62,16 +62,32 @@ def _handle_interactivity_widget_action(
 
     element = get_dict(attribution, "elementRenderer")
     compatibility = get_dict(element, "compatibilityOptions")
+    message_id = get_str(attribution, "id") or get_str(compatibility, "liveChatId")
+    author_name = get_dict(attribution, "authorName")
+    detail_text = get_dict(attribution, "detailText")
+    if (
+        not message_id
+        or not _parse_runs(author_name).get("message")
+        or not _parse_runs(detail_text).get("message")
+    ):
+        debug_log("Incomplete Jewels gift attribution", attribution)
+        return (data, {}, None, original_action_type)
+
     gift_item: JSONDict = {
-        "id": get_str(attribution, "id") or get_str(compatibility, "liveChatId"),
-        "authorExternalChannelId": get_str(
-            compatibility,
-            "liveChatAuthorExternalChannelId",
-        ),
-        "authorName": get_dict(attribution, "authorName"),
-        "text": get_dict(attribution, "detailText"),
-        "comboCount": get_int(attribution, "comboCount"),
+        "id": message_id,
+        "authorName": author_name,
+        "text": detail_text,
     }
+    author_channel_id = get_str(
+        compatibility,
+        "liveChatAuthorExternalChannelId",
+    )
+    if author_channel_id:
+        gift_item["authorExternalChannelId"] = author_channel_id
+
+    combo_count = get_int(attribution, "comboCount", default=-1)
+    if combo_count >= 0:
+        gift_item["comboCount"] = combo_count
 
     gift_label = get_str(attribution, "giftA11yLabel")
     if gift_label:
