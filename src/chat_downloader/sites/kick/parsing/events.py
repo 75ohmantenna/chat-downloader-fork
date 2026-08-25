@@ -20,6 +20,7 @@ from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.kick.constants import (
     EVENT_NAME_MAP,
     KICK_DEBUG_SAMPLE_LIMIT,
+    MESSAGE_TYPE_REMAPPING,
     PUSHER_CONNECTION_ESTABLISHED,
     PUSHER_ERROR,
     PUSHER_PING,
@@ -96,12 +97,27 @@ def _decode_event_data(data: object) -> object:
     return data
 
 
-def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
+def _record_diagnostic(
+    callback: Callable[[str], None] | None,
+    name: str,
+) -> None:
+    """Record one event-dispatch diagnostic when a callback is configured."""
+    if callback is not None:
+        callback(name)
+
+
+def dispatch_event(
+    frame: Mapping[str, object],
+    *,
+    record_diagnostic: Callable[[str], None] | None = None,
+) -> dict[str, Any] | None:
     """Dispatch one decoded Pusher frame to its handler.
 
     Args:
         frame: A decoded Pusher frame, expected to contain an ``event`` name
             and a ``data`` payload.
+        record_diagnostic: Optional callback that increments a named live-run
+            diagnostic counter.
 
     Returns:
         A normalized chat message dictionary for a recognized event, or
@@ -116,6 +132,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
 
     # --- Pusher protocol errors -----------------------------------------------
     if event_name == PUSHER_ERROR:
+        _record_diagnostic(record_diagnostic, "pusher_error_count")
         capture_debug_sample(
             "kick-pusher-error",
             {"raw": frame},
@@ -126,11 +143,13 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
 
     # --- Pusher control frames (silently ignore) ------------------------------
     if event_name in _KNOWN_CONTROL_EVENTS:
+        _record_diagnostic(record_diagnostic, "control_frame_count")
         logger.debug("Ignoring Kick Pusher control event: %s", event_name)
         return None
 
     # --- Resolve the Pusher event name to a normalized message type -----------
     if not isinstance(event_name, str):
+        _record_diagnostic(record_diagnostic, "unsupported_event_count")
         capture_debug_sample(
             "kick-unknown-event",
             {"raw": frame, "reason": "missing or non-string event name"},
@@ -140,6 +159,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
         return None
     message_type = EVENT_NAME_MAP.get(event_name)
     if message_type is None:
+        _record_diagnostic(record_diagnostic, "unsupported_event_count")
         capture_debug_sample(
             "kick-unknown-event",
             {"raw": frame, "event_name": event_name},
@@ -151,6 +171,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
     # --- Look up the parser and run it ----------------------------------------
     parser = _PARSER_DISPATCH.get(message_type)
     if parser is None:  # pragma: no cover — programming error guard
+        _record_diagnostic(record_diagnostic, "malformed_event_count")
         capture_debug_sample(
             "kick-malformed-event",
             {
@@ -165,7 +186,13 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
 
     try:
         payload = _decode_event_data(frame.get("data"))
-        return parser(payload)
+        if (
+            message_type == "text_message"
+            and isinstance(payload, dict)
+            and str(payload.get("type")) not in MESSAGE_TYPE_REMAPPING
+        ):
+            _record_diagnostic(record_diagnostic, "unknown_message_type_count")
+        message = parser(payload)
     except (
         ParsingError,
         ValueError,
@@ -173,6 +200,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
         KeyError,
         IndexError,
     ) as error:
+        _record_diagnostic(record_diagnostic, "malformed_event_count")
         # A single malformed frame must never tear down the live download
         # loop (which only retries on ConnectionError); skip it instead.
         capture_debug_sample(
@@ -186,3 +214,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
         )
         logger.debug("Skipping malformed Kick %s: %s", message_type, error)
         return None
+    else:
+        if message is not None:
+            _record_diagnostic(record_diagnostic, "parsed_event_count")
+        return message

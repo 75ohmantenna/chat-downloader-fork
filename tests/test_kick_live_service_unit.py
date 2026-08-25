@@ -584,6 +584,62 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
     assert created[0].close_count >= 1
 
 
+def test_get_chat_by_channel_reports_live_diagnostics() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frames = [
+        {"event": "pusher:connection_established", "data": "{}"},
+        {"event": "App\\Events\\FutureEvent", "data": "{}"},
+        {"event": CHAT_MESSAGE_EVENT, "data": "not JSON"},
+        pusher_frame(
+            CHAT_MESSAGE_EVENT,
+            {"id": "a", "type": "message", "content": "1"},
+        ),
+    ]
+    final_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {"id": "b", "type": "message", "content": "2"},
+    )
+
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            downloader,
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [[*frames, ConnectionError("drop")], [final_frame]]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == ["a", "b"]
+
+    assert isinstance(chat.diagnostics["last_websocket_frame_timestamp"], int)
+    diagnostics_without_timestamp = {
+        **chat.diagnostics,
+        "last_websocket_frame_timestamp": None,
+    }
+    assert diagnostics_without_timestamp == {
+        "websocket_frame_count": 5,
+        "control_frame_count": 1,
+        "parsed_event_count": 2,
+        "unsupported_event_count": 1,
+        "unknown_message_type_count": 0,
+        "malformed_event_count": 1,
+        "invalid_websocket_frame_count": 0,
+        "websocket_reconnect_count": 1,
+        "pusher_error_count": 0,
+        "pusher_key_recovery_count": 0,
+        "last_websocket_frame_timestamp": None,
+    }
+
+
 def test_get_chat_by_channel_rediscovers_key_after_pusher_error() -> None:
     downloader = FakeDownloader()
     session = FakeKickSession(

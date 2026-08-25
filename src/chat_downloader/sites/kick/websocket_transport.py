@@ -41,7 +41,7 @@ from .constants import (
 from .pusher_discovery import _HttpClient, get_pusher_ws_url
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
 
     from chat_downloader.utils.json_types import JSONDict
 
@@ -138,6 +138,7 @@ class KickPusherTransport:
         url: str | None = None,
         proxy_url: str | None = None,
         pusher_http_client: _HttpClient | None = None,
+        diagnostic_callback: Callable[[str], None] | None = None,
     ) -> None:
         """Initialize the transport.
 
@@ -150,12 +151,19 @@ class KickPusherTransport:
                 compiled-in Pusher URL.
             proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
             pusher_http_client: HTTP client used to discover the Pusher key.
+            diagnostic_callback: Optional counter callback for malformed frames.
         """
         self._connector = connector or _default_connector
         self._url = url
         self._proxy_url = proxy_url
         self._pusher_http_client = pusher_http_client
+        self._diagnostic_callback = diagnostic_callback
         self._ws: _WebSocketConnection | None = None
+
+    def _record_diagnostic(self, name: str) -> None:
+        """Record a transport diagnostic when a callback is configured."""
+        if self._diagnostic_callback is not None:
+            self._diagnostic_callback(name)
 
     def connect(
         self,
@@ -270,6 +278,7 @@ class KickPusherTransport:
         try:
             frame = json.loads(raw)
         except (json.JSONDecodeError, ValueError):
+            self._record_diagnostic("invalid_websocket_frame_count")
             capture_debug_sample(
                 "kick-unknown-websocket-shape",
                 {"raw": raw, "reason": "invalid JSON"},
@@ -278,6 +287,7 @@ class KickPusherTransport:
             logger.debug("Discarding malformed Kick WebSocket frame.")
             return None
         if not isinstance(frame, dict):
+            self._record_diagnostic("invalid_websocket_frame_count")
             capture_debug_sample(
                 "kick-unknown-websocket-shape",
                 {"raw": frame, "reason": "decoded frame was not an object"},
@@ -315,8 +325,9 @@ def read_frames(
             connection is treated as stale.
 
     Yields:
-        Decoded Pusher frames, excluding pings (answered in place) and
-        timed-out/malformed reads (skipped).
+        Decoded Pusher frames. Pings are answered before being yielded so live
+        diagnostics include keepalive traffic. Timed-out and malformed reads
+        are skipped.
 
     Raises:
         ConnectionError: If the connection is closed (drives reconnect).
@@ -336,5 +347,4 @@ def read_frames(
         last_activity = time.monotonic()
         if frame.get("event") == PUSHER_PING:
             transport.send_pong()
-            continue
         yield frame

@@ -41,6 +41,20 @@ def test_chat_message_event_with_object_data() -> None:
     assert message["message_id"] == "live-1"
 
 
+def test_unknown_chat_message_type_records_diagnostic() -> None:
+    diagnostics: list[str] = []
+    frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {"id": "future", "type": "future_type", "content": "message"},
+    )
+
+    message = dispatch_event(frame, record_diagnostic=diagnostics.append)
+
+    assert message is not None
+    assert message["message_type"] == "text_message"
+    assert diagnostics == ["unknown_message_type_count", "parsed_event_count"]
+
+
 def test_reply_context_survives_event_dispatch() -> None:
     data = load_fixture("reply_message_event_data.json")
 

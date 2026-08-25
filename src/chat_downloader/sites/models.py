@@ -72,6 +72,7 @@ class Chat:
         start_time: float | None = None,
         id: str | None = None,  # noqa: A002 — public Chat API; renaming `id` would break callers
         max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
+        diagnostics: dict[str, object] | None = None,
         **kwargs: Any,  # noqa: ARG002 — forward-compat absorber; site subclasses pass extra fields
     ) -> None:
         """Set up chat metadata, output dispatch, and deduplication state."""
@@ -85,6 +86,7 @@ class Chat:
 
         self.start_time = start_time
         self.id = id
+        self.diagnostics = diagnostics if diagnostics is not None else {}
 
         # Site object that produced this chat — set by configure_chat().
         self.site: BaseChatDownloader | None = None

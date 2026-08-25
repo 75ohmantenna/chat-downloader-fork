@@ -15,6 +15,8 @@ streams messages regardless of stream status.
 from __future__ import annotations
 
 import os
+import time
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from requests.exceptions import RequestException
@@ -57,6 +59,36 @@ _KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
 _SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES"
 _SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+class _KickLiveDiagnostics:
+    """Mutable counters shared by Kick live orchestration and run summaries."""
+
+    def __init__(self) -> None:
+        self.summary: dict[str, object] = {
+            "websocket_frame_count": 0,
+            "control_frame_count": 0,
+            "parsed_event_count": 0,
+            "unsupported_event_count": 0,
+            "unknown_message_type_count": 0,
+            "malformed_event_count": 0,
+            "invalid_websocket_frame_count": 0,
+            "websocket_reconnect_count": 0,
+            "pusher_error_count": 0,
+            "pusher_key_recovery_count": 0,
+            "last_websocket_frame_timestamp": None,
+        }
+
+    def increment(self, name: str) -> None:
+        """Increment one integer counter by name."""
+        value = self.summary.get(name)
+        if isinstance(value, int):
+            self.summary[name] = value + 1
+
+    def record_frame(self) -> None:
+        """Record successful receipt of a decoded WebSocket frame."""
+        self.increment("websocket_frame_count")
+        self.summary["last_websocket_frame_timestamp"] = time.time_ns() // 1_000
 
 
 def _fetch_channel_with_retry(
@@ -175,6 +207,7 @@ def get_chat_by_channel(
     data = _fetch_channel_with_retry(downloader, username, request)
     channel_id, chatroom_id, title = _resolve_channel(data, username)
     status = "live" if _is_live_status(data) else "idle"
+    diagnostics = _KickLiveDiagnostics()
 
     return Chat(
         _iter_chat_messages(
@@ -183,6 +216,7 @@ def get_chat_by_channel(
             channel_id,
             chatroom_id,
             request,
+            diagnostics,
             transport_factory=transport_factory,
             frame_iterator=frame_iterator,
         ),
@@ -190,6 +224,7 @@ def get_chat_by_channel(
         status=status,
         video_type="video",
         id=username,
+        diagnostics=diagnostics.summary,
     )
 
 
@@ -347,13 +382,18 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     channel_id: str,
     chatroom_id: str,
     request: ChatRequest,
+    diagnostics: _KickLiveDiagnostics,
     *,
     transport_factory: Callable[[], KickPusherTransport] | None = None,
     frame_iterator: Callable[[KickPusherTransport], Generator[JSONDict, None, None]]
     | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized live chat messages for a channel."""
-    transport_factory = transport_factory or KickPusherTransport
+    if transport_factory is None:
+        transport_factory = partial(
+            KickPusherTransport,
+            diagnostic_callback=diagnostics.increment,
+        )
     frame_iterator = frame_iterator or read_frames
 
     msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
@@ -408,7 +448,11 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     # A decoded application frame proves this connection made
                     # progress, even when it is not a chat-message event.
                     consecutive_connection_failures = 0
-                    live_message = dispatch_event(frame)
+                    diagnostics.record_frame()
+                    live_message = dispatch_event(
+                        frame,
+                        record_diagnostic=diagnostics.increment,
+                    )
                     if live_message is not None:
                         if (
                             capture_successful_frames
@@ -442,6 +486,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     proxy_url=proxy_url,
                     pusher_http_client=pusher_http_client,
                 )
+                diagnostics.increment("websocket_reconnect_count")
                 log(
                     "debug",
                     "Kick WebSocket reconnected; checking recent history for "
@@ -466,6 +511,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     proxy_url=proxy_url,
                     pusher_http_client=pusher_http_client,
                 )
+                diagnostics.increment("pusher_key_recovery_count")
                 yield from _iter_preloaded_chat(
                     downloader,
                     channel_id,

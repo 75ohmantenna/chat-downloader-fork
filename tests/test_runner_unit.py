@@ -297,11 +297,18 @@ def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
 
     assert result.success is True
     assert result.message_count == 2
+    assert result.message_type_counts == {
+        "paid_message": 1,
+        "ticker_paid_message_item": 1,
+    }
     assert logged[-1] == (
         "debug",
         (
             "Run summary: {'message_count': 2, "
-            "'formatted_duplicates_suppressed': 1, 'output_writers': "
+            "'message_type_counts': {'paid_message': 1, "
+            "'ticker_paid_message_item': 1}, "
+            "'formatted_duplicates_suppressed': 1, "
+            "'provider_diagnostics': {}, 'output_writers': "
             "[{'file_name': 'chat.jsonl', 'file_created': True, "
             "'records_written': 2}, {'file_name': 'chat.txt', "
             "'file_created': True, 'records_written': 1}]}"
@@ -331,7 +338,7 @@ def test_log_run_summary_redacts_credentials(monkeypatch) -> None:
         lambda _level, message: logged.append(message),
     )
 
-    _log_run_summary(Chat(), 0)
+    _log_run_summary(Chat(), 0, {})
 
     assert len(logged) == 2
     assert all("hunter2" not in message for message in logged)
@@ -382,7 +389,8 @@ def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> 
         "Lazy output file was not created because no records were retrieved: empty.txt",
         (
             "Run summary: {'message_count': 0, "
-            "'formatted_duplicates_suppressed': 0, 'output_writers': "
+            "'message_type_counts': {}, 'formatted_duplicates_suppressed': 0, "
+            "'provider_diagnostics': {}, 'output_writers': "
             "[{'file_name': 'empty.txt', 'file_created': False, "
             "'records_written': 0}]}"
         ),

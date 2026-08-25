@@ -194,12 +194,16 @@ Debug and automation:
 - YouTube terminal continuation responses finish immediately without an
   unnecessary final wait. Empty replay pages continue when the provider
   supplies another continuation token.
-- Successful debug runs end with the total retrieved-message count and the
-  number of semantic duplicates suppressed across formatted file outputs, plus
-  the creation state and completed-record count for each output writer. A
-  duplicate is counted once even when multiple formatted writers are attached;
-  raw-only outputs do not increase the suppression count. Zero-record lazy
-  outputs are named explicitly as files that were not created.
+- Successful debug runs end with total and per-type retrieved-message counts,
+  provider diagnostics when available, the number of semantic duplicates
+  suppressed across formatted file outputs, and the creation state and
+  completed-record count for each output writer. Kick live diagnostics include
+  decoded, control, parsed, unsupported, unknown-message-type, malformed, and
+  invalid-frame counts; reconnect and Pusher-key recovery counts; and the last
+  decoded-frame timestamp. A duplicate is counted once even when multiple
+  formatted writers are attached; raw-only outputs do not increase the
+  suppression count. Zero-record lazy outputs are named explicitly as files
+  that were not created.
 - `--quiet`, `--testing`, `--pause_on_debug`, `--exit_on_debug` — automation
   and parser-debug workflows.
 

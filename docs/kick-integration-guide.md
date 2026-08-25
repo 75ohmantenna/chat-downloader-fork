@@ -220,9 +220,17 @@ The transport:
 - subscribes anonymously (`auth: ""`) to `chatrooms.{chatroom_id}.v2`
 - applies the one-second receive-timeout minimum and debug-logs the requested
   and effective values
-- answers Pusher `ping` frames with `pong` inside `read_frames`
+- answers Pusher `ping` frames with `pong` inside `read_frames`, then exposes
+  them to the orchestration layer for connection diagnostics
 - treats timed-out or malformed reads as skippable (`None`)
 - raises `ConnectionError` on a closed socket, which drives reconnect
+
+Successful debug runs include live-connection diagnostics in the final run
+summary: decoded, control, parsed, unsupported, unknown-message-type,
+malformed, and invalid-frame counts; successful reconnect and Pusher-key
+recovery counts; and the last decoded-frame timestamp in UTC microseconds.
+Per-type output counts remain separate because filtering and preloaded history
+can make them differ from raw Pusher counts.
 
 Kick live channel URLs reject `start_time` and `end_time` because the public
 Pusher feed and short preloaded history cannot seek. Use a Kick VOD URL for

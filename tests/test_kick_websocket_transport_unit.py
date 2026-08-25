@@ -273,6 +273,20 @@ def test_recv_non_object_frame_is_captured(monkeypatch: Any) -> None:
     }
 
 
+@pytest.mark.parametrize("raw", ["{not json", "[1, 2, 3]"])
+def test_recv_invalid_shape_records_diagnostic(raw: str) -> None:
+    diagnostics: list[str] = []
+    transport = KickPusherTransport(
+        connector=lambda _url, _timeout, **_kwargs: FakeWebSocket([raw]),
+        url="wss://fake.test/",
+        diagnostic_callback=diagnostics.append,
+    )
+    transport.connect(5.0)
+
+    assert transport.recv() is None
+    assert diagnostics == ["invalid_websocket_frame_count"]
+
+
 def test_recv_valid_frame_returns_dict() -> None:
     frame = {"event": "App\\Events\\ChatMessageEvent", "data": "{}"}
     transport = _connected(FakeWebSocket([json.dumps(frame)]))
@@ -303,7 +317,7 @@ def test_read_frames_handles_ping_and_skips_and_yields() -> None:
     ws = FakeWebSocket(
         [
             TimeoutError(),  # -> recv returns None -> skipped
-            json.dumps(ping),  # -> ping answered, continue
+            json.dumps(ping),  # -> ping answered, then yielded for diagnostics
             json.dumps(message),  # -> yielded
             WebSocketConnectionClosedException(),  # -> ends the generator
         ]
@@ -315,7 +329,7 @@ def test_read_frames_handles_ping_and_skips_and_yields() -> None:
         for frame in read_frames(transport):
             frames.append(frame)  # noqa: PERF402 — generator raises, cannot use list()
 
-    assert frames == [message]
+    assert frames == [ping, message]
     assert json.loads(ws.sent[0])["event"] == PUSHER_PONG
 
 

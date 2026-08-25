@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections import Counter
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
 
 from requests.exceptions import ConnectionError as RequestsConnectionError
@@ -112,6 +113,7 @@ class RunResult:
 
     success: bool = False
     message_count: int = 0
+    message_type_counts: dict[str, int] = field(default_factory=dict)
     interrupted: bool = False
     error_message: str | None = None
 
@@ -135,7 +137,11 @@ def create_message_callback(
     return deduplicating_callback
 
 
-def _log_run_summary(chat: Chat | None, message_count: int) -> None:
+def _log_run_summary(
+    chat: Chat | None,
+    message_count: int,
+    message_type_counts: dict[str, int],
+) -> None:
     """Log final message and per-writer record counts for a successful run."""
     output_dispatcher = getattr(chat, "_output_dispatcher", None)
     writer_summaries = (
@@ -149,7 +155,9 @@ def _log_run_summary(chat: Chat | None, message_count: int) -> None:
     summary = sanitize_for_log(
         {
             "message_count": message_count,
+            "message_type_counts": message_type_counts,
             "formatted_duplicates_suppressed": formatted_duplicates_suppressed,
+            "provider_diagnostics": getattr(chat, "diagnostics", {}),
             "output_writers": writer_summaries,
         }
     )
@@ -184,6 +192,7 @@ def execute_run(
     _configure_testing_mode(run_config)
     downloader = None
     result = RunResult()
+    message_type_counts: Counter[str] = Counter()
     chat = None
     primary_error = False
 
@@ -198,6 +207,9 @@ def execute_run(
 
         for message in chat:
             result.message_count += 1
+            message_type = message.get("message_type")
+            counter_key = message_type if isinstance(message_type, str) else "<missing>"
+            message_type_counts[counter_key] += 1
             callback(message)
 
         result.success = True
@@ -231,7 +243,8 @@ def execute_run(
                 "One or more output writers reported errors during close"
             )
 
+    result.message_type_counts = dict(sorted(message_type_counts.items()))
     if result.success:
-        _log_run_summary(chat, result.message_count)
+        _log_run_summary(chat, result.message_count, result.message_type_counts)
 
     return result
