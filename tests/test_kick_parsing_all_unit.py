@@ -363,9 +363,9 @@ def test_parse_pinned_message_created_event() -> None:
     assert msg["author"]["display_name"] == "streamer_chan"
     assert "pinned_by" not in msg["metadata"]
     original_message_created_at = msg["metadata"]["original_message_created_at"]
-    assert isinstance(original_message_created_at, int)
+    assert original_message_created_at == 1749902400000000
     assert msg["metadata"]["pinned_message_created_at"] == original_message_created_at
-    assert msg["timestamp"] != original_message_created_at
+    assert msg["timestamp"] == 1749903900000000
     assert msg["metadata"]["duration"] == 120
 
 
@@ -379,10 +379,9 @@ def test_parse_current_pinned_message_created_event() -> None:
     assert msg["author"]["display_name"] == "MessageAuthor"
     assert msg["metadata"]["pinned_message_id"] == "current-pinned-message"
     assert msg["metadata"]["pinned_by"]["display_name"] == "PinningModerator"
-    assert (
-        msg["metadata"]["original_message_created_at"]
-        == msg["metadata"]["pinned_message_created_at"]
-    )
+    original_message_created_at = msg["metadata"]["original_message_created_at"]
+    assert original_message_created_at == 1787650147000000
+    assert msg["metadata"]["pinned_message_created_at"] == original_message_created_at
     assert msg["metadata"]["duration"] == 1200
     assert "timestamp" not in msg
 

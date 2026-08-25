@@ -242,6 +242,23 @@ def test_open_subscribed_transport_separates_connect_and_receive_timeouts() -> N
     )
 
 
+def test_open_subscribed_transport_logs_unclamped_receive_timeout() -> None:
+    transport = FakeTransport()
+    with patch.object(live_service, "log") as mock_log:
+        live_service._open_subscribed_transport(
+            FakeDownloader(),
+            "54321",
+            _request(message_receive_timeout=2.5),
+            lambda: transport,
+        )
+
+    assert transport.receive_timeout == pytest.approx(2.5)
+    mock_log.assert_called_once_with(
+        "debug",
+        "Kick WebSocket receive timeout: requested=2.5s, effective=2.5s.",
+    )
+
+
 def test_open_subscribed_transport_unreachable_guard() -> None:
     with pytest.raises(RuntimeError, match="unreachable"):
         live_service._open_subscribed_transport(

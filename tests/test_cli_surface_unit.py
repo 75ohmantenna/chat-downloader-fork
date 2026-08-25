@@ -214,6 +214,14 @@ def test_cli_message_filters_accept_one_comma_separated_argument(option: str) ->
     ]
 
 
+def test_cli_message_groups_accepts_all_keyword() -> None:
+    parser = _build_arg_parser()
+
+    args = parser.parse_args(["https://kick.com/example", "--message_groups", "all"])
+
+    assert args.message_groups == ["all"]
+
+
 def test_cli_message_filters_reject_unquoted_multiple_arguments() -> None:
     parser = _build_arg_parser()
 
