@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from chat_downloader.errors import ParsingError
@@ -34,6 +36,55 @@ def test_parse_full_chat_message() -> None:
 def test_reply_type_maps_to_text_message() -> None:
     msg = parse_chat_message({"id": "x", "type": "reply", "content": "hi"})
     assert msg["message_type"] == "text_message"
+
+
+def test_reply_preserves_original_message_context() -> None:
+    raw = load_fixture("reply_message_event_data.json")
+
+    msg = parse_chat_message(raw)
+
+    assert msg["message_type"] == "text_message"
+    assert msg["in_reply_to"]["message_id"] == "original-message"
+    assert msg["in_reply_to"]["message"] == "Original :KEKW:"
+    assert msg["in_reply_to"]["emotes"][0]["id"] == "37226"
+    assert msg["in_reply_to"]["timestamp"] == 1787650140000000
+    assert msg["in_reply_to"]["author"]["display_name"] == "OriginalAuthor"
+    assert msg["in_reply_to"]["thread_parent_message_id"] == "original-message"
+
+
+def test_reply_decodes_preloaded_string_metadata() -> None:
+    raw = load_fixture("reply_message_event_data.json")
+    raw["metadata"] = json.dumps(raw["metadata"])
+
+    msg = parse_chat_message(raw)
+
+    assert msg["in_reply_to"]["message_id"] == "original-message"
+
+
+@pytest.mark.parametrize("metadata", ["{bad json", "[]", [], 7, None])
+def test_reply_ignores_malformed_metadata(metadata: object) -> None:
+    msg = parse_chat_message(
+        {"id": "reply", "type": "reply", "content": "text", "metadata": metadata}
+    )
+
+    assert "in_reply_to" not in msg
+
+
+def test_reply_uses_original_message_sender_fallback() -> None:
+    raw = {
+        "id": "reply",
+        "type": "reply",
+        "metadata": {
+            "original_message": {
+                "id": "original",
+                "sender": {"id": 1, "username": "NestedAuthor"},
+            }
+        },
+    }
+
+    msg = parse_chat_message(raw)
+
+    assert msg["in_reply_to"]["author"]["display_name"] == "NestedAuthor"
 
 
 def test_unknown_type_falls_back_to_default() -> None:

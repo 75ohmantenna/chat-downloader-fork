@@ -1,0 +1,6 @@
+{
+  "aiModerated": true,
+  "id": "ai-delete-event",
+  "message": {"id": "ai-deleted-message"},
+  "violatedRules": ["hate", "harassment"]
+}

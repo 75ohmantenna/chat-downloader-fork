@@ -267,6 +267,39 @@ def test_parse_message_deleted_event() -> None:
     assert msg["metadata"]["deleted_message_id"] == "original-msg-999"
 
 
+def test_parse_ai_moderated_message_deleted_event() -> None:
+    raw = load_fixture("message_deleted_event_ai.json")
+
+    msg = parse_message_deleted_event(raw)
+
+    assert msg["metadata"] == {
+        "deleted_message_id": "ai-deleted-message",
+        "ai_moderated": True,
+        "violated_rules": ["hate", "harassment"],
+    }
+
+
+def test_message_deleted_preserves_false_ai_flag_and_filters_rules() -> None:
+    msg = parse_message_deleted_event(
+        {
+            "id": "x",
+            "aiModerated": False,
+            "violatedRules": ["valid", 7, None],
+        }
+    )
+
+    assert msg["metadata"] == {
+        "ai_moderated": False,
+        "violated_rules": ["valid"],
+    }
+
+
+def test_message_deleted_ignores_non_list_violated_rules() -> None:
+    msg = parse_message_deleted_event({"id": "x", "violatedRules": "hate"})
+
+    assert "metadata" not in msg
+
+
 def test_message_deleted_empty_dict_raises() -> None:
     with pytest.raises(ParsingError):
         parse_message_deleted_event({})

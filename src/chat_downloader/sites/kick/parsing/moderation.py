@@ -16,6 +16,7 @@ from chat_downloader.sites.kick.parsing.common_fields import (
     _opt_str,
     _parse_timestamp,
 )
+from chat_downloader.utils.json_types import get_list
 
 
 def _parse_moderator(raw_mod: object) -> dict[str, Any]:
@@ -179,11 +180,26 @@ def parse_message_deleted_event(raw: object) -> dict[str, Any]:
     if timestamp is not None:
         info["timestamp"] = timestamp
 
+    metadata: dict[str, object] = {}
+
     raw_message = raw.get("message")
     if isinstance(raw_message, dict):
         deleted_msg_id = _opt_str(raw_message.get("id"))
         if deleted_msg_id is not None:
-            info["metadata"] = {"deleted_message_id": deleted_msg_id}
+            metadata["deleted_message_id"] = deleted_msg_id
+
+    ai_moderated = raw.get("aiModerated")
+    if isinstance(ai_moderated, bool):
+        metadata["ai_moderated"] = ai_moderated
+
+    raw_rules = raw.get("violatedRules")
+    if isinstance(raw_rules, list):
+        metadata["violated_rules"] = [
+            rule for rule in get_list(raw, "violatedRules") if isinstance(rule, str)
+        ]
+
+    if metadata:
+        info["metadata"] = metadata
 
     return info
 

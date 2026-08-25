@@ -124,7 +124,8 @@ The Kick flow depends on the target type.
   a `pusher:error` frame raises `KickError`.
 - `parsing/messages.py`: chat-message normalization for both live
   `ChatMessageEvent` payloads and preloaded history (same shape); badge and
-  timestamp handling. Entry points `parse_chat_message` /
+  timestamp handling, including reply context from object- or string-encoded
+  metadata. Entry points `parse_chat_message` /
   `parse_preloaded_messages`.
 - `parsing/emotes.py`: inline emote-marker parsing (`[emote:ID:NAME]` →
   `:NAME:` in plain text, or `:emote_ID:` when no name is present) and
@@ -132,7 +133,7 @@ The Kick flow depends on the target type.
 - `parsing/subscriptions.py`: `SubscriptionEvent` and
   `GiftedSubscriptionsEvent` normalization.
 - `parsing/moderation.py`: ban, unban, message-delete, and chat-clear
-  normalization.
+  normalization, including Kick's AI-moderation flag and violated-rule labels.
 - `parsing/pins.py`: pinned-message created/deleted normalization.
 - `parsing/hosts.py`: stream-host normalization.
 - `constants.py`: URL patterns, REST endpoints, Pusher/event name constants,

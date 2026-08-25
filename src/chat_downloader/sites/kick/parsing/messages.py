@@ -8,6 +8,7 @@ history objects, which share the same shape.
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import ParsingError
@@ -21,9 +22,63 @@ from chat_downloader.sites.kick.parsing.common_fields import (
     _parse_timestamp,
 )
 from chat_downloader.sites.kick.parsing.emotes import parse_emotes
+from chat_downloader.utils.json_types import get_dict
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from chat_downloader.utils.json_types import JSONDict
+
+
+def _decode_metadata(raw_metadata: object) -> JSONDict:
+    """Decode Kick metadata supplied as either an object or JSON string."""
+    if isinstance(raw_metadata, dict):
+        return raw_metadata
+    if not isinstance(raw_metadata, str):
+        return {}
+    try:
+        decoded: object = json.loads(raw_metadata)
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _parse_reply_context(raw: JSONDict) -> dict[str, object]:
+    """Normalize Kick reply metadata into the shared ``in_reply_to`` shape."""
+    if raw.get("type") != "reply":
+        return {}
+
+    metadata = _decode_metadata(raw.get("metadata"))
+    original_message = get_dict(metadata, "original_message")
+    original_sender = get_dict(metadata, "original_sender")
+    if not original_sender:
+        original_sender = get_dict(original_message, "sender")
+
+    reply: dict[str, object] = {}
+    message_id = _opt_str(original_message.get("id"))
+    if message_id:
+        reply["message_id"] = message_id
+
+    content = original_message.get("content")
+    if isinstance(content, str):
+        message, emotes = parse_emotes(content)
+        reply["message"] = message
+        if emotes:
+            reply["emotes"] = emotes
+
+    timestamp = _parse_timestamp(original_message.get("created_at"))
+    if timestamp is not None:
+        reply["timestamp"] = timestamp
+
+    author = _parse_author(original_sender)
+    if author:
+        reply["author"] = author
+
+    thread_parent_id = _opt_str(raw.get("thread_parent_id"))
+    if thread_parent_id:
+        reply["thread_parent_message_id"] = thread_parent_id
+
+    return reply
 
 
 def parse_chat_message(raw: object) -> dict[str, Any]:
@@ -70,6 +125,10 @@ def parse_chat_message(raw: object) -> dict[str, Any]:
 
     if emotes:
         info["emotes"] = emotes
+
+    in_reply_to = _parse_reply_context(raw)
+    if in_reply_to:
+        info["in_reply_to"] = in_reply_to
 
     return info
 

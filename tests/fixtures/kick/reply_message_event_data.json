@@ -1,0 +1,26 @@
+{
+  "chatroom_id": 54321,
+  "content": "Reply text",
+  "created_at": "2026-08-25T09:29:20+00:00",
+  "id": "reply-message",
+  "metadata": {
+    "message_ref": "987654321",
+    "original_message": {
+      "content": "Original [emote:37226:KEKW]",
+      "created_at": "2026-08-25T09:29:00+00:00",
+      "id": "original-message"
+    },
+    "original_sender": {
+      "id": 600,
+      "identity": {
+        "badges": [{"type": "subscriber", "text": "Subscriber", "count": 3}],
+        "color": "#31D6C2"
+      },
+      "slug": "original-author",
+      "username": "OriginalAuthor"
+    }
+  },
+  "sender": {"id": 700, "username": "ReplyAuthor"},
+  "thread_parent_id": "original-message",
+  "type": "reply"
+}

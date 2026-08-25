@@ -6,6 +6,7 @@ import pytest
 
 from chat_downloader.sites.kick.constants import (
     CHAT_MESSAGE_EVENT,
+    MESSAGE_DELETED_EVENT,
     PUSHER_CONNECTION_ESTABLISHED,
     PUSHER_ERROR,
     PUSHER_PING,
@@ -30,6 +31,26 @@ def test_chat_message_event_with_object_data() -> None:
     message = dispatch_event({"event": CHAT_MESSAGE_EVENT, "data": data})
     assert message is not None
     assert message["message_id"] == "live-1"
+
+
+def test_reply_context_survives_event_dispatch() -> None:
+    data = load_fixture("reply_message_event_data.json")
+
+    message = dispatch_event(pusher_frame(CHAT_MESSAGE_EVENT, data))
+
+    assert message is not None
+    assert message["in_reply_to"]["message_id"] == "original-message"
+    assert message["in_reply_to"]["author"]["display_name"] == "OriginalAuthor"
+
+
+def test_ai_moderation_context_survives_event_dispatch() -> None:
+    data = load_fixture("message_deleted_event_ai.json")
+
+    message = dispatch_event(pusher_frame(MESSAGE_DELETED_EVENT, data))
+
+    assert message is not None
+    assert message["metadata"]["ai_moderated"] is True
+    assert message["metadata"]["violated_rules"] == ["hate", "harassment"]
 
 
 def test_malformed_nested_json_is_skipped() -> None:
