@@ -85,6 +85,7 @@ class _ChatOutputDispatcher:
         self._attached_writer_ids: set[int] = set()
         self._initialised_writer_ids: set[int] = set()
         self._records_written_by_writer: dict[int, int] = {}
+        self._formatted_duplicates_suppressed = 0
         self._write_error_count: int = 0
         self.closed = False
         self._formatted_deduplicator = _FormattedMessageDeduplicator(
@@ -134,6 +135,8 @@ class _ChatOutputDispatcher:
 
             if emit_formatted is None:
                 emit_formatted = self._formatted_deduplicator.should_emit(item)
+                if not emit_formatted:
+                    self._formatted_duplicates_suppressed += 1
             if not emit_formatted:
                 continue
             if formatted_item is None:
@@ -162,6 +165,11 @@ class _ChatOutputDispatcher:
     def write_error_count(self) -> int:
         """Return the number of writer close errors encountered."""
         return self._write_error_count
+
+    @property
+    def formatted_duplicates_suppressed(self) -> int:
+        """Return provider items omitted from all formatted file outputs."""
+        return self._formatted_duplicates_suppressed
 
     @property
     def writer_summaries(self) -> list[_WriterSummary]:

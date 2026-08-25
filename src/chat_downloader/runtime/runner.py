@@ -141,9 +141,15 @@ def _log_run_summary(chat: Chat | None, message_count: int) -> None:
     writer_summaries = (
         output_dispatcher.writer_summaries if output_dispatcher is not None else []
     )
+    formatted_duplicates_suppressed = (
+        output_dispatcher.formatted_duplicates_suppressed
+        if output_dispatcher is not None
+        else 0
+    )
     summary = sanitize_for_log(
         {
             "message_count": message_count,
+            "formatted_duplicates_suppressed": formatted_duplicates_suppressed,
             "output_writers": writer_summaries,
         }
     )

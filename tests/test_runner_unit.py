@@ -300,7 +300,8 @@ def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
     assert logged[-1] == (
         "debug",
         (
-            "Run summary: {'message_count': 2, 'output_writers': "
+            "Run summary: {'message_count': 2, "
+            "'formatted_duplicates_suppressed': 1, 'output_writers': "
             "[{'file_name': 'chat.jsonl', 'file_created': True, "
             "'records_written': 2}, {'file_name': 'chat.txt', "
             "'file_created': True, 'records_written': 1}]}"
@@ -311,6 +312,7 @@ def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
 def test_log_run_summary_redacts_credentials(monkeypatch) -> None:
     class Dispatcher:
         def __init__(self) -> None:
+            self.formatted_duplicates_suppressed = 0
             self.writer_summaries = [
                 {
                     "file_name": ("https://alice:hunter2@example.invalid/chat.jsonl"),
@@ -379,7 +381,8 @@ def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> 
     assert logged[-2:] == [
         "Lazy output file was not created because no records were retrieved: empty.txt",
         (
-            "Run summary: {'message_count': 0, 'output_writers': "
+            "Run summary: {'message_count': 0, "
+            "'formatted_duplicates_suppressed': 0, 'output_writers': "
             "[{'file_name': 'empty.txt', 'file_created': False, "
             "'records_written': 0}]}"
         ),

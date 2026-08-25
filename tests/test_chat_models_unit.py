@@ -393,6 +393,7 @@ def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
     assert formatted_b == ["paid_message:paid-1"]
     assert raw_items == [paid, ticker]
     assert format_calls == [paid]
+    assert dispatcher.formatted_duplicates_suppressed == 1
     assert dispatcher.writer_summaries == [
         {
             "file_name": "x",
@@ -480,6 +481,44 @@ def test_raw_only_output_does_not_populate_formatted_dedup_cache() -> None:
 
     assert len(raw_items) == 2
     assert formatted_items == ["ticker_paid_message_item"]
+    assert dispatcher.formatted_duplicates_suppressed == 0
+
+
+def test_raw_only_output_does_not_count_formatted_suppressions() -> None:
+    """Raw duplicates remain lossless and do not inflate formatted stats."""
+    raw_items: list[Any] = []
+
+    class Writer:
+        file_name = "chat.jsonl"
+        output_mode = "raw"
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            raise AssertionError("already initialized")
+
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+            assert isinstance(item, dict)
+            raw_items.append(item)
+
+        def close(self) -> None:
+            pass
+
+    chat = Chat(iter(()), title="Example")
+    dispatcher = _ChatOutputDispatcher(chat)
+    dispatcher.attach_writer(Writer())
+    paid = {"message_type": "paid_message", "message_id": "paid-1"}
+    ticker = {
+        "message_type": "ticker_paid_message_item",
+        "message_id": "paid-1",
+    }
+
+    dispatcher.emit(paid)
+    dispatcher.emit(ticker)
+
+    assert raw_items == [paid, ticker]
+    assert dispatcher.formatted_duplicates_suppressed == 0
 
 
 def test_attaching_same_writer_twice_is_idempotent() -> None:

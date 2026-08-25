@@ -60,8 +60,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   valid YouTube continuation responses for clean-run diagnosis.
 - Distinguish processed YouTube actions from emitted messages in per-poll
   debug diagnostics instead of labeling both as a total message count.
-- Report final retrieved-message and per-output-writer record counts after a
-  successful debug run.
+- Report final retrieved-message, formatted-output suppression, and
+  per-output-writer record counts after a successful debug run.
 - Log Twitch's known optional `user.primaryTeam` GraphQL service error at debug
   level while retaining warnings for unfamiliar service-error paths in the
   same response.

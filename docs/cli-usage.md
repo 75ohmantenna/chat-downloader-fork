@@ -193,10 +193,11 @@ Debug and automation:
   unnecessary final wait. Empty replay pages continue when the provider
   supplies another continuation token.
 - Successful debug runs end with the total retrieved-message count and the
-  creation state and completed-record count for each output writer.
-  Formatted-writer counts can be lower than JSONL counts when semantic
-  duplicates are suppressed. Zero-record lazy outputs are named explicitly as
-  files that were not created.
+  number of semantic duplicates suppressed across formatted file outputs, plus
+  the creation state and completed-record count for each output writer. A
+  duplicate is counted once even when multiple formatted writers are attached;
+  raw-only outputs do not increase the suppression count. Zero-record lazy
+  outputs are named explicitly as files that were not created.
 - `--quiet`, `--testing`, `--pause_on_debug`, `--exit_on_debug` — automation
   and parser-debug workflows.
 
