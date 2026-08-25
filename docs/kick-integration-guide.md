@@ -204,7 +204,12 @@ The response's current pin state is emitted after recent messages. Current Kick
 pin events omit a top-level event ID, so the parser derives a namespaced event
 ID from the nested message ID to avoid colliding with the original chat message.
 It keeps the nested sender as the message author and the `pinnedBy`/`pinned_by`
-actor as pin metadata.
+actor as pin metadata. A live pin event's top-level `timestamp` is the time of
+the pin action. A current pin loaded from REST has no action time and therefore
+omits that field rather than inventing one. In both shapes,
+`metadata.original_message_created_at` records the nested chat message's own
+creation time; `metadata.pinned_message_created_at` remains as a compatibility
+alias with the same value.
 
 ### Pusher transport
 

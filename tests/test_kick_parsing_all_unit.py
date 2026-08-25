@@ -362,7 +362,10 @@ def test_parse_pinned_message_created_event() -> None:
     assert msg["metadata"]["pinned_message_id"] == "pinned-msg-001"
     assert msg["author"]["display_name"] == "streamer_chan"
     assert "pinned_by" not in msg["metadata"]
-    assert isinstance(msg["metadata"]["pinned_message_created_at"], int)
+    original_message_created_at = msg["metadata"]["original_message_created_at"]
+    assert isinstance(original_message_created_at, int)
+    assert msg["metadata"]["pinned_message_created_at"] == original_message_created_at
+    assert msg["timestamp"] != original_message_created_at
     assert msg["metadata"]["duration"] == 120
 
 
@@ -376,6 +379,10 @@ def test_parse_current_pinned_message_created_event() -> None:
     assert msg["author"]["display_name"] == "MessageAuthor"
     assert msg["metadata"]["pinned_message_id"] == "current-pinned-message"
     assert msg["metadata"]["pinned_by"]["display_name"] == "PinningModerator"
+    assert (
+        msg["metadata"]["original_message_created_at"]
+        == msg["metadata"]["pinned_message_created_at"]
+    )
     assert msg["metadata"]["duration"] == 1200
     assert "timestamp" not in msg
 
@@ -493,6 +500,7 @@ def test_pinned_message_omits_invalid_nested_timestamp() -> None:
     msg = parse_pinned_message_created_event(
         {"id": "x", "message": {"id": "pinned", "created_at": "not-a-date"}}
     )
+    assert "original_message_created_at" not in msg["metadata"]
     assert "pinned_message_created_at" not in msg["metadata"]
 
 

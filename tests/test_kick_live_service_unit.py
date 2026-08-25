@@ -430,7 +430,12 @@ def test_get_chat_by_channel_emits_current_pin_after_preloaded_history() -> None
     ]
     assert messages[1]["message_id"] == "kick-pin:startup-pinned-message"
     assert messages[1]["metadata"]["pinned_by"]["display_name"] == ("StartupModerator")
+    assert isinstance(
+        messages[1]["metadata"]["original_message_created_at"],
+        int,
+    )
     assert isinstance(messages[1]["metadata"]["pinned_message_expires_at"], int)
+    assert "timestamp" not in messages[1]
 
 
 def test_get_chat_by_channel_dedups_current_pin_against_live_pin_event() -> None:

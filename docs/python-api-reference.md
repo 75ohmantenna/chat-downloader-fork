@@ -284,6 +284,10 @@ File writers are crash-resilient: each record is flushed on write and the file
 is synchronized to disk periodically (about every 60 seconds). Datetime values
 serialized to JSONL output must be timezone-aware (UTC); a naive `datetime`
 raises `ValueError` at the output boundary to keep timestamps unambiguous.
+Kick pin records reserve the top-level `timestamp` for the pin event time.
+Startup pin state has no event time and omits it; the original chat message time
+is available as `metadata.original_message_created_at`, with
+`metadata.pinned_message_created_at` retained as a compatibility alias.
 
 ## Debugging Helpers
 

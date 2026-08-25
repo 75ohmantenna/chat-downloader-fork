@@ -47,9 +47,11 @@ def _extract_pinned_message(
     if author:
         info["author"] = author
 
-    pinned_created_at = _parse_timestamp(raw_message.get("created_at"))
-    if pinned_created_at is not None:
-        metadata["pinned_message_created_at"] = pinned_created_at
+    original_message_created_at = _parse_timestamp(raw_message.get("created_at"))
+    if original_message_created_at is not None:
+        metadata["original_message_created_at"] = original_message_created_at
+        # Compatibility alias retained for existing structured-output consumers.
+        metadata["pinned_message_created_at"] = original_message_created_at
 
 
 def _resolve_event_id(raw: JSONDict, prefix: str) -> str | None:
