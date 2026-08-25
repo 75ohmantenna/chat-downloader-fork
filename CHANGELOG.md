@@ -15,6 +15,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Debugging
 
+- Log Twitch's known optional `user.primaryTeam` GraphQL service error at debug
+  level while retaining warnings for unfamiliar service-error paths in the
+  same response.
 - Capture sanitized Twitch drift samples for unknown IRC actions, message
   types, tags, unmatched lines, and unexpected replay shapes while retaining
   promotable raw payloads. Twitch captures are limited to ten unique samples

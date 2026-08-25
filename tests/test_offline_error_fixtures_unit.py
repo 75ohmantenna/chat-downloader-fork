@@ -160,22 +160,84 @@ def test_continuation_retries_on_forbidden_fixture() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_handle_gql_errors_service_error_does_not_raise(caplog) -> None:
-    """_handle_gql_errors warns and does not raise on 'service error'."""
-    import logging
-
+def test_handle_gql_errors_known_optional_service_error_logs_debug(
+    monkeypatch,
+) -> None:
+    """Known optional GraphQL field failures stay visible without warning."""
     fixture = _load(_TW_ERRORS, "graphql_service_error")
     errors = fixture[0]["errors"]
+    logged: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.graphql_client.log",
+        lambda level, message: logged.append((level, message)),
+    )
 
-    # The logger name is chat_downloader.metadata (child of chat_downloader).
-    with caplog.at_level(logging.WARNING, logger="chat_downloader.metadata"):
-        _handle_gql_errors(errors)  # must not raise
+    _handle_gql_errors(errors)
 
-    # Either caplog captured it, or at minimum it did not raise an exception.
-    # The key invariant is: service errors are non-fatal.
-    log_texts = " ".join(r.message.lower() for r in caplog.records)
-    if log_texts:
-        assert "transient" in log_texts or "service error" in log_texts
+    assert logged == [
+        (
+            "debug",
+            (
+                "Transient GraphQL field error at user -> primaryTeam: "
+                "service error (skipping)"
+            ),
+        )
+    ]
+
+
+def test_handle_gql_errors_unfamiliar_service_error_still_warns(
+    monkeypatch,
+) -> None:
+    """Do not hide service failures outside the known optional field set."""
+    logged: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.graphql_client.log",
+        lambda level, message: logged.append((level, message)),
+    )
+
+    _handle_gql_errors(
+        [{"message": "service error", "path": ["video", "comments"]}],
+    )
+
+    assert logged == [
+        (
+            "warning",
+            (
+                "Transient GraphQL field error at video -> comments: "
+                "service error (skipping)"
+            ),
+        )
+    ]
+
+
+def test_handle_gql_errors_checks_every_service_error(monkeypatch) -> None:
+    """A known optional first error must not hide a later unfamiliar path."""
+    logged: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.graphql_client.log",
+        lambda level, message: logged.append((level, message)),
+    )
+
+    _handle_gql_errors(
+        [
+            {"message": "service error", "path": ["user", "primaryTeam"]},
+            {"message": "service error", "path": ["video", "comments"]},
+        ],
+    )
+
+    assert [level for level, _message in logged] == ["debug", "warning"]
+
+
+def test_handle_gql_errors_optional_error_does_not_hide_later_failure() -> None:
+    """A debug-level optional error must not suppress a fatal later error."""
+    with pytest.raises(ParsingError, match="Operation hashes"):
+        _handle_gql_errors(
+            [
+                {"message": "service error", "path": ["user", "primaryTeam"]},
+                {"message": "PersistedQueryNotFound", "path": []},
+            ],
+            ["StreamMetadata"],
+        )
 
 
 def test_handle_gql_errors_persisted_query_not_found_is_actionable() -> None:

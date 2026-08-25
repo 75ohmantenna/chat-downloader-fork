@@ -40,6 +40,8 @@ _CHALLENGE_HINTS: tuple[str, ...] = (
     "verify you are human",
 )
 
+_OPTIONAL_SERVICE_ERROR_PATHS: tuple[tuple[str, ...], ...] = (("user", "primaryTeam"),)
+
 
 def _contains_challenge_text(text: object) -> bool:
     if not isinstance(text, str):
@@ -98,50 +100,56 @@ def _handle_gql_errors(
     if not errors:
         return
 
-    error = errors[0]
-    if not isinstance(error, dict):
-        return
-    error_message = get_str(error, "message", "Unknown GraphQL error")
-    error_path = get_list(error, "path")
-    message_lower = error_message.lower()
     operation_text = _describe_operation_names(operation_names)
+    for error in errors:
+        if not isinstance(error, dict):
+            continue
+        error_message = get_str(error, "message", "Unknown GraphQL error")
+        error_path = get_list(error, "path")
+        message_lower = error_message.lower()
 
-    if "not found" in message_lower or "does not exist" in message_lower:
-        raise VideoNotFound(error_message)
-    if "unauthorized" in message_lower or "not authorized" in message_lower:
-        msg = f"Authentication required: {error_message}"
-        raise LoginRequired(msg)
-    if "subscriber" in message_lower or "subscription" in message_lower:
-        msg = f"Subscriber-only content requires login: {error_message}"
-        raise VideoUnplayable(
-            msg,
-        )
-    if "unavailable" in message_lower or "deleted" in message_lower:
-        raise VideoUnavailable(error_message)
-    if "service error" in message_lower:
+        if "not found" in message_lower or "does not exist" in message_lower:
+            raise VideoNotFound(error_message)
+        if "unauthorized" in message_lower or "not authorized" in message_lower:
+            msg = f"Authentication required: {error_message}"
+            raise LoginRequired(msg)
+        if "subscriber" in message_lower or "subscription" in message_lower:
+            msg = f"Subscriber-only content requires login: {error_message}"
+            raise VideoUnplayable(
+                msg,
+            )
+        if "unavailable" in message_lower or "deleted" in message_lower:
+            raise VideoUnavailable(error_message)
+        if "service error" in message_lower:
+            _log_service_error(error_message, error_path)
+            continue
+        if (
+            "persistedquerynotfound" in message_lower
+            or "persisted query not found" in message_lower
+        ):
+            msg = (
+                "Twitch persisted GraphQL query failed for "
+                f"{operation_text}: {error_message}. "
+                "Operation hashes or required variables may be stale."
+            )
+            raise ParsingError(
+                msg,
+            )
+
         path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
-        log(
-            "warning",
-            f"Transient GraphQL field error at {path_str}: {error_message} (skipping)",
-        )
-        return
-    if (
-        "persistedquerynotfound" in message_lower
-        or "persisted query not found" in message_lower
-    ):
-        msg = (
-            "Twitch persisted GraphQL query failed for "
-            f"{operation_text}: {error_message}. "
-            "Operation hashes or required variables may be stale."
-        )
+        msg = f"GraphQL error at {path_str} during {operation_text}: {error_message}"
         raise ParsingError(
             msg,
         )
 
+
+def _log_service_error(error_message: str, error_path: JSONList) -> None:
+    """Log one non-fatal GraphQL service error at its path-aware severity."""
     path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
-    msg = f"GraphQL error at {path_str} during {operation_text}: {error_message}"
-    raise ParsingError(
-        msg,
+    level = "debug" if tuple(error_path) in _OPTIONAL_SERVICE_ERROR_PATHS else "warning"
+    log(
+        level,
+        f"Transient GraphQL field error at {path_str}: {error_message} (skipping)",
     )
 
 

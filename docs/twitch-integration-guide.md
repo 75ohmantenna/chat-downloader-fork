@@ -193,6 +193,11 @@ downloader exceptions such as:
 - `VideoUnplayable`
 - `ParsingError`
 
+A Twitch `service error` for the optional `user.primaryTeam` field retains the
+usable response data and logs at debug level. The same error on an unfamiliar
+GraphQL path remains a warning so new partial-response failures stay visible,
+including when Twitch returns multiple errors together.
+
 The default public Client-ID is defined in `constants.py`; callers can override
 it with `DownloaderConfig(twitch_client_id=...)` or `--twitch_client_id`.
 
