@@ -238,12 +238,17 @@ def _open_subscribed_transport(
             else:
                 transport.connect(downloader._http_timeout[0])
             transport.subscribe(chatroom_id)
-            transport.set_timeout(
-                max(
-                    request.message_receive_timeout,
-                    _MIN_RECEIVE_TIMEOUT_SECONDS,
-                )
+            effective_receive_timeout = max(
+                request.message_receive_timeout,
+                _MIN_RECEIVE_TIMEOUT_SECONDS,
             )
+            log(
+                "debug",
+                "Kick WebSocket receive timeout: "
+                f"requested={request.message_receive_timeout}s, "
+                f"effective={effective_receive_timeout}s.",
+            )
+            transport.set_timeout(effective_receive_timeout)
         except ConnectionError as error:
             transport.close()
             try:

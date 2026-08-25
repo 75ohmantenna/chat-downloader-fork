@@ -213,6 +213,8 @@ The transport:
 
 - builds the URL from the resolved Pusher app key
 - subscribes anonymously (`auth: ""`) to `chatrooms.{chatroom_id}.v2`
+- applies the one-second receive-timeout minimum and debug-logs the requested
+  and effective values
 - answers Pusher `ping` frames with `pong` inside `read_frames`
 - treats timed-out or malformed reads as skippable (`None`)
 - raises `ConnectionError` on a closed socket, which drives reconnect

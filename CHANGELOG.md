@@ -48,6 +48,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   per drift label and process to prevent unbounded diagnostic output.
 - Report the effective Twitch IRC receive timeout after applying the one-second
   minimum.
+- Report the effective Kick WebSocket receive timeout after applying the
+  one-second minimum.
 
 ## 2.0.7 — 2026-08-25
 

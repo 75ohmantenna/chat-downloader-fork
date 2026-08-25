@@ -224,17 +224,22 @@ def test_open_subscribed_transport_retries_then_succeeds() -> None:
 def test_open_subscribed_transport_separates_connect_and_receive_timeouts() -> None:
     transport = FakeTransport()
     downloader = FakeDownloader(connect_timeout=7.5, read_timeout=22.0)
-    opened = live_service._open_subscribed_transport(
-        downloader,
-        "54321",
-        _request(message_receive_timeout=0.1),
-        lambda: transport,
-    )
+    with patch.object(live_service, "log") as mock_log:
+        opened = live_service._open_subscribed_transport(
+            downloader,
+            "54321",
+            _request(message_receive_timeout=0.1),
+            lambda: transport,
+        )
 
     assert opened is transport
     assert transport.connect_timeout == pytest.approx(7.5)
     assert transport.receive_timeout == pytest.approx(1.0)
     assert transport.subscribed_to == "54321"
+    mock_log.assert_called_once_with(
+        "debug",
+        "Kick WebSocket receive timeout: requested=0.1s, effective=1.0s.",
+    )
 
 
 def test_open_subscribed_transport_unreachable_guard() -> None:
