@@ -43,7 +43,9 @@ _SENSITIVE_KEY_COMPONENTS = frozenset(
         "token",
     }
 )
-_COMPACT_SENSITIVE_KEYS = frozenset({"apikey", "authuser", "visitordata"})
+_COMPACT_SENSITIVE_KEYS = frozenset(
+    {"apikey", "authuser", "continuation", "visitordata"}
+)
 _KEY_COMPONENT_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|[0-9]+")
 _AUTH_HEADER_VALUE_RE = re.compile(r"(?i)^\s*(?:basic|bearer|oauth|sapisidhash)\s+\S+")
 _URL_RE = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>]+")
@@ -51,6 +53,7 @@ _APPARENT_USERINFO_RE = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+:[^@\s/'\"<>]+@"
 )
 _QUERY_PAIR_RE = re.compile(r"([?&])([^=\s&#]+)(=)([^&#\s'\"<>]*)")
+_GOOGLE_API_KEY_RE = re.compile(r"^AIza[A-Za-z0-9_-]{20,}$")
 _LABELED_VALUE_RE = re.compile(
     r"(?i)\b([A-Za-z][A-Za-z0-9_-]*)\s*([:=])\s*"
     r"((?:bearer\s+)?[^\s,;]+)"
@@ -119,9 +122,18 @@ def _is_sensitive_key(key: str) -> bool:
     return bool(pairs & {("api", "key"), ("visitor", "data"), ("visitor", "id")})
 
 
+def _is_sensitive_query_value(key: str, value: str) -> bool:
+    """Return whether a query value is credential-shaped or token-bearing."""
+    return _is_sensitive_key(key) or (
+        key.lower() == "key" and _GOOGLE_API_KEY_RE.fullmatch(value) is not None
+    )
+
+
 def _redact_query_pair(match: re.Match[str]) -> str:
     """Redact a query-pair value when its decoded key is sensitive."""
-    if not _is_sensitive_key(unquote_plus(match.group(2))):
+    key = unquote_plus(match.group(2))
+    value = unquote_plus(match.group(4))
+    if not _is_sensitive_query_value(key, value):
         return match.group()
     return f"{match.group(1)}{match.group(2)}={REDACTED}"
 
@@ -142,7 +154,10 @@ def _redact_url(match: re.Match[str]) -> str:
             netloc = f"{REDACTED}@{netloc}"
         query = urlencode(
             [
-                (key, REDACTED if _is_sensitive_key(key) else value)
+                (
+                    key,
+                    REDACTED if _is_sensitive_query_value(key, value) else value,
+                )
                 for key, value in parse_qsl(parsed.query, keep_blank_values=True)
             ],
             doseq=True,
@@ -184,6 +199,10 @@ def _sanitize_secret_string(value: str) -> str:
     """Redact secrets without altering non-sensitive payload characters."""
     value = _QUOTED_FIELD_RE.sub(_redact_quoted_field, value)
     value = _URL_RE.sub(_redact_url, value)
+    # urllib3 logs the request target separately from the origin, so a query
+    # can appear in a quoted ``"POST /path?..."`` fragment rather than in the
+    # absolute URL handled above.
+    value = _QUERY_PAIR_RE.sub(_redact_query_pair, value)
     value = _APPARENT_USERINFO_RE.sub(f"{REDACTED}@", value)
     return _redact_labeled_values(value)
 

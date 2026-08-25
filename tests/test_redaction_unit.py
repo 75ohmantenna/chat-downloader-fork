@@ -121,7 +121,10 @@ def test_sensitive_key_classifier_redacts_structured_values_and_headers(
     }
 
 
-@pytest.mark.parametrize("key", ["x-api-key", "x-goog-visitor-id"])
+@pytest.mark.parametrize(
+    "key",
+    ["x-api-key", "x-goog-visitor-id", "continuation"],
+)
 def test_sensitive_key_classifier_redacts_valid_url_queries(key: str) -> None:
     rendered = red.render_for_log(f"https://example.invalid/?{key}=QUERY_SECRET")
 
@@ -129,7 +132,43 @@ def test_sensitive_key_classifier_redacts_valid_url_queries(key: str) -> None:
     assert "redacted" in rendered
 
 
-@pytest.mark.parametrize("key", ["author", "authority", "tokenizer", "monkey"])
+def test_redacts_google_api_key_in_generic_key_query() -> None:
+    api_key = "AIza" + "A" * 35
+
+    rendered = red.render_for_log(
+        f"https://www.youtube.com/youtubei/v1/live_chat?key={api_key}"
+    )
+
+    assert api_key not in rendered
+    assert "key=%3Credacted%3E" in rendered
+
+
+def test_preserves_non_secret_generic_key_query() -> None:
+    url = "https://example.invalid/?key=display-name"
+
+    assert red.render_for_log(url) == url
+
+
+def test_redacts_tokens_from_urllib3_request_target_log() -> None:
+    api_key = "AIza" + "A" * 35
+    continuation = "opaque-continuation"
+    message = (
+        'https://www.youtube.com:443 "POST '
+        f"/youtubei/v1/live_chat?key={api_key}&continuation={continuation} "
+        'HTTP/1.1" 200 None'
+    )
+
+    rendered = red.render_for_log(message)
+
+    assert api_key not in rendered
+    assert continuation not in rendered
+    assert rendered.count(red.REDACTED) == 2
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["author", "authority", "continuationPolicy", "tokenizer", "monkey"],
+)
 def test_sensitive_key_classifier_avoids_substring_false_positives(key: str) -> None:
     value = {
         key: "VISIBLE",

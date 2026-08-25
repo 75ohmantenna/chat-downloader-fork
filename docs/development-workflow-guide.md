@@ -192,8 +192,10 @@ introduce new secret-bearing shapes.
 
 The logging handler applies the same structured and string redaction to project
 messages, exception text, and stack information. It redacts credentials in
-URLs and sensitive query or labeled values, then renders control characters
-visibly to prevent forged terminal output.
+URLs and sensitive query or labeled values, including continuation tokens and
+credential-shaped Google API keys in urllib3 request-target messages. Ordinary
+non-secret `key` query values remain visible. The handler then renders control
+characters visibly to prevent forged terminal output.
 
 Provider-specific diagnosis and fixture-promotion steps live in the
 [YouTube](youtube-integration-guide.md),
