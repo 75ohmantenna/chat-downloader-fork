@@ -157,6 +157,44 @@ def test_handle_continuation_response_composes_state_log_and_error_checks(
     assert calls == ["state", "log", "error"]
 
 
+def test_successful_response_capture_requires_explicit_scope_opt_in(
+    monkeypatch,
+) -> None:
+    captured_samples = []
+    monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", raising=False)
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
+        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
+    )
+
+    _loop(object())._capture_successful_response({"responseContext": {}})
+
+    assert captured_samples == []
+
+
+def test_successful_response_capture_limits_serialization_attempts(
+    monkeypatch,
+) -> None:
+    captured_samples = []
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "yes")
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
+        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
+    )
+    loop = _loop(object())
+
+    for index in range(5):
+        loop._capture_successful_response({"response": index})
+
+    assert captured_samples == [
+        (
+            ("youtube-continuation-response", {"response": index}),
+            {"sample_limit": 3},
+        )
+        for index in range(3)
+    ]
+
+
 def test_log_request_context_includes_click_tracking_and_logged_in_info(
     monkeypatch,
 ) -> None:
@@ -534,6 +572,13 @@ def test_chat_iteration_raises_no_chat_replay_on_replay_api_400(
     monkeypatch,
 ) -> None:
     downloader = _DummyDownloader()
+    captured_samples = []
+
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "1")
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
+        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
+    )
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._generate_headers",
@@ -577,6 +622,8 @@ def test_chat_iteration_raises_no_chat_replay_on_replay_api_400(
                 ),
             ),
         )
+
+    assert captured_samples == []
 
 
 def test_chat_iteration_raises_api_error_for_non_replay_failure(
@@ -853,6 +900,13 @@ def test_chat_iteration_raises_when_live_chat_continuation_is_missing(
     monkeypatch,
 ) -> None:
     downloader = _DummyDownloader()
+    captured_samples = []
+
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "1")
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
+        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
+    )
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
@@ -897,6 +951,8 @@ def test_chat_iteration_raises_when_live_chat_continuation_is_missing(
                 ),
             )
         )
+
+    assert captured_samples == []
 
 
 def test_chat_iteration_returns_immediately_when_action_processing_requests_stop(
@@ -970,6 +1026,16 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
 ) -> None:
     downloader = _DummyDownloader()
     msg_filter = SimpleNamespace(should_add=lambda _message: True)
+    captured_samples = []
+    response = {
+        "continuationContents": {"liveChatContinuation": {"actions": []}},
+    }
+
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "on")
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
+        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
+    )
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
@@ -990,9 +1056,7 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *_args, **_kwargs: {
-            "continuationContents": {"liveChatContinuation": {"actions": []}},
-        },
+        lambda *_args, **_kwargs: response,
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
@@ -1020,6 +1084,12 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
             "action_type": "chat_ended",
             "message": None,
         },
+    ]
+    assert captured_samples == [
+        (
+            ("youtube-continuation-response", response),
+            {"sample_limit": 3},
+        )
     ]
 
 

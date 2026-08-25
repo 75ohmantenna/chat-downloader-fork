@@ -29,6 +29,16 @@ def test_describe_debug_sample_returns_stable_fixture_hint() -> None:
     assert hint.fixture_name == "youtube-unknown-continuation-heartbeat"
 
 
+def test_successful_continuation_sample_maps_to_continuation_fixtures() -> None:
+    hint = describe_debug_sample(
+        Path("youtube-continuation-response-abc123def456.json"),
+    )
+
+    assert hint.site == "youtube"
+    assert hint.group == "continuations"
+    assert hint.fixture_name == "youtube-continuation-response"
+
+
 def test_describe_debug_sample_falls_back_to_misc_for_unknown_label() -> None:
     hint = describe_debug_sample(Path("label-abc123def456.json"))
 

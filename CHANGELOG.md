@@ -28,6 +28,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Debugging
 
+- Add a separately opted-in, sanitized capture of the first three structurally
+  valid YouTube continuation responses for clean-run diagnosis.
 - Distinguish processed YouTube actions from emitted messages in per-poll
   debug diagnostics instead of labeling both as a total message count.
 - Report final retrieved-message and per-output-writer record counts after a

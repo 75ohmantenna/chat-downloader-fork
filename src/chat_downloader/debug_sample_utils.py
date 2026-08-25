@@ -11,6 +11,7 @@ from pathlib import Path
 _DIGEST_SUFFIX_RE = re.compile(r"-[0-9a-f]{12}$")
 _NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 _GROUP_RULES: tuple[tuple[str, str], ...] = (
+    ("continuation-response", "continuations"),
     ("unknown-continuation", "continuations"),
     ("unknown-action", "actions"),
     ("empty-action-parse", "actions"),

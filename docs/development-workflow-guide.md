@@ -172,6 +172,22 @@ CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
 chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" --logging debug
 ```
 
+For clean-run diagnosis, YouTube can also capture the first three structurally
+valid continuation responses from each retrieval run. This requires a separate
+explicit opt-in because successful responses contain ordinary public chat data:
+
+```bash
+CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
+CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES=1 \
+chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" --logging debug
+```
+
+The per-run attempt limit avoids repeatedly sanitizing large responses after
+the cap. The shared per-label limit also prevents more than three unique
+successful-response files in one process and output directory. API-error and
+structurally incomplete response bodies are not classified or captured as
+successful responses.
+
 Snapshots default to a temporary directory. Set
 `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR` to choose a stable location. Review captures
 before promoting them into `tests/fixtures/`; captured data is evidence, not an
@@ -188,7 +204,9 @@ Capture sanitization recursively removes known cookie, proxy, token, and API
 key fields. It also treats custom header names containing authentication,
 credential, secret, or token markers—and values using common authentication
 schemes—as sensitive. Review remains mandatory because provider payloads can
-introduce new secret-bearing shapes.
+introduce new secret-bearing shapes. Successful YouTube samples also retain
+public chat contents after credential sanitization, so review them before
+sharing.
 
 The logging handler applies the same structured and string redaction to project
 messages, exception text, and stack information. It redacts credentials in

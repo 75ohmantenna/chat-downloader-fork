@@ -292,6 +292,9 @@ To turn a captured drift sample into a permanent regression anchor:
 1. Reproduce the failure with
    `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1` to confirm the snapshot file
    is written.
+   When a clean raw response is also useful, set
+   `CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES=1`; this captures at most the
+   first three structurally valid responses and requires debug logging.
 2. Read the snapshot. The `"Unknown action"` variant has
    `{"action": {...}, ...}`; the `"Missing keys"` variant has
    `{"original_item": {...}, ...}`.
