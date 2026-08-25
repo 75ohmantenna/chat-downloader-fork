@@ -147,6 +147,9 @@ channel URLs reject these bounds because the public live feed cannot seek.
 Debug and automation:
 
 - `--logging debug`, `--verbose` — transport and parser debugging.
+- YouTube continuation polls report separate processed-action and
+  emitted-message counts so skipped or non-emitting provider actions are
+  visible without inflating the output count.
 - Successful debug runs end with the total retrieved-message count and the
   number of completed records for each output writer. Formatted-writer counts
   can be lower than JSONL counts when semantic duplicates are suppressed.

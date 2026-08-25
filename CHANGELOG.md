@@ -28,6 +28,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Debugging
 
+- Distinguish processed YouTube actions from emitted messages in per-poll
+  debug diagnostics instead of labeling both as a total message count.
 - Report final retrieved-message and per-output-writer record counts after a
   successful debug run.
 - Log Twitch's known optional `user.primaryTeam` GraphQL service error at debug

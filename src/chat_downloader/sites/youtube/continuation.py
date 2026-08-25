@@ -230,7 +230,8 @@ def _process_actions(
         ``True`` if a ``"stop"`` disposition was encountered (caller should
         terminate the outer loop), ``False`` otherwise.
     """
-    message_count = 0
+    processed_action_count = 0
+    emitted_message_count = 0
     for action in actions:
         pipeline_result = process_pipeline_action(
             action,
@@ -238,17 +239,22 @@ def _process_actions(
             msg_filter,
             time_filter,
         )
+        processed_action_count += 1
         if pipeline_result.disposition == "skip":
             continue
         if pipeline_result.disposition == "stop":
             return True
         if not is_replay and pipeline_result.message is not None:
             _apply_live_timing(pipeline_result.message, loop_state, live_start_time_ms)
-        message_count += 1
         if pipeline_result.message is not None:
+            emitted_message_count += 1
             yield pipeline_result.message
 
-    log("debug", f"Total number of messages: {message_count}")
+    log(
+        "debug",
+        "Processed actions in poll: "
+        f"{processed_action_count}; emitted messages: {emitted_message_count}",
+    )
     return False
 
 

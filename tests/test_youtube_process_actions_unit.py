@@ -138,13 +138,16 @@ def test_process_actions_skip_disposition_does_not_yield() -> None:
     assert result == [{"text": "kept"}]
 
 
-def test_process_actions_counts_non_message_action_without_yielding() -> None:
+def test_process_actions_logs_processed_and_emitted_counts(monkeypatch) -> None:
     from chat_downloader.sites.filters import MessageFilter
 
     msg_filter = MessageFilter({})
+    log_calls = []
     pipeline_results = iter(
         [
             SimpleNamespace(disposition="yield", message=None),
+            SimpleNamespace(disposition="skip", message=None),
+            SimpleNamespace(disposition="yield", message={"text": "kept"}),
         ]
     )
 
@@ -153,11 +156,12 @@ def test_process_actions_counts_non_message_action_without_yielding() -> None:
 
     import chat_downloader.sites.youtube.continuation as mod
 
+    monkeypatch.setattr(mod, "log", lambda *args: log_calls.append(args))
     original = mod.process_pipeline_action
     mod.process_pipeline_action = fake_pipeline
     try:
         gen = _process_actions(
-            [{"id": 1}],
+            [{"id": 1}, {"id": 2}, {"id": 3}],
             offset=None,
             msg_filter=msg_filter,
             time_filter=None,
@@ -175,8 +179,14 @@ def test_process_actions_counts_non_message_action_without_yielding() -> None:
     finally:
         mod.process_pipeline_action = original
 
-    assert messages == []
+    assert messages == [{"text": "kept"}]
     assert stop_requested is False
+    assert log_calls == [
+        (
+            "debug",
+            "Processed actions in poll: 3; emitted messages: 1",
+        )
+    ]
 
 
 def test_process_actions_keeps_backlog_timing_signed_and_polling_nonnegative(
