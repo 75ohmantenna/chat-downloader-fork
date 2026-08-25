@@ -28,6 +28,8 @@ The Kick implementation is responsible for:
   the chatroom stays active when the stream is down)
 - emitting preloaded recent history and current pin state on connect, then
   deduplicating them against the live feed
+- backfilling recent history after reconnects and Pusher-key recovery so
+  messages received during an outage are not silently lost
 - reading historical chat for VODs and clips by paginating the channel message
   API and filtering to the selected replay window
 - parsing Kick-specific message, badge, emote, subscription, moderation, pin,
@@ -80,7 +82,8 @@ The Kick flow depends on the target type.
    recent message IDs, filter by message groups/types, and yield.
 7. On disconnect, reconnect and resubscribe. If Pusher rejects the application
    key, force one fresh discovery before treating a repeated rejection as
-   terminal.
+   terminal. After either recovery path, refetch recent history and emit only
+   records not already present in the bounded deduplication cache.
 
 ### VODs
 
@@ -141,8 +144,9 @@ source-VOD interval, rather than the playlist's padded wall-clock start.
 - `parsing/events.py`: Pusher frame dispatch. Maps raw event names to
   normalized message types via `EVENT_NAME_MAP`, then to parser functions via
   `_PARSER_DISPATCH`. Decodes Kick's double-encoded `data` field. Control
-  frames are ignored; unknown events are debug-logged by name only and skipped;
-  a `pusher:error` frame raises `KickError`.
+  frames are omitted from output; unknown events are captured when explicitly
+  enabled, debug-logged by name, and skipped; a `pusher:error` frame raises
+  `KickError`.
 - `parsing/messages.py`: chat-message normalization for both live
   `ChatMessageEvent` payloads and preloaded history (same shape); badge and
   timestamp handling, including reply context from object- or string-encoded
@@ -191,7 +195,8 @@ Relevant documented surfaces:
 Known gaps:
 
 - The official docs do not document `https://kick.com/api/v2/channels/{slug}`,
-  `https://kick.com/api/v2/channels/{id}/messages`, or the VOD
+  `https://kick.com/api/v2/channels/{id}/messages`,
+  `https://kick.com/api/v2/clips/{clip_id}`, or the VOD
   `api/v1/video/{uuid}` endpoint this tool currently uses.
 - The official docs do not document Pusher event names such as
   `App\Events\ChatMessageEvent`, `App\Events\PinnedMessageCreatedEvent`, or
@@ -220,7 +225,8 @@ Recent messages are fetched from `api/v2/channels/{id}/messages` before the
 WebSocket opens and emitted first. This fetch is best-effort: expected provider,
 challenge, and transport errors yield an empty list, since the live feed is the
 primary source. Process interrupts still propagate. Preloaded IDs seed the
-deduplication cache so they are not repeated when they also arrive over the socket.
+deduplication cache so they are not repeated when they also arrive over the
+socket.
 The response's current pin state is emitted after recent messages. Current Kick
 pin events omit a top-level event ID, so the parser derives a namespaced event
 ID from the nested message ID to avoid colliding with the original chat message.
@@ -289,7 +295,9 @@ Before yielding, the live service:
 The receive loop runs under a reconnect wrapper: a `ConnectionError` closes the
 transport, reopens it, and resubscribes, retrying per the request's retry
 policy. A Pusher error gets the separate one-shot forced-discovery recovery
-described above. The loop carries `# noqa: C901` for its intrinsic branchiness.
+described above. Both recovery paths refetch recent messages and current pin
+state, then use the shared ID cache to backfill only records missed during the
+outage. The loop carries `# noqa: C901` for its intrinsic branchiness.
 
 ## Replay Capture Details
 
@@ -379,6 +387,8 @@ The Kick stack is most sensitive to changes in:
 - Cloudflare bot-protection on the REST endpoints
 - channel/video metadata structure (`chatroom.id`, `livestream`, `start_time`,
   `duration`)
+- clip metadata identity, source-VOD, channel, `vod_starts_at`, and `duration`
+  fields
 - divergence between official webhook schemas and live Pusher payloads; the
   official docs are schema hints, not authoritative contracts for the Pusher
   path
@@ -421,14 +431,14 @@ directory. Each anomaly label captures at most ten unique payloads per process
 and directory; successful frame capture attempts at most three payloads per
 normalized event type and retrieval run. Type-specific labels make the sampled
 surface visible without opening every file. The shared sanitizer redacts
-credential-bearing fields, URL tokens, and token-like strings before secure
+credential-bearing fields and sensitive URL or labeled values before secure
 `0600` files are written. Samples can still contain public chat content, so
 review them before sharing or promoting one into `tests/fixtures/kick/`.
 
 ## Testing
 
-The Kick suite is fully offline. The WebSocket connector and frame iterator,
-and the HTTP session, are injectable, so the live and replay paths run without
+The Kick suite is offline by default. The WebSocket connector, frame iterator,
+and HTTP session are injectable, so the live and replay paths run without
 network access. Fixtures live under `tests/fixtures/kick/`; shared fakes live in
 `tests/kick_helpers.py`. Live-network smoke tests are marked
 `@pytest.mark.network` in `tests/test_kick_network.py` and run only with

@@ -216,7 +216,7 @@ When Twitch rotates a persisted-query hash:
 
 These are structural offline checks; no network access is required.
 
-## Capture and fix parser drift
+## Capture and Fix Parser Drift
 
 For a bounded clean-run inspection of ordinary IRC traffic, enable
 `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`,
@@ -298,8 +298,8 @@ To turn a captured drift sample into a permanent regression anchor:
    - New replay field or typename → update the VOD edge schema in
      `validation_keys.py`, then update the parser/remapping when the field is
      useful.
-   - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`;
-     see GraphQL Hash Rotation below.
+   - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`; see
+     [GraphQL hash rotation](#graphql-hash-rotation).
 4. Promote reviewed IRC samples into `tests/fixtures/twitch/live_events/` and
    replay samples into `tests/fixtures/twitch/graphql/`. The drift harness runs
    both fixture families through their real parser composition.
@@ -323,12 +323,14 @@ The Twitch stack is most sensitive to changes in:
 When debugging Twitch breakage, inspect modules in this order:
 
 1. `graphql_client.py` — GraphQL request structure and error mapping
-2. `constants.py` — persisted-query hashes (`OPERATION_HASHES`) and known-key sets
-3. `replay_service.py` or `live_service.py` — service-layer orchestration
-4. `irc_transport.py` — low-level IRC socket and capability negotiation
-5. `parsing/message_irc_resolve.py` — IRC action/message-type resolution
-6. `parsing/message_emotes.py` — emote parsing and image-list assembly
-7. `parsing/messages.py` — high-level orchestration and field assembly
+2. `constants.py` — persisted-query hashes (`OPERATION_HASHES`) and message
+   group/remapping tables
+3. `validation_keys.py` — raw IRC and replay-shape known-key sets
+4. `replay_service.py` or `live_service.py` — service-layer orchestration
+5. `irc_transport.py` — low-level IRC socket and capability negotiation
+6. `parsing/message_irc_resolve.py` — IRC action/message-type resolution
+7. `parsing/message_emotes.py` — emote parsing and image-list assembly
+8. `parsing/messages.py` — high-level orchestration and field assembly
 
 ## Testing
 

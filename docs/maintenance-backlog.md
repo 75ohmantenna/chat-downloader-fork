@@ -36,4 +36,5 @@ documented read-chat, replay-chat, or equivalent event stream that covers it.
 - Current Chat API operations send and delete messages; they do not retrieve
   chat history or provide an unauthenticated live read stream.
 - Revisit when the official API adds a read surface that can preserve current
-  live, offline-channel, preloaded-history, and VOD behavior.
+  live, offline-channel, preloaded-history, reconnect-backfill, VOD, and clip
+  behavior.

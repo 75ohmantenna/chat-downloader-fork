@@ -200,8 +200,8 @@ the renderer's display timing instead of aborting the replay or replacing
 valid nested timing. Clip offsets are applied once after nested renderer timing
 is merged.
 
-`NoChatReplay` is most likely to appear in replay mode, when YouTube simply
-does not expose replay chat for the target.
+`NoChatReplay` indicates that YouTube does not expose replay chat for the
+target.
 
 ### Request profiles and fallback
 
@@ -271,9 +271,8 @@ so consumers can track a growing gift combo.
 
 `ban_user` is the normalized `message_type` for three distinct wire actions:
 `remove_chat_item`, `remove_chat_item_by_author`, and
-`mark_chat_items_by_author_as_deleted`. All three appeared in fixture captures
-from the Shu/Pokopia and Shapy/Crimson Desert live streams
-(`tests/fixtures/youtube/live_events/`).
+`mark_chat_items_by_author_as_deleted`. Reviewed captures for all three are
+preserved under `tests/fixtures/youtube/live_events/`.
 
 `deleted_message` (from `markChatItemAsDeletedAction`) is implemented but has
 not yet appeared in any observed live stream capture.
@@ -304,13 +303,14 @@ The mapping from wire action key to output `action_type` and `message_type`
 lives in `_KNOWN_REMOVE_ACTION_TYPES` in
 `src/chat_downloader/sites/youtube/constants_actions_messages_core.py`.
 
-## Capture and fix parser drift
+## Capture and Fix Parser Drift
 
 When a real stream produces a new renderer or action type that the parser
 doesn't recognize, the runtime emits a debug sentinel and can save a sanitized
 snapshot. See [Debug sample capture](development-workflow-guide.md#debug-sample-capture)
 for capture configuration. Promote reviewed samples into
-`tests/fixtures/youtube/`.
+`tests/fixtures/youtube/`. Each YouTube drift label captures at most ten unique
+payloads per process and output directory.
 
 Each continuation poll also emits one bounded aggregate debug diagnostic. It
 reports processed and emitted counts, then categorizes non-emitting actions as
@@ -356,9 +356,9 @@ To turn a captured drift sample into a permanent regression anchor:
    uv run pytest -q tests/test_youtube_drift_harness_unit.py
    make ci
    ```
-   It parameterizes over every dictionary-shaped `live_events/*.json` file and asserts
-   no drift sentinel fires. If the harness passes, the fix is complete and the
-   fixture is a permanent regression anchor.
+   It parameterizes over every dictionary-shaped `live_events/*.json` file and
+   asserts no drift sentinel fires. If the harness passes, the fix is complete
+   and the fixture is a permanent regression anchor.
 
 The four sentinel phrases checked by the harness are `"Unknown action"`,
 `"Unknown message type"`, `"Missing keys found"`, and
@@ -377,6 +377,7 @@ The YouTube stack is most sensitive to changes in:
 
 The initial watch-page fetch raises `RetriesExceeded` after all retry attempts
 on 5xx responses are exhausted.
+
 Invalid or negative continuation delay values from the InnerTube response use
 the five-second polling fallback unless a completed replay has an explicit
 `youtube_replay_poll_interval` override.

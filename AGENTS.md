@@ -85,7 +85,7 @@ Key ratchets:
 | `tests/test_cli_surface_unit.py` | Observable CLI option strings, defaults, and groups stay intentional |
 | `tests/test_makefile_contract_unit.py` | Canonical Makefile validation target stays pinned |
 | `tests/test_architecture_doc_contract_unit.py` | Package inventories stay aligned with source modules |
-| `tests/test_documentation_contract_unit.py` | Local links and Python API docs stay aligned |
+| `tests/test_documentation_contract_unit.py` | Local links, typed API docs, and debug-capture settings stay aligned |
 
 ## Style
 

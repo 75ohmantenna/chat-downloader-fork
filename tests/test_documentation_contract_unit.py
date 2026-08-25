@@ -19,6 +19,7 @@ from chat_downloader.runtime import RunResult
 from chat_downloader.sites.kick.constants import MESSAGE_GROUPS as KICK_MESSAGE_GROUPS
 
 ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src" / "chat_downloader"
 API_REFERENCE = ROOT / "docs" / "python-api-reference.md"
 CLI_REFERENCE = ROOT / "docs" / "cli-usage.md"
 KICK_REFERENCE = ROOT / "docs" / "kick-integration-guide.md"
@@ -210,3 +211,23 @@ def test_kick_reference_lists_exact_message_groups() -> None:
     }
 
     assert documented == KICK_MESSAGE_GROUPS
+
+
+def test_python_api_reference_lists_exact_debug_capture_environment_variables() -> None:
+    """Keep opt-in capture settings discoverable without documenting stale names."""
+    implemented = {
+        match
+        for path in SRC.rglob("*.py")
+        for match in re.findall(
+            r'"(CHAT_DOWNLOADER_[A-Z_]+)"',
+            path.read_text(encoding="utf-8"),
+        )
+    }
+    documented = set(
+        re.findall(
+            r"`(CHAT_DOWNLOADER_[A-Z_]+)(?:=1)?`",
+            API_REFERENCE.read_text(encoding="utf-8"),
+        )
+    )
+
+    assert documented == implemented

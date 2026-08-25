@@ -15,15 +15,15 @@ large refactors, parser reshaping, or tooling changes.
 | Twitch live IRC | `sites/twitch/live_service.py`, `irc_transport.py`, `parsing/` | live-service, transport, IRC parser, drift harness tests |
 | Twitch VOD and clip replay | `sites/twitch/replay_service.py`, `_replay_vod_loop.py`, `replay_transport.py` | replay service, replay transport, VOD edge tests |
 | Twitch GraphQL hashes, badges, Client-ID | `graphql_client.py`, `constants.py`, `types.py`, `parsing/badges.py` | Twitch client, hash coverage, badge-purity tests |
-| Kick live Pusher chat and rejected-key recovery | `sites/kick/live_service.py`, `websocket_transport.py`, `api_client.py`, `http_session.py`, `parsing/` | Kick live-service, transport, api-client, parsing unit tests |
+| Kick live Pusher chat, current pin state, reconnect backfill, diagnostics, and rejected-key recovery | `sites/kick/live_service.py`, `websocket_transport.py`, `api_client.py`, `http_session.py`, `parsing/` | Kick live-service, transport, api-client, parsing unit tests |
 | Kick VOD and clip replay | `sites/kick/replay_service.py`, `clip_service.py`, `api_client.py` | Kick replay-service, clip-service, and api-client tests |
 | Kick Pusher key discovery, Cloudflare handling, event/group maps | `sites/kick/pusher_discovery.py`, `constants.py`, `api_client.py`, `parsing/events.py` | Kick pusher-discovery, extractor, api-client, parsing-events tests |
 | Output formats: JSONL and TXT; placeholder expansion; path/inode deduplication; unsupported extensions rejected | `output/continuous_write.py`, `output/writers.py`, `runtime/chat_pipeline.py`, `sites/output_dispatch.py` | output writer, continuous-write, JSONL UTC, multiple-output and expanded-alias tests |
 | Paid/ticker semantic deduplication for formatted outputs; lossless raw output | `sites/_message_dedup.py`, `sites/output_dispatch.py`, `runtime/runner.py` | deduplication, chat-model, runner, and mixed-output tests |
-| Filtering, formatting, time windows | `sites/filters.py`, `formatting/format.py`, `runtime/chat_pipeline.py` (`configure_chat`) | filtering, formatting, configured-chat composition |
+| Filtering, provider-aware text formatting, conditional/singular format fields, time windows | `sites/filters.py`, `formatting/format.py`, `formatting/custom_formats.json`, `runtime/chat_pipeline.py` (`configure_chat`) | filtering, formatting, provider-format, configured-chat composition |
 | Cookies, sessions, auth, explicit/environment proxy safety | `ChatDownloader`, `_SiteSessionPool`, `ChatDownloaderSession`, `runtime/config_guards.py`, `sites/proxy.py`, YouTube auth | HTTP adapter, downloader lifecycle, proxy transport, auth, facade redaction |
 | Retry, timeout, interruption, cleanup | `sites/retry.py`, `utils/retry_utils.py`, `runtime/runner.py`, `Chat.close`, `TimedGenerator` | retry, network-retry, runner, chat-model, live-service, timed-generator tests |
-| Debug logging, custom-header redaction, debug sample capture | `debugging.py`, `redaction.py`, `debug_sample_utils.py` | debugging, redaction, debug-sample tests |
+| Debug logging, custom-header redaction, bounded drift/clean-run sample capture, final run summaries | `debugging.py`, `redaction.py`, `debug_sample_utils.py`, `runtime/runner.py` | debugging, redaction, debug-sample, runner, provider-diagnostic tests |
 | Build, spelling, install, smoke, import boundaries | `Makefile`, `pyproject.toml`, GitHub Actions | codespell, `tests/test_makefile_contract_unit.py`, import-linter, release metadata, `make ci` |
 
 ## Preservation Rules

@@ -25,8 +25,8 @@ For behavior-preservation coverage see
 └──────┬──────────────────┬───────────────────────────┬────┘
        │                  │                           │
 ┌──────▼──────┐   ┌───────▼──────────────┐   ┌───────▼────┐
-│  sites/     │   │  output/             │   │  format-   │
-│  base · ...  │   │  ContinuousWriter   │   │  ting/     │
+│  sites/     │   │  output/             │   │ formatting/│
+│  base · ... │   │  ContinuousWriter    │   │ templates  │
 │  youtube/   │   │  writers.py          │   │            │
 │  twitch/    │   └──────────────────────┘   └────────────┘
 │  kick/      │
@@ -93,9 +93,10 @@ bounded independently of channel activity after the recording.
 
 ## Package inventory
 
-Each table catalogs a package's immediate Python modules. Subpackages such as
-`parsing/` are summarized as one row. A contract test ensures every immediate
-non-`__init__.py` module is represented and rejects stale module names.
+Each table catalogs a package's immediate implementation files. Subpackages
+such as `parsing/` are summarized as one row. A contract test ensures every
+immediate non-`__init__.py` Python module is represented and rejects stale
+module names.
 
 ### Top-level
 | Module | Purpose |
@@ -116,7 +117,7 @@ non-`__init__.py` module is represented and rejects stale module names.
 ### `models/`
 | Module | Purpose |
 |--------|---------|
-| `_base.py` | Shared dataclass field helpers (`get_field_default`) |
+| `_base.py` | Shared defaults, CLI metadata, and dataclass field helpers (`get_field_default`) |
 | `_config.py` | `DownloaderConfig` (init-time settings) |
 | `_request.py` | `ChatRequest` (per-request options) |
 | `_runconfig.py` | `RunConfig`, `coerce_chat_request` |
@@ -130,7 +131,7 @@ non-`__init__.py` module is represented and rejects stale module names.
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
 | `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
 | `config_guards.py` | Explicit/environment proxy and cookie-authentication safety validation |
-| `runner.py` | Top-level run loop, testing-mode selection, and cleanup |
+| `runner.py` | Top-level run loop, structured `RunResult`, final diagnostics, testing-mode selection, and cleanup |
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
 
 ### `output/`
@@ -138,6 +139,28 @@ non-`__init__.py` module is represented and rejects stale module names.
 |--------|---------|
 | `continuous_write.py` | `ContinuousWriter` factory; re-exports writer types |
 | `writers.py` | `ContinuousFileWriter` ABC; `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
+
+### `formatting/`
+| Module | Purpose |
+|--------|---------|
+| `format.py` | `ItemFormatter`: safe template resolution, inheritance, field formatting, singular/conditional fragments, and output sanitization |
+| `custom_formats.json` | Built-in default, provider-specific, live, and time-display format definitions |
+
+### `utils/`
+| Module | Purpose |
+|--------|---------|
+| `color_utils.py` | ARGB/RGBA color conversion |
+| `console_utils.py` | Cross-platform safe console output and pause handling |
+| `conversion_utils.py` | Scalar conversion, retry-attempt, and back-off helpers |
+| `dict_utils.py` | Nested dictionary lookup, mutation, and first-item helpers |
+| `filename_utils.py` | Safe single-component filename sanitization |
+| `json_types.py` | JSON aliases plus typed accessors (`get_str`, `get_int`, `get_dict`, `get_list`, `dig`) |
+| `json_utils.py` | JSON parsing, flattening, and nested update helpers |
+| `retry_utils.py` | Immutable retry policy model |
+| `string_utils.py` | Regex, wrapping, prefix/suffix, and name-normalization helpers |
+| `time_utils.py` | Timestamp, duration, timezone, and ISO-8601 conversion |
+| `timed_generator.py` | Close-propagating timeout and inactivity wrapper |
+| `timed_input.py` | Interruptible console input with timeout support |
 
 ### `sites/` (shared)
 | Module | Purpose |
@@ -149,7 +172,7 @@ non-`__init__.py` module is represented and rejects stale module names.
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output and deduplication are delegated to `_ChatOutputDispatcher` |
-| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted item dispatch, and shutdown |
+| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted dispatch, completed-record and suppression counts, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_message_dedup.py` | Shared formatted-message policy: paid/ticker semantic deduplication for console and formatted files |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO deduplication cache |
@@ -199,7 +222,7 @@ non-`__init__.py` module is represented and rejects stale module names.
 | Module | Purpose |
 |--------|---------|
 | `_protocols.py` | Twitch transport and downloader structural interfaces |
-| `constants.py` | Client-ID and GraphQL operation hashes |
+| `constants.py` | URL/IRC constants, Client-ID, GraphQL operations, and message group/remapping tables |
 | `discovery.py` | Twitch URL discovery and GraphQL query construction |
 | `extractor.py` | Twitch site extractor class |
 | `graphql_client.py` | Persisted-query GraphQL client and error handling |
@@ -217,7 +240,7 @@ non-`__init__.py` module is represented and rejects stale module names.
 | Module | Purpose |
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
-| `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with deduplication, bounded reconnect, and rejected-key recovery |
+| `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, reconnect backfill, bounded diagnostics, and rejected-key recovery |
 | `replay_service.py` | VOD metadata, reverse pagination, time-window filtering, and chronological spooled output |
 | `clip_service.py` | Clip metadata validation, clip-relative bounds, and source-VOD replay assembly |
 | `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, VOD, and clip endpoints |

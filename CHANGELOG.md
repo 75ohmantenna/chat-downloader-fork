@@ -8,8 +8,27 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Features
+
+- Add bounded Kick clip chat replay through
+  `kick.com/{channel}/clips/{clip_id}` URLs. Clip-relative time bounds are
+  validated against clip metadata, translated onto the source VOD, and emitted
+  chronologically through the existing spooled replay path.
+- Accept YouTube channel, user, and handle `/live` shortcuts and resolve them
+  to the active video before normal playability and chat initialization.
+- Add an optional `youtube_replay_poll_interval` CLI and typed-API setting for
+  explicitly bounded completed-replay polling.
+- Extend `RunResult` with per-message-type counts while preserving the existing
+  positional field layout.
+- Add `singular_template` and `omit_if_false` custom-format field controls, and
+  make Kick's event-aware text formatter the provider default.
+
 ### Fixes
 
+- Retry generic initial YouTube `UNPLAYABLE` responses across request profiles
+  while preserving explicit user-agent and custom-header overrides.
+- Tolerate optional YouTube thumbnail and text-run shape drift without dropping
+  otherwise valid messages.
 - Align the default live socket receive timeout with the one-second minimum
   enforced by Twitch and Kick while continuing to clamp explicit lower values.
 - Keep paired YouTube paid and ticker replay items aligned in the zero-offset
@@ -34,6 +53,7 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Preserve signed capture-relative timing for YouTube messages received from
   the initial live backlog while keeping continuation polling offsets
   nonnegative and monotonic.
+- Retain Twitch badges when a replay comment omits its author object.
 - Preserve Twitch raid and unraid system-event descriptions in text output,
   with safe raider/author fallbacks when optional fields are missing or empty.
 - Preserve Twitch subscription-family and viewer-milestone descriptions while
@@ -43,6 +63,16 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Distinguish a Kick pin event's timestamp from the original chat message time
   through `metadata.original_message_created_at`, while retaining the previous
   metadata name as a compatibility alias.
+- Preserve Kick's current pin state, reply moderation context, live receive-time
+  fallback, and AI-moderation rule labels in normalized and formatted output.
+- Render Kick subscription, pin, host, and moderation events as informative
+  text notices instead of blank lines.
+- Keep empty Kick VOD and clip windows empty without making an unnecessary
+  history request.
+- Close provider iterators after deferred timeout-worker completion so early
+  limits and shutdown do not leave generators open.
+- Report configured lazy output paths that were not created because a
+  successful run retrieved no records.
 
 ### Security / hardening
 
@@ -55,15 +85,19 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Add a separately opted-in, sanitized capture of the first three successfully
   parsed raw Twitch IRC frames, with one bound spanning reconnects.
 - Add a separately opted-in, sanitized capture of the first three successfully
-  parsed Kick WebSocket event frames, with one bound spanning reconnects.
+  parsed Kick WebSocket frames per normalized event type, with per-type bounds
+  spanning reconnects.
 - Add a separately opted-in, sanitized capture of the first three structurally
   valid YouTube continuation responses for clean-run diagnosis.
+- Capture bounded, sanitized YouTube, Twitch, and Kick parser-drift samples,
+  including raw provider context needed to promote a regression fixture.
 - Distinguish processed YouTube actions from emitted messages in per-poll
   debug diagnostics and categorize non-emitting actions as known ignored
   controls or renderers, parser failures, message-filter exclusions, or
   time-range filtering outcomes.
 - Report final retrieved-message, formatted-output suppression, and
-  per-output-writer record counts after a successful debug run.
+  per-output-writer record counts after a successful debug run, including
+  provider diagnostics and lazy-file creation state.
 - Log Twitch's known optional `user.primaryTeam` GraphQL service error at debug
   level while retaining warnings for unfamiliar service-error paths in the
   same response.
@@ -75,12 +109,13 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   minimum.
 - Report the effective Kick WebSocket receive timeout after applying the
   one-second minimum.
+- Report decoded/control/event counts, reconnects, Pusher errors and key
+  recoveries, and the last decoded-frame timestamp for Kick live runs.
 
 ### Performance
 
-- Add an explicit bounded YouTube replay polling override while respecting
-  provider delay hints by default, skip terminal waits, and follow continuation
-  tokens across empty replay pages.
+- Skip terminal YouTube waits and follow continuation tokens across empty
+  replay pages while respecting provider delay hints by default.
 
 ## 2.0.7 — 2026-08-25
 

@@ -98,6 +98,7 @@ Full CLI examples, output-format details, options, and troubleshooting are in
   development workflow and validation commands
 - [`docs/architecture.md`](docs/architecture.md) — package ownership,
   lifecycle, and dependency rules
+- [`CHANGELOG.md`](CHANGELOG.md) — user-visible changes grouped by release
 - [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md) and
   [`docs/maintenance-decisions.md`](docs/maintenance-decisions.md) — current
   watch items and durable design rationale

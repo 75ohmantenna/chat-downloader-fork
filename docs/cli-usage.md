@@ -110,10 +110,10 @@ only for an exact numeric value of one; zero, other numbers, booleans, and
 numeric strings use the normal template. `omit_if_false: true` suppresses the
 field's complete rendered fragment for false, zero, empty, or null values.
 
-Kick text output labels subscription, pin, host, and moderation events. Events
-without ordinary message text render a bracketed notice instead of a blank
-line; JSONL retains their structured identifiers and metadata. When a Kick
-live event omits its provider timestamp, JSONL records a separate
+Kick's default text format labels subscription, pin, host, and moderation
+events. Events without ordinary message text render a bracketed notice instead
+of a blank line; JSONL retains their structured identifiers and metadata. When
+a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
 display fallback. AI deletion notices retain their AI-moderated marker and
 violated-rule labels in TXT instead of becoming indistinguishable from ordinary
@@ -196,6 +196,9 @@ Debug and automation:
   sanitized samples for unknown or malformed REST/Pusher payloads; see the
   Kick integration guide for storage and review guidance.
 - With both that setting and
+  `CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES=1`, YouTube captures the first
+  three structurally valid continuation responses for clean-run schema review.
+- With both that setting and
   `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1`, Twitch captures the first
   three successfully parsed raw IRC frames for clean-run schema review.
 - With both that setting and `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`, Kick also
@@ -234,7 +237,7 @@ Debug and automation:
   Cloudflare bot-protection page. The bundled `curl-cffi` and `cloudscraper`
   fallbacks can clear some challenges, but endpoint or VPN reputation can still
   trigger one.
-- Use `jsonl` for long or live captures.
+- Use `.jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `src/chat_downloader/sites/`.
 - The CLI exits with a nonzero status on failure or when interrupted

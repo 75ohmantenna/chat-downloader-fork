@@ -84,6 +84,15 @@ uv run mypy .
 uv run lint-imports
 ```
 
+Documentation and release contracts:
+
+```bash
+uv run pytest -q \
+  tests/test_documentation_contract_unit.py \
+  tests/test_architecture_doc_contract_unit.py \
+  tests/test_release_metadata_unit.py
+```
+
 Opt-in network tests:
 
 ```bash
@@ -244,9 +253,13 @@ Provider-specific diagnosis and fixture-promotion steps live in the
    unchanged; setuptools reads the version dynamically.
 4. Run `uv lock`, `uv lock --check`, `uv sync --locked`, and `make ci`.
 5. Inspect the built wheel metadata and confirm the expected version.
-6. Create and verify the signed release commit, then create the annotated
-   `v<version>` tag at that commit.
-7. Push `master` and the new tag, then confirm both remote refs resolve to the
+6. Create and verify the signed release commit, then create and verify the
+   signed annotated `v<version>` tag at that commit.
+7. If the release was prepared in a second checkout, fetch its branch into the
+   target checkout, prove the target `master` is an ancestor, and merge with
+   `--ff-only`. A fast-forward preserves the reviewed commit identities and is
+   preferable to replaying a linearly related branch through cherry-picks.
+8. Push `master` and the new tag, then confirm both remote refs resolve to the
    expected commits.
 
 `tests/test_release_metadata_unit.py` enforces agreement between the package

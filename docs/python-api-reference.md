@@ -1,8 +1,9 @@
 # Python API Reference
 
 The stable Python surface exposed by `chat-downloader-fork`. The authoritative
-sources are `src/chat_downloader/__init__.py`, `src/chat_downloader/chat_downloader.py`,
-and `src/chat_downloader/models/`; this document reflects them.
+sources are `src/chat_downloader/__init__.py`,
+`src/chat_downloader/chat_downloader.py`, and `src/chat_downloader/models/`;
+this document reflects them.
 
 ## Quick Start
 
@@ -96,7 +97,7 @@ these fields:
 | `message_count` | Number of messages processed |
 | `interrupted` | Whether execution ended through `KeyboardInterrupt` or `SIGTERM` |
 | `error_message` | Terminal error text, or `None` on success |
-| `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error |
+| `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error, and messages without a string type use the `<missing>` key |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.
@@ -262,8 +263,10 @@ the same class.
 ## `Chat` Objects
 
 `get_chat()` returns a `Chat` object from `chat_downloader.sites.models`. It
-wraps the underlying generator and carries metadata such as status and output
-writer state.
+wraps the underlying generator and carries metadata such as `title`, `id`,
+`status`, `video_type`, `start_time`, and `duration`. Provider-specific live
+diagnostics, when available, are exposed through `chat.diagnostics` and included
+in the successful debug run summary.
 
 In normal usage, treat it as an iterable of message dictionaries:
 
@@ -279,10 +282,13 @@ for item in chat:
 - `TimedGenerator`: generator wrapper that enforces timeout and inactivity
   limits
 
-Custom `ItemFormatter` field definitions may set `omit_if_false: true` to
-suppress the field's whole rendered fragment for false, zero, empty, or null
-values. This supports conditional notices without adding presentation-only
-fields to normalized JSONL records.
+Custom `ItemFormatter` field definitions may provide a `template`, an optional
+`singular_template`, and `omit_if_false: true`. The singular template is used
+only for an exact numeric value of one; booleans and numeric strings continue to
+use the normal template. Conditional fields suppress their complete rendered
+fragment for false, zero, empty, or null values. These controls support natural
+event notices without adding presentation-only fields to normalized JSONL
+records.
 
 The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
@@ -312,6 +318,9 @@ is available as `metadata.original_message_created_at`, with
 `chat_downloader.debugging` provides:
 
 - `log(...)` and `debug_log(...)` for package logging
+
+`chat_downloader.redaction` provides:
+
 - `sanitize_for_log(...)` for redacting cookies, proxies, known secret fields,
   custom header names containing auth/token/secret/credential markers, API-key
   headers, and Basic/Bearer/OAuth/SAPISIDHASH values before logging or capture
@@ -336,9 +345,13 @@ duplicate payloads continue to resolve to their deterministic existing path.
 
 Clean-run provider captures require a second explicit opt-in because they
 contain ordinary public chat data. Set
-`CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1` to capture the first three valid
-raw Twitch IRC frames across reconnects. The shared capture flag and debug
-logging must also be enabled.
+`CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES=1` to capture the first three
+structurally valid YouTube continuation responses in a retrieval run. API-error
+and structurally incomplete responses are excluded.
+
+Set `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1` to capture the first three
+valid raw Twitch IRC frames across reconnects. The shared capture flag and
+debug logging must also be enabled.
 
 Set `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1` to capture up to three successfully
 parsed raw Kick WebSocket frames per normalized event type across reconnects.

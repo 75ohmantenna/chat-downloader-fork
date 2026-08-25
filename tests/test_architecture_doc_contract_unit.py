@@ -16,6 +16,8 @@ INVENTORIES: dict[str, Path] = {
     "### `models/`": SRC / "models",
     "### `runtime/`": SRC / "runtime",
     "### `output/`": SRC / "output",
+    "### `formatting/`": SRC / "formatting",
+    "### `utils/`": SRC / "utils",
     "### `sites/` (shared)": SRC / "sites",
     "### `sites/youtube/`": SRC / "sites" / "youtube",
     "### `sites/twitch/`": SRC / "sites" / "twitch",
