@@ -210,11 +210,18 @@ does not expose replay chat for the target.
 `DownloaderConfig`. Any other profile name raises `ValueError` during
 configuration.
 
-When `auto_profile_fallback` is enabled, the continuation loop can rotate
-YouTube profiles after repeated incomplete continuation payloads. The fallback
-logic lives in `continuation.py`; profile headers and
-InnerTube context adjustments live in `client_context.py` and
-`request_profiles.py`.
+When `auto_profile_fallback` is enabled, initial bootstrap rotates YouTube
+profiles when an `UNPLAYABLE` response contains only a generic reason such as
+`Video unavailable`. A more specific response (for example, a country
+restriction) is surfaced without further rotation. The continuation loop can
+also rotate profiles after repeated incomplete continuation payloads. The
+fallback logic lives in `video_initialization.py` and `continuation.py`;
+profile headers and InnerTube context adjustments live in `client_context.py`
+and `request_profiles.py`.
+
+The session owns profile-generated headers. Explicit `--user-agent` and
+`--header` overrides remain unchanged during fallback, as do runtime headers
+such as authorization and visitor identifiers.
 
 The initial InnerTube fallback uses the same request-profile context fields
 when constructing its `player` and `next` payloads. Continuation-loop profile

@@ -10,7 +10,7 @@ from dataclasses import fields as dc_fields
 from typing import Any, Literal, Protocol, TypedDict
 
 from .models import ChatRequest, DownloaderConfig, RunConfig, get_field_default
-from .request_profiles import REQUEST_PROFILES, get_request_profile_headers
+from .request_profiles import REQUEST_PROFILES
 
 HEADER_NAME_PATTERN = re.compile(r"^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
 
@@ -158,11 +158,11 @@ def _build_request_headers(args_dict: dict[str, Any]) -> dict[str, str]:
     """Assemble the request headers dict from parsed CLI args.
 
     Mutates ``args_dict`` to remove the CLI-only ``user_agent`` and
-    ``headers_list`` keys so they are not forwarded to :func:`run`. Header
-    precedence: request-profile headers, then ``--user-agent``, then
-    ``--header`` entries (later wins).
+    ``headers_list`` keys so they are not forwarded to :func:`run`. Request
+    profiles are applied by the session, leaving this helper responsible only
+    for explicit ``--user-agent`` and ``--header`` overrides (later wins).
     """
-    headers = get_request_profile_headers(args_dict.get("request_profile"))
+    headers: dict[str, str] = {}
     user_agent = args_dict.pop("user_agent", None)
     headers_list = args_dict.pop("headers_list", None)
     if user_agent:

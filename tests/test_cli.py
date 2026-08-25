@@ -11,7 +11,6 @@ import pytest
 import chat_downloader.cli_args as cli_args_module
 from chat_downloader.cli import main
 from chat_downloader.cli_args import (
-    REQUEST_PROFILES,
     _build_request_headers,
     parse_header,
     splitter,
@@ -255,7 +254,7 @@ def test_user_agent_sets_user_agent_header() -> None:
 def test_request_profile_sets_preset_headers() -> None:
     d = _run_and_capture("--request_profile", "youtube_android")
     assert d.get("request_profile") == "youtube_android"
-    assert d.get("headers", {}) == REQUEST_PROFILES["youtube_android"]
+    assert "headers" not in d
 
 
 def test_user_agent_overrides_profile_user_agent() -> None:
@@ -263,7 +262,7 @@ def test_user_agent_overrides_profile_user_agent() -> None:
         "--request_profile", "youtube_ios", "--user-agent", "Override/9.9"
     )
     assert d.get("headers", {}).get("User-Agent") == "Override/9.9"
-    assert d.get("headers", {}).get("Accept-Language") == "en-US,en;q=0.9"
+    assert "Accept-Language" not in d.get("headers", {})
 
 
 def test_header_flag_overrides_profile_values() -> None:
@@ -529,5 +528,4 @@ def test_build_request_headers_user_agent_overrides_profile() -> None:
     args = {"request_profile": "youtube_web", "user_agent": "custom-ua"}
     headers = _build_request_headers(args)
     assert headers["User-Agent"] == "custom-ua"
-    # Non-overridden profile headers are preserved.
-    assert headers["Accept-Language"] == "en-US,en;q=0.9"
+    assert "Accept-Language" not in headers

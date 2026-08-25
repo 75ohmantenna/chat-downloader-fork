@@ -18,7 +18,6 @@ from chat_downloader._timeout_defaults import (
 )
 from chat_downloader.errors import CookieError, InvalidParameter
 from chat_downloader.request_profiles import (
-    build_request_profile_headers,
     get_request_profile_headers,
     normalize_request_profile,
 )
@@ -29,6 +28,14 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONAny
 
 _ALLOWED_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks5", "socks5h"})
+_DEFAULT_SESSION_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/143.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "en-US, en, *",
+}
 
 
 def _validate_cookie_domain(domain: str) -> None:
@@ -60,17 +67,11 @@ def _build_session_headers(
     request_profile: str | None,
 ) -> dict[str, str]:
     """Return initial headers after applying request-profile policy."""
-    headers = dict(provided_headers) if provided_headers is not None else {}
-    if not headers:
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/143.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "en-US, en, *",
-        }
-    return build_request_profile_headers(request_profile, headers)
+    headers = dict(_DEFAULT_SESSION_HEADERS)
+    headers.update(get_request_profile_headers(request_profile))
+    if provided_headers:
+        headers.update(provided_headers)
+    return headers
 
 
 @dataclass(slots=True)
@@ -135,6 +136,7 @@ class ChatDownloaderSession:
         self.request_profile = normalize_request_profile(request_profile)
         self.auto_profile_fallback = bool(auto_profile_fallback)
         self.twitch_client_id = twitch_client_id
+        self._explicit_header_names = {key.casefold() for key in headers or ()}
 
         merged_headers = _build_session_headers(headers, self.request_profile)
         self.session.headers.clear()
@@ -171,10 +173,9 @@ class ChatDownloaderSession:
         profile_headers = get_request_profile_headers(profile_name)
         if not profile_headers:
             return False
-        session_headers = cast("dict[str, str]", dict(self.session.headers))
-        merged_headers = build_request_profile_headers(profile_name, session_headers)
-        self.session.headers.clear()
-        self.session.headers.update(merged_headers)
+        for name, value in profile_headers.items():
+            if name.casefold() not in self._explicit_header_names:
+                self.session.headers[name] = value
         self.request_profile = profile_name
         return True
 

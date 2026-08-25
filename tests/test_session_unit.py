@@ -9,6 +9,7 @@ from typing import Any, ClassVar, cast
 import pytest
 
 from chat_downloader.errors import CookieError, InvalidParameter
+from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.common import check_for_invalid_types, get_mapped_keys
 from chat_downloader.sites.models import SiteDefault
@@ -115,14 +116,10 @@ def test_http_session_headers_profiles_and_cookies(monkeypatch) -> None:
         "chat_downloader.sites.session.get_request_profile_headers",
         lambda name: None if name == "missing" else {"X": name},
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.session.build_request_profile_headers",
-        lambda name, headers: {**dict(headers), "Profile": name},
-    )
     assert http.apply_request_profile("missing") is False
     assert http.apply_request_profile("youtube_web") is True
     assert http.request_profile == "youtube_web"
-    assert http.get_header("Profile") == "youtube_web"
+    assert http.get_header("X") == "youtube_web"
 
     http.set_cookie(
         CookieSpec(".youtube.com", "sid", "abc", path="/watch", secure=True)
@@ -133,6 +130,33 @@ def test_http_session_headers_profiles_and_cookies(monkeypatch) -> None:
     cookie = next(iter(http.session.cookies))
     assert cookie.path == "/watch"
     assert cookie.secure is True
+
+
+def test_http_session_profile_switch_replaces_only_profile_headers() -> None:
+    http = _http(
+        headers={"Authorization": "token", "User-Agent": "explicit-agent"},
+        request_profile="youtube_web",
+    )
+
+    assert http.get_header("User-Agent") == "explicit-agent"
+    assert http.get_header("Accept-Language") == "en-US,en;q=0.9"
+    assert http.apply_request_profile("youtube_android") is True
+    assert http.get_header("User-Agent") == "explicit-agent"
+    assert http.get_header("Accept-Language") == "en-US,en;q=0.9"
+    assert http.get_header("Authorization") == "token"
+
+
+def test_http_session_profile_switch_updates_unoverridden_user_agent() -> None:
+    http = _http(request_profile="youtube_web")
+
+    assert (
+        http.get_header("User-Agent") == REQUEST_PROFILES["youtube_web"]["User-Agent"]
+    )
+    assert http.apply_request_profile("youtube_android") is True
+    assert (
+        http.get_header("User-Agent")
+        == REQUEST_PROFILES["youtube_android"]["User-Agent"]
+    )
     http.clear_cookies()
     assert http.cookies_dict() == {}
 

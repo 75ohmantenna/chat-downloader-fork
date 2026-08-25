@@ -72,8 +72,8 @@ class DownloaderConfig:
         default=True,
         metadata={
             "cli": _cli(
-                "Auto-switch request profile on repeated incomplete "
-                "YouTube continuation responses",
+                "Auto-switch YouTube request profiles after generic initial "
+                "playability or repeated incomplete continuation responses",
                 group="init",
             ),
         },

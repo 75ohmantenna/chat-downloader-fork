@@ -62,7 +62,7 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
   --header "Accept-Language: en-US,en;q=0.9"
 ```
 
-Enable automatic YouTube profile fallback on incomplete continuations:
+Enable automatic YouTube profile fallback during bootstrap and continuations:
 
 ```bash
 chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
@@ -155,8 +155,10 @@ Request control:
 - `--request_profile` — request-header preset: `youtube_web`,
   `youtube_android`, `youtube_ios`, or `twitch_web`. Unknown names fail during
   configuration.
-- `--auto_profile_fallback` — rotate YouTube request profiles when
-  continuation payloads are repeatedly incomplete.
+- `--auto_profile_fallback` — rotate YouTube request profiles when initial
+  playability is generically unavailable or continuation payloads are
+  repeatedly incomplete. Explicit `--user-agent` and `--header` values remain
+  authoritative during rotation.
 - `--youtube_replay_poll_interval` — explicitly override completed YouTube
   replay polling with an interval from 0.5 through 8 seconds. The default
   respects the provider delay; faster polling is opt-in and can be rate-limited.
