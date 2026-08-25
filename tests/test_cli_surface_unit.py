@@ -81,7 +81,7 @@ EXPECTED_DEFAULTS: dict[str, Any] = {
     "max_attempts": 15,
     "max_messages": None,
     "message_groups": ("SiteDefault", "message_groups"),
-    "message_receive_timeout": 0.1,
+    "message_receive_timeout": 1.0,
     "message_types": None,
     "output": None,
     "overwrite": True,

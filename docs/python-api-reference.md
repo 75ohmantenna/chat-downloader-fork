@@ -170,7 +170,7 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `chat_type` | `"live"` | YouTube chat mode: `"live"` or `"top"` |
 | `ignore` | `None` | YouTube video IDs to skip during discovery |
 | `youtube_replay_poll_interval` | `None` | Optional completed-replay polling override in seconds from `0.5` through `8`; `None` respects YouTube's delay hint |
-| `message_receive_timeout` | `0.1` | Live socket receive-poll timeout; Twitch and Kick enforce a one-second minimum |
+| `message_receive_timeout` | `1.0` | Live socket receive-poll timeout; Twitch and Kick enforce a one-second minimum |
 | `buffer_size` | `4096` | Twitch IRC receive-buffer size in bytes |
 
 URL dispatch matches the complete input. Normal query strings and fragments are

@@ -10,6 +10,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Align the default live socket receive timeout with the one-second minimum
+  enforced by Twitch and Kick while continuing to clamp explicit lower values.
 - Keep paired YouTube paid and ticker replay items aligned in the zero-offset
   preroll by retaining their signed nested display timing.
 - Ignore malformed, non-finite, and negative YouTube replay-wrapper offsets and

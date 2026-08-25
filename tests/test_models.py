@@ -486,8 +486,8 @@ def test_default_buffer_size_positive() -> None:
     assert DEFAULT_BUFFER_SIZE > 0
 
 
-def test_default_message_receive_timeout_positive() -> None:
-    assert DEFAULT_MESSAGE_RECEIVE_TIMEOUT > 0
+def test_default_message_receive_timeout_matches_provider_minimum() -> None:
+    assert pytest.approx(1.0) == DEFAULT_MESSAGE_RECEIVE_TIMEOUT
 
 
 # ===========================================================================

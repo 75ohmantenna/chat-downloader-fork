@@ -12,7 +12,7 @@ import dataclasses
 from typing import Any
 
 DEFAULT_MAX_ATTEMPTS: int = 15
-DEFAULT_MESSAGE_RECEIVE_TIMEOUT: float = 0.1
+DEFAULT_MESSAGE_RECEIVE_TIMEOUT: float = 1.0
 DEFAULT_BUFFER_SIZE: int = 4096
 
 
