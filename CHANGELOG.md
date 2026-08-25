@@ -38,6 +38,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   with safe raider/author fallbacks when optional fields are missing or empty.
 - Preserve Twitch subscription-family and viewer-milestone descriptions while
   separating any appended user messages in text output.
+- Render one-second Twitch timeouts with singular grammar in text output while
+  retaining numeric timeout durations in structured output.
 - Distinguish a Kick pin event's timestamp from the original chat message time
   through `metadata.original_message_created_at`, while retaining the previous
   metadata name as a compatibility alias.

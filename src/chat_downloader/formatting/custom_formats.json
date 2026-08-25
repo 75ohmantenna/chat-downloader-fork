@@ -304,7 +304,10 @@
             "template": "{timestamp}{banned_user} was {ban_duration|ban_type}.",
             "inherit": "default",
             "keys": {
-                "ban_duration": "timed out for {} seconds",
+                "ban_duration": {
+                    "template": "timed out for {} seconds",
+                    "singular_template": "timed out for {} second"
+                },
                 "ban_type": "{}ly banned"
             }
         },

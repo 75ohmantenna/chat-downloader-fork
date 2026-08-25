@@ -57,6 +57,7 @@ class ItemFormatter:
     KEY_INHERIT = "inherit"
     KEY_FORMAT = "format"
     KEY_SEPARATOR = "separator"
+    KEY_SINGULAR_TEMPLATE = "singular_template"
     KEY_COLLAPSE_LEADING_ZEROES = "collapse_leading_zeroes"
 
     # Special field names that require custom formatting
@@ -240,10 +241,27 @@ class ItemFormatter:
         if field_config is None:
             return str(value)
 
-        template = self._extract_template(field_config)
+        template = self._select_field_template(field_config, value)
         formatted_value = self._apply_field_formatting(field_path, value, field_config)
 
         return _SAFE_FORMATTER.format(template, formatted_value)
+
+    def _select_field_template(self, field_config: object, value: object) -> str:
+        """Select the singular template for an exact numeric value of one."""
+        template = self._extract_template(field_config)
+        if (
+            not isinstance(field_config, dict)
+            or isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or value != 1
+        ):
+            return template
+
+        singular_template = field_config.get(self.KEY_SINGULAR_TEMPLATE)
+        if isinstance(singular_template, str):
+            return singular_template
+
+        return template
 
     def _extract_template(self, field_config: Any) -> str:
         """Return the template string from a field config entry."""

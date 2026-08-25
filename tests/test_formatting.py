@@ -83,6 +83,7 @@ def test_format_constants() -> None:
     assert ItemFormatter.KEY_TEMPLATE == "template"
     assert ItemFormatter.KEY_KEYS == "keys"
     assert ItemFormatter.KEY_MATCHING == "matching"
+    assert ItemFormatter.KEY_SINGULAR_TEMPLATE == "singular_template"
     assert ItemFormatter.DEFAULT_FORMAT_NAME == "default"
 
 
@@ -650,6 +651,97 @@ def test_format_twitch_ban_type(formatter: ItemFormatter) -> None:
     }
     result = formatter.format(item, format_name="twitch")
     assert isinstance(result, str)
+
+
+@pytest.mark.parametrize(
+    ("duration", "expected_suffix"),
+    [
+        (0, "spammer was timed out for 0 seconds."),
+        (1, "spammer was timed out for 1 second."),
+        (30, "spammer was timed out for 30 seconds."),
+    ],
+)
+def test_format_twitch_timeout_duration_uses_correct_grammar(
+    formatter: ItemFormatter,
+    duration: int,
+    expected_suffix: str,
+) -> None:
+    item = {
+        "message_type": "ban_user",
+        "banned_user": "spammer",
+        "ban_duration": duration,
+        "ban_type": "timeout",
+        "timestamp": 1000000,
+    }
+
+    result = formatter.format(item, format_name="twitch")
+
+    assert result.endswith(expected_suffix)
+    assert item["ban_duration"] == duration
+    assert isinstance(item["ban_duration"], int)
+
+
+def test_format_twitch_permanent_ban_falls_back_to_ban_type(
+    formatter: ItemFormatter,
+) -> None:
+    item = {
+        "message_type": "ban_user",
+        "banned_user": "spammer",
+        "ban_type": "permanent",
+        "timestamp": 1000000,
+    }
+
+    result = formatter.format(item, format_name="twitch")
+
+    assert result.endswith("spammer was permanently banned.")
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (1, "1 item"),
+        (1.0, "1.0 item"),
+        (0, "0 items"),
+        (2, "2 items"),
+        (True, "True items"),
+        (False, "False items"),
+        ("1", "1 items"),
+    ],
+)
+def test_singular_template_only_matches_exact_numeric_one(
+    formatter: ItemFormatter,
+    value: object,
+    expected: str,
+) -> None:
+    format_object = {
+        "template": "{count}",
+        "keys": {
+            "count": {
+                "template": "{} items",
+                "singular_template": "{} item",
+            },
+        },
+    }
+
+    assert formatter.format({"count": value}, format_object=format_object) == expected
+
+
+@pytest.mark.parametrize("singular_template", [None, 1, False])
+def test_invalid_singular_template_falls_back_to_standard_template(
+    formatter: ItemFormatter,
+    singular_template: object,
+) -> None:
+    format_object = {
+        "template": "{count}",
+        "keys": {
+            "count": {
+                "template": "{} items",
+                "singular_template": singular_template,
+            },
+        },
+    }
+
+    assert formatter.format({"count": 1}, format_object=format_object) == "1 items"
 
 
 def test_match_format_from_list_no_match_uses_default(
