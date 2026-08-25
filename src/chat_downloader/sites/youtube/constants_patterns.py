@@ -57,6 +57,22 @@ _YT_RESERVED_USER_PATHS = (
     "watch",
 )
 
+_YT_USER_ROUTE_RE = (
+    r"""(?x)
+            (?:https?://|//)
+                (?:\w+\.)?
+                (?:
+                    youtube(?:kids)?\.com
+                )/
+                (?!(?:"""
+    + "|".join(_YT_RESERVED_USER_PATHS)
+    + r""")(?:[/?#]|$))
+                (?:
+                    (?P<type>channel/|c/|user/|@)
+                )?
+                (?P<id>[a-zA-Z0-9_-]+)"""
+)
+
 _VALID_URLS = {
     "_get_chat_by_video_id": r"""(?x)^
                  (
@@ -90,22 +106,10 @@ _VALID_URLS = {
                     youtube?\.com
                 )/clip/
                 (?P<id>[a-zA-Z0-9_-]+)""",
+    "_get_chat_by_live_user": _YT_USER_ROUTE_RE + r"/live",
     # while this does match 'watch' urls, it will never
     # return this since the above regex is run before this
-    "_get_chat_by_user": r"""(?x)
-            (?:https?://|//)
-                (?:\w+\.)?
-                (?:
-                    youtube(?:kids)?\.com
-                )/
-                (?!(?:"""
-    + "|".join(_YT_RESERVED_USER_PATHS)
-    + r""")(?:[/?#]|$))
-                (?:
-                    (?P<type>channel/|c/|user/|@)
-                )?
-                (?P<id>[a-zA-Z0-9_-]+)
-                (?:/live)?""",
+    "_get_chat_by_user": _YT_USER_ROUTE_RE,
 }
 
 # Live playlist used for discovery tests

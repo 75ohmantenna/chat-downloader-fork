@@ -76,7 +76,7 @@ def test_youtube_live_channel_url_matching(
 
     assert result is not None
     function_name, match = result
-    assert function_name == "_get_chat_by_user"
+    assert function_name == "_get_chat_by_live_user"
     assert match.group("id") == expected_id
     assert match.group("type") == expected_type
     assert match.end() == len(url)
@@ -89,7 +89,7 @@ def test_youtube_live_channel_url_accepts_query_suffix() -> None:
 
     assert result is not None
     function_name, match = result
-    assert function_name == "_get_chat_by_user"
+    assert function_name == "_get_chat_by_live_user"
     assert match.group("id") == "example"
 
 

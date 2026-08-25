@@ -33,18 +33,20 @@ Main implementation areas:
 The normal YouTube flow is:
 
 1. Match the incoming URL to a supported YouTube target.
-2. Load the watch page and parse initial JSON state.
-3. If the watch page is challenged or cannot be parsed, fall back to the
+2. Resolve a channel, user, or handle `/live` shortcut to the canonical video
+   ID so video-specific playability errors remain visible.
+3. Load the watch page and parse initial JSON state.
+4. If the watch page is challenged or cannot be parsed, fall back to the
    InnerTube `player` and `next` endpoints for live-video bootstrap metadata.
-4. Extract video details, playability information, client config, and initial
+5. Extract video details, playability information, client config, and initial
    chat continuation hints.
-5. Load the chat page once to recover the active `Top chat` and `Live chat`
+6. Load the chat page once to recover the active `Top chat` and `Live chat`
    continuation tokens.
-6. Build browser-like request headers, optionally adding auth headers when
+7. Build browser-like request headers, optionally adding auth headers when
    cookies are available.
-7. Poll the private InnerTube chat continuation endpoint.
-8. Parse actions into normalized chat messages.
-9. Continue until replay data ends, live continuations stop, or the caller
+8. Poll the private InnerTube chat continuation endpoint.
+9. Parse actions into normalized chat messages.
+10. Continue until replay data ends, live continuations stop, or the caller
    reaches a configured limit.
 
 ## Module Guide
@@ -63,6 +65,8 @@ The normal YouTube flow is:
   `video_status_models.py` (`VideoDetails`)
 - `discovery.py`: cohesive channel/handle discovery, browse pagination, and
   live-page test URL generation
+- `chat_users_router.py`: channel/user/handle routing and direct `/live`
+  shortcut resolution
 - `discovery_playlists.py`: playlist discovery and pagination
 
 ### Request construction

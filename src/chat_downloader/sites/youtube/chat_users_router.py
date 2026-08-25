@@ -4,11 +4,21 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, cast
 
-if TYPE_CHECKING:
-    import re
+from chat_downloader.debugging import log
+from chat_downloader.errors import VideoUnavailable
+from chat_downloader.utils.json_types import get_dict, get_str
 
+from .client_requests_initial import _get_initial_info
+from .constants_patterns import (
+    _YT_CFG_RE,
+    _YT_INITIAL_DATA_RE,
+    _YT_INITIAL_PLAYER_RESPONSE_RE,
+)
+
+if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
 
@@ -17,6 +27,30 @@ if TYPE_CHECKING:
 
 class YouTubeChatUsersRouterMixin:
     """Resolve user/channel route parameters to chat lookup calls."""
+
+    def _get_chat_by_live_user(
+        self,
+        match: re.Match[str],
+        params: ChatRequest,
+    ) -> Chat:
+        """Resolve a channel live shortcut to its canonical video chat."""
+        proto = cast("YouTubeDownloaderProto", self)
+        _, _, player_response = _get_initial_info(
+            params.url,
+            proto._session_get,
+            params,
+            _YT_INITIAL_DATA_RE,
+            _YT_CFG_RE,
+            _YT_INITIAL_PLAYER_RESPONSE_RE,
+        )
+        video_id = get_str(get_dict(player_response, "videoDetails"), "videoId")
+        if not video_id or re.fullmatch(r"[0-9A-Za-z_-]{11}", video_id) is None:
+            route = match.group(0)
+            msg = f"Unable to resolve an active livestream from {route!r}."
+            raise VideoUnavailable(msg)
+
+        log("debug", f"Resolved YouTube live URL to video ID: {video_id}")
+        return proto.get_chat_by_video_id(video_id, params)
 
     def _get_chat_by_user(self, match: re.Match[str], params: ChatRequest) -> Chat:
         """Get chat by user from regex match."""
