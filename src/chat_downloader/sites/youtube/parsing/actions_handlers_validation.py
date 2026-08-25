@@ -14,6 +14,9 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
 from chat_downloader.sites.youtube.constants_message import (
     known_keys,
 )
+from chat_downloader.sites.youtube.constants_patterns import (
+    YOUTUBE_DEBUG_SAMPLE_LIMIT,
+)
 from chat_downloader.utils.json_types import JSONDict, get_dict
 from chat_downloader.utils.string_utils import (
     camel_case_split,
@@ -48,6 +51,7 @@ def _emit_parse_diagnostics(
                 "original_item": original_item,
                 "original_action_type": original_action_type,
             },
+            sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
         )
         debug_log(
             f"Parse of action returned empty results: {original_action_type}",
@@ -63,6 +67,7 @@ def _emit_parse_diagnostics(
                 "original_message_type": original_message_type,
                 "missing_keys": sorted(missing_keys),
             },
+            sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
         )
         debug_log(
             f"Missing keys found: {missing_keys}",
@@ -125,6 +130,7 @@ def validate_and_finalize_message(
                 "original_action_type": original_action_type,
                 "original_message_type": original_message_type,
             },
+            sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
         )
         debug_log(
             f'Unknown message type "{original_message_type}" '

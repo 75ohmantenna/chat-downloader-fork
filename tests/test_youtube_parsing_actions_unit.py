@@ -583,7 +583,7 @@ def test_process_action_unknown_action_type_captures_debug_sample(
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.parsing.actions_router.capture_debug_sample",
-        lambda label, payload: captures.append((label, payload)),
+        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
     )
 
     assert process_action({"someNewAction": {"foo": "bar"}}) is None
@@ -594,6 +594,7 @@ def test_process_action_unknown_action_type_captures_debug_sample(
                 "action": {"someNewAction": {"foo": "bar"}},
                 "parsed_data": {"action_type": "some_new"},
             },
+            {"sample_limit": 10},
         ),
     ]
 
@@ -830,7 +831,7 @@ def test_process_action_paid_sticker_with_pdg_logging_directives(
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda label, payload: captures.append((label, payload)),
+        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
@@ -966,7 +967,7 @@ def test_validate_and_finalize_message_missing_keys_captures_debug_sample(
     captures = []
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda label, payload: captures.append((label, payload)),
+        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
     )
 
     result = validate_and_finalize_message(
@@ -987,6 +988,7 @@ def test_validate_and_finalize_message_missing_keys_captures_debug_sample(
             "original_message_type": "liveChatMadeUpRenderer",
             "missing_keys": ["unknownField2026XYZ"],
         },
+        {"sample_limit": 10},
     )
 
 
@@ -996,7 +998,7 @@ def test_validate_and_finalize_message_unknown_message_type_captures_debug_sampl
     captures = []
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda label, payload: captures.append((label, payload)),
+        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
     )
 
     result = validate_and_finalize_message(
@@ -1015,4 +1017,5 @@ def test_validate_and_finalize_message_unknown_message_type_captures_debug_sampl
             "original_action_type": "addChatItemAction",
             "original_message_type": "liveChatMadeUpRenderer",
         },
+        {"sample_limit": 10},
     )

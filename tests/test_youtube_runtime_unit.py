@@ -825,7 +825,9 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.capture_debug_sample",
-        lambda label, payload: captured_samples.append((label, payload)),
+        lambda label, payload, **kwargs: captured_samples.append(
+            (label, payload, kwargs)
+        ),
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.polling_sleep",
@@ -870,6 +872,7 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
                     "continuation_keys": ["heartbeat"],
                 },
             },
+            {"sample_limit": 10},
         ),
     ]
     assert debug_messages == [

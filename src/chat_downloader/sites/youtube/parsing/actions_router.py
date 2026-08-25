@@ -23,6 +23,9 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_REPLACE_ACTION_TYPES,
     _KNOWN_TOOLTIP_ACTION_TYPES,
 )
+from chat_downloader.sites.youtube.constants_patterns import (
+    YOUTUBE_DEBUG_SAMPLE_LIMIT,
+)
 from chat_downloader.utils.dict_utils import try_get_first_key
 from chat_downloader.utils.json_types import (
     JSONAny,
@@ -168,6 +171,7 @@ def process_action(
     capture_debug_sample(
         f"youtube-unknown-action-{original_action_type}",
         {"action": action, "parsed_data": data},
+        sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
     )
     debug_log(f"Unknown action: {original_action_type}", action, data)
     return None
