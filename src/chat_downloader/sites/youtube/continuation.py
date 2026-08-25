@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import os
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -65,7 +66,7 @@ from .continuations import (
     summarize_continuation_payload,
 )
 from .helpers import require_innertube_api_key
-from .message_pipeline import process_pipeline_action
+from .message_pipeline import NonEmissionReason, process_pipeline_action
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
@@ -279,6 +280,7 @@ def _process_actions(
     """
     processed_action_count = 0
     emitted_message_count = 0
+    non_emission_counts: Counter[NonEmissionReason] = Counter()
     for action in actions:
         pipeline_result = process_pipeline_action(
             action,
@@ -287,9 +289,16 @@ def _process_actions(
             time_filter,
         )
         processed_action_count += 1
+        if pipeline_result.non_emission_reason is not None:
+            non_emission_counts[pipeline_result.non_emission_reason] += 1
         if pipeline_result.disposition == "skip":
             continue
         if pipeline_result.disposition == "stop":
+            _log_poll_action_diagnostics(
+                processed_action_count,
+                emitted_message_count,
+                non_emission_counts,
+            )
             return True
         if not is_replay and pipeline_result.message is not None:
             _apply_live_timing(pipeline_result.message, loop_state, live_start_time_ms)
@@ -297,12 +306,34 @@ def _process_actions(
             emitted_message_count += 1
             yield pipeline_result.message
 
-    log(
-        "debug",
-        "Processed actions in poll: "
-        f"{processed_action_count}; emitted messages: {emitted_message_count}",
+    _log_poll_action_diagnostics(
+        processed_action_count,
+        emitted_message_count,
+        non_emission_counts,
     )
     return False
+
+
+def _log_poll_action_diagnostics(
+    processed_count: int,
+    emitted_count: int,
+    non_emission_counts: Counter[NonEmissionReason],
+) -> None:
+    """Log bounded aggregate action outcomes for one continuation poll."""
+    non_emitted_count = sum(non_emission_counts.values())
+    message = (
+        f"Processed actions in poll: {processed_count}; "
+        f"emitted messages: {emitted_count}; "
+        f"non-emitted actions: {non_emitted_count}"
+    )
+    reason_counts = ", ".join(
+        f"{reason.value}: {non_emission_counts[reason]}"
+        for reason in NonEmissionReason
+        if non_emission_counts[reason]
+    )
+    if reason_counts:
+        message += f" ({reason_counts})"
+    log("debug", message)
 
 
 def _advance_continuation_loop(
@@ -594,7 +625,7 @@ class _ContinuationLoop:
 
     # -- main loop ----------------------------------------------------------
 
-    def run(  # noqa: C901 — live/replay branching, no-progress guard, and end-message injection are intrinsic to the continuation loop
+    def run(
         self,
     ) -> Generator[JSONDict, None, None]:
         """Yield chat messages from a YouTube continuation endpoint."""
@@ -637,20 +668,17 @@ class _ContinuationLoop:
             self._capture_successful_response(yt_info)
 
             actions = info.get("actions") or []
-            if actions:
-                stop_requested: bool = yield from _process_actions(
-                    actions,
-                    ctx.offset,
-                    ctx.msg_filter,
-                    ctx.time_filter,
-                    ctx.loop_state,
-                    ctx.live_start_time_ms,
-                    is_replay=ctx.is_replay,
-                )
-                if stop_requested:
-                    return
-            else:
-                log("debug", "No actions to process.")
+            stop_requested: bool = yield from _process_actions(
+                actions,
+                ctx.offset,
+                ctx.msg_filter,
+                ctx.time_filter,
+                ctx.loop_state,
+                ctx.live_start_time_ms,
+                is_replay=ctx.is_replay,
+            )
+            if stop_requested:
+                return
 
             if _advance_continuation_loop(ctx, yt_info):
                 ended_cleanly = True

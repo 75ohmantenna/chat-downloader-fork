@@ -312,6 +312,13 @@ snapshot. See [Debug sample capture](development-workflow-guide.md#debug-sample-
 for capture configuration. Promote reviewed samples into
 `tests/fixtures/youtube/`.
 
+Each continuation poll also emits one bounded aggregate debug diagnostic. It
+reports processed and emitted counts, then categorizes non-emitting actions as
+known ignored controls or renderers, unparsed actions, invalid messages,
+message type/group exclusions, or replay time-range filtering and stop outcomes.
+These categories distinguish expected provider bookkeeping from parser drift
+without adding a log entry for every action.
+
 To turn a captured drift sample into a permanent regression anchor:
 
 1. Reproduce the failure with

@@ -15,10 +15,18 @@ Public surface
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Literal, cast
 
-from .parsing.actions_handlers_validation import validate_and_finalize_message
-from .parsing.actions_router import ProcessedAction, process_action
+from .parsing.actions_handlers_validation import (
+    is_known_ignored_message_type,
+    validate_and_finalize_message,
+)
+from .parsing.actions_router import (
+    ProcessedAction,
+    is_known_ignored_action,
+    process_action,
+)
 
 if TYPE_CHECKING:
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
@@ -28,7 +36,31 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+class NonEmissionReason(StrEnum):
+    """Bounded reasons why a processed action did not produce a message."""
+
+    KNOWN_IGNORED_ACTION = "known ignored/control actions"
+    KNOWN_IGNORED_MESSAGE = "known ignored renderers"
+    UNPARSED_ACTION = "unparsed actions"
+    INVALID_MESSAGE = "invalid messages"
+    MESSAGE_FILTERED = "message type/group filtered"
+    TIME_RANGE_FILTERED = "time-range filtered"
+    TIME_RANGE_STOPPED = "time-range stop"
+
+
+_SKIP_NON_EMISSION_REASONS = frozenset(
+    {
+        NonEmissionReason.KNOWN_IGNORED_ACTION,
+        NonEmissionReason.KNOWN_IGNORED_MESSAGE,
+        NonEmissionReason.UNPARSED_ACTION,
+        NonEmissionReason.INVALID_MESSAGE,
+        NonEmissionReason.MESSAGE_FILTERED,
+        NonEmissionReason.TIME_RANGE_FILTERED,
+    }
+)
+
+
+@dataclass(frozen=True, slots=True)
 class PipelineResult:
     """Outcome of processing a single raw action through the message pipeline.
 
@@ -41,10 +73,41 @@ class PipelineResult:
 
     :param message: Fully-parsed message dict when ``disposition == "yield"``,
         otherwise ``None``.
+    :param non_emission_reason: Bounded diagnostic reason when the action was
+        processed but did not yield a message.
     """
 
     disposition: Literal["yield", "skip", "stop"]
     message: dict[str, Any] | None = None
+    non_emission_reason: NonEmissionReason | None = None
+
+    def __post_init__(self) -> None:
+        """Enforce the message/reason contract for each disposition."""
+        disposition = cast("str", self.disposition)
+        if disposition == "yield":
+            if self.message is None or self.non_emission_reason is not None:
+                msg = "A yielding pipeline result requires a message and no reason"
+                raise ValueError(msg)
+            return
+        if disposition == "skip":
+            if (
+                self.message is not None
+                or not isinstance(self.non_emission_reason, NonEmissionReason)
+                or self.non_emission_reason not in _SKIP_NON_EMISSION_REASONS
+            ):
+                msg = "A skipped pipeline result requires a skip reason and no message"
+                raise ValueError(msg)
+            return
+        if disposition == "stop":
+            if (
+                self.message is not None
+                or self.non_emission_reason is not NonEmissionReason.TIME_RANGE_STOPPED
+            ):
+                msg = "A stopped pipeline result requires only the stop reason"
+                raise ValueError(msg)
+            return
+        msg = f"Unknown pipeline disposition: {disposition}"
+        raise ValueError(msg)
 
 
 def _validate_pipeline_message(
@@ -113,15 +176,41 @@ def process_pipeline_action(
     :return: :class:`PipelineResult` with ``disposition`` and optional
         ``message``.
     """
-    validated_data = _validate_pipeline_message(process_action(action, offset))
+    known_ignored_action = is_known_ignored_action(action)
+    parsed_action = process_action(action, offset)
+    if parsed_action is None:
+        reason = (
+            NonEmissionReason.KNOWN_IGNORED_ACTION
+            if known_ignored_action
+            else NonEmissionReason.UNPARSED_ACTION
+        )
+        return PipelineResult(disposition="skip", non_emission_reason=reason)
+
+    validated_data = _validate_pipeline_message(parsed_action)
     if validated_data is None:
-        return PipelineResult(disposition="skip")
+        reason = (
+            NonEmissionReason.KNOWN_IGNORED_MESSAGE
+            if is_known_ignored_message_type(parsed_action.message_type)
+            else NonEmissionReason.INVALID_MESSAGE
+        )
+        return PipelineResult(disposition="skip", non_emission_reason=reason)
 
     if not msg_filter.should_add(validated_data):
-        return PipelineResult(disposition="skip")
+        return PipelineResult(
+            disposition="skip",
+            non_emission_reason=NonEmissionReason.MESSAGE_FILTERED,
+        )
 
     time_result = _check_time_filter(validated_data, time_filter)
-    if time_result != "yield":
-        return PipelineResult(disposition=time_result)
+    if time_result == "skip":
+        return PipelineResult(
+            disposition="skip",
+            non_emission_reason=NonEmissionReason.TIME_RANGE_FILTERED,
+        )
+    if time_result == "stop":
+        return PipelineResult(
+            disposition="stop",
+            non_emission_reason=NonEmissionReason.TIME_RANGE_STOPPED,
+        )
 
     return PipelineResult(disposition="yield", message=validated_data)

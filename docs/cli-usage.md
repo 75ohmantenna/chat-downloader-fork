@@ -187,8 +187,10 @@ Debug and automation:
   captures the first three successfully parsed raw event frames for clean-run
   schema review.
 - YouTube continuation polls report separate processed-action and
-  emitted-message counts so skipped or non-emitting provider actions are
-  visible without inflating the output count.
+  emitted-message counts. Non-emitting actions are aggregated by bounded
+  reason: known ignored controls or renderers, unparsed actions, invalid
+  messages, message type/group filtering, and replay time-range filtering or
+  stop.
 - YouTube terminal continuation responses finish immediately without an
   unnecessary final wait. Empty replay pages continue when the provider
   supplies another continuation token.

@@ -36,6 +36,11 @@ _KNOWN_IGNORE_MESSAGE_TYPES: frozenset[str] = frozenset(
 )
 
 
+def is_known_ignored_message_type(message_type: str | None) -> bool:
+    """Return whether a renderer is intentionally excluded from output."""
+    return message_type in _KNOWN_IGNORE_MESSAGE_TYPES
+
+
 def _emit_parse_diagnostics(
     data: dict[str, Any],
     original_item: JSONDict,
@@ -115,7 +120,7 @@ def validate_and_finalize_message(
     )
     _derive_message_type(data, original_message_type)
 
-    if original_message_type in _KNOWN_IGNORE_MESSAGE_TYPES:
+    if is_known_ignored_message_type(original_message_type):
         return None
 
     if original_message_type not in _KNOWN_ACTION_TYPES.get(

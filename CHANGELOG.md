@@ -59,7 +59,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Add a separately opted-in, sanitized capture of the first three structurally
   valid YouTube continuation responses for clean-run diagnosis.
 - Distinguish processed YouTube actions from emitted messages in per-poll
-  debug diagnostics instead of labeling both as a total message count.
+  debug diagnostics and categorize non-emitting actions as known ignored
+  controls or renderers, parser failures, message-filter exclusions, or
+  time-range filtering outcomes.
 - Report final retrieved-message, formatted-output suppression, and
   per-output-writer record counts after a successful debug run.
 - Log Twitch's known optional `user.primaryTeam` GraphQL service error at debug

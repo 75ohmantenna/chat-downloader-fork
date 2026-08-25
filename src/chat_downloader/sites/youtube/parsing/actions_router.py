@@ -126,6 +126,27 @@ def _get_replay_time_seconds(replay_action: JSONDict) -> float | None:
     return offset_milliseconds / 1000
 
 
+def _unwrap_replay_action(action: JSONDict) -> JSONDict:
+    """Return the first action nested in a replay wrapper, when present."""
+    replay_action = get_dict(action, "replayChatItemAction")
+    actions = get_list(replay_action, "actions")
+    return cast("JSONDict", actions[0]) if actions else action
+
+
+def _get_action_type(action: JSONDict) -> str | None:
+    """Return the routed action key without mutating tracking metadata."""
+    unwrapped_action = _unwrap_replay_action(action)
+    return next(
+        (key for key in unwrapped_action if key != "clickTrackingParams"),
+        None,
+    )
+
+
+def is_known_ignored_action(action: JSONDict) -> bool:
+    """Return whether *action* is an explicitly ignored control action."""
+    return _get_action_type(action) in _KNOWN_IGNORE_ACTION_TYPES
+
+
 def process_action(
     action: JSONDict,
     offset: float = 0,
@@ -147,8 +168,7 @@ def process_action(
         replay_time = _get_replay_time_seconds(replay_chat_item_action)
         if replay_time is not None:
             data["time_in_seconds"] = replay_time
-        actions_list = get_list(replay_chat_item_action, "actions")
-        action = cast("JSONDict", actions_list[0]) if actions_list else action
+        action = _unwrap_replay_action(action)
 
     # Remove tracking params and get action type
     action.pop("clickTrackingParams", None)

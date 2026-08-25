@@ -32,6 +32,10 @@ from chat_downloader.sites.youtube.continuation import (
     derive_live_offset_milliseconds,
     enrich_live_message_timing,
 )
+from chat_downloader.sites.youtube.message_pipeline import (
+    NonEmissionReason,
+    PipelineResult,
+)
 
 
 def _loop(downloader: object, *, ytcfg: dict | None = None) -> _ContinuationLoop:
@@ -1070,6 +1074,7 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
     downloader = _DummyDownloader()
     msg_filter = SimpleNamespace(should_add=lambda _message: True)
     captured_samples = []
+    log_calls = []
     response = {
         "continuationContents": {"liveChatContinuation": {"actions": []}},
     }
@@ -1109,6 +1114,10 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
         "chat_downloader.sites.youtube.continuation._advance_continuation_loop",
         lambda *_args, **_kwargs: True,
     )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.log",
+        lambda *args: log_calls.append(args),
+    )
 
     assert list(
         _get_chat_messages(
@@ -1132,6 +1141,15 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
         (
             ("youtube-continuation-response", response),
             {"sample_limit": 3},
+        )
+    ]
+    assert log_calls == [
+        (
+            "debug",
+            (
+                "Processed actions in poll: 0; emitted messages: 0; "
+                "non-emitted actions: 0"
+            ),
         )
     ]
 
@@ -1253,7 +1271,7 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.process_pipeline_action",
-        lambda *_args, **_kwargs: SimpleNamespace(
+        lambda *_args, **_kwargs: PipelineResult(
             disposition="yield",
             message={"timestamp": 6_000_000},
         ),
@@ -1413,8 +1431,14 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
 
     pipeline_results = iter(
         [
-            SimpleNamespace(disposition="skip", message=None),
-            SimpleNamespace(disposition="yield", message={"message": "hi"}),
+            PipelineResult(
+                disposition="skip",
+                non_emission_reason=NonEmissionReason.TIME_RANGE_FILTERED,
+            ),
+            PipelineResult(
+                disposition="yield",
+                message={"message": "hi"},
+            ),
         ],
     )
 

@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+from itertools import product
 from typing import TYPE_CHECKING, Any, cast
 
+import pytest
+
 from chat_downloader.sites.youtube.message_pipeline import (
+    NonEmissionReason,
+    PipelineResult,
     _check_time_filter,
     _validate_pipeline_message,
     process_pipeline_action,
@@ -33,6 +38,67 @@ class _DummyTimeFilter:
     def check(self, message: dict[str, Any]) -> str | None:
         self.seen_messages.append(message)
         return self.result
+
+
+_PIPELINE_DISPOSITIONS = ("yield", "skip", "stop", "unknown")
+_PIPELINE_MESSAGES = (None, {"message": "hello"})
+_PIPELINE_REASONS = (
+    None,
+    *NonEmissionReason,
+    *(reason.value for reason in NonEmissionReason),
+    "unknown",
+)
+_VALID_PIPELINE_STATES = {
+    ("yield", True, None),
+    ("skip", False, NonEmissionReason.KNOWN_IGNORED_ACTION),
+    ("skip", False, NonEmissionReason.KNOWN_IGNORED_MESSAGE),
+    ("skip", False, NonEmissionReason.UNPARSED_ACTION),
+    ("skip", False, NonEmissionReason.INVALID_MESSAGE),
+    ("skip", False, NonEmissionReason.MESSAGE_FILTERED),
+    ("skip", False, NonEmissionReason.TIME_RANGE_FILTERED),
+    ("stop", False, NonEmissionReason.TIME_RANGE_STOPPED),
+}
+
+
+@pytest.mark.parametrize(
+    ("disposition", "message", "reason"),
+    tuple(product(_PIPELINE_DISPOSITIONS, _PIPELINE_MESSAGES, _PIPELINE_REASONS)),
+)
+def test_pipeline_result_accepts_only_valid_state_combinations(
+    disposition,
+    message,
+    reason,
+) -> None:
+    state = (disposition, message is not None, reason)
+    reason_has_valid_runtime_type = reason is None or isinstance(
+        reason, NonEmissionReason
+    )
+    if reason_has_valid_runtime_type and state in _VALID_PIPELINE_STATES:
+        result = PipelineResult(
+            disposition=cast("Any", disposition),
+            message=message,
+            non_emission_reason=reason,
+        )
+        assert result.disposition == disposition
+        assert result.message is message
+        assert result.non_emission_reason is reason
+        return
+
+    with pytest.raises(ValueError):
+        PipelineResult(
+            disposition=cast("Any", disposition),
+            message=message,
+            non_emission_reason=reason,
+        )
+
+
+@pytest.mark.parametrize("reason", [reason.value for reason in NonEmissionReason])
+def test_pipeline_result_rejects_raw_string_non_emission_reasons(reason) -> None:
+    with pytest.raises(ValueError):
+        PipelineResult(
+            disposition="skip",
+            non_emission_reason=cast("Any", reason),
+        )
 
 
 def test_validate_pipeline_message_returns_none_for_missing_parse_result() -> None:
@@ -82,7 +148,7 @@ def test_check_time_filter_propagates_skip_and_stop() -> None:
     assert stop_filter.seen_messages == [message]
 
 
-def test_process_pipeline_action_skips_when_action_is_ignored(
+def test_process_pipeline_action_categorizes_unparsed_action(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
@@ -99,6 +165,41 @@ def test_process_pipeline_action_skips_when_action_is_ignored(
 
     assert result.disposition == "skip"
     assert result.message is None
+    assert result.non_emission_reason is NonEmissionReason.UNPARSED_ACTION
+
+
+def test_process_pipeline_action_categorizes_known_ignored_control_action() -> None:
+    result = process_pipeline_action(
+        {
+            "replayChatItemAction": {
+                "actions": [{"addInteractivityWidgetAction": {}}],
+            },
+        },
+        0,
+        cast("MessageFilter", _DummyMessageFilter()),
+        None,
+    )
+
+    assert result.disposition == "skip"
+    assert result.message is None
+    assert result.non_emission_reason is NonEmissionReason.KNOWN_IGNORED_ACTION
+
+
+def test_process_pipeline_action_categorizes_known_ignored_renderer() -> None:
+    result = process_pipeline_action(
+        {
+            "addChatItemAction": {
+                "item": {"liveChatPlaceholderItemRenderer": {}},
+            },
+        },
+        0,
+        cast("MessageFilter", _DummyMessageFilter()),
+        None,
+    )
+
+    assert result.disposition == "skip"
+    assert result.message is None
+    assert result.non_emission_reason is NonEmissionReason.KNOWN_IGNORED_MESSAGE
 
 
 def test_process_pipeline_action_skips_when_validation_fails(
@@ -127,6 +228,7 @@ def test_process_pipeline_action_skips_when_validation_fails(
 
     assert result.disposition == "skip"
     assert result.message is None
+    assert result.non_emission_reason is NonEmissionReason.INVALID_MESSAGE
 
 
 def test_process_pipeline_action_skips_when_message_filter_rejects(
@@ -156,6 +258,7 @@ def test_process_pipeline_action_skips_when_message_filter_rejects(
 
     assert result.disposition == "skip"
     assert result.message is None
+    assert result.non_emission_reason is NonEmissionReason.MESSAGE_FILTERED
     assert msg_filter.seen_messages == [{"message": "hello"}]
 
 
@@ -186,6 +289,7 @@ def test_process_pipeline_action_skips_when_time_filter_skips(
 
     assert result.disposition == "skip"
     assert result.message is None
+    assert result.non_emission_reason is NonEmissionReason.TIME_RANGE_FILTERED
     assert time_filter.seen_messages == [{"message": "hello"}]
 
 
@@ -215,6 +319,7 @@ def test_process_pipeline_action_stops_when_time_filter_stops(
 
     assert result.disposition == "stop"
     assert result.message is None
+    assert result.non_emission_reason is NonEmissionReason.TIME_RANGE_STOPPED
 
 
 def test_process_pipeline_action_yields_valid_message(monkeypatch) -> None:
@@ -241,6 +346,7 @@ def test_process_pipeline_action_yields_valid_message(monkeypatch) -> None:
 
     assert result.disposition == "yield"
     assert result.message == {"message": "hello:5"}
+    assert result.non_emission_reason is None
 
 
 def test_process_pipeline_action_tolerates_thumbnail_shape_drift() -> None:
