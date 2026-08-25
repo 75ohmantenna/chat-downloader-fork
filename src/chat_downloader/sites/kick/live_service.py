@@ -22,6 +22,7 @@ from chat_downloader.debugging import log, logger
 from chat_downloader.errors import (
     CaptchaChallengeRequired,
     InvalidParameter,
+    ParsingError,
     RetriesExceeded,
 )
 from chat_downloader.sites._seen_cache import _SeenMessageCache
@@ -34,6 +35,7 @@ from .constants import MESSAGE_GROUPS, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.events import dispatch_event
 from .parsing.messages import parse_preloaded_messages
+from .parsing.pins import parse_pinned_message_created_event
 from .pusher_discovery import _HttpClient, _RequestsHttpClient
 from .websocket_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
@@ -289,15 +291,15 @@ def _recover_pusher_transport(
     return refreshed
 
 
-def _iter_preloaded_messages(
+def _iter_preloaded_chat(
     downloader: KickChatDownloader,
     channel_id: str,
     username: str,
     emit: Callable[[JSONDict], bool],
 ) -> Generator[JSONDict, None, None]:
-    """Yield recent HTTP history not already emitted by the live stream."""
+    """Yield recent HTTP history and current pin state without duplicates."""
     try:
-        preloaded = downloader._kick_client.fetch_preloaded_messages(
+        preloaded = downloader._kick_client.fetch_preloaded_chat_state(
             channel_id,
             username,
         )
@@ -309,9 +311,19 @@ def _iter_preloaded_messages(
     ) as error:
         logger.debug("Kick preloaded-message fetch failed (non-fatal): %s", error)
         return
-    for message in reversed(parse_preloaded_messages(preloaded)):
+    for message in reversed(parse_preloaded_messages(preloaded.messages)):
         if emit(message):
             yield message
+    if preloaded.pinned_message is not None:
+        try:
+            pinned_message = parse_pinned_message_created_event(
+                preloaded.pinned_message
+            )
+        except (ParsingError, ValueError, TypeError, KeyError, IndexError) as error:
+            logger.debug("Skipping malformed Kick startup pin: %s", error)
+        else:
+            if emit(pinned_message):
+                yield pinned_message
 
 
 def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths are intrinsic to the stream loop
@@ -341,7 +353,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         return msg_filter.should_add(message)
 
     # 1. Preloaded history (best-effort; non-fatal on failure).
-    yield from _iter_preloaded_messages(
+    yield from _iter_preloaded_chat(
         downloader,
         channel_id,
         username,
@@ -404,7 +416,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     "Kick WebSocket reconnected; checking recent history for "
                     "messages missed during the outage.",
                 )
-                yield from _iter_preloaded_messages(
+                yield from _iter_preloaded_chat(
                     downloader,
                     channel_id,
                     username,
@@ -423,7 +435,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     proxy_url=proxy_url,
                     pusher_http_client=pusher_http_client,
                 )
-                yield from _iter_preloaded_messages(
+                yield from _iter_preloaded_chat(
                     downloader,
                     channel_id,
                     username,

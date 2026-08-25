@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from http import HTTPStatus
 from json import JSONDecodeError
 from typing import TYPE_CHECKING, Literal, NoReturn, cast
@@ -35,6 +36,14 @@ _DEFAULT_TIMEOUT = (10.0, 30.0)
 _ResourceKind = Literal["channel", "video", "messages"]
 
 
+@dataclass(frozen=True, slots=True)
+class PreloadedChatState:
+    """Recent messages and the current pin returned by Kick's history API."""
+
+    messages: JSONList
+    pinned_message: JSONDict | None
+
+
 class KickApiClient:
     """Own one HTTP session and apply one response policy to Kick endpoints."""
 
@@ -64,19 +73,26 @@ class KickApiClient:
             resource="channel",
         )
 
-    def fetch_preloaded_messages(
+    def fetch_preloaded_chat_state(
         self,
         channel_id: str,
         username: str,
-    ) -> JSONList:
-        """Fetch and validate recent live-chat history."""
+    ) -> PreloadedChatState:
+        """Fetch and validate recent live-chat history and current pin state."""
         payload = self._request_object(
             MESSAGES_API_TEMPLATE.format(channel_id=channel_id),
             context=username,
             resource="messages",
         )
-        messages = get_list(get_dict(payload, "data"), "messages")
-        return cast("JSONList", [item for item in messages if isinstance(item, dict)])
+        data = get_dict(payload, "data")
+        messages = get_list(data, "messages")
+        pinned_message = get_dict(data, "pinned_message") or None
+        return PreloadedChatState(
+            messages=cast(
+                "JSONList", [item for item in messages if isinstance(item, dict)]
+            ),
+            pinned_message=pinned_message,
+        )
 
     def fetch_video_metadata(self, video_id: str) -> JSONDict:
         """Fetch VOD metadata by UUID."""

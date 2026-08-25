@@ -327,14 +327,34 @@ def test_parse_pinned_message_created_event() -> None:
     assert msg["message"] == "Welcome to the stream! Read the rules!"
     assert isinstance(msg["timestamp"], int)
     assert msg["metadata"]["pinned_message_id"] == "pinned-msg-001"
-    assert msg["metadata"]["pinned_by"]["display_name"] == "streamer_chan"
+    assert msg["author"]["display_name"] == "streamer_chan"
+    assert "pinned_by" not in msg["metadata"]
     assert isinstance(msg["metadata"]["pinned_message_created_at"], int)
     assert msg["metadata"]["duration"] == 120
+
+
+def test_parse_current_pinned_message_created_event() -> None:
+    raw = load_fixture("pinned_message_created_event_current.json")
+
+    msg = parse_pinned_message_created_event(raw)
+
+    assert msg["message_id"] == "kick-pin:current-pinned-message"
+    assert msg["message"] == "Current pin payload"
+    assert msg["author"]["display_name"] == "MessageAuthor"
+    assert msg["metadata"]["pinned_message_id"] == "current-pinned-message"
+    assert msg["metadata"]["pinned_by"]["display_name"] == "PinningModerator"
+    assert msg["metadata"]["duration"] == 1200
+    assert "timestamp" not in msg
 
 
 def test_pinned_message_created_empty_dict_raises() -> None:
     with pytest.raises(ParsingError):
         parse_pinned_message_created_event({})
+
+
+def test_pinned_message_created_rejects_empty_nested_id() -> None:
+    with pytest.raises(ParsingError):
+        parse_pinned_message_created_event({"message": {"id": ""}})
 
 
 def test_pinned_message_created_missing_optional_fields() -> None:
@@ -370,6 +390,13 @@ def test_pinned_message_deleted_missing_optional_fields() -> None:
     assert msg["message_type"] == "pinned_message_deleted"
     assert "timestamp" not in msg
     assert "metadata" not in msg
+
+
+def test_pinned_message_deleted_uses_namespaced_nested_id_fallback() -> None:
+    msg = parse_pinned_message_deleted_event({"message": {"id": "nested"}})
+
+    assert msg["message_id"] == "kick-unpin:nested"
+    assert msg["metadata"]["unpinned_message_id"] == "nested"
 
 
 # ── stream_host ────────────────────────────────────────────────────────

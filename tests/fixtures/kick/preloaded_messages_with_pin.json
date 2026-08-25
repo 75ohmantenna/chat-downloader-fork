@@ -1,0 +1,25 @@
+{
+  "data": {
+    "messages": [
+      {
+        "content": "Recent message",
+        "created_at": "2026-08-25T09:30:00Z",
+        "id": "preloaded-current",
+        "sender": {"id": 300, "username": "RecentAuthor"},
+        "type": "message"
+      }
+    ],
+    "pinned_message": {
+      "duration": 1064,
+      "finish_at": "2026-08-26T03:11:03.047898Z",
+      "message": {
+        "content": "Existing pin",
+        "created_at": "2026-08-25T07:10:58+00:00",
+        "id": "startup-pinned-message",
+        "sender": {"id": 400, "username": "PinnedAuthor"},
+        "type": "message"
+      },
+      "pinned_by": {"id": 500, "username": "StartupModerator"}
+    }
+  }
+}

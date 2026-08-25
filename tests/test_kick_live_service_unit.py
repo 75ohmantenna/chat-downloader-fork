@@ -14,7 +14,12 @@ from chat_downloader.errors import (
 )
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import live_service
-from chat_downloader.sites.kick.constants import CHAT_MESSAGE_EVENT, PUSHER_ERROR
+from chat_downloader.sites.kick.api_client import PreloadedChatState
+from chat_downloader.sites.kick.constants import (
+    CHAT_MESSAGE_EVENT,
+    PINNED_MESSAGE_CREATED_EVENT,
+    PUSHER_ERROR,
+)
 from chat_downloader.sites.kick.errors import KickError
 from tests.kick_helpers import (
     FakeDownloader,
@@ -294,6 +299,74 @@ def test_get_chat_by_channel_emits_preloaded_then_live() -> None:
         assert ids == ["preloaded-1", "preloaded-2", "live-1"]
 
 
+def test_get_chat_by_channel_emits_current_pin_after_preloaded_history() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, load_fixture("preloaded_messages_with_pin.json")),
+        ]
+    )
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            downloader,
+            request_kwargs={"message_groups": ["messages", "pins"]},
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([[]]),
+        )
+
+        messages = list(chat.chat)
+
+    assert [message["message_type"] for message in messages] == [
+        "text_message",
+        "pinned_message",
+    ]
+    assert messages[1]["message_id"] == "kick-pin:startup-pinned-message"
+    assert messages[1]["metadata"]["pinned_by"]["display_name"] == ("StartupModerator")
+    assert isinstance(messages[1]["metadata"]["pinned_message_expires_at"], int)
+
+
+def test_get_chat_by_channel_dedups_current_pin_against_live_pin_event() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, load_fixture("preloaded_messages_with_pin.json")),
+        ]
+    )
+    live_pin = {
+        "duration": "1200",
+        "message": {
+            "content": "Existing pin",
+            "id": "startup-pinned-message",
+            "sender": {"id": 400, "username": "PinnedAuthor"},
+        },
+        "pinnedBy": {"id": 500, "username": "StartupModerator"},
+    }
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            downloader,
+            request_kwargs={"message_groups": ["messages", "pins"]},
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [[pusher_frame(PINNED_MESSAGE_CREATED_EVENT, live_pin)]]
+            ),
+        )
+
+        messages = list(chat.chat)
+
+    assert [message["message_type"] for message in messages] == [
+        "text_message",
+        "pinned_message",
+    ]
+
+
 def test_get_chat_by_channel_dedups_live_against_preloaded() -> None:
     downloader = FakeDownloader()
     session = FakeKickSession(
@@ -560,7 +633,7 @@ def test_get_chat_by_channel_rejects_replay_time_bounds(bounds: dict[str, Any]) 
 def test_preloaded_history_is_best_effort(error: Exception) -> None:
     class FailingClient:
         @staticmethod
-        def fetch_preloaded_messages(_channel_id: str, _username: str) -> Any:
+        def fetch_preloaded_chat_state(_channel_id: str, _username: str) -> Any:
             raise error
 
     downloader = MagicMock()
@@ -568,7 +641,7 @@ def test_preloaded_history_is_best_effort(error: Exception) -> None:
 
     assert (
         list(
-            live_service._iter_preloaded_messages(
+            live_service._iter_preloaded_chat(
                 downloader,
                 "123",
                 "creator",
@@ -582,7 +655,7 @@ def test_preloaded_history_is_best_effort(error: Exception) -> None:
 def test_preloaded_history_does_not_swallow_keyboard_interrupt() -> None:
     class InterruptingClient:
         @staticmethod
-        def fetch_preloaded_messages(_channel_id: str, _username: str) -> Any:
+        def fetch_preloaded_chat_state(_channel_id: str, _username: str) -> Any:
             raise KeyboardInterrupt
 
     downloader = MagicMock()
@@ -590,10 +663,35 @@ def test_preloaded_history_does_not_swallow_keyboard_interrupt() -> None:
 
     with pytest.raises(KeyboardInterrupt):
         list(
-            live_service._iter_preloaded_messages(
+            live_service._iter_preloaded_chat(
                 downloader,
                 "123",
                 "creator",
                 lambda _message: True,
             )
         )
+
+
+def test_preloaded_chat_skips_malformed_current_pin(caplog: Any) -> None:
+    class MalformedPinClient:
+        @staticmethod
+        def fetch_preloaded_chat_state(
+            _channel_id: str, _username: str
+        ) -> PreloadedChatState:
+            return PreloadedChatState(messages=[], pinned_message={"duration": 1})
+
+    downloader = MagicMock()
+    downloader._kick_client = MalformedPinClient()
+    caplog.set_level("DEBUG", logger=live_service.logger.name)
+
+    messages = list(
+        live_service._iter_preloaded_chat(
+            downloader,
+            "123",
+            "creator",
+            lambda _message: True,
+        )
+    )
+
+    assert messages == []
+    assert "Skipping malformed Kick startup pin" in caplog.text

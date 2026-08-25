@@ -26,8 +26,8 @@ The Kick implementation is responsible for:
 - retrieving channel and video metadata
 - streaming live chat from the Pusher WebSocket (live *and* offline channels —
   the chatroom stays active when the stream is down)
-- emitting preloaded recent history on connect and deduplicating it against the
-  live feed
+- emitting preloaded recent history and current pin state on connect, then
+  deduplicating them against the live feed
 - reading historical chat for VODs by paginating the channel message API and
   filtering to the VOD time window
 - parsing Kick-specific message, badge, emote, subscription, moderation, pin,
@@ -69,9 +69,9 @@ The Kick flow depends on the target type.
    transient failures).
 3. Resolve the channel ID, chatroom ID, and title. Offline channels are *not*
    rejected — the chatroom is still active.
-4. Fetch preloaded recent messages (best-effort; non-fatal on failure). The
-   API returns them newest-first; they are reversed into chronological order
-   before being emitted.
+4. Fetch preloaded recent messages and the current pin state (best-effort;
+   non-fatal on failure). The API returns messages newest-first; they are
+   reversed into chronological order before the current pin is emitted.
 5. Open the Pusher WebSocket, subscribe to the public chatroom channel, and
    stream live frames.
 6. Dispatch each frame to a typed parser, deduplicate against preloaded and
@@ -199,6 +199,11 @@ WebSocket opens and emitted first. This fetch is best-effort: expected provider,
 challenge, and transport errors yield an empty list, since the live feed is the
 primary source. Process interrupts still propagate. Preloaded IDs seed the
 deduplication cache so they are not repeated when they also arrive over the socket.
+The response's current pin state is emitted after recent messages. Current Kick
+pin events omit a top-level event ID, so the parser derives a namespaced event
+ID from the nested message ID to avoid colliding with the original chat message.
+It keeps the nested sender as the message author and the `pinnedBy`/`pinned_by`
+actor as pin metadata.
 
 ### Pusher transport
 

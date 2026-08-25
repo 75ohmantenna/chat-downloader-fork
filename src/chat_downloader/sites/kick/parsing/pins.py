@@ -9,7 +9,7 @@ Handles ``App\Events\PinnedMessageCreatedEvent`` and
 from __future__ import annotations
 
 import contextlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import ParsingError
 from chat_downloader.sites.kick.parsing.common_fields import (
@@ -18,9 +18,12 @@ from chat_downloader.sites.kick.parsing.common_fields import (
     _parse_timestamp,
 )
 
+if TYPE_CHECKING:
+    from chat_downloader.utils.json_types import JSONDict
+
 
 def _extract_pinned_message(
-    raw_message: object, info: dict[str, Any], metadata: dict[str, Any]
+    raw_message: object, info: dict[str, Any], metadata: dict[str, object]
 ) -> None:
     """Extract pinned message fields into info and metadata dicts.
 
@@ -40,13 +43,36 @@ def _extract_pinned_message(
     if pinned_msg_id is not None:
         metadata["pinned_message_id"] = pinned_msg_id
 
-    sender = _parse_author(raw_message.get("sender"))
-    if sender:
-        metadata["pinned_by"] = sender
+    author = _parse_author(raw_message.get("sender"))
+    if author:
+        info["author"] = author
 
     pinned_created_at = _parse_timestamp(raw_message.get("created_at"))
     if pinned_created_at is not None:
         metadata["pinned_message_created_at"] = pinned_created_at
+
+
+def _resolve_event_id(raw: JSONDict, prefix: str) -> str | None:
+    """Return an explicit event id or a namespaced nested-message fallback."""
+    event_id = _opt_str(raw.get("id"))
+    if event_id:
+        return event_id
+
+    raw_message = raw.get("message")
+    if not isinstance(raw_message, dict):
+        return None
+    nested_id = _opt_str(raw_message.get("id"))
+    return f"kick-{prefix}:{nested_id}" if nested_id else None
+
+
+def _extract_pinner(raw: JSONDict, metadata: dict[str, object]) -> None:
+    """Preserve the actor that pinned the message across live/REST spellings."""
+    raw_pinner = raw.get("pinnedBy")
+    if not isinstance(raw_pinner, dict):
+        raw_pinner = raw.get("pinned_by")
+    pinner = _parse_author(raw_pinner)
+    if pinner:
+        metadata["pinned_by"] = pinner
 
 
 def parse_pinned_message_created_event(raw: object) -> dict[str, Any]:
@@ -66,7 +92,7 @@ def parse_pinned_message_created_event(raw: object) -> dict[str, Any]:
         msg = "Kick pinned-message-created event payload was not a JSON object."
         raise ParsingError(msg)
 
-    message_id = _opt_str(raw.get("id"))
+    message_id = _resolve_event_id(raw, "pin")
     if message_id is None:
         msg = "Kick pinned-message-created event payload was missing an id."
         raise ParsingError(msg)
@@ -81,14 +107,19 @@ def parse_pinned_message_created_event(raw: object) -> dict[str, Any]:
     if timestamp is not None:
         info["timestamp"] = timestamp
 
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, object] = {}
 
     _extract_pinned_message(raw.get("message"), info, metadata)
+    _extract_pinner(raw, metadata)
 
     duration = raw.get("duration")
     if duration is not None:
         with contextlib.suppress(ValueError, TypeError):
             metadata["duration"] = int(duration)
+
+    finish_at = _parse_timestamp(raw.get("finish_at"))
+    if finish_at is not None:
+        metadata["pinned_message_expires_at"] = finish_at
 
     if metadata:
         info["metadata"] = metadata
@@ -113,7 +144,7 @@ def parse_pinned_message_deleted_event(raw: object) -> dict[str, Any]:
         msg = "Kick pinned-message-deleted event payload was not a JSON object."
         raise ParsingError(msg)
 
-    message_id = _opt_str(raw.get("id"))
+    message_id = _resolve_event_id(raw, "unpin")
     if message_id is None:
         msg = "Kick pinned-message-deleted event payload was missing an id."
         raise ParsingError(msg)

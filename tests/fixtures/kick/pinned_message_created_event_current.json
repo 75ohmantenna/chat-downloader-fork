@@ -1,0 +1,30 @@
+{
+  "message": {
+    "chatroom_id": 54321,
+    "content": "Current pin payload",
+    "created_at": "2026-08-25T09:29:07+00:00",
+    "id": "current-pinned-message",
+    "metadata": {"message_ref": "123456789"},
+    "sender": {
+      "id": 100,
+      "identity": {
+        "badges": [{"type": "subscriber", "text": "Subscriber", "count": 2}],
+        "color": "#BDFF28"
+      },
+      "slug": "message-author",
+      "username": "MessageAuthor"
+    },
+    "thread_parent_id": "",
+    "type": "message"
+  },
+  "duration": "1200",
+  "pinnedBy": {
+    "id": 200,
+    "identity": {
+      "badges": [{"type": "moderator", "text": "Moderator"}],
+      "color": "#75FD46"
+    },
+    "slug": "pinning-moderator",
+    "username": "PinningModerator"
+  }
+}

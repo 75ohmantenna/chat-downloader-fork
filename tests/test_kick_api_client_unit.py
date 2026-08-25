@@ -170,24 +170,41 @@ def test_non_object_payload_is_transient() -> None:
         client.fetch_channel("x")
 
 
-def test_fetch_preloaded_messages_filters_non_dict_entries() -> None:
+def test_fetch_preloaded_chat_state_filters_non_dict_entries() -> None:
     payload = {"data": {"messages": [{"id": "a"}, "bad", 7]}}
     client, _ = _client([FakeResponse(200, payload)])
 
-    assert client.fetch_preloaded_messages("1", "x") == [{"id": "a"}]
+    state = client.fetch_preloaded_chat_state("1", "x")
+
+    assert state.messages == [{"id": "a"}]
+    assert state.pinned_message is None
 
 
-def test_fetch_preloaded_messages_missing_messages_is_empty() -> None:
+def test_fetch_preloaded_chat_state_preserves_current_pin() -> None:
+    payload = load_fixture("preloaded_messages_with_pin.json")
+    client, _ = _client([FakeResponse(200, payload)])
+
+    state = client.fetch_preloaded_chat_state("1", "x")
+
+    assert [message["id"] for message in state.messages] == ["preloaded-current"]
+    assert state.pinned_message is not None
+    assert state.pinned_message["message"]["id"] == "startup-pinned-message"
+
+
+def test_fetch_preloaded_chat_state_missing_messages_is_empty() -> None:
     client, _ = _client([FakeResponse(200, {"data": {}})])
 
-    assert client.fetch_preloaded_messages("1", "x") == []
+    state = client.fetch_preloaded_chat_state("1", "x")
+
+    assert state.messages == []
+    assert state.pinned_message is None
 
 
-def test_fetch_preloaded_messages_does_not_hide_required_response_errors() -> None:
+def test_fetch_preloaded_chat_state_does_not_hide_required_response_errors() -> None:
     client, _ = _client([FakeResponse(500, {"err": True})])
 
     with pytest.raises(KickServerError):
-        client.fetch_preloaded_messages("1", "x")
+        client.fetch_preloaded_chat_state("1", "x")
 
 
 def test_fetch_video_metadata_uses_endpoint_specific_not_found_error() -> None:
