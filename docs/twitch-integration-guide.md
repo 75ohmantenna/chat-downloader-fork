@@ -238,6 +238,49 @@ See [Debug sample capture](development-workflow-guide.md#debug-sample-capture)
 for capture configuration. Promote reviewed samples into
 `tests/fixtures/twitch/`.
 
+For a bounded full-spectrum inspection of a live channel's message-retrieval
+window, use the `all` message group and write both supported output formats:
+
+```bash
+capture_dir="$(mktemp -d)"
+CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR="${capture_dir}/samples" \
+CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
+CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1 \
+uv run chat_downloader "https://www.twitch.tv/auronplay" \
+  --message_groups all \
+  --logging debug \
+  --timeout 240 \
+  --output "${capture_dir}/chat.jsonl" \
+  --output "${capture_dir}/chat.txt" \
+  --quiet \
+  2> "${capture_dir}/debug.log"
+```
+
+`--quiet` suppresses the duplicate formatted stream on standard output; it does
+not disable debug logging or either output writer. After the run, inspect
+`debug.log` for warnings, errors, reconnects, and drift diagnostics; inspect the
+sanitized samples under `samples/`; and compare `chat.jsonl` with `chat.txt`.
+`--timeout 240` bounds chat-message retrieval after setup; metadata and badge
+setup plus final output shutdown can make the command's total wall time longer
+than four minutes.
+
+JSONL is the lossless record for checking message types and provider metadata,
+while TXT verifies user-visible formatting. The raw-frame option captures only
+the first three successfully parsed IRC frames, not the entire conversation.
+Review captured public chat data before sharing it.
+
+Use `--message_groups all` for this output inspection because Twitch's default
+`messages` group emits ordinary chat messages but omits known system and
+moderation events such as subscriptions, room-state changes, deleted messages,
+and bans. Unknown-action, unknown-type, unknown-tag, unmatched-shape, and
+unexpected-key diagnostics run during parsing or on the parsed record before
+message-group filtering. They therefore remain active with the default filter;
+`all` removes message-group filtering from normal parsed output records observed
+during the window rather than enabling drift detection itself. Transport-control
+records and duplicate message IDs can still be handled internally. The option
+also cannot make rare events occur; use curated fixtures or repeated targeted
+runs when the complete parser surface needs coverage.
+
 To turn a captured drift sample into a permanent regression anchor:
 
 1. Reproduce the failure with
