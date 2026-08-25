@@ -160,6 +160,52 @@ def test_youtube_live_24_hour_prefers_timestamp_over_time_text(
     assert result.startswith("00:00 | ")
 
 
+@pytest.mark.parametrize(
+    ("format_name", "expected_prefix"),
+    [
+        ("youtube_live_default", "2020-01-01 00:00:00 | "),
+        ("youtube_live_24_hour", "00:00 | "),
+        ("youtube_live_12_hour", "12:00 AM | "),
+    ],
+)
+@pytest.mark.parametrize(
+    "message_type",
+    ["viewer_engagement_message", "deleted_message", "ban_user"],
+)
+def test_youtube_live_system_messages_omit_missing_author_separator(
+    formatter: ItemFormatter,
+    format_name: str,
+    expected_prefix: str,
+    message_type: str,
+) -> None:
+    item = {
+        "message_type": message_type,
+        "message": "System notice",
+        "timestamp": 1577836800000000,  # 2020-01-01 00:00:00 UTC
+        "time_text": "0:42",
+    }
+
+    result = formatter.format(item, format_name=format_name)
+
+    assert result == f"{expected_prefix}System notice"
+
+
+def test_youtube_live_system_format_keeps_authored_message_separator(
+    formatter: ItemFormatter,
+) -> None:
+    item = {
+        "message_type": "text_message",
+        "message": "Hello",
+        "author": {"name": "user"},
+        "timestamp": 1577836800000000,  # 2020-01-01 00:00:00 UTC
+        "time_text": "0:42",
+    }
+
+    result = formatter.format(item, format_name="youtube_live_default")
+
+    assert result == "2020-01-01 00:00:00 | user: Hello"
+
+
 def test_format_with_badges(formatter: ItemFormatter) -> None:
     """Test formatting with author badges."""
     item = {

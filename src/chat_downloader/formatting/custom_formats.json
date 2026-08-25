@@ -15,10 +15,25 @@
             "message": ": {}"
         }
     },
-    "youtube_live_default": {
-        "inherit": "default",
-        "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}"
-    },
+    "youtube_live_default": [
+        {
+            "matching": [
+                "viewer_engagement_message",
+                "deleted_message",
+                "ban_user"
+            ],
+            "template": "{timestamp|time_text}{message}",
+            "inherit": "default",
+            "keys": {
+                "message": "{}"
+            }
+        },
+        {
+            "matching": "all",
+            "inherit": "default",
+            "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}"
+        }
+    ],
     "24_hour": {
         "inherit": "default",
         "keys": {
@@ -27,15 +42,33 @@
             }
         }
     },
-    "youtube_live_24_hour": {
-        "inherit": "default",
-        "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}",
-        "keys": {
-            "timestamp": {
-                "format": "%H:%M"
+    "youtube_live_24_hour": [
+        {
+            "matching": [
+                "viewer_engagement_message",
+                "deleted_message",
+                "ban_user"
+            ],
+            "template": "{timestamp|time_text}{message}",
+            "inherit": "default",
+            "keys": {
+                "timestamp": {
+                    "format": "%H:%M"
+                },
+                "message": "{}"
+            }
+        },
+        {
+            "matching": "all",
+            "inherit": "default",
+            "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}",
+            "keys": {
+                "timestamp": {
+                    "format": "%H:%M"
+                }
             }
         }
-    },
+    ],
     "12_hour": {
         "inherit": "default",
         "keys": {
@@ -45,16 +78,35 @@
             }
         }
     },
-    "youtube_live_12_hour": {
-        "inherit": "default",
-        "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}",
-        "keys": {
-            "timestamp": {
-                "template": "{} | ",
-                "format": "%I:%M %p"
+    "youtube_live_12_hour": [
+        {
+            "matching": [
+                "viewer_engagement_message",
+                "deleted_message",
+                "ban_user"
+            ],
+            "template": "{timestamp|time_text}{message}",
+            "inherit": "default",
+            "keys": {
+                "timestamp": {
+                    "template": "{} | ",
+                    "format": "%I:%M %p"
+                },
+                "message": "{}"
+            }
+        },
+        {
+            "matching": "all",
+            "inherit": "default",
+            "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}",
+            "keys": {
+                "timestamp": {
+                    "template": "{} | ",
+                    "format": "%I:%M %p"
+                }
             }
         }
-    },
+    ],
     "padded_time": {
         "inherit": "default",
         "keys": {
