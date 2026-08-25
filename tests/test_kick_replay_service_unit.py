@@ -347,6 +347,33 @@ def test_cursor_after_treats_naive_timestamp_as_utc() -> None:
     assert replay_service._cursor_after(timestamp) == "1000000"
 
 
+@pytest.mark.parametrize(
+    "end",
+    [
+        datetime(2026, 1, 1, tzinfo=UTC),
+        datetime(2025, 12, 31, tzinfo=UTC),
+    ],
+)
+def test_iter_vod_messages_does_not_fetch_empty_or_reversed_window(
+    end: datetime,
+) -> None:
+    api_client = Mock()
+
+    assert (
+        list(
+            replay_service._iter_vod_messages(
+                "123",
+                datetime(2026, 1, 1, tzinfo=UTC),
+                end,
+                ChatRequest(max_attempts=1, interruptible_retry=False),
+                api_client=api_client,
+            )
+        )
+        == []
+    )
+    api_client.fetch_message_page.assert_not_called()
+
+
 def test_iter_vod_messages_stops_repeated_cursor_without_duplicates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

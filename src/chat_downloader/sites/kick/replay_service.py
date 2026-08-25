@@ -265,6 +265,9 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
     With ``max_messages`` set, the oldest *N* messages (i.e. the first *N* from
     the stream start) are returned.
     """
+    if end_dt <= start_dt:
+        return
+
     cursor: str | None = _cursor_after(end_dt)
     done = False
     page_offsets: list[int] = []

@@ -129,6 +129,36 @@ def test_clip_bounds_are_relative_clamped_and_do_not_mutate_request() -> None:
     )
 
 
+def test_clip_bounds_beyond_duration_yield_no_endpoint_messages() -> None:
+    client = Mock()
+    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
+    client.fetch_video_metadata.return_value = _video_metadata()
+    client.fetch_message_page.return_value = {
+        "data": {
+            "messages": [
+                _raw_message("at-end", "2026-08-18T22:55:23Z"),
+            ]
+        }
+    }
+
+    chat = clip_service.get_clip_chat(
+        "n3on",
+        CLIP_ID,
+        ChatRequest(
+            start_time=70,
+            end_time=90,
+            max_attempts=1,
+            interruptible_retry=False,
+        ),
+        api_client=client,
+    )
+
+    assert chat.start_time == 60
+    assert chat.duration == 0
+    assert list(chat) == []
+    client.fetch_message_page.assert_not_called()
+
+
 def test_clip_window_is_truncated_at_source_vod_end() -> None:
     client = Mock()
     client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
