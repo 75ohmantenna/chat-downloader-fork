@@ -218,6 +218,13 @@ These are structural offline checks; no network access is required.
 
 ## Capture and fix parser drift
 
+For a bounded clean-run inspection of ordinary IRC traffic, enable
+`CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`,
+`CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1`, and debug logging. The first
+three successfully parsed raw IRC frames are sanitized and captured across the
+entire live run, including reconnects. This explicit second opt-in is required
+because valid frames contain ordinary public chat data.
+
 When a live IRC message or GraphQL response contains an unknown type, tag, or
 shape, the runtime emits a drift diagnostic and saves a sanitized snapshot when
 debug-sample capture is enabled. Unknown IRC actions, message types, tags, and

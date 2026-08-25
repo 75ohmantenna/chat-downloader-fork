@@ -49,6 +49,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 ### Debugging
 
 - Add a separately opted-in, sanitized capture of the first three successfully
+  parsed raw Twitch IRC frames, with one bound spanning reconnects.
+- Add a separately opted-in, sanitized capture of the first three successfully
   parsed Kick WebSocket event frames, with one bound spanning reconnects.
 - Add a separately opted-in, sanitized capture of the first three structurally
   valid YouTube continuation responses for clean-run diagnosis.

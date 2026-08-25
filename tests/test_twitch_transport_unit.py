@@ -16,7 +16,7 @@ from chat_downloader.errors import (
     VideoUnplayable,
 )
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.twitch import graphql_client, irc_transport
+from chat_downloader.sites.twitch import graphql_client, irc_diagnostics, irc_transport
 
 
 def _privmsg(message_id: str, text: str) -> str:
@@ -25,6 +25,25 @@ def _privmsg(message_id: str, text: str) -> str:
         f"{message_id};mod=0;room-id=1;subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;"
         f"user-type= :user!user@user.tmi.twitch.tv PRIVMSG #example :{text}"
     )
+
+
+def test_successful_irc_frame_capture_requires_explicit_scope_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(
+        "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES",
+        raising=False,
+    )
+    captured = []
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+
+    irc_diagnostics._SuccessfulIrcFrameCapture().capture("valid frame\r\n")
+
+    assert captured == []
 
 
 @pytest.mark.parametrize(

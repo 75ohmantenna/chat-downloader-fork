@@ -25,6 +25,7 @@ from .constants import (
     PONG_TEXT,
     TWITCH_DEBUG_SAMPLE_LIMIT,
 )
+from .irc_diagnostics import _is_benign_unmatched_irc_buffer
 from .parsing.messages import _parse_irc_item
 
 if TYPE_CHECKING:
@@ -33,6 +34,7 @@ if TYPE_CHECKING:
 
     from chat_downloader.models import ChatRequest
 
+    from .irc_diagnostics import _SuccessfulIrcFrameCapture
     from .types import BadgeSet
 
 _PROGRESS_LOG_INTERVAL_MESSAGES = 250
@@ -138,11 +140,15 @@ def _parse_irc_matches(
     matches: list[re.Match[str]],
     badge_set: BadgeSet | None,
     message_count: int,
+    successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Parse IRC matches and update the running message count."""
     items: list[dict[str, Any]] = []
     for match in matches:
-        items.append(_parse_irc_item(match, badge_set))
+        item = _parse_irc_item(match, badge_set)
+        if successful_frame_capture is not None:
+            successful_frame_capture.capture(f"{match.group(0)}\r\n")
+        items.append(item)
         message_count += 1
     return items, message_count
 
@@ -165,39 +171,6 @@ def _should_send_keepalive(
         ``True`` if ``ping_every`` seconds have passed since ``last_ping_time``.
     """
     return current_time - last_ping_time > ping_every
-
-
-def _is_benign_unmatched_irc_buffer(readbuffer: str) -> bool:
-    """Return True for unmatched IRC traffic that is expected and noisy."""
-    lines = [line.strip() for line in readbuffer.splitlines() if line.strip()]
-    if not lines:
-        return True
-
-    for line in lines:
-        if line.startswith(("PING :", "PONG :")):
-            continue
-
-        if " JOIN #" in line or " PART #" in line:
-            continue
-
-        if "tmi.twitch.tv" not in line:
-            return False
-
-        parts = line.split()
-        if len(parts) >= 3 and parts[1].isdigit():
-            continue
-
-        if (
-            len(parts) >= 4
-            and parts[1] == "CAP"
-            and parts[2] == "*"
-            and parts[3] == "ACK"
-        ):
-            continue
-
-        return False
-
-    return True
 
 
 class TwitchChatIRC:
@@ -318,6 +291,8 @@ def get_chat_messages_by_stream_id(
     channel: str,  # noqa: ARG001 — part of the uniform transport callable signature
     params: ChatRequest | dict[str, Any],
     badge_set: BadgeSet | None = None,
+    *,
+    successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield live chat messages for a stream via IRC."""
     from chat_downloader.models import ChatRequest
@@ -358,6 +333,7 @@ def get_chat_messages_by_stream_id(
                     matches,
                     badge_set,
                     message_count,
+                    successful_frame_capture,
                 )
                 yield from items
             elif unmatched_full_buffer is not None:

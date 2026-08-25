@@ -15,6 +15,15 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch import live_service
 
 
+def _privmsg(message_id: str, text: str) -> str:
+    return (
+        "@badge-info=;badges=;color=;display-name=User;emotes=;flags=;id="
+        f"{message_id};mod=0;room-id=1;subscriber=0;tmi-sent-ts=1;turbo=0;"
+        f"user-id=1;user-type= :user!user@user.tmi.twitch.tv PRIVMSG "
+        f"#example :{text}"
+    )
+
+
 def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (
     None
 ):
@@ -80,6 +89,73 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
     first_irc.close_connection.assert_called_once()
     second_irc.close_connection.assert_called_once()
     mock_debug_log.assert_called_once()
+
+
+def test_successful_irc_frame_capture_is_bounded_across_reconnects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeIRC:
+        def __init__(self, frames: list[str]) -> None:
+            self.responses = iter(["\r\n".join(frames) + "\r\n", ""])
+            self.closed = False
+
+        def recv(self, _buffer_size: int) -> str:
+            return next(self.responses)
+
+        def send_raw(self, _message: str) -> None:
+            return None
+
+        def set_timeout(self, _timeout: float) -> None:
+            return None
+
+        def join_channel(self, _channel: str) -> None:
+            return None
+
+        def close_connection(self) -> None:
+            self.closed = True
+
+    first_frames = [_privmsg(str(index), f"message {index}") for index in range(2)]
+    second_frames = [_privmsg(str(index), f"message {index}") for index in range(2, 5)]
+    ircs = [FakeIRC(first_frames), FakeIRC(second_frames)]
+    downloader = SimpleNamespace(
+        badge_cache=SimpleNamespace(snapshot=lambda: None),
+        _update_badge_info=Mock(),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/example",
+        max_attempts=2,
+        retry_timeout=0,
+        interruptible_retry=False,
+        message_groups=["messages"],
+    )
+    captured = []
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "yes")
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+
+    messages = live_service.iter_stream_chat_messages(
+        cast("Any", downloader),
+        "example",
+        request,
+        irc_factory=cast("live_service._IRCFactory", Mock(side_effect=ircs)),
+    )
+    received = [next(messages) for _ in range(5)]
+    messages.close()
+
+    assert [message["message_id"] for message in received] == [
+        str(index) for index in range(5)
+    ]
+    assert captured == [
+        (
+            ("twitch-irc-frame", {"raw": f"{frame}\r\n"}),
+            {"sample_limit": 3},
+        )
+        for frame in [*first_frames, second_frames[0]]
+    ]
+    assert all(irc.closed for irc in ircs)
 
 
 def test_live_service_passes_effective_proxy_to_irc_factory() -> None:

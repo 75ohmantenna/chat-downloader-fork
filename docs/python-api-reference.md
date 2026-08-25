@@ -319,6 +319,12 @@ path-based fallback. Set `sample_limit` to bound the number of unique payloads
 written for one label and output directory during the current process;
 duplicate payloads continue to resolve to their deterministic existing path.
 
+Clean-run provider captures require a second explicit opt-in because they
+contain ordinary public chat data. Set
+`CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1` to capture the first three valid
+raw Twitch IRC frames across reconnects. The shared capture flag and debug
+logging must also be enabled.
+
 `chat_downloader.debug_sample_utils` contains naming helpers used to turn
 captured samples into stable fixture names.
 

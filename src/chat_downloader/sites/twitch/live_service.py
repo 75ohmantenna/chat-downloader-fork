@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
+from functools import partial
 from json.decoder import JSONDecodeError
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from requests.exceptions import RequestException
 
@@ -19,6 +20,7 @@ from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.dict_utils import multi_get
 
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
+from .irc_diagnostics import _SuccessfulIrcFrameCapture
 from .irc_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
     _PROGRESS_LOG_INTERVAL_MESSAGES,
@@ -85,6 +87,14 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     """Yield live IRC chat messages for a stream."""
     irc_factory = irc_factory or TwitchChatIRC
     message_generator = message_generator or get_chat_messages_by_stream_id
+    if message_generator is get_chat_messages_by_stream_id:
+        message_generator = cast(
+            "_MessageGenerator",
+            partial(
+                message_generator,
+                successful_frame_capture=_SuccessfulIrcFrameCapture(),
+            ),
+        )
     msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
 
     def create_connection() -> TwitchChatIRC:

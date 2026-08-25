@@ -199,6 +199,7 @@ non-`__init__.py` module is represented and rejects stale module names.
 | `discovery.py` | Twitch URL discovery and GraphQL query construction |
 | `extractor.py` | Twitch site extractor class |
 | `graphql_client.py` | Persisted-query GraphQL client and error handling |
+| `irc_diagnostics.py` | IRC control-traffic classification and bounded clean-run capture |
 | `irc_transport.py` | Low-level IRC socket connection and message stream |
 | `live_service.py` | Live IRC chat orchestration |
 | `parsing/` | IRC message, tag, badge, and emote parsing |

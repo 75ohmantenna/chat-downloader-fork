@@ -208,6 +208,13 @@ introduce new secret-bearing shapes. Successful YouTube samples also retain
 public chat contents after credential sanitization, so review them before
 sharing.
 
+Twitch supports clean-run IRC inspection with
+`CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1`. Combined with the shared capture
+flag and debug logging, it captures at most the first three raw IRC frames that
+successfully parse. The per-run attempt cap spans reconnects and preserves the
+original `\r\n` terminator so reviewed samples can be promoted directly into
+live-event fixtures.
+
 Kick supports the equivalent clean-run workflow with
 `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`. Combined with the shared capture flag
 and debug logging, it captures at most the first three raw WebSocket frames
