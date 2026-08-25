@@ -188,6 +188,11 @@ one response to reach the requested offset. Those pages must still advance the
 continuation token or their greatest replay offset; repeated stale responses
 eventually trigger the bounded no-progress guard.
 
+Replay-wrapper offsets are used only when they are finite and nonnegative.
+Malformed offsets fall back to the renderer's display timing instead of
+aborting the replay or replacing valid nested timing. Clip offsets are applied
+once after nested renderer timing is merged.
+
 `NoChatReplay` is most likely to appear in replay mode, when YouTube simply
 does not expose replay chat for the target.
 

@@ -228,7 +228,6 @@ def _apply_colour_keys(
 def _merge_nested_renderers(
     info: dict[str, Any],
     item_info: JSONDict,
-    offset: float,
     depth: int,
     *,
     preserve_wrapper_time: bool,
@@ -240,14 +239,14 @@ def _merge_nested_renderers(
     if item_endpoint:
         renderer = multi_get(item_endpoint, "showLiveChatItemEndpoint", "renderer")
         if renderer:
-            nested_info = _parse_item(renderer, offset=offset, depth=depth + 1)
+            nested_info = _parse_item(renderer, depth=depth + 1)
             if nested_info:
                 info.update(nested_info)
                 merged_nested_renderer = True
 
     header = get_dict(item_info, "header")
     if header:
-        nested_info = _parse_item(header, offset=offset, depth=depth + 1)
+        nested_info = _parse_item(header, depth=depth + 1)
         if nested_info:
             info.update(nested_info)
             merged_nested_renderer = True
@@ -288,7 +287,6 @@ def _parse_item(
     _merge_nested_renderers(
         info,
         item_info,
-        offset,
         depth,
         preserve_wrapper_time=preserve_wrapper_time,
     )

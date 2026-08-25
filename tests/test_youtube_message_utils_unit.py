@@ -320,7 +320,7 @@ def test_parse_item_returns_existing_info_for_empty_renderer() -> None:
     assert _parse_item({"liveChatTextMessageRenderer": {}}, info=info) == {"kept": True}
 
 
-def test_parse_item_recurses_moves_author_and_normalizes_time(
+def test_parse_item_recurses_moves_author_and_applies_offset_once(
     monkeypatch,
 ) -> None:
 
@@ -355,8 +355,8 @@ def test_parse_item_recurses_moves_author_and_normalizes_time(
 
     assert result["body_background_colour"] == "#112233ff"
     assert result["author"] == {"images": {"thumb": "img"}, "name": ""}
-    assert result["time_in_seconds"] == 58
-    assert result["time_text"] == "0:58"
+    assert result["time_in_seconds"] == 60
+    assert result["time_text"] == "1:00"
     assert result["message"] is None
 
 

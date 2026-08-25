@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
 from chat_downloader.sites.youtube.continuations import (
@@ -134,7 +136,7 @@ def test_replay_paid_ticker_fixture_preserves_shared_precise_offset() -> None:
 
     parsed = []
     for action in result.actions:
-        pipeline_result = process_pipeline_action(action, 0, all_filter, None)
+        pipeline_result = process_pipeline_action(action, 100, all_filter, None)
         assert pipeline_result.message is not None
         parsed.append(pipeline_result.message)
 
@@ -143,8 +145,45 @@ def test_replay_paid_ticker_fixture_preserves_shared_precise_offset() -> None:
         "ticker_paid_message_item",
     ]
     assert [item["message_id"] for item in parsed] == ["paid-1", "paid-1"]
-    assert [item["time_in_seconds"] for item in parsed] == [1137.252, 1137.252]
-    assert [item["time_text"] for item in parsed] == ["18:57", "18:57"]
+    assert [item["time_in_seconds"] for item in parsed] == [1037.252, 1037.252]
+    assert [item["time_text"] for item in parsed] == ["17:17", "17:17"]
+
+
+@pytest.mark.parametrize(
+    "raw_offset",
+    ["", "not-a-number", "nan", "inf", "-1", 123, [], True],
+)
+def test_replay_paid_ticker_fixture_rejects_invalid_wrapper_offset(
+    raw_offset,
+    monkeypatch,
+) -> None:
+    debug_calls: list[object] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.parsing.actions_router.debug_log",
+        lambda *args: debug_calls.append(args),
+    )
+    payload = _load_payload("youtube-replay-paid-ticker-shared-offset.json")
+    result = parse_continuation_response(payload)
+    all_filter = MessageFilter(
+        _MESSAGE_GROUPS,
+        groups_to_add=["all"],
+        types_to_add=None,
+    )
+
+    parsed = []
+    for action in result.actions:
+        action["replayChatItemAction"]["videoOffsetTimeMsec"] = raw_offset
+        pipeline_result = process_pipeline_action(action, 1000, all_filter, None)
+        assert pipeline_result.message is not None
+        parsed.append(pipeline_result.message)
+
+    assert [item["message_type"] for item in parsed] == [
+        "paid_message",
+        "ticker_paid_message_item",
+    ]
+    assert [item["time_in_seconds"] for item in parsed] == [137, 137]
+    assert [item["time_text"] for item in parsed] == ["2:17", "2:17"]
+    assert len(debug_calls) == 2
 
 
 def test_mobile_element_chat_fixture_parses_through_real_pipeline() -> None:

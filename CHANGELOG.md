@@ -10,6 +10,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Ignore malformed, non-finite, and negative YouTube replay-wrapper offsets and
+  apply clip rebasing once so nested ticker timing remains usable.
 - Continue across YouTube replay pages that remain just before `start_time`,
   preventing dense chats from ending before the requested range is reached.
 - Preserve millisecond replay offsets when YouTube ticker items embed a paid
