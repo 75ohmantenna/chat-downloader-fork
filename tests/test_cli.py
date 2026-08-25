@@ -26,7 +26,7 @@ from chat_downloader.runtime.runner import RunResult
 
 
 def _run_and_capture(*extra_args) -> dict:
-    """Run main() with a dummy URL; return the kwargs dict passed to run()."""
+    """Run main() with a dummy URL and return the keywords passed to run()."""
     captured: dict = {}
 
     def fake_run(**kwargs) -> RunResult:

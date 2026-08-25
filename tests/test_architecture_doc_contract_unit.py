@@ -34,21 +34,30 @@ def _section(text: str, heading: str) -> str:
     return match.group(0)
 
 
-def test_architecture_doc_lists_immediate_modules() -> None:
-    """Require every immediate non-package module in its package section."""
+def test_architecture_doc_lists_exact_immediate_modules() -> None:
+    """Keep every package inventory exact, including removal of stale names."""
     text = ARCHITECTURE_DOC.read_text(encoding="utf-8")
     offenders: list[str] = []
 
     for heading, directory in INVENTORIES.items():
         section = _section(text, heading)
-        for path in sorted(directory.glob("*.py")):
-            if path.name == "__init__.py":
-                continue
-            if f"`{path.name}`" not in section:
-                rel = path.relative_to(SRC).as_posix()
-                offenders.append(f"{heading}: {rel}")
+        expected = {
+            path.name for path in directory.glob("*.py") if path.name != "__init__.py"
+        }
+        documented = {
+            module_name
+            for module_name in re.findall(r"`([^`]+\.py)`", section)
+            if "/" not in module_name
+            and "*" not in module_name
+            and module_name != "__init__.py"
+        }
+        missing = sorted(expected - documented)
+        stale = sorted(documented - expected)
+        if missing:
+            offenders.append(f"{heading}: missing {', '.join(missing)}")
+        if stale:
+            offenders.append(f"{heading}: stale {', '.join(stale)}")
 
-    assert not offenders, (
-        "source modules missing from architecture.md inventories:\n"
-        + "\n".join(offenders)
+    assert not offenders, "architecture.md package inventory drift:\n" + "\n".join(
+        offenders
     )

@@ -146,24 +146,31 @@ downloader = ChatDownloader(**config.as_dict())
 `ChatRequest` holds request-level settings passed into
 `ChatDownloader.get_chat(...)` or `ChatDownloader.get_chat_request(...)`.
 
-Common fields:
+Fields appear in dataclass definition order. Contract tests compare every name
+and default below with the dataclass definitions used by the facade and CLI:
 
 | Field | Default | Description |
 | --- | --- | --- |
 | `url` | `""` | Stream, video, or clip URL |
 | `start_time` | `None` | Replay start offset; supported by YouTube, Twitch replay, and Kick VOD URLs |
 | `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD URLs |
+| `max_attempts` | `15` | Maximum retry attempts |
+| `retry_timeout` | `None` | Delay before retry; `None` uses exponential backoff, while a negative value waits for user input |
+| `interruptible_retry` | `True` | Allow a waiting retry to be triggered immediately |
+| `timeout` | `None` | Overall runtime limit |
+| `inactivity_timeout` | `None` | Stop after idle period |
 | `max_messages` | `None` | Stop after this many messages |
 | `message_groups` | site default | High-level message filtering |
 | `message_types` | `None` | Explicit message-type filtering; overrides `message_groups` when supplied |
 | `output` | `None` | Output path or list of paths |
-| `format` | site default | Output format override |
-| `format_file` | `None` | Custom formatter definition |
-| `chat_type` | `"live"` | YouTube live/top chat mode |
-| `timeout` | `None` | Overall runtime limit |
-| `inactivity_timeout` | `None` | Stop after idle period |
 | `overwrite` | `True` | Replace existing output files |
 | `sort_keys` | `True` | Sort keys in JSON output |
+| `format` | site default | Text-format template override |
+| `format_file` | `None` | Custom formatter definition |
+| `chat_type` | `"live"` | YouTube chat mode: `"live"` or `"top"` |
+| `ignore` | `None` | YouTube video IDs to skip during discovery |
+| `message_receive_timeout` | `0.1` | Live socket receive-poll timeout; Twitch and Kick enforce a one-second minimum |
+| `buffer_size` | `4096` | Twitch IRC receive-buffer size in bytes |
 
 URL dispatch matches the complete input. Normal query strings and fragments are
 accepted, while URLs embedded in unrelated text, reserved site routes, and
@@ -174,23 +181,14 @@ For YouTube live chats, the site default text format renders absolute
 timestamps before elapsed replay offsets. Replay chats keep the standard
 elapsed-time rendering.
 
-Additional fields are available for retry and transport tuning:
-
-- `max_attempts`
-- `retry_timeout`
-- `interruptible_retry`
-- `ignore`
-- `message_receive_timeout`
-- `buffer_size`
-
 Kick VOD offsets are relative to the recording start and are clamped to its
 duration. Kick live channel URLs reject `start_time` and `end_time` because the
 public live feed cannot seek.
 
-Validation raises `ValueError` for: non-positive or non-integer message/retry/buffer
-counts; malformed or non-finite start/end times; non-finite `retry_timeout`;
-`chat_type` outside `"live"` and `"top"`; non-positive or non-finite `timeout` or
-`inactivity_timeout` when set (they may be `None`); and non-positive or
+Validation raises `ValueError` for non-positive or non-integer message, retry,
+or buffer counts; malformed or non-finite start/end times; a non-finite
+`retry_timeout`; a `chat_type` other than `"live"` or `"top"`; a non-positive
+or non-finite `timeout` or `inactivity_timeout` when set; and a non-positive or
 non-finite `message_receive_timeout`.
 
 Helpers:
@@ -227,7 +225,7 @@ chat = downloader.get_chat_request(request)
 | Field | Default | Description |
 | --- | --- | --- |
 | `quiet` | `False` | Suppress formatted chat output to stdout |
-| `max_seen_message_ids` | shared default | Deduplication cache size for `run()` |
+| `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |
 | `exit_on_debug` | `False` | Exit when unexpected debug conditions are hit |
 | `pause_on_debug` | `False` | Pause when selected debug conditions are hit |
 
@@ -389,9 +387,9 @@ from chat_downloader import (
 ```
 
 Additional typed model helpers are available from `chat_downloader.models`,
-including `RunConfig`, `coerce_chat_request` (converts a kwargs dict to a
-`ChatRequest` with `strict=True`, rejecting unknown keys), and the default
-constants used by the facade.
+including `RunConfig`, `coerce_chat_request` (converts a keyword-argument
+dictionary to a `ChatRequest` with `strict=True`, rejecting unknown keys), and
+the default constants used by the facade.
 
 ## Site Classes
 
@@ -407,6 +405,6 @@ from chat_downloader import KickChatDownloader, KickError
 `get_all_sites()` returns every registered site class, including
 `KickChatDownloader`.
 
-Kick URLs (`kick.com/{username}` for live chat, `kick.com/{username}/videos/
-{uuid}` for VOD replay) work through the standard `get_chat()` /
-`get_chat_request()` entry points like any other site.
+Kick URLs (`kick.com/{username}` for live chat and
+`kick.com/{username}/videos/{uuid}` for VOD replay) work through the standard
+`get_chat()` and `get_chat_request()` entry points like any other site.

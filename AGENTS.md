@@ -58,10 +58,11 @@ For deeper context use:
 - `uv run pytest tests/FILE.py::test_name -q` — single test
 - `uv run pytest -v -m network --run-network` — opt-in network tests
 - `uv run ruff check src/chat_downloader tests` — lint
+- `make spell` — spell-check all tracked text and filenames
 - `uv run ruff format --check src/chat_downloader tests` — format check
 - `uv run mypy .` — type check
-- `make ci` — canonical validation: lock-check, lint, fmt-check, typecheck,
-  100% offline line coverage, build, smoke
+- `make ci` — canonical validation: lock-check, lint, spelling, fmt-check,
+  typecheck, 100% offline line coverage, build, smoke
 
 ## Testing
 
@@ -140,6 +141,7 @@ A behavior, runtime, parser, or tooling change is not done until:
 
 - Regression test added or updated under `tests/`
 - `uv run ruff check src/chat_downloader tests` clean
+- `make spell` clean
 - `uv run ruff format --check src/chat_downloader tests` clean
 - `uv run mypy .` clean
 - `uv run lint-imports` clean

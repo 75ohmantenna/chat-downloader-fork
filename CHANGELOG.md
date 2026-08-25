@@ -8,6 +8,15 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Tooling
+
+- Add codespell to the locked development toolchain, pre-commit checks, and
+  canonical `make ci` validation. The spelling target checks every tracked
+  file and filename while preserving exact third-party fixture text.
+- Strengthen documentation contracts so code remains authoritative for typed
+  field/default tables, CLI flags, output formats, provider message groups,
+  and architecture module inventories.
+
 ## 2.0.6 — 2026-08-09
 
 ### Security / hardening
@@ -209,7 +218,7 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   six `sites/kick/parsing/` modules take `object`/`Mapping[str, object]` params
   with `_opt_str`-style extraction; behavior unchanged.
 - **Kick non-parsing layer migrated to `json_types` (Round-14).** HTTP-response
-  boundaries (`api_client.py`) and the websocket-frame boundary
+  boundaries (`api_client.py`) and the WebSocket-frame boundary
   (`websocket_transport.py`) use `JSONAny`/`JSONDict`/`JSONList` with `cast`;
   downstream callers in `live_service.py`/`replay_service.py` were
   param-narrowed accordingly. `api_client.py` retains `Any` only for the
@@ -269,7 +278,7 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
-- **[critical] Kick HTTP + WebSocket now honor user transport config (proxy, cookies, headers, timeouts).** `_get_kick_session()` accepts optional `proxy` and `extra_headers` kwargs; `KickPusherTransport` threads `http_proxy_host`/`http_proxy_port` through its connector to `create_connection()`. Proxy/config flows from the downloader's configured session through Kick's API calls and websocket transport. Previously `--proxy`, `--cookies`, `--headers`, and timeouts were silently ignored for Kick — the challenge error message advised proxy changes that had no effect.
+- **[critical] Kick HTTP + WebSocket now honor user transport config (proxy, cookies, headers, timeouts).** `_get_kick_session()` accepts optional `proxy` and `extra_headers` kwargs; `KickPusherTransport` threads `http_proxy_host`/`http_proxy_port` through its connector to `create_connection()`. Proxy/config flows from the downloader's configured session through Kick's API calls and WebSocket transport. Previously `--proxy`, `--cookies`, `--headers`, and timeouts were silently ignored for Kick — the challenge error message advised proxy changes that had no effect.
 - **[critical] YouTube unknown continuation types now extract generic tokens instead of silently truncating chat.** `_extract_next_continuation()` in `continuations.py` previously returned `(None, ..., {unknown: True})` for unrecognized continuation wrappers, causing `parse_continuation_response()` to set `is_end=True` and exit normally — silently discarding any further messages behind the new wrapper. Now the generic `continuation` field is extracted from unknown entries, keeping the stream alive. The `unknown: True` flag in `debug_info` preserves observability.
 - **[critical] Output write/close errors no longer silently reported as success.** `_ChatOutputDispatcher` tracks write-close errors via `_write_error_count`; `_finalize_run` in `runner.py` checks this after close and raises `ChatDownloaderError` when any writer failed and no primary error existed; `execute_run` catches this and sets `result.success = False` with an informative error message.
 - **[high] Kick VOD `max_messages` now returns oldest N messages (first N of the VOD) instead of newest N.** Removed the premature `max_messages` early-break during pagination — the loop now paginates fully through the time window before reversing to chronological order and slicing. The old behavior broke out after collecting N newest messages, yielding the most recent N instead of the first N from the stream start.
@@ -688,7 +697,7 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 - Stop VOD pagination on no-progress signals
 - Make GraphQL hash-rotation failures actionable in the raised error
-- Bump the live dedup window and validate the dedup cache limit
+- Bump the live deduplication window and validate the cache limit
 
 ### Debugging
 

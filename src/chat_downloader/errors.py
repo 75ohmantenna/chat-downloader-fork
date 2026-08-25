@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""File for defining errors."""
+"""Public exception hierarchy for chat-downloader."""
 
 from __future__ import annotations
 
 
 class ChatDownloaderError(Exception):
-    """Base class for Chat Downloader errors."""
+    """Base class for chat-downloader errors."""
 
 
 class InvalidParameter(ChatDownloaderError):
@@ -22,11 +22,11 @@ class IncompleteContinuationError(RetriesExceeded):
 
 
 class VideoNotFound(ChatDownloaderError):
-    """Raised when video cannot be found."""
+    """Raised when a video cannot be found."""
 
 
 class UserNotFound(ChatDownloaderError):
-    """Raised when user cannot be found."""
+    """Raised when a user cannot be found."""
 
 
 class NoVideos(ChatDownloaderError):
@@ -34,23 +34,23 @@ class NoVideos(ChatDownloaderError):
 
 
 class ParsingError(ChatDownloaderError):
-    """Raised when video data cannot be parsed."""
+    """Raised when provider data cannot be parsed."""
 
 
 class VideoUnavailable(ChatDownloaderError):
-    """Raised when video is unavailable."""
+    """Raised when a video is unavailable."""
 
 
 class LoginRequired(ChatDownloaderError):
-    """Raised when video is login is required (e.g. if video is private)."""
+    """Raised when a video requires login, such as for private content."""
 
 
 class CaptchaChallengeRequired(LoginRequired):
-    """Raised when a captcha/challenge gate blocks requests."""
+    """Raised when a CAPTCHA or challenge gate blocks requests."""
 
 
 class VideoUnplayable(ChatDownloaderError):
-    """Raised when video is unplayable (e.g. if video is members-only)."""
+    """Raised when a video is unplayable, such as for members-only content."""
 
 
 class NoChatReplay(ChatDownloaderError):
@@ -62,15 +62,15 @@ class ChatDisabled(ChatDownloaderError):
 
 
 class URLNotProvided(ChatDownloaderError):
-    """Raised when no url is provided."""
+    """Raised when no URL is provided."""
 
 
 class InvalidURL(ChatDownloaderError):
-    """Raised when the url is invalid."""
+    """Raised when a URL is invalid."""
 
 
 class ChatGeneratorError(ChatDownloaderError):
-    """Raised when no valid generator method for a site can be found."""
+    """Raised when no valid generator method can be found for a site."""
 
 
 class SiteError(ChatDownloaderError):
@@ -78,7 +78,7 @@ class SiteError(ChatDownloaderError):
 
 
 class SiteNotSupported(SiteError):
-    """Raised when the url is valid, but the site is not supported."""
+    """Raised when a URL is valid but its site is not supported."""
 
 
 class NoContinuation(ChatDownloaderError):
@@ -94,11 +94,11 @@ class FormatError(ChatDownloaderError):
 
 
 class FormatNotFound(FormatError):
-    """Raised when a specified format can not be found."""
+    """Raised when a specified format cannot be found."""
 
 
 class FormatFileNotFound(FormatError):
-    """Raised when the format file can not be found."""
+    """Raised when the format file cannot be found."""
 
 
 __all__ = [

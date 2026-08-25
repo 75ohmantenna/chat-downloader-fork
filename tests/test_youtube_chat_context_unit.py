@@ -293,9 +293,7 @@ def test_build_chat_context_message_types_override_default_groups(
     assert not ctx.msg_filter.should_add({"message_type": "text_message"})
 
 
-# ---------------------------------------------------------------------------
-# Round-09.2 seam tests: _build_continuation_urls
-# ---------------------------------------------------------------------------
+# Continuation URL helper contracts.
 
 
 def test_build_continuation_urls_live() -> None:
@@ -313,9 +311,7 @@ def test_build_continuation_urls_replay() -> None:
     assert "get_live_chat_replay?key=KEY" in url
 
 
-# ---------------------------------------------------------------------------
-# Round-09.2 seam tests: _build_message_filters
-# ---------------------------------------------------------------------------
+# Message-filter helper contracts.
 
 
 def test_build_message_filters_live_no_time_filter() -> None:
@@ -375,9 +371,7 @@ def test_build_message_filters_groups_non_list_yields_empty() -> None:
     assert msg_filter is not None
 
 
-# ---------------------------------------------------------------------------
-# Round-09.2 seam tests: _apply_session_headers
-# ---------------------------------------------------------------------------
+# Session-header helper contracts.
 
 
 def test_apply_session_headers_calls_update_twice(monkeypatch) -> None:

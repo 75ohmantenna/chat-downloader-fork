@@ -35,7 +35,7 @@ def test_get_chat_defaults_match_field_defaults() -> None:
         expected = field_defaults[name]
         actual = p.default
         # url: facade uses None as "not provided" sentinel; dataclass uses "".
-        # The facade normalises None→"" before constructing ChatRequest, so the
+        # The facade normalizes None→"" before constructing ChatRequest, so the
         # defaults legitimately differ.
         if name == "url":
             continue

@@ -91,7 +91,7 @@ def test_chat_downloader_init_logs_sanitized_proxy_and_headers(
     )
 
     init_log = next(
-        msg for msg in messages if msg.startswith("Initialisation parameters:")
+        msg for msg in messages if msg.startswith("Initialization parameters:")
     )
     assert "Bearer secret" not in init_log
     assert "user:pass@example.invalid" not in init_log
@@ -110,7 +110,7 @@ def test_chat_downloader_init_logs_sanitized_cookies(monkeypatch) -> None:
     ChatDownloader(cookies="/tmp/cookies.txt")
 
     init_log = next(
-        msg for msg in messages if msg.startswith("Initialisation parameters:")
+        msg for msg in messages if msg.startswith("Initialization parameters:")
     )
     assert "/tmp/cookies.txt" not in init_log
     assert "<redacted>" in init_log

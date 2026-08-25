@@ -72,7 +72,7 @@ The normal YouTube flow is:
   bootstrap requests
 - `client_requests_initial.py`: initial request helpers
 - `client_requests_continuation.py`: continuation request helpers
-- `client_requests_errors.py`: shared HTTP, JSON, captcha, and retry
+- `client_requests_errors.py`: shared HTTP, JSON, CAPTCHA, and retry
   classification for request helpers
 - `client_auth.py`: cookie initialization, SAPISID cookie parsing, and auth
   header derivation
@@ -95,7 +95,7 @@ The normal YouTube flow is:
   validation
 - `parsing/message_content_badges.py`,
   `parsing/message_content_text_parser.py`,
-- `parsing/message_items_content_parser.py`,
+  `parsing/message_items_content_parser.py`,
   `parsing/message_items_video.py`, and `parsing/message_links.py`: message
   content, links, video metadata, and shared normalization helpers
 - `parsing/__init__.py`: package-level parsing surface; focused modules own the
@@ -150,7 +150,7 @@ The runtime repeatedly calls the InnerTube continuation endpoint with:
 
 Each response is parsed for actions, new continuation tokens, and timeout
 hints. YouTube chat polling respects server-provided delay values when present
-and otherwise falls back to 5 seconds, clamped to 0.5-8 seconds. This polling
+and otherwise falls back to five seconds, clamped to 0.5-8 seconds. This polling
 delay is separate from HTTP connect/read timeout settings.
 
 Actions then pass through the message pipeline, which:
@@ -314,7 +314,7 @@ To turn a captured drift sample into a permanent regression anchor:
    uv run pytest -q tests/test_youtube_drift_harness_unit.py
    make ci
    ```
-   It parametrizes over every `live_events/*.json` dict-shaped file and asserts
+   It parameterizes over every dictionary-shaped `live_events/*.json` file and asserts
    no drift sentinel fires. If the harness passes, the fix is complete and the
    fixture is a permanent regression anchor.
 
@@ -336,7 +336,7 @@ The YouTube stack is most sensitive to changes in:
 The initial watch-page fetch raises `RetriesExceeded` after all retry attempts
 on 5xx responses are exhausted.
 Invalid or negative continuation delay values from the InnerTube response use
-the 5 second polling fallback.
+the five-second polling fallback.
 
 When debugging YouTube breakage, inspect modules in this order:
 

@@ -26,7 +26,7 @@ from .irc_transport import (
     get_chat_messages_by_stream_id,
 )
 
-# Twitch live IRC dedup window. Tuned for multi-day captures and reconnect
+# Twitch live IRC deduplication window. Tuned for multi-day captures and reconnect
 # storms; ~5 MB of IDs in memory at full capacity.
 _LIVE_SEEN_MESSAGE_LIMIT = 50_000
 

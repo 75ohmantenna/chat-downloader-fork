@@ -229,7 +229,7 @@ def test_move_to_dict_merges_into_existing_subdict() -> None:
 
 
 def test_move_to_dict_replace_is_global_not_just_prefix() -> None:
-    # Documents substring + replace-all behavior (potential gotcha): every
+    # Documents a substring/replace-all edge case: every
     # occurrence of "a_" is stripped, not just a leading prefix.
     info = {"a_foo_a_bar": "v"}
     sub = move_to_dict(info, "a")  # replace_key == "a_"

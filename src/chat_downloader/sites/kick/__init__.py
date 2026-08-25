@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick.com site package: unauthenticated live chat support."""
+"""Kick.com site package for unauthenticated live and VOD chat."""
 
 from __future__ import annotations
 

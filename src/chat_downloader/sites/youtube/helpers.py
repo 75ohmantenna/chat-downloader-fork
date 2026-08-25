@@ -1,10 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Helper utilities shared by YouTube extractor modules.
-
-This module centralizes helper functions that are currently reused across
-multiple YouTube modules after the large extractor refactor.
-"""
+"""Helper utilities shared by YouTube extractor modules."""
 
 from __future__ import annotations
 

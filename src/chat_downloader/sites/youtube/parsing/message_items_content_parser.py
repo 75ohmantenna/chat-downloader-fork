@@ -172,7 +172,7 @@ def _get_remapping() -> tuple[Mapping[str, Any], list[str]]:
     """Return the remapping table and colour-key list.
 
     Computed once and memoised so that the deferred import of
-    ``constants_message`` does not run during package initialisation (which
+    ``constants_message`` does not run during package initialization (which
     would trigger a circular-import error). Tests that patch the underlying
     tables must call ``_get_remapping.cache_clear()`` first.
     """
@@ -216,7 +216,7 @@ def _apply_colour_keys(
     item_info: JSONDict,
     colour_keys: list[str],
 ) -> None:
-    """Convert ARGB colour fields to hex and store under normalised keys."""
+    """Convert ARGB color fields to hex and store under normalized keys."""
     for colour_key in colour_keys:
         if colour_key in item_info:
             rgba_colour = argb_int_to_rgba(item_info[colour_key])  # type: ignore[arg-type]

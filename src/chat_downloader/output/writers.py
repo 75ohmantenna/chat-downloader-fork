@@ -128,7 +128,7 @@ class ContinuousFileWriter(ABC):
         overwrite: bool = True,
         **kwargs: Any,  # noqa: ARG002 — base class contract; subclasses consume kwargs
     ) -> None:
-        """Initialise the writer for the given file path."""
+        """Initialize the writer for the given file path."""
         self.file_name = file_name
         self.overwrite = overwrite
         self.file: IO[Any] | None = None

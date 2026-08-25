@@ -359,7 +359,7 @@ def get_chat_messages_by_stream_id(
                 )
                 yield from items
             elif unmatched_full_buffer is not None:
-                # Buffer was fully consumed with no matches — log unrecognised
+                # Buffer was fully consumed with no matches — log unrecognized
                 # traffic.
                 if not _is_benign_unmatched_irc_buffer(unmatched_full_buffer):
                     log(

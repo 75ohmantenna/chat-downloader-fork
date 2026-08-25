@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Console script for chat_downloader."""
+"""Command-line entry point for chat-downloader."""
 
 from __future__ import annotations
 

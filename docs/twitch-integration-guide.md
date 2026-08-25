@@ -1,7 +1,8 @@
 # Twitch Integration Guide
 
-How the Twitch integration works in `chat-downloader-fork`. For maintainers
-debugging the live IRC path or the GraphQL-backed replay path.
+This guide explains how the Twitch integration works in
+`chat-downloader-fork`. It is intended for maintainers debugging the live IRC
+path or the GraphQL-backed replay path.
 
 The Twitch stack is split across two transport families:
 
@@ -202,7 +203,7 @@ When Twitch rotates a persisted-query hash:
 
 1. Update `OPERATION_HASHES` in `src/chat_downloader/sites/twitch/constants.py`.
 2. Run `tests/test_twitch_drift_harness_unit.py`. Its coverage and orphan
-   checks keep the table aligned with operation names used by the client.
+   checks keep the table aligned with the operation names used by the client.
 
 These are structural offline checks; no network access is required.
 

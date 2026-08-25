@@ -1,7 +1,7 @@
 UV ?= uv
 UV_RUN ?= $(UV) run --locked
 
-.PHONY: setup setup-hooks lock lock-check test lint fmt fmt-check typecheck coverage build smoke ci check clean
+.PHONY: setup setup-hooks lock lock-check test lint spell fmt fmt-check typecheck coverage build smoke ci check clean
 
 setup: setup-hooks
 	$(UV) sync
@@ -21,6 +21,9 @@ test:
 lint:
 	$(UV_RUN) ruff check src/chat_downloader tests
 	$(UV_RUN) lint-imports
+
+spell:
+	@git ls-files -z | xargs -0 $(UV_RUN) codespell
 
 fmt:
 	$(UV) run ruff format src/chat_downloader tests
@@ -44,9 +47,9 @@ smoke: build
 	@whl=$$(ls dist/*.whl); \
 	$(UV) run --isolated --no-project --with "$$whl" chat_downloader --version
 
-ci: lock-check lint fmt-check typecheck coverage smoke
+ci: lock-check lint spell fmt-check typecheck coverage smoke
 
-check: lint fmt-check typecheck test
+check: lint spell fmt-check typecheck test
 
 clean:
 	find . -type d -name '__pycache__' -exec rm -rf {} +

@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Main module for ChatDownloader.
-
-Orchestrates chat retrieval from streaming platforms.
-"""
+"""Public ChatDownloader facade and run convenience wrapper."""
 
 from __future__ import annotations
 
@@ -118,7 +115,7 @@ class ChatDownloader:
         log("debug", f"Program version: {__version__}")
         log(
             "debug",
-            f"Initialisation parameters: {sanitize_for_log(self.config.as_dict())}",
+            f"Initialization parameters: {sanitize_for_log(self.config.as_dict())}",
         )
 
         self._session_pool = _SiteSessionPool(self.config)
@@ -216,10 +213,10 @@ class ChatDownloader:
         Time filtering:
         :param start_time: Start time in seconds or hh:mm:ss
             (None = from beginning)
-        :type start_time: float, optional
+        :type start_time: float or str, optional
         :param end_time: End time in seconds or hh:mm:ss
             (None = until end)
-        :type end_time: float, optional
+        :type end_time: float or str, optional
         :param timeout: Maximum duration to retrieve messages in
             seconds
         :type timeout: float, optional
@@ -244,16 +241,16 @@ class ChatDownloader:
         :type max_messages: int, optional
         :param message_groups: Predefined message groups to include
             (site-specific)
-        :type message_groups: SiteDefault, optional
+        :type message_groups: SiteDefault or list[str], optional
         :param message_types: Specific message types to include
             (overrides message_groups)
         :type message_types: list, optional
 
         Output options:
-        :param output: Output file path (None = print to stdout). Extension
-            determines format (.jsonl/.txt). Other extensions are not
-            supported.
-        :type output: str, optional
+        :param output: Output file path or list of paths (None = print to
+            stdout). Each extension determines its format (.jsonl/.txt).
+            Other extensions are not supported.
+        :type output: str or list[str], optional
         :param overwrite: Overwrite existing output file
             (default: True)
         :type overwrite: bool, optional
@@ -263,21 +260,23 @@ class ChatDownloader:
         Formatting:
         :param format: Message format template name
             (site-specific default)
-        :type format: SiteDefault, optional
+        :type format: SiteDefault or str, optional
         :param format_file: Path to custom format definition file
         :type format_file: str, optional
 
         Site-specific (YouTube):
-        :param chat_type: Chat type ('live', 'top', etc.)
+        :param chat_type: Chat type ('live' or 'top')
             (default: 'live')
         :type chat_type: str, optional
         :param ignore: List of video IDs to ignore
         :type ignore: list, optional
 
-        Site-specific (Twitch):
-        :param message_receive_timeout: Seconds between message
-            requests (default: 0.1)
+        Live transport (Twitch and Kick):
+        :param message_receive_timeout: Live socket receive-poll timeout in
+            seconds (default: 0.1; Twitch and Kick enforce a minimum of 1)
         :type message_receive_timeout: float, optional
+
+        Site-specific (Twitch):
         :param buffer_size: Buffer size for message retrieval
             (default: 4096)
         :type buffer_size: int, optional

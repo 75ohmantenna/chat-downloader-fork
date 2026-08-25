@@ -5,7 +5,7 @@
 These tests exercise:
 - DownloaderConfig construction and as_dict()
 - ChatRequest construction with defaults
-- ChatRequest.from_kwargs() round-trip and unknown-key behaviour
+- ChatRequest.from_kwargs() round-trip and unknown-key behavior
 - ChatRequest.as_dict()/to_legacy_kwargs() key completeness and value fidelity
 """
 

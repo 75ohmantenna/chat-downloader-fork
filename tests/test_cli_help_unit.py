@@ -22,7 +22,7 @@ def test_generated_help_preserves_key_argument_groups() -> None:
         "[Site Specific] Twitch Arguments:",
         "Output Arguments:",
         "Debugging/Testing Arguments:",
-        "Initialisation Arguments:",
+        "Initialization Arguments:",
     ):
         assert heading in help_text
 

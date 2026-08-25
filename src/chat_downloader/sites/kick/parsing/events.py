@@ -4,8 +4,8 @@
 
 A dispatch dictionary maps normalized message types (resolved from raw Pusher
 ``event`` names via ``EVENT_NAME_MAP``) to parser functions. Pusher protocol
-control frames are recognised and ignored; unknown events are debug-logged
-using their sanitised name only — never their payload body — and skipped so
+control frames are recognized and ignored; unknown events are debug-logged
+using their sanitized name only—never their payload body—and skipped so
 they can never crash normal chat logging.
 """
 
@@ -55,7 +55,7 @@ _KNOWN_CONTROL_EVENTS = frozenset(
     }
 )
 
-#: Maps normalised message types to their parser functions.
+#: Maps normalized message types to their parser functions.
 _PARSER_DISPATCH: dict[str, Callable[[object], dict[str, Any] | None]] = {
     "text_message": parse_chat_message,
     "subscription": parse_subscription_event,
@@ -102,7 +102,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
             and a ``data`` payload.
 
     Returns:
-        A normalized chat message dictionary for a recognised event, or
+        A normalized chat message dictionary for a recognized event, or
         ``None`` for control frames, unknown/unsupported events, and
         unparsable payloads (which are skipped, not raised).
 
@@ -122,7 +122,7 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
         logger.debug("Ignoring Kick Pusher control event: %s", event_name)
         return None
 
-    # --- Resolve the Pusher event name to a normalised message type -----------
+    # --- Resolve the Pusher event name to a normalized message type -----------
     if not isinstance(event_name, str):
         logger.debug("Kick Pusher frame has no event name; skipping.")
         return None

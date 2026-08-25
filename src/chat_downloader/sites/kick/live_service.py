@@ -3,12 +3,12 @@
 """Kick live chat orchestration.
 
 Fetches channel metadata, resolves the chatroom, emits preloaded history, then
-streams live chat from the Pusher websocket — deduplicating across the two
-sources and filtering by the requested message groups/types. The websocket
+streams live chat from the Pusher WebSocket—deduplicating across the two
+sources and filtering by the requested message groups/types. The WebSocket
 transport and frame iterator are injectable so this module is fully testable
 without live Kick access.
 
-The chatroom is active even when the channel is offline; the Pusher websocket
+The chatroom is active even when the channel is offline; the Pusher WebSocket
 streams messages regardless of stream status.
 """
 
@@ -150,7 +150,7 @@ def get_chat_by_channel(
         downloader: The Kick downloader.
         username: Channel username/slug.
         request: The active chat request.
-        transport_factory: Optional factory for the websocket transport
+        transport_factory: Optional factory for the WebSocket transport
             (tests inject a fake).
         frame_iterator: Optional replacement for the live frame generator
             (tests inject a finite generator).
@@ -187,7 +187,7 @@ def get_chat_by_channel(
 
 
 def _resolve_ws_proxy(downloader: object) -> str | None:
-    """Return the effective proxy URL for Kick's secure websocket."""
+    """Return the effective proxy URL for Kick's secure WebSocket."""
     return resolve_session_proxy(
         getattr(downloader, "session", None),
         "https://ws-us2.pusher.com",
@@ -242,7 +242,7 @@ def _open_subscribed_transport(
             try:
                 downloader.retry(attempt_number, error=error, request=request)
             except RetriesExceeded as exhausted:
-                msg = f"{exhausted} Last Kick websocket error: {error}"
+                msg = f"{exhausted} Last Kick WebSocket error: {error}"
                 raise RetriesExceeded(msg) from error
         else:
             return transport
@@ -348,7 +348,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         emit,
     )
 
-    # 2. Live websocket feed with reconnect.
+    # 2. Live WebSocket feed with reconnect.
     proxy_url = _resolve_ws_proxy(downloader)
     session = getattr(downloader, "session", None)
     pusher_http_client = (
@@ -382,14 +382,14 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                         if emit(live_message):
                             yield live_message
             except ConnectionError as error:
-                logger.debug("Kick websocket disconnected; reconnecting: %s", error)
+                logger.debug("Kick WebSocket disconnected; reconnecting: %s", error)
                 transport.close()
                 consecutive_connection_failures += 1
                 wait_for_reconnect(
                     consecutive_connection_failures,
                     error=error,
                     request=request,
-                    provider="Kick websocket",
+                    provider="Kick WebSocket",
                 )
                 transport = _open_subscribed_transport(
                     downloader,
@@ -401,7 +401,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                 )
                 log(
                     "debug",
-                    "Kick websocket reconnected; checking recent history for "
+                    "Kick WebSocket reconnected; checking recent history for "
                     "messages missed during the outage.",
                 )
                 yield from _iter_preloaded_messages(

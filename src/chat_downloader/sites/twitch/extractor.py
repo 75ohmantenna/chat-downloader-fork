@@ -1,16 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Twitch chat downloader extractor.
-
-This module contains the main TwitchChatDownloader class that handles
-downloading chat messages from Twitch VODs, clips, and live streams. It
-provides public API methods for retrieving chat by VOD ID, clip ID, or
-stream ID.
-
-Logging Strategy:
-- logger.debug() for development/API exploration (won't trigger EXIT_ON_DEBUG)
-- debug_log() for diagnostic/quality control (will trigger EXIT_ON_DEBUG)
-"""
+"""Assemble Twitch live, VOD, and clip chat behind the site API."""
 
 from __future__ import annotations
 

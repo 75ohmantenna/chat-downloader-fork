@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Owned client for Kick's public, unauthenticated HTTP APIs."""
+"""Owned client for Kick's unauthenticated web JSON endpoints."""
 
 from __future__ import annotations
 

@@ -30,7 +30,7 @@ _PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
 _DISCOVERY_REQUEST_TIMEOUT_SECONDS = 3.0
 _DISCOVERY_TOTAL_TIMEOUT_SECONDS = 10.0
 
-#: Pusher websocket URL template, formatted with the resolved app key.
+#: Pusher WebSocket URL template, formatted with the resolved app key.
 _PUSHER_WS_TEMPLATE = (
     "wss://ws-us2.pusher.com/app/{key}?protocol=7&client=js&version=7.6.0&flash=false"
 )
@@ -45,7 +45,7 @@ class PusherKeyCache:
     """
 
     def __init__(self) -> None:
-        """Initialise an empty cache with no resolved key."""
+        """Initialize an empty cache with no resolved key."""
         self.key: str | None = None
 
 
@@ -237,7 +237,7 @@ def get_pusher_ws_url(
     force_discover: bool = False,
     http_client: _HttpClient | None = None,
 ) -> str:
-    """Return the Pusher websocket URL with the current app key.
+    """Return the Pusher WebSocket URL with the current app key.
 
     Args:
         force_discover: If True, force re-discovery of the app key from

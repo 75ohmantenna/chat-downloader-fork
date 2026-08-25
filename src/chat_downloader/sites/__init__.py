@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Lists the sites that are supported."""
+"""Supported-site registry for chat-downloader."""
 
 from __future__ import annotations
 

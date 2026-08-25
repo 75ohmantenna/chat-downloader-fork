@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Set metadata for chat-downloader.
+"""Package metadata for chat-downloader.
 
 Note: Portions of this codebase have been developed with AI assistance.
 """
@@ -10,8 +10,8 @@ from __future__ import annotations
 __title__ = "chat-downloader"
 __program__ = "chat_downloader"
 __summary__ = (
-    "A simple tool used to retrieve chat messages from livestreams, "
-    "videos, clips and past broadcasts. No authentication needed!"
+    "Retrieve YouTube, Twitch, and Kick chat from live streams, videos, "
+    "clips, and past broadcasts."
 )
 __author__ = "75ohmantenna"
 __maintainer__ = "75ohmantenna"

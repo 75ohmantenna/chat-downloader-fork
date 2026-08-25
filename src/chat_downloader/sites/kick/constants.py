@@ -6,9 +6,9 @@ URL patterns, API endpoints, Pusher configuration, message-type/group
 definitions, emote parsing patterns, and Cloudflare/challenge markers for the
 Kick site.
 
-All values reflect Kick's *current* public, unauthenticated web/API behavior
-and may break if Kick changes endpoints, the Pusher application key, websocket
-details, or event payloads.
+These values encode the endpoints and payload shapes that the implementation
+expects. Kick changes to endpoints, the Pusher application key, WebSocket
+details, or event payloads may require corresponding updates here.
 """
 
 from __future__ import annotations

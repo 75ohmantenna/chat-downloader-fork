@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Seam tests for helpers extracted from video_status in Round-09.1."""
+"""Focused contracts for YouTube video-status helpers."""
 
 from __future__ import annotations
 

@@ -50,7 +50,7 @@ class RunConfig:
 
     @classmethod
     def from_kwargs(cls, **kwargs: Any) -> Self:
-        """Construct from keyword args, ignoring unknown keys."""
+        """Construct from keyword arguments, ignoring unknown keys."""
         known = {f.name for f in dc_fields(cls)}
         filtered = {k: v for k, v in kwargs.items() if k in known}
         return cls(**filtered)
@@ -63,7 +63,7 @@ class RunConfig:
 def coerce_chat_request(
     params_or_request: ChatRequest | dict[str, Any],
 ) -> ChatRequest:
-    """Return a typed :class:`ChatRequest` from a request object or params dict.
+    """Return a typed :class:`ChatRequest` from an object or parameter dictionary.
 
     Applies ``strict=True`` so any unknown keys in a plain dict are rejected
     at the public API boundary.

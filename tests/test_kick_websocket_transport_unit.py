@@ -85,7 +85,7 @@ def test_default_connector_opens_authenticated_proxy_tunnel(
 
 
 def test_default_connector_rejects_non_secure_proxied_url() -> None:
-    with pytest.raises(OSError, match="Unsupported proxied websocket"):
+    with pytest.raises(OSError, match="Unsupported proxied WebSocket"):
         wt._default_connector(
             "ws://example.test/socket",
             4.0,

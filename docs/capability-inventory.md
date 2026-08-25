@@ -19,12 +19,12 @@ large refactors, parser reshaping, or tooling changes.
 | Kick VOD replay | `sites/kick/replay_service.py`, `api_client.py` | Kick replay-service and api-client tests |
 | Kick Pusher key discovery, Cloudflare handling, event/group maps | `sites/kick/pusher_discovery.py`, `constants.py`, `api_client.py`, `parsing/events.py` | Kick pusher-discovery, extractor, api-client, parsing-events tests |
 | Output formats: JSONL and TXT; placeholder expansion; path/inode deduplication; unsupported extensions rejected | `output/continuous_write.py`, `output/writers.py`, `runtime/chat_pipeline.py`, `sites/output_dispatch.py` | output writer, continuous-write, JSONL UTC, multiple-output and expanded-alias tests |
-| Paid/ticker semantic dedup for formatted outputs; lossless raw output | `sites/_message_dedup.py`, `sites/output_dispatch.py`, `runtime/runner.py` | deduplication, chat-model, runner, and mixed-output tests |
+| Paid/ticker semantic deduplication for formatted outputs; lossless raw output | `sites/_message_dedup.py`, `sites/output_dispatch.py`, `runtime/runner.py` | deduplication, chat-model, runner, and mixed-output tests |
 | Filtering, formatting, time windows | `sites/filters.py`, `formatting/format.py`, `runtime/chat_pipeline.py` (`configure_chat`) | filtering, formatting, configured-chat composition |
 | Cookies, sessions, auth, explicit/environment proxy safety | `ChatDownloader`, `_SiteSessionPool`, `ChatDownloaderSession`, `runtime/config_guards.py`, `sites/proxy.py`, YouTube auth | HTTP adapter, downloader lifecycle, proxy transport, auth, facade redaction |
 | Retry, timeout, interruption, cleanup | `sites/retry.py`, `utils/retry_utils.py`, `runtime/runner.py`, `Chat.close`, `TimedGenerator` | retry, network-retry, runner, chat-model, live-service, timed-generator tests |
 | Debug logging, custom-header redaction, debug sample capture | `debugging.py`, `redaction.py`, `debug_sample_utils.py` | debugging, redaction, debug-sample tests |
-| Build, install, smoke, import boundaries | `Makefile`, `pyproject.toml`, GitHub Actions | `tests/test_makefile_contract_unit.py`, import-linter, release metadata, `make ci` |
+| Build, spelling, install, smoke, import boundaries | `Makefile`, `pyproject.toml`, GitHub Actions | codespell, `tests/test_makefile_contract_unit.py`, import-linter, release metadata, `make ci` |
 
 ## Preservation Rules
 
@@ -35,8 +35,9 @@ large refactors, parser reshaping, or tooling changes.
   YouTube, Twitch, or Kick parser logic.
 - Keep old public import paths working unless a deliberate compatibility break
   is documented and tested.
-- Do not weaken coverage, import-linter, Any-density, module-size, complexity,
-  build, smoke, or network-separation guardrails without documented rationale.
+- Do not weaken spelling, coverage, import-linter, Any-density, module-size,
+  complexity, build, smoke, or network-separation guardrails without documented
+  rationale.
 - Reopen closed maintenance deferrals only with new evidence, such as a third
   site, a failing capability, or an organic threshold breach during feature
   work.

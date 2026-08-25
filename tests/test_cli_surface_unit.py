@@ -127,7 +127,7 @@ EXPECTED_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
         "verbose",
         "quiet",
     ),
-    "Initialisation Arguments": (
+    "Initialization Arguments": (
         "cookies",
         "proxy",
         "connect_timeout",

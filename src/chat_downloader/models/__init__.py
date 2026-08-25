@@ -17,15 +17,16 @@ transition.
 
 CLI metadata
 ------------
-Fields tagged with ``field(metadata={"cli": {...}})`` are auto-wired into the
-argparse CLI by :mod:`chat_downloader.cli`.  Fields without a ``"cli"`` key
-are internal-only and not exposed as CLI arguments.
+Fields tagged with ``field(metadata={"cli": {...}})`` provide the defaults,
+help text, and short flags used by :mod:`chat_downloader.cli_args`. Parser
+registration remains explicit there. Fields without a ``"cli"`` key are
+internal-only and are not exposed as CLI arguments.
 
 CLI metadata keys:
 
 - ``help``   (str, required) — argparse ``help=`` text.
-- ``group``  (str, default ``"general"``) — argument group name; must match
-  a group registered in :func:`chat_downloader.cli.main`.
+- ``group``  (str, default ``"general"``) — declarative argument-group owner;
+  registration in :mod:`chat_downloader.cli_args` must use the same group.
 - ``flags``  (list[str], optional) — additional short flags, e.g. ``["-s"]``.
 """
 

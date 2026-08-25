@@ -22,7 +22,7 @@ def _cli(
     """Build the ``"cli"`` metadata dict for a dataclass field.
 
     :param description: Help text shown in ``--help`` output.
-    :param group: Argument group name (must match a group in ``cli.main``).
+    :param group: Declarative argument-group ownership label.
     :param flags: Additional short-form flags, e.g. ``["-s"]``.
     """
     m: dict[str, Any] = {"help": description, "group": group}

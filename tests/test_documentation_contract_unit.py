@@ -7,16 +7,26 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
-from dataclasses import fields
+from dataclasses import MISSING, Field, fields
 from pathlib import Path
 from urllib.parse import unquote
 
 from chat_downloader import __all__ as public_exports
+from chat_downloader.cli import _build_arg_parser
+from chat_downloader.models import ChatRequest, DownloaderConfig, RunConfig, SiteDefault
+from chat_downloader.output.continuous_write import SUPPORTED_OUTPUT_FORMATS
 from chat_downloader.runtime import RunResult
+from chat_downloader.sites.kick.constants import MESSAGE_GROUPS as KICK_MESSAGE_GROUPS
 
 ROOT = Path(__file__).resolve().parents[1]
 API_REFERENCE = ROOT / "docs" / "python-api-reference.md"
+CLI_REFERENCE = ROOT / "docs" / "cli-usage.md"
+KICK_REFERENCE = ROOT / "docs" / "kick-integration-guide.md"
 _MARKDOWN_LINK = re.compile(r"(?<!!)\[[^]]*]\(([^)]+)\)")
+_FIELD_ROW = re.compile(
+    r"^\| `(?P<name>[a-z_]+)` \| (?P<default>[^|]+?) \|",
+    re.MULTILINE,
+)
 
 
 def _project_documents() -> list[Path]:
@@ -47,6 +57,44 @@ def _project_text_files() -> list[Path]:
     files.update(ROOT.glob("*.md"))
     files.add(ROOT / "pyproject.toml")
     return sorted(files)
+
+
+def _section(text: str, heading: str) -> str:
+    """Return a level-three Markdown section through the next peer."""
+    match = re.search(
+        rf"^{re.escape(heading)}\s*$.*?(?=^###\s|^##\s|\Z)",
+        text,
+        flags=re.DOTALL | re.MULTILINE,
+    )
+    assert match is not None, f"missing documentation section {heading!r}"
+    return match.group(0)
+
+
+def _field_default(field: Field[object]) -> object:
+    """Return a dataclass field's effective default."""
+    if field.default is not MISSING:
+        return field.default
+    if field.default_factory is not MISSING:
+        return field.default_factory()
+    raise AssertionError(f"public field {field.name!r} has no default")
+
+
+def _documented_default(value: object) -> str:
+    """Render a public dataclass default as used by the API table."""
+    if isinstance(value, SiteDefault):
+        return "site default"
+    if isinstance(value, str):
+        return f'`"{value}"`'
+    return f"`{value}`"
+
+
+def _documented_fields(heading: str) -> list[tuple[str, str]]:
+    """Return field/default rows from one typed-configuration section."""
+    section = _section(API_REFERENCE.read_text(encoding="utf-8"), heading)
+    return [
+        (match.group("name"), match.group("default").strip())
+        for match in _FIELD_ROW.finditer(section)
+    ]
 
 
 def test_local_markdown_links_resolve() -> None:
@@ -112,6 +160,53 @@ def test_python_api_reference_lists_exact_top_level_exports() -> None:
 
 def test_python_api_reference_documents_run_result_fields() -> None:
     """Keep the observable ``run()`` result shape documented."""
-    text = API_REFERENCE.read_text(encoding="utf-8")
-    for field in fields(RunResult):
-        assert f"`{field.name}`" in text
+    section = _section(API_REFERENCE.read_text(encoding="utf-8"), "### `run`")
+    documented = [match.group("name") for match in _FIELD_ROW.finditer(section)]
+
+    assert documented == [field.name for field in fields(RunResult)]
+
+
+def test_python_api_reference_documents_exact_typed_fields_and_defaults() -> None:
+    """Keep typed tables in dataclass order with code-derived defaults."""
+    for heading, dataclass_type in (
+        ("### `DownloaderConfig`", DownloaderConfig),
+        ("### `ChatRequest`", ChatRequest),
+        ("### `RunConfig`", RunConfig),
+    ):
+        expected = [
+            (field.name, _documented_default(_field_default(field)))
+            for field in fields(dataclass_type)
+        ]
+        assert _documented_fields(heading) == expected
+
+
+def test_cli_reference_mentions_only_real_cli_flags() -> None:
+    """Reject stale option names in the user-facing CLI guide."""
+    text = CLI_REFERENCE.read_text(encoding="utf-8")
+    documented = set(re.findall(r"`(--[a-z][a-z0-9_-]*)", text))
+    parser = _build_arg_parser()
+    actual = {option for action in parser._actions for option in action.option_strings}
+
+    assert documented <= actual
+
+
+def test_cli_reference_lists_exact_output_formats() -> None:
+    """Keep the output-format table aligned with writer dispatch."""
+    section = _section(CLI_REFERENCE.read_text(encoding="utf-8"), "## Output Formats")
+    documented = set(re.findall(r"^\| `([a-z0-9]+)`\s*\|", section, re.MULTILINE))
+
+    assert documented == set(SUPPORTED_OUTPUT_FORMATS)
+
+
+def test_kick_reference_lists_exact_message_groups() -> None:
+    """Keep the Kick message-group table aligned with provider constants."""
+    section = _section(
+        KICK_REFERENCE.read_text(encoding="utf-8"),
+        "## Message Groups and Types",
+    )
+    rows = re.findall(r"^\| `([^`]+)` \| ([^|]+) \|", section, re.MULTILINE)
+    documented = {
+        group: re.findall(r"`([^`]+)`", message_types) for group, message_types in rows
+    }
+
+    assert documented == KICK_MESSAGE_GROUPS

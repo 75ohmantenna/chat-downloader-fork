@@ -123,7 +123,7 @@ def _redact_query_pair(match: re.Match[str]) -> str:
 
 
 def _redact_malformed_url(url: str) -> str:
-    """Conservatively redact an URL that cannot be parsed structurally."""
+    """Conservatively redact a URL that cannot be parsed structurally."""
     url = _APPARENT_USERINFO_RE.sub(f"{REDACTED}@", url)
     return _QUERY_PAIR_RE.sub(_redact_query_pair, url)
 

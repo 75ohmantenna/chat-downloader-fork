@@ -22,7 +22,7 @@ def _is_loopback_host(host: str) -> bool:
     """Return True only for genuine loopback hosts.
 
     Uses :mod:`ipaddress` so the whole ``127.0.0.0/8`` range and ``::1`` are
-    recognised, while spoofed names like ``127.0.0.1.attacker.com`` (which a
+    recognized, while spoofed names like ``127.0.0.1.attacker.com`` (which a
     naive ``startswith("127.")`` check would wrongly accept) are rejected.
     ``urlparse`` already strips IPv6 brackets, so ``::1`` arrives bare here.
     """

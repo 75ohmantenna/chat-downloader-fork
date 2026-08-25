@@ -5,7 +5,7 @@
 Covers:
 - _parse_emotes: correct output for representative IRC emote tag strings
 - _generate_emote_image_list: caching (same object on repeat calls) + JSON
-  serialisation produces an array (not object), and returns 6 images
+  serialization produces an array (not object), and returns six images
 - _EMOTE_RE: pre-compiled pattern produces same results as re.findall
 """
 
@@ -119,10 +119,10 @@ def test_cache_info_shows_hits() -> None:
 
 
 def test_json_serialises_as_array() -> None:
-    """json.dumps must serialise the returned tuple as a JSON array."""
+    """json.dumps must serialize the returned tuple as a JSON array."""
     result = _generate_emote_image_list("25")
-    serialised = json.dumps(result)
-    parsed = json.loads(serialised)
+    serialized = json.dumps(result)
+    parsed = json.loads(serialized)
     assert isinstance(parsed, list)
     assert len(parsed) == 6
 
@@ -172,7 +172,7 @@ def test_no_emotes_returns_empty_list() -> None:
 
 
 def test_images_json_serialisable() -> None:
-    """Full parse output must serialise to JSON without errors."""
+    """Full parse output must serialize to JSON without errors."""
     result = _parse_emotes("25:0-4/1902:6-10")
     json.dumps(result)  # must not raise
 

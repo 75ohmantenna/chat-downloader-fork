@@ -32,7 +32,7 @@ def _parse_irc_int_flag(value: object, default: int) -> int:
             ``str``.
 
     Returns:
-        The parsed integer, or *default* when the type is unrecognised.
+        The parsed integer, or *default* when the type is unrecognized.
     """
     if isinstance(value, (int, str)):
         return int(value)
@@ -285,9 +285,9 @@ def _resolve_irc_action_and_message_type(
     3. When *original_action_type* is ``"CLEARCHAT"`` and *message_match* is
        truthy, rewrites the entry as a ban (``ban_user`` / ``timeout`` /
        ``permanent``).
-    4. Normalises ``follower_only`` to a bool and, when positive, adds
+    4. Normalizes ``follower_only`` to a bool and, when positive, adds
        ``minutes_to_follow_before_chatting``.
-    5. Normalises ``slow_mode`` to a bool and, when non-zero, adds
+    5. Normalizes ``slow_mode`` to a bool and, when non-zero, adds
        ``seconds_to_wait``.
 
     Args:

@@ -32,7 +32,7 @@ __all__ = ["KickChatDownloader", "KickError"]
 
 
 class KickChatDownloader(BaseChatDownloader):
-    """Download public, live chat from Kick channels or VOD replay.
+    """Download unauthenticated Kick channel chat or VOD replay.
 
     Supports:
     - Live: ``https://kick.com/{username}``

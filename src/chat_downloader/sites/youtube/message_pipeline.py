@@ -3,7 +3,7 @@
 """YouTube chat message processing pipeline.
 
 Pure functions that take a raw action dict and run it through the full
-message pipeline: parse → validate/finalise → message-type filter →
+message pipeline: parse → validate/finalize → message-type filter →
 time-range filter.  No network calls or logging side effects.
 
 Public surface
@@ -36,7 +36,7 @@ class PipelineResult:
 
         * ``"yield"`` — ``message`` is ready to be emitted to the consumer.
         * ``"skip"`` — action was filtered out; move to the next one.
-        * ``"stop"`` — time-range filter signalled end of stream; the caller
+        * ``"stop"`` — time-range filter signaled end of stream; the caller
           should stop iterating.
 
     :param message: Fully-parsed message dict when ``disposition == "yield"``,

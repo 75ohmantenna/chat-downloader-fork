@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Bounded FIFO cache of recently seen message IDs (dedup primitive)."""
+"""Bounded FIFO cache of recently seen message IDs for deduplication."""
 
 from __future__ import annotations
 

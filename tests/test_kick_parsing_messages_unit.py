@@ -120,9 +120,8 @@ def test_parse_preloaded_skips_unparseable() -> None:
     assert [m["message_id"] for m in parsed] == ["ok"]
 
 
-# --- int-id coercion regression (Round-13) -----------------------------------
-# Kick sends numeric ids in some contexts.  _opt_str must coerce them to str
-# rather than rejecting them (which get_str would do).  Pin the invariant so
+# Kick sends numeric IDs in some contexts. _opt_str must coerce them to str
+# rather than rejecting them (which get_str would do). Pin the invariant so
 # a future accessor swap cannot silently break numeric-id handling.
 
 

@@ -60,7 +60,7 @@ def _expand_output_file_name(
 
 
 class _ChatOutputDispatcher:
-    """Manage writer setup, callback dispatch, dedup, and shutdown for a chat.
+    """Manage writer setup, callback dispatch, deduplication, and chat shutdown.
 
     Superchat/ticker deduplication is an output concern (it prevents the same
     paid item from being written twice via the chat and ticker surfaces), so the
@@ -83,7 +83,7 @@ class _ChatOutputDispatcher:
         )
 
     def _initialise_writers(self) -> None:
-        """Initialise each attached writer once before dispatch begins."""
+        """Initialize each attached writer once before dispatch begins."""
         for writer in self.writers:
             writer_id = id(writer)
             if writer_id in self._initialised_writer_ids:

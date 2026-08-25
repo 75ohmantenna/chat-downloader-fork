@@ -30,7 +30,7 @@ def parse_chat_message(raw: object) -> dict[str, Any]:
     """Normalize one Kick chat message object.
 
     Args:
-        raw: A decoded Kick chat message object (from the websocket event or
+        raw: A decoded Kick chat message object (from the WebSocket event or
             preloaded history).
 
     Returns:

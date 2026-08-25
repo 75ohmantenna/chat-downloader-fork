@@ -2,8 +2,8 @@
 
 """Typed JSON aliases and narrowing accessors for upstream API payloads.
 
-Lets payload-parsing code narrow ``Any`` to concrete types without modelling
-entire upstream APIs.  Leaf module: imports nothing from chat_downloader.
+Lets payload-parsing code narrow ``Any`` to concrete types without modeling
+entire upstream APIs. Leaf module: imports nothing from chat_downloader.
 
 Usage::
 

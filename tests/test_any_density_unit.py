@@ -2,10 +2,8 @@
 
 """Non-regression floor: no module may exceed its Any-density baseline.
 
-The per-round lowering ritual is retired (Round-10.4). These baselines are now a
-frozen floor — do not raise them. Opportunistic tightening is welcome when
-a typing migration happens alongside feature work, but there is no
-scheduled lowering cadence.
+The baselines are frozen: do not raise them. Tighten a cap when related work
+removes ``Any`` occurrences; no scheduled lowering cadence is required.
 """
 
 from __future__ import annotations
@@ -17,8 +15,7 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"
 _ANY = re.compile(r"\bAny\b")
 DEFAULT_CAP = 2
 
-# Baseline captured after Round-03 typing migrations; frozen at Round-10.4 (2026-06).
-# Counts are total occurrences of `Any` in each file (not line count).
+# Counts are total occurrences of ``Any`` in each file, not line counts.
 # Files omitted here inherit DEFAULT_CAP. Explicit entries may tighten that cap
 # below the default. Do not raise values; tighten them alongside typing work.
 # See docs/maintenance-decisions.md "Distinguish raw JSON from assembled output".
@@ -35,16 +32,10 @@ BASELINE: dict[str, int] = {
     "sites/session.py": 7,
     "sites/remap.py": 10,
     "sites/filters.py": 3,
-    # Twitch site-specific accumulators and remapping tables.
-    # Round-11.5 migrated discovery/graphql_client/replay_service/replay_transport/
-    # live_service off dict[str,Any] JSON boundaries to json_types aliases.
-    # Round-15 narrowed transport Callable[...,Any] seams to Protocols and precise
-    # Callable signatures (live_service irc_factory/message_generator,
-    # replay_service fetch_messages/_fetch_gql_one, replay_transport signatures,
-    # graphql_client and discovery session/download_gql_func callables).
-    # Residuals per the Round-11 taxonomy: badge accumulators (types.py containers),
-    # IRC-tag accumulators (Round-08.3-declined), frozen public params,
-    # assembled-output dicts.
+    # Twitch site-specific accumulators and remapping tables. Raw JSON uses the
+    # json_types aliases, and injectable transports use Protocols or precise
+    # Callable signatures. Remaining Any occurrences belong to badge and IRC-tag
+    # accumulators, frozen public parameters, and assembled output dictionaries.
     "sites/twitch/replay_service.py": 0,
     "sites/twitch/extractor.py": 18,
     "sites/twitch/parsing/message_irc_resolve.py": 14,
@@ -73,8 +64,7 @@ BASELINE: dict[str, int] = {
     "sites/youtube/client_context.py": 6,
     "sites/youtube/video_status.py": 8,
     "sites/youtube/discovery_playlists.py": 8,
-    # Error/retry helpers extracted from client_requests_continuation (Round-07.1).
-    # Round-06.2 helper adds dict[str,Any] param; Any import duplicated across split.
+    # Error/retry helpers retain one heterogeneous assembled-parameter boundary.
     "sites/youtube/client_requests_errors.py": 2,
     "sites/youtube/client_auth.py": 6,
     # Continuation loop: initial_info dict[str,Any] boundary appears in the loop
@@ -116,26 +106,17 @@ BASELINE: dict[str, int] = {
     # Top-level modules.
     "debugging.py": 3,
     # Redaction-payload boundary — sanitize_for_log/capture_debug_sample accept
-    # Any because incoming payloads are untyped (moved from debugging.py in M2).
+    # Any because incoming payloads are untyped.
     "redaction.py": 6,
     "chat_downloader.py": 5,
     "cli_args.py": 4,
     "request_profiles.py": 3,
-    # Kick site — transport/session callables, injectable Callable[...,Any]
-    # seams, and assembled-output accumulators (info/metadata/author) remain Any.
-    # Round-13: parsing-layer params narrowed from Any to object/Mapping[str,object]
-    # (param-annotation-only; extraction logic via _opt_str unchanged).
-    # Round-14: HTTP-response boundaries (api_client) and websocket-frame boundary
-    # (websocket_transport) migrated to JSONAny/JSONDict/JSONList + cast().
-    # Round-15: transport/service Callable[...,Any] seams narrowed to Protocols
-    # (websocket_transport connector, live_service frame_iterator, twitch live
-    # irc_factory/message_generator, replay fetch_messages/transport signatures).
-    # http_session.py retains Any at the optional curl-cffi/cloudscraper
-    # construction boundary; KickApiClient itself uses a narrow Protocol.
-    # Residuals per Round-11/13/14/15 taxonomy: assembled-output dicts.
-    # emotes.py: inputs already typed (content: str); all Any are output accumulators.
-    # extractor.py: params: ChatRequest|dict[str,Any] x4 frozen public API; ClassVar
-    # data tables x2; import -- all intentional residuals, no code change.
+    # Kick parsing inputs use object/Mapping types, HTTP and WebSocket response
+    # boundaries use JSON aliases, and injected transport/service callables use
+    # Protocols. http_session.py retains Any at the optional curl-cffi/cloudscraper
+    # construction boundary; remaining parser occurrences assemble heterogeneous
+    # output dictionaries. extractor.py also retains frozen public dict parameters
+    # and heterogeneous class-level data tables.
     "sites/kick/parsing/messages.py": 10,
     "sites/kick/websocket_transport.py": 0,
     "sites/kick/live_service.py": 3,

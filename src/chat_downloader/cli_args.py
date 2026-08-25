@@ -94,7 +94,7 @@ def str2bool(value: str | bool) -> bool:  # noqa: FBT001 — argparse converter;
         The corresponding bool value.
 
     Raises:
-        argparse.ArgumentTypeError: If the string is not a recognised boolean.
+        argparse.ArgumentTypeError: If the string is not a recognized boolean.
     """
     if isinstance(value, bool):
         return value
@@ -176,7 +176,7 @@ class _ParamRegistrar:
     """Thin wrapper routing add_argument calls to the right field-info dict."""
 
     def __init__(self) -> None:
-        """Initialise field-info caches for all three parameter groups."""
+        """Initialize field-info caches for all three parameter groups."""
         self._chat = _build_field_info(ChatRequest)
         self._init = _build_field_info(DownloaderConfig)
         self._run = _build_field_info(RunConfig)
@@ -308,8 +308,8 @@ def _add_debug_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> No
 
 
 def _add_init_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:
-    """Register initialisation argument group."""
-    init_group = parser.add_argument_group("Initialisation Arguments")
+    """Register the initialization argument group."""
+    init_group = parser.add_argument_group("Initialization Arguments")
     reg.init(init_group, "--cookies", "-c")
     reg.init(init_group, "--proxy", "-p")
     reg.init(init_group, "--connect_timeout", type=float)

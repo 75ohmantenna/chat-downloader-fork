@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_make_ci_target_runs_canonical_validation_steps_in_order() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
-    assert "ci: lock-check lint fmt-check typecheck coverage smoke" in makefile
+    assert "ci: lock-check lint spell fmt-check typecheck coverage smoke" in makefile
 
 
 def test_make_lint_includes_import_linter_contracts() -> None:
@@ -25,6 +25,12 @@ def test_make_lint_includes_import_linter_contracts() -> None:
 
     assert "$(UV_RUN) ruff check src/chat_downloader tests" in makefile
     assert "$(UV_RUN) lint-imports" in makefile
+
+
+def test_make_spell_checks_every_tracked_file() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "git ls-files -z | xargs -0 $(UV_RUN) codespell" in makefile
 
 
 def test_make_test_paths_exclude_network_tests() -> None:

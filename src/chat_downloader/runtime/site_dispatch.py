@@ -74,7 +74,7 @@ def _execute_chat_generator(
         f'function in "{site_name}".',
     )
     if chat is None:
-        msg = f'No valid generator found in {site_name} for url "{request.url}"'
+        msg = f'No valid generator found in {site_name} for URL "{request.url}"'
         raise ChatGeneratorError(msg)
     return chat
 

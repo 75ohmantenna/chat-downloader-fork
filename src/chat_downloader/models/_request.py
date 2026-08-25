@@ -78,17 +78,9 @@ class ChatRequest:
     """A single chat retrieval request.
 
     Maps 1:1 to :meth:`ChatDownloader.get_chat` parameters.
-
-    **Stable public fields** (user-facing API):
-        ``url``, ``start_time``, ``end_time``, ``max_messages``,
-        ``message_groups``, ``message_types``, ``output``, ``format``,
-        ``format_file``.
-
-    **Internal / site-specific fields**:
-        ``chat_type``, ``ignore``, ``message_receive_timeout``,
-        ``buffer_size``, ``max_attempts``, ``retry_timeout``,
-        ``interruptible_retry``, ``timeout``, ``inactivity_timeout``,
-        ``overwrite``, ``sort_keys``.
+    Every dataclass field is part of the public typed request surface. Provider-
+    specific and advanced controls remain public because the facade and CLI
+    expose them directly.
     """
 
     # ── Core ──────────────────────────────────────────────────────────────────
@@ -246,7 +238,7 @@ class ChatRequest:
         metadata={"cli": _cli("List of video IDs to ignore", group="youtube")},
     )
 
-    # ── Twitch-specific ───────────────────────────────────────────────────────
+    # ── Live transport ────────────────────────────────────────────────────────
     message_receive_timeout: float = field(
         default=DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
         metadata={
@@ -257,6 +249,8 @@ class ChatRequest:
             ),
         },
     )
+
+    # ── Twitch-specific ───────────────────────────────────────────────────────
     buffer_size: int = field(
         default=DEFAULT_BUFFER_SIZE,
         metadata={"cli": _cli("Buffer size for message retrieval", group="twitch")},
@@ -306,17 +300,17 @@ class ChatRequest:
 
     @classmethod
     def from_kwargs(cls, *, strict: bool = False, **kwargs: Any) -> Self:
-        """Construct a :class:`ChatRequest` from a ``**kwargs`` dict.
+        """Construct a :class:`ChatRequest` from keyword arguments.
 
         Known keys are mapped to fields; unknown keys are silently ignored
-        by default.  Internal callers that forward an opaque ``params`` dict
+        by default. Internal callers that forward an opaque ``params`` dict
         (where the dict may contain keys intended for other consumers) rely on
-        this lenient default.  Pass ``strict=True`` to raise
+        this lenient default. Pass ``strict=True`` to raise
         :exc:`TypeError` when any unknown key is present; the public API
         boundary (:func:`coerce_chat_request`) always uses ``strict=True``.
 
-        This is the single canonical location for mapping a kwargs dict to a
-        :class:`ChatRequest` — do not duplicate this logic elsewhere.
+        This is the canonical location for mapping keyword arguments to a
+        :class:`ChatRequest`; do not duplicate this logic elsewhere.
 
         :param strict: When ``True``, raise :exc:`TypeError` listing all
             unknown keys instead of silently ignoring them.  Defaults to
@@ -333,7 +327,7 @@ class ChatRequest:
             msg = (
                 "ChatRequest.from_kwargs() received unknown keyword "
                 "argument(s): "
-                f"{unknown}.  Valid fields are: {sorted(known)}."
+                f"{unknown}. Valid fields are: {sorted(known)}."
             )
             raise TypeError(
                 msg,

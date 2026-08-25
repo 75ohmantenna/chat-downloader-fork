@@ -14,6 +14,7 @@ support and AI-assistance disclosures.
 - Dependency and build metadata: `pyproject.toml` and `uv.lock`.
 - Tests and coverage: pytest and coverage.py.
 - Formatting and linting: Ruff, with an 88-character line length.
+- Spelling: codespell over every Git-tracked file and filename.
 - Type checking: mypy, configured in `mypy.ini`.
 - Import boundaries: import-linter, configured in `pyproject.toml`.
 - CLI/API parameter definitions: `src/chat_downloader/models/`.
@@ -36,11 +37,12 @@ uv sync
 uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
 ```
 
-The pre-commit stage runs Ruff lint and format checks. The pre-push stage runs
-mypy and rejects fork-history commit messages that could notify an upstream
-issue tracker. Avoid bare issue-number syntax in commit subjects and bodies;
-describe the local change without an issue reference instead. Hooks use
-`uv run --locked` so they match the committed lockfile.
+The pre-commit stage runs Ruff lint and format checks plus codespell over every
+tracked file. The pre-push stage runs mypy and rejects fork-history commit
+messages that could notify an upstream issue tracker. Avoid bare issue-number
+syntax in commit subjects and bodies; describe the local change without an
+issue reference instead. Hooks use `uv run --locked` so they match the
+committed lockfile.
 
 ## Daily workflow
 
@@ -77,6 +79,7 @@ Static checks:
 ```bash
 uv run ruff check src/chat_downloader tests
 uv run ruff format --check src/chat_downloader tests
+git ls-files -z | xargs -0 uv run codespell
 uv run mypy .
 uv run lint-imports
 ```
@@ -87,7 +90,7 @@ Opt-in network tests:
 # Stable replay and immutable-resource contracts
 uv run pytest -v -m network_replay --run-network
 
-# Volatile live-channel and websocket smoke checks
+# Volatile live-channel and WebSocket smoke checks
 uv run pytest -v -m network_live --run-network
 
 # Proxy, header, and cookie integration checks
@@ -106,6 +109,7 @@ uv run pytest -v -m network --run-network
 | `make lock-check` | Verify that `uv.lock` matches project metadata |
 | `make test` | Run the offline test suite |
 | `make lint` | Run Ruff and import-linter |
+| `make spell` | Run codespell over every tracked file and filename |
 | `make fmt` / `make fmt-check` | Apply or check Ruff formatting |
 | `make typecheck` | Run mypy |
 | `make coverage` | Run the offline suite with 100% line coverage enforced |
@@ -115,8 +119,9 @@ uv run pytest -v -m network --run-network
 | `make ci` | Run the complete canonical validation path |
 | `make clean` | Remove caches, coverage data, build output, and package metadata |
 
-`make ci` runs `lock-check`, `lint`, `fmt-check`, `typecheck`, `coverage`, and
-`smoke`. GitHub Actions invokes this exact target after `uv sync --locked`.
+`make ci` runs `lock-check`, `lint`, `spell`, `fmt-check`, `typecheck`,
+`coverage`, and `smoke`. GitHub Actions invokes this exact target after
+`uv sync --locked`.
 
 ## Architecture and test guardrails
 
@@ -131,6 +136,11 @@ for non-obvious choices live in
 
 Update one authoritative document instead of copying the same explanation into
 several places.
+
+Source code, dataclass metadata, constants, and tests are authoritative when
+prose and implementation disagree. Documentation contract tests keep module
+inventories, typed field/default tables, CLI flags, output formats, public
+exports, and provider message-group tables aligned with those sources.
 
 | Document | Owns |
 | --- | --- |

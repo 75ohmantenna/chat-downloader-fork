@@ -245,7 +245,7 @@ def test_open_subscribed_transport_unreachable_guard() -> None:
 def test_open_subscribed_transport_preserves_terminal_connection_error() -> None:
     with pytest.raises(
         RetriesExceeded,
-        match="Last Kick websocket error: fake connect failure",
+        match="Last Kick WebSocket error: fake connect failure",
     ):
         live_service._open_subscribed_transport(
             FakeDownloader(),

@@ -1,13 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""YouTube Chat Downloader Extractor Module.
-
-This module contains the main YouTubeChatDownloader class that orchestrates all
-YouTube chat downloading functionality by using the client, parsing, and
-constants modules.
-
-This module contains the orchestrating class with tests.
-"""
+"""Assemble the YouTube downloader from provider-specific mixins."""
 
 from __future__ import annotations
 

@@ -1,10 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for Twitch extractor improvements.
-
-Tests the IRC buffer deduplication (#6) and typename validation (#8)
-improvements added in v0.2.33+mod and v0.2.34+mod.
-"""
+"""Regression tests for Twitch extractor delegation and GraphQL validation."""
 
 from __future__ import annotations
 
@@ -19,11 +15,10 @@ from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 
 
 class TestIRCBufferDeduplication:
-    """Test improvement #6: IRC buffer logic deduplication.
+    """Keep IRC buffer parsing delegated to the transport helper.
 
-    Verifies that the extractor properly delegates buffer parsing to the
-    client's get_chat_messages_by_stream_id() function instead of duplicating
-    the logic.
+    The extractor delegates to ``get_chat_messages_by_stream_id()`` instead of
+    duplicating the buffer logic.
     """
 
     def test_client_generator_function_exists(self) -> None:
@@ -87,10 +82,9 @@ class TestIRCBufferDeduplication:
 
 
 class TestTypenameValidation:
-    """Test improvement #8: GraphQL __typename validation.
+    """Validate GraphQL ``__typename`` values before parsing replay edges.
 
-    Verifies that VOD pagination properly validates edge and node types,
-    skipping unexpected GraphQL response structures.
+    VOD pagination skips unexpected edge and node structures.
     """
 
     @patch("chat_downloader.sites.twitch.extractor.get_chat_messages_by_vod_id")

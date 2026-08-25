@@ -404,7 +404,7 @@ def test_stream_host_missing_optional_fields() -> None:
     assert "metadata" not in msg
 
 
-# --- int-id coercion regression (Round-13) -----------------------------------
+# Numeric-ID coercion regression.
 # Moderation events can have numeric top-level ids; _opt_str must stringify them.
 
 

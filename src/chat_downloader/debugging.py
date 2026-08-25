@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Debugging module for chat_downloader."""
+"""Logging and debug-mode controls for chat-downloader."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class TestingException(Exception):
 
 
 class TestingModes(Enum):
-    """Testing modes controlling pause/exit behaviour on debug events."""
+    """Testing modes controlling pause/exit behavior on debug events."""
 
     EXIT_ON_ERROR = 4
     PAUSE_ON_ERROR = 3
@@ -87,7 +87,7 @@ def log(
 
 
 def debug_log(*items: Any) -> None:
-    """Method which simplifies the logging of debugging messages."""
+    """Log an unexpected data-quality condition using testing-mode controls."""
     log("debug", items, to_pause=True, to_exit=True)
 
 
@@ -102,7 +102,7 @@ else:
 
 
 def supports_colour() -> bool:
-    """Return True if the running system's terminal supports colour.
+    """Return True if the running system's terminal supports color.
 
     Returns False otherwise.
 

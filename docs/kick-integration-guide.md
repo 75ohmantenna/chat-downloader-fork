@@ -1,13 +1,14 @@
 # Kick Integration Guide
 
-How the Kick integration works in `chat-downloader-fork`. For maintainers
-debugging the live Pusher path or the REST-backed VOD replay path.
+This guide explains how the Kick integration works in
+`chat-downloader-fork`. It is intended for maintainers debugging the live
+Pusher path or the REST-backed VOD replay path.
 
 The Kick stack is split across two transport families:
 
 - A Pusher (WebSocket) feed for live chat.
-- Kick's public, unauthenticated `api/v2` JSON REST API for channel metadata,
-  preloaded history, and VOD replay messages.
+- Kick's unauthenticated web JSON endpoints (`api/v2` for channel metadata and
+  messages, plus `api/v1/video` for VOD metadata).
 
 Kick's OAuth-scoped official Public API is a useful schema reference, but it
 does not expose the unauthenticated read-chat or replay stream this tool needs.
@@ -66,7 +67,7 @@ The Kick flow depends on the target type.
 1. Resolve the username from the URL.
 2. Fetch channel metadata from `api/v2/channels/{username}` (retried on
    transient failures).
-3. Resolve the channel id, chatroom id, and title. Offline channels are *not*
+3. Resolve the channel ID, chatroom ID, and title. Offline channels are *not*
    rejected — the chatroom is still active.
 4. Fetch preloaded recent messages (best-effort; non-fatal on failure). The
    API returns them newest-first; they are reversed into chronological order
@@ -74,7 +75,7 @@ The Kick flow depends on the target type.
 5. Open the Pusher WebSocket, subscribe to the public chatroom channel, and
    stream live frames.
 6. Dispatch each frame to a typed parser, deduplicate against preloaded and
-   recent message ids, filter by message groups/types, and yield.
+   recent message IDs, filter by message groups/types, and yield.
 7. On disconnect, reconnect and resubscribe. If Pusher rejects the application
    key, force one fresh discovery before treating a repeated rejection as
    terminal.
@@ -83,7 +84,7 @@ The Kick flow depends on the target type.
 
 1. Resolve the username and video UUID from the URL.
 2. Fetch video metadata from `api/v1/video/{video_id}`.
-3. Derive the channel id and the VOD time window (`start_time` plus
+3. Derive the channel ID and the VOD time window (`start_time` plus
    `duration`).
 4. Narrow the metadata window with request-relative `start_time` and
    `end_time` offsets when supplied.
@@ -99,7 +100,7 @@ The Kick flow depends on the target type.
 
 - `extractor.py`: `KickChatDownloader`, URL matching, public site methods
 - `live_service.py`: live chat orchestration (metadata, chatroom resolution,
-  preloaded history, websocket loop, dedup, reconnect)
+  preloaded history, WebSocket loop, deduplication, reconnect)
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
 
 ### Transport and API access
@@ -150,14 +151,19 @@ for the live feed, and `parsing/` for message shaping.
 The official Kick Dev Docs are useful maintenance references, but they are not
 drop-in replacements for this tool's current capture path.
 
+Use the official [API documentation](https://docs.kick.com/) and
+[documentation changelog](https://github.com/KickEngineering/KickDevDocs/blob/main/changelog.md)
+when reviewing these external surfaces. Runtime behavior remains defined by
+this repository's constants, parsers, fixtures, and tests.
+
 Relevant documented surfaces:
 
 | Official surface | Usefulness to this project |
 | --- | --- |
-| `GET /public/v1/channels` | Authenticated channel metadata by slug or broadcaster id. Useful as a field-name reference (`slug`, `broadcaster_user_id`, `stream`, `viewer_count`, `stream_title`) and a possible future authenticated metadata fallback. |
-| `GET /public/v1/livestreams` | Authenticated livestream metadata (`channel_id`, `slug`, `started_at`, `viewer_count`, title/category fields). Useful for comparing live-status semantics, but not currently needed for unauthenticated capture. |
+| `GET /public/v1/channels` | Authenticated channel metadata by slug or broadcaster ID. Useful as a field-name reference (`slug`, `broadcaster_user_id`, `stream`, `viewer_count`, `stream_title`) and a possible future authenticated metadata fallback. |
+| `GET /public/v2/livestreams` and `GET /public/v1/users/livestreams` | Authenticated, paginated livestream metadata and per-user live status. These are useful for comparing live-status semantics, but are not needed for unauthenticated capture. The older `GET /public/v1/livestreams` surface is deprecated. |
 | `POST /public/v1/chat` and `DELETE /public/v1/chat/{message_id}` | Write/moderation APIs only. They do not read chat and should not be wired into the downloader's read-only capture flow. |
-| Webhook event `chat.message.sent` | Best official schema reference for message fields (`message_id`, `replies_to`, `sender.identity.badges`, `content`, `emotes`, `created_at`). Use it to sanity-check parser fixtures and output-field expectations. |
+| Webhook event `chat.message.sent` | Best official schema reference for message fields (`message_id`, `replies_to`, `sender.identity.badges`, `content`, `emotes`, `created_at`). Use it to verify parser fixtures and output-field expectations. |
 | Webhook events `channel.subscription.*`, `moderation.banned`, `kicks.gifted` | Useful shape references for subscription/moderation/gift-style events. They are webhook payloads, not Pusher payloads, so treat differences as evidence to investigate rather than direct parser contracts. |
 
 Known gaps:
@@ -179,8 +185,8 @@ Known gaps:
 
 ### Metadata and offline channels
 
-The live path begins with a `api/v2/channels/{username}` lookup. A missing
-channel id or chatroom id is a terminal `KickError`. An absent `livestream`
+The live path begins with an `api/v2/channels/{username}` lookup. A missing
+channel ID or chatroom ID is a terminal `KickError`. An absent `livestream`
 object means the channel is offline — this is logged but **not** an error,
 because Kick keeps the chatroom active and the Pusher feed flowing regardless of
 stream status. The reported `Chat.status` is `"live"` when a livestream is
@@ -191,8 +197,8 @@ present and `"idle"` otherwise.
 Recent messages are fetched from `api/v2/channels/{id}/messages` before the
 WebSocket opens and emitted first. This fetch is best-effort: expected provider,
 challenge, and transport errors yield an empty list, since the live feed is the
-primary source. Process interrupts still propagate. Preloaded ids seed the
-dedup cache so they are not repeated when they also arrive over the socket.
+primary source. Process interrupts still propagate. Preloaded IDs seed the
+deduplication cache so they are not repeated when they also arrive over the socket.
 
 ### Pusher transport
 

@@ -151,9 +151,9 @@ Debug and automation:
   pass `--proxy ""` if direct connections are intended.
 - `CaptchaChallengeRequired` means a platform returned an explicit challenge
   response that the library cannot solve automatically. On Kick this is a
-  Cloudflare bot-protection page; installing `cloudscraper` (a dependency) lets
-  the REST client clear most JS challenges, but endpoint/VPN reputation can
-  still trigger one.
+  Cloudflare bot-protection page. The bundled `curl-cffi` and `cloudscraper`
+  fallbacks can clear some challenges, but endpoint or VPN reputation can still
+  trigger one.
 - Use `jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `src/chat_downloader/sites/`.

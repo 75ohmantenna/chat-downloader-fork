@@ -40,7 +40,7 @@ class BaseChatDownloader:
     }
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initialise session state for the downloader instance."""
+        """Initialize session state for the downloader instance."""
         self._http = ChatDownloaderSession(**kwargs)
         self._has_initial_auth_cookies = self._has_auth_cookies
         self._cookie_rotation_warned = False

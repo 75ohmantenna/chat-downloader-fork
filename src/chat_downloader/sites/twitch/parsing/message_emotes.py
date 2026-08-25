@@ -52,7 +52,7 @@ def _generate_emote_image_list(emote_id: str) -> tuple[dict[str, Any], ...]:
     is immutable at the outer level; callers must not mutate the individual
     image dicts.
 
-    Serialisation note: Python's :mod:`json` module serialises tuples as JSON
+    Serialization note: Python's :mod:`json` module serializes tuples as JSON
     arrays, so downstream JSON output is identical to the previous list-based
     return value.
 
@@ -60,7 +60,7 @@ def _generate_emote_image_list(emote_id: str) -> tuple[dict[str, Any], ...]:
         emote_id: Twitch emote ID (e.g. ``"25"`` for Kappa)
 
     Returns:
-        Tuple of emote image dicts (6 entries: 3 sizes x 2 themes)
+        Tuple of emote image dictionaries (six entries: three sizes by two themes).
     """
     images = []
     for theme in _EMOTE_IMAGE_THEMES:

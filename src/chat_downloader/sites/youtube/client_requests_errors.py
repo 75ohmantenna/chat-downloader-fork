@@ -62,7 +62,7 @@ def _apply_retry_or_raise(
     error-handling paths in the continuation retry loop.
 
     Args:
-        policy: The :class:`RetryPolicy` governing wait behaviour.
+        policy: The :class:`RetryPolicy` governing wait behavior.
         attempt_number: Current attempt number (1-based).
         url: Endpoint URL, included verbatim in the raised exception message.
         message: Human-readable error description.
@@ -152,7 +152,7 @@ def _handle_http_error(
         continuation_url: The endpoint URL, used in error messages.
         attempt_number: Current attempt number (1-based).
         max_attempts: Total attempt budget.
-        retry_policy: Controls wait behaviour between retries.
+        retry_policy: Controls wait behavior between retries.
 
     Returns:
         True to signal the caller to retry, False to fall through.
@@ -205,7 +205,7 @@ def _handle_json_api_error(
         continuation_url: The endpoint URL, used in error messages.
         attempt_number: Current attempt number (1-based).
         max_attempts: Total attempt budget.
-        retry_policy: Controls wait behaviour between retries.
+        retry_policy: Controls wait behavior between retries.
 
     Returns:
         True to signal the caller to retry.

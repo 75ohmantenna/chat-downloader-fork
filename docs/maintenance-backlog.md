@@ -30,8 +30,9 @@ documented read-chat, replay-chat, or equivalent event stream that covers it.
 
 - Official documentation: <https://docs.kick.com/>
 - Documentation source: <https://github.com/KickEngineering/KickDevDocs>
-- Relevant current surfaces: channel and livestream metadata plus chat,
-  subscription, moderation, and gift webhook schemas.
+- Relevant current surfaces: channel metadata, paginated livestream metadata,
+  per-user live status, and chat, subscription, moderation, and gift webhook
+  schemas.
 - Current Chat API operations send and delete messages; they do not retrieve
   chat history or provide an unauthenticated live read stream.
 - Revisit when the official API adds a read surface that can preserve current

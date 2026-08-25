@@ -39,6 +39,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "codespell>=2.4,<3.0",
     "ruff>=0.15,<1.0",
     "mypy>=2.3,<3.0",
     "pytest>=9.0,<10.0",
@@ -48,6 +49,10 @@ dev = [
     "import-linter>=2.11",
     "pyyaml>=6.0,<7.0",
 ]
+
+[tool.codespell]
+check-filenames = true
+exclude-file = ".codespell-ignore-lines"
 
 [project.scripts]
 chat_downloader = "chat_downloader.cli:main"
@@ -234,7 +239,7 @@ ignore_imports = [
 markers = [
     "network: tests that require external network access (opt-in locally)",
     "network_replay: stable replay and immutable-resource network contracts",
-    "network_live: volatile live-channel and websocket smoke checks",
+    "network_live: volatile live-channel and WebSocket smoke checks",
     "network_environment: end-to-end proxy, header, and cookie checks",
 ]
 filterwarnings = [

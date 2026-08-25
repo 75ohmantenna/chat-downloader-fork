@@ -283,7 +283,7 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
 
 
 def test_pre_initialised_writer_receives_emitted_item() -> None:
-    """An already-initialised writer must still receive emitted items."""
+    """An already-initialized writer must still receive emitted items."""
     received: list[Any] = []
 
     class PreInitWriter:

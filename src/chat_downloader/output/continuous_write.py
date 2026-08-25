@@ -47,7 +47,7 @@ class ContinuousWriter:
         lazy_initialise: bool = False,
         **kwargs: Any,
     ) -> None:
-        """Initialise the factory, optionally deferring writer creation."""
+        """Initialize the factory, optionally deferring writer creation."""
         self.file_name = file_name
         self.overwrite = overwrite
         self.format = format

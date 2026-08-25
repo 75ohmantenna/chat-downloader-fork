@@ -429,7 +429,7 @@ def test_factory_del_io_error_log_contained_in_test(
 ) -> None:
     """Regression: __del__ debug log for a suppressed OSError must not escape.
 
-    In Python 3.14 the incremental GC can delay object finalisation past the
+    In Python 3.14 the incremental GC can delay object finalization past the
     test boundary, causing the suppression log to fire while a later test has
     patched dbg.logger.debug, corrupting that test's mock call history.
     """

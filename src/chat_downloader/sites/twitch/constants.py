@@ -1,10 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Twitch chat downloader constants.
-
-This module contains all configuration constants, URL patterns, remapping
-dictionaries, and message type definitions for Twitch chat downloading.
-"""
+"""Twitch endpoints, IRC/GraphQL constants, and message-type mappings."""
 
 from __future__ import annotations
 
@@ -12,7 +8,7 @@ import re
 from functools import cache
 
 # API Configuration
-CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa"  # public client id
+CLIENT_ID = "ue6666qo983tsx6so1t0vnawi233wa"  # Public client ID.
 GQL_API_URL = "https://gql.twitch.tv/gql"
 
 # IRC Configuration
@@ -26,7 +22,7 @@ IRC_CAP_REQUEST = "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membersh
 IRC_ANONYMOUS_PASSWORD = "SCHMOOPIIE"  # noqa: S105 — not a real password; any PASS value grants Twitch anonymous IRC access
 IRC_ANONYMOUS_NICK = "justinfan67420"
 
-# GraphQL Operation Hashes (UPDATED from patch - includes GlobalBadges)
+# Persisted GraphQL operation hashes, including GlobalBadges.
 OPERATION_HASHES = {
     "ChatList_Badges": (
         "838a7e0b47c09cac05f93ff081a9ff4f876b68f7624f0fc465fe30031e372fc2"

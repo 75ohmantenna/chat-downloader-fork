@@ -3,7 +3,7 @@
 """Core action mapping constants."""
 
 # Payload wrapper-path keys used when extracting items from action dicts.
-# Centralised so a YouTube API rename is a one-line change, and a typo becomes
+# Centralized so a YouTube API rename is a one-line change, and a typo becomes
 # a NameError at import rather than a silently-empty parse result.
 from __future__ import annotations
 

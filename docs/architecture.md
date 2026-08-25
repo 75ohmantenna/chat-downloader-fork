@@ -21,7 +21,7 @@ For behavior-preservation coverage see
 ┌─────────────────────────▼────────────────────────────────┐
 │  runtime/                        (orchestration)          │
 │    cli_bridge · site_dispatch · chat_pipeline            │
-│    runner · session_lifecycle · testing                  │
+│    config_guards · runner · session_lifecycle            │
 └──────┬──────────────────┬───────────────────────────┬────┘
        │                  │                           │
 ┌──────▼──────┐   ┌───────▼──────────────┐   ┌───────▼────┐
@@ -91,7 +91,7 @@ memory bounded independently of the number of fetched messages.
 
 Each table catalogs a package's immediate Python modules. Subpackages such as
 `parsing/` are summarized as one row. A contract test ensures every immediate
-non-`__init__.py` module remains represented.
+non-`__init__.py` module is represented and rejects stale module names.
 
 ### Top-level
 | Module | Purpose |
@@ -100,7 +100,7 @@ non-`__init__.py` module remains represented.
 | `chat_downloader.py` | Thin public facade; delegates dispatch and session ownership, and exposes `run()` |
 | `cli.py` | Argument parsing entry point (`main()`), signal handler, arg-parser builder |
 | `cli_args.py` | Parser-construction machinery: `_ParamRegistrar`, all `_add_*_args` helpers, `splitter`/`parse_header`/`str2bool` converters |
-| `debugging.py` | Logging setup (colorlog/plain handler), testing modes, colour detection |
+| `debugging.py` | Logging setup (colorlog/plain handler), testing modes, color detection |
 | `redaction.py` | Recursive secret and authentication-header redaction (`sanitize_for_log`, `REDACTED`), opt-in debug-sample capture (`capture_debug_sample`) |
 | `errors.py` | Public exception hierarchy |
 | `metadata.py` | `__version__`, `__program__`, `__summary__` |
@@ -144,11 +144,11 @@ non-`__init__.py` module remains represented.
 | `proxy.py` | Shared proxy resolution and TLS tunneling for live transports |
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
-| `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output/dedup are delegated to `_ChatOutputDispatcher` |
+| `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output and deduplication are delegated to `_ChatOutputDispatcher` |
 | `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted item dispatch, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_message_dedup.py` | Shared formatted-message policy: paid/ticker semantic deduplication for console and formatted files |
-| `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO dedup cache |
+| `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO deduplication cache |
 
 ### `sites/youtube/`
 
@@ -166,7 +166,7 @@ non-`__init__.py` module remains represented.
 | `client_context.py` | InnerTube context dict construction and request-profile application |
 | `client_requests_bootstrap.py` | Fallback InnerTube bootstrap requests (initial video data) |
 | `client_requests_continuation.py` | HTTP continuation polling: request dispatch, retry, error surfacing |
-| `client_requests_errors.py` | HTTP/JSON error classification, captcha detection, and retry helpers |
+| `client_requests_errors.py` | HTTP/JSON error classification, CAPTCHA detection, and retry helpers |
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |
 
 #### Continuation loop
@@ -212,7 +212,7 @@ non-`__init__.py` module remains represented.
 | Module | Purpose |
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
-| `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with dedup, bounded reconnect, and rejected-key recovery |
+| `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with deduplication, bounded reconnect, and rejected-key recovery |
 | `replay_service.py` | VOD metadata, reverse pagination, time-window filtering, and chronological spooled output |
 | `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, and VOD endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
@@ -235,6 +235,7 @@ non-`__init__.py` module remains represented.
 
 | Guardrail | Where |
 |-----------|-------|
+| Spelling | `pyproject.toml [tool.codespell]`; `make spell` checks every tracked file and filename, with exact raw-fixture lines recorded in `.codespell-ignore-lines` |
 | Import-layering contracts | `pyproject.toml [tool.importlinter]`; enforced by `uv run lint-imports` (wired into `make lint`). Includes site independence, the `utils`/`models` leaf rules, and the provider-neutral contract keeping `runtime`/`output`/`formatting` free of concrete site packages |
 | Public-API snapshot | `tests/test_public_api_unit.py` — frozen `__all__` sets for `chat_downloader`, `chat_downloader.models`, `chat_downloader.errors`, and `chat_downloader.sites`; any intentional surface change must update the snapshot in the same commit |
 | Module-size gate | `tests/test_module_size_unit.py` — 400-line ceiling on all source modules (allowlist for intentional data tables and cohesive modules); fails on future bloat |

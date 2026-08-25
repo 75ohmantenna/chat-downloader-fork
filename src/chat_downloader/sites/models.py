@@ -93,10 +93,10 @@ class Chat:
         # keeps Chat usable without pipeline configuration.
         self._formatter: Callable[[dict[str, Any]], str] = _default_formatter
 
-        # Output dispatch (writers, dedup, and shutdown) is created lazily when
-        # the first writer is attached, so this model module stays free of the
-        # output layer at import time. The dedup-cache size is remembered here
-        # and handed to the dispatcher, which owns deduplication.
+        # Output dispatch (writers, deduplication, and shutdown) is created
+        # lazily when the first writer is attached, so this model module stays
+        # free of the output layer at import time. The deduplication-cache size
+        # is remembered here and handed to the dispatcher, which owns it.
         self._output_dispatcher: _ChatOutputDispatcher | None = None
         self._generator_closed = False
         self._max_seen_message_ids = max_seen_message_ids
