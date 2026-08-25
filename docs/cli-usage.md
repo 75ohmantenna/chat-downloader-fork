@@ -36,7 +36,7 @@ Capture a Kick live channel, including subscription and moderation events:
 
 ```bash
 chat_downloader "https://kick.com/xqc" \
-  --message_groups messages subscriptions moderation \
+  --message_groups messages,subscriptions,moderation \
   --output kick-chat.jsonl
 ```
 
@@ -119,6 +119,7 @@ in `src/chat_downloader/models/`.
 Filtering and output:
 
 - `--message_groups` and `--message_types` are mutually exclusive CLI filters.
+  Pass multiple names as one comma-separated argument.
   In typed API requests, an explicit `ChatRequest.message_types` value overrides
   `message_groups`, including the `all` group.
 - `--format` or `--format_file` — change rendered text output.

@@ -7,6 +7,8 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+import pytest
+
 from chat_downloader.cli import _build_arg_parser
 from chat_downloader.models import SiteDefault
 
@@ -141,8 +143,16 @@ EXPECTED_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
 }
 
 EXPECTED_HELP: dict[str, str] = {
+    "--message_groups": (
+        "Predefined message groups to include as one comma-separated argument "
+        "(site-specific)"
+    ),
     "--message_receive_timeout": (
         "Live socket receive polling timeout in seconds (minimum 1 for Twitch and Kick)"
+    ),
+    "--message_types": (
+        "Specific message types to include as one comma-separated argument "
+        "(overrides message_groups)"
     ),
 }
 
@@ -187,3 +197,33 @@ def test_cli_option_help_is_stable() -> None:
     assert {
         option: parser._option_string_actions[option].help for option in EXPECTED_HELP
     } == EXPECTED_HELP
+
+
+@pytest.mark.parametrize("option", ["--message_groups", "--message_types"])
+def test_cli_message_filters_accept_one_comma_separated_argument(option: str) -> None:
+    parser = _build_arg_parser()
+
+    args = parser.parse_args(
+        ["https://kick.com/example", option, "messages,subscriptions,moderation"]
+    )
+
+    assert getattr(args, option.removeprefix("--")) == [
+        "messages",
+        "subscriptions",
+        "moderation",
+    ]
+
+
+def test_cli_message_filters_reject_unquoted_multiple_arguments() -> None:
+    parser = _build_arg_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "https://kick.com/example",
+                "--message_groups",
+                "messages",
+                "subscriptions",
+                "moderation",
+            ]
+        )

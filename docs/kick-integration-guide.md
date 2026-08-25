@@ -285,7 +285,7 @@ message types:
 | `hosts` | `stream_host` |
 
 The default message group surfaces only `messages`. Use, for example,
-`--message_groups messages subscriptions moderation` to capture non-text
+`--message_groups messages,subscriptions,moderation` to capture non-text
 events.
 
 Kick's default text formatter labels subscription, pin, host, and moderation

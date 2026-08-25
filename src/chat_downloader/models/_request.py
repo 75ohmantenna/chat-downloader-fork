@@ -170,7 +170,8 @@ class ChatRequest:
         default_factory=lambda: SiteDefault("message_groups"),
         metadata={
             "cli": _cli(
-                "Predefined message groups to include (site-specific)",
+                "Predefined message groups to include as one comma-separated "
+                "argument (site-specific)",
                 group="type",
             ),
         },
@@ -179,7 +180,8 @@ class ChatRequest:
         default=None,
         metadata={
             "cli": _cli(
-                "Specific message types to include (overrides message_groups)",
+                "Specific message types to include as one comma-separated "
+                "argument (overrides message_groups)",
                 group="type",
             ),
         },
