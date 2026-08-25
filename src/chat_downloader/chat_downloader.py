@@ -196,6 +196,7 @@ class ChatDownloader:
         # YouTube
         chat_type: Literal["live", "top"] = "live",
         ignore: list[str] | None = None,
+        youtube_replay_poll_interval: float | None = None,
         # Twitch
         message_receive_timeout: float = DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
@@ -270,6 +271,10 @@ class ChatDownloader:
         :type chat_type: str, optional
         :param ignore: List of video IDs to ignore
         :type ignore: list, optional
+        :param youtube_replay_poll_interval: Explicit YouTube replay polling
+            interval in seconds from 0.5 through 8. None respects the
+            provider's delay hint (default: None)
+        :type youtube_replay_poll_interval: float, optional
 
         Live transport (Twitch and Kick):
         :param message_receive_timeout: Live socket receive-poll timeout in

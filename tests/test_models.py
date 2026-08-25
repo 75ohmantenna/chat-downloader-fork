@@ -54,6 +54,7 @@ _EXPECTED_LEGACY_KEYS = frozenset(
         "format_file",
         "chat_type",
         "ignore",
+        "youtube_replay_poll_interval",
         "message_receive_timeout",
         "buffer_size",
     },
@@ -240,6 +241,7 @@ def test_site_default_compat_import_shares_identity() -> None:
         "output",
         "format_file",
         "ignore",
+        "youtube_replay_poll_interval",
     ],
 )
 def test_default_none_fields(sample_request: ChatRequest, attr: str) -> None:
@@ -311,6 +313,7 @@ def test_from_kwargs_round_trip_all_fields() -> None:
         format_file="custom.json",
         chat_type="top",
         ignore=["baduser"],
+        youtube_replay_poll_interval=0.75,
         message_receive_timeout=0.5,
         buffer_size=8192,
     )
@@ -332,6 +335,7 @@ def test_from_kwargs_round_trip_all_fields() -> None:
         "format_file",
         "chat_type",
         "ignore",
+        "youtube_replay_poll_interval",
         "message_receive_timeout",
         "buffer_size",
     ]:
@@ -693,6 +697,23 @@ def test_message_receive_timeout_positive_allowed() -> None:
     assert ChatRequest(
         message_receive_timeout=0.5
     ).message_receive_timeout == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0.0, 0.49, 8.01, float("nan"), float("inf"), float("-inf")],
+)
+def test_youtube_replay_poll_interval_invalid_raises(value: float) -> None:
+    with pytest.raises(ValueError, match="youtube_replay_poll_interval"):
+        ChatRequest(youtube_replay_poll_interval=value)
+
+
+@pytest.mark.parametrize("value", [None, 0.5, 1.0, 8.0])
+def test_youtube_replay_poll_interval_allowed(value: float | None) -> None:
+    actual = ChatRequest(
+        youtube_replay_poll_interval=value
+    ).youtube_replay_poll_interval
+    assert actual == value
 
 
 # ---------------------------------------------------------------------------

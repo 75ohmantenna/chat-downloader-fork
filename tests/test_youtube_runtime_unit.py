@@ -236,7 +236,7 @@ def _build_result(
     debug_info=None,
     timeout_ms=None,
     is_end=True,
-    next_continuation="next-token",
+    next_continuation=None,
 ):
     return SimpleNamespace(
         debug_info={} if debug_info is None else debug_info,
@@ -246,25 +246,23 @@ def _build_result(
     )
 
 
-def test_advance_continuation_loop_updates_state_and_sleeps(
+def test_advance_continuation_loop_updates_state_without_sleep_at_end(
     monkeypatch,
 ) -> None:
     sleep_calls: list[float] = []
     logs: list[tuple[str, object]] = []
-    ctx = SimpleNamespace(
-        loop_state=ContinuationLoopState(continuation="token"),
-        time_filter=None,
-        is_replay=True,
-    )
-    next_state = ContinuationLoopState(continuation="next-token")
+    end_page_calls: list[str] = []
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
-        lambda _yt_info: _build_result(timeout_ms=250, is_end=True),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.update_state_from_result",
-        lambda _state, _result: next_state,
+    class RecordingTimeFilter:
+        def end_page(self) -> None:
+            end_page_calls.append("end")
+
+    loop_state = ContinuationLoopState(continuation="token")
+    ctx = SimpleNamespace(
+        loop_state=loop_state,
+        time_filter=RecordingTimeFilter(),
+        is_replay=True,
+        replay_poll_interval=None,
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.polling_sleep",
@@ -275,10 +273,49 @@ def test_advance_continuation_loop_updates_state_and_sleeps(
         lambda level, message: logs.append((level, message)),
     )
 
-    assert _advance_continuation_loop(ctx, {"responseContext": {}}) is True
-    assert ctx.loop_state is next_state
-    assert sleep_calls == [0.5]
-    assert any("Sleeping for 500ms." in str(message) for _level, message in logs)
+    terminal_response = {
+        "continuationContents": {
+            "liveChatContinuation": {
+                "actions": [],
+                "continuations": [],
+            },
+        },
+    }
+
+    assert _advance_continuation_loop(ctx, terminal_response) is True
+    assert ctx.loop_state is loop_state
+    assert sleep_calls == []
+    assert end_page_calls == []
+    assert not any("Sleeping" in str(message) for _level, message in logs)
+
+
+def test_advance_continuation_loop_uses_explicit_replay_interval(monkeypatch) -> None:
+    sleep_calls: list[float] = []
+    ctx = SimpleNamespace(
+        loop_state=ContinuationLoopState(continuation="token"),
+        time_filter=None,
+        is_replay=True,
+        replay_poll_interval=0.75,
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
+        lambda _yt_info: _build_result(timeout_ms=5000, is_end=False),
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.update_state_from_result",
+        lambda _state, _result: _state,
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
+        sleep_calls.append,
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.log",
+        lambda *_: None,
+    )
+
+    assert _advance_continuation_loop(ctx, {}) is False
+    assert sleep_calls == [0.75]
 
 
 def test_advance_continuation_loop_applies_min_floor_for_live_stream(
@@ -289,6 +326,7 @@ def test_advance_continuation_loop_applies_min_floor_for_live_stream(
         loop_state=ContinuationLoopState(continuation="token"),
         time_filter=None,
         is_replay=False,
+        replay_poll_interval=None,
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.parse_continuation_response",
@@ -319,6 +357,7 @@ def test_advance_continuation_loop_applies_floor_when_timeout_absent_for_live(
         loop_state=ContinuationLoopState(continuation="token"),
         time_filter=None,
         is_replay=False,
+        replay_poll_interval=None,
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.parse_continuation_response",
@@ -815,7 +854,7 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     assert downloader.invalid_type_checks
     assert downloader.session.headers["authorization"] == "AUTH_TOKEN"
     assert downloader.session.headers["x-goog-visitor-id"] == "visitor-2"
-    assert sleep_calls == [0.5]
+    assert sleep_calls == []
     assert captured_samples == [
         (
             "youtube-unknown-continuation-heartbeat",
@@ -1282,7 +1321,7 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
     process_calls = []
     end_page_calls = []
     continuation_requests = []
-    state_updates = []
+    sleep_calls = []
 
     class FakeTimeFilter:
         def end_page(self) -> None:
@@ -1292,12 +1331,43 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         [
             {
                 "continuationContents": {
-                    "liveChatContinuation": {"actions": [{"id": 1}, {"id": 2}]},
+                    "liveChatContinuation": {
+                        "actions": [{"id": 1}, {"id": 2}],
+                        "continuations": [
+                            {
+                                "liveChatReplayContinuationData": {
+                                    "continuation": "first-token",
+                                    "timeUntilLastMessageMsec": 5000,
+                                },
+                            },
+                        ],
+                    },
                 },
                 "responseContext": {},
             },
             {
-                "continuationContents": {"liveChatContinuation": {"actions": []}},
+                "continuationContents": {
+                    "liveChatContinuation": {
+                        "actions": [],
+                        "continuations": [
+                            {
+                                "liveChatReplayContinuationData": {
+                                    "continuation": "last-token",
+                                    "timeUntilLastMessageMsec": 5000,
+                                },
+                            },
+                        ],
+                    },
+                },
+                "responseContext": {},
+            },
+            {
+                "continuationContents": {
+                    "liveChatContinuation": {
+                        "actions": [],
+                        "continuations": [],
+                    },
+                },
                 "responseContext": {},
             },
         ],
@@ -1332,6 +1402,10 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_args, **_kwargs: next(responses),
     )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.polling_sleep",
+        sleep_calls.append,
+    )
 
     pipeline_results = iter(
         [
@@ -1348,24 +1422,6 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         "chat_downloader.sites.youtube.continuation.process_pipeline_action",
         fake_process_pipeline_action,
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
-        lambda _yt_info: _build_result(
-            debug_info={"continuation_entry": {"timeoutMs": 0}},
-            timeout_ms=None,
-            is_end=False,
-        ),
-    )
-
-    def fake_update_state_from_result(state, _result):
-        state_updates.append(state.continuation)
-        return state
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.update_state_from_result",
-        fake_update_state_from_result,
-    )
-
     messages = list(
         _get_chat_messages(
             downloader,
@@ -1383,15 +1439,16 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
                 chat_type="live",
                 message_groups=["messages"],
                 start_time=2,
+                youtube_replay_poll_interval=0.75,
             ),
         ),
     )
 
     assert messages == [{"message": "hi"}]
     assert process_calls == [({"id": 1}, 4.0), ({"id": 2}, 4.0)]
-    assert continuation_requests == ["live-token", "live-token"]
-    assert state_updates == ["live-token"]
-    assert end_page_calls == ["end"]
+    assert continuation_requests == ["live-token", "first-token", "last-token"]
+    assert sleep_calls == [0.75, 0.75]
+    assert end_page_calls == ["end", "end"]
 
 
 def test_user_chat_lookup_skips_ignored_and_non_live_videos_before_yield() -> None:

@@ -144,16 +144,29 @@ def update_state_from_result(
     )
 
 
-def _resolve_poll_delay_ms(timeout_ms: _PollDelayHint) -> int:
-    """Return the safe YouTube chat poll delay in milliseconds."""
+def _resolve_poll_delay_ms(
+    timeout_ms: _PollDelayHint,
+    *,
+    replay_poll_interval: float | None = None,
+) -> int:
+    """Return the provider delay or an explicit bounded replay override."""
+    if replay_poll_interval is not None:
+        override_ms = round(replay_poll_interval * 1000)
+        return max(
+            _YOUTUBE_POLL_DELAY_MIN_MS,
+            min(override_ms, _YOUTUBE_POLL_DELAY_MAX_MS),
+        )
+
     if isinstance(timeout_ms, bool) or timeout_ms is None:
-        return _YOUTUBE_POLL_DELAY_FALLBACK_MS
-    try:
-        poll_delay_ms = int(timeout_ms)
-    except (TypeError, ValueError):
-        return _YOUTUBE_POLL_DELAY_FALLBACK_MS
-    if poll_delay_ms < 0:
-        return _YOUTUBE_POLL_DELAY_FALLBACK_MS
+        poll_delay_ms = _YOUTUBE_POLL_DELAY_FALLBACK_MS
+    else:
+        try:
+            poll_delay_ms = int(timeout_ms)
+        except (TypeError, ValueError):
+            poll_delay_ms = _YOUTUBE_POLL_DELAY_FALLBACK_MS
+        if poll_delay_ms < 0:
+            poll_delay_ms = _YOUTUBE_POLL_DELAY_FALLBACK_MS
+
     return max(
         _YOUTUBE_POLL_DELAY_MIN_MS,
         min(poll_delay_ms, _YOUTUBE_POLL_DELAY_MAX_MS),

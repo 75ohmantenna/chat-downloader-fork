@@ -263,6 +263,7 @@ def _add_format_site_output_args(
     youtube_group = parser.add_argument_group("[Site Specific] YouTube Arguments")
     reg.chat(youtube_group, "--chat_type", choices=["live", "top"])
     reg.chat(youtube_group, "--ignore", type=splitter)
+    reg.chat(youtube_group, "--youtube_replay_poll_interval", type=float)
 
     live_transport_group = parser.add_argument_group("Live Transport Arguments")
     reg.chat(live_transport_group, "--message_receive_timeout", type=float)

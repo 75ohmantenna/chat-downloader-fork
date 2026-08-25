@@ -94,6 +94,7 @@ class _ChatContext:
     live_start_time_ms: int
     is_replay: bool
     offset: float | None
+    replay_poll_interval: float | None
 
 
 @dataclass(slots=True)
@@ -271,13 +272,19 @@ def _advance_continuation_loop(
     _log_continuation_debug_info(cont_result)
     ctx.loop_state = update_state_from_result(ctx.loop_state, cont_result)
 
-    poll_delay_ms = _resolve_poll_delay_ms(cont_result.timeout_ms)
+    if cont_result.is_end:
+        return True
+
+    poll_delay_ms = _resolve_poll_delay_ms(
+        cont_result.timeout_ms,
+        replay_poll_interval=ctx.replay_poll_interval,
+    )
     log("debug", f"Sleeping for {poll_delay_ms}ms.")
     polling_sleep(poll_delay_ms / _MS_PER_SECOND)
 
     if ctx.time_filter is not None:
         ctx.time_filter.end_page()
-    return bool(cont_result.is_end)
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +411,9 @@ class _ContinuationLoop:
             live_start_time_ms=live_start_time_ms,
             is_replay=is_replay,
             offset=offset,
+            replay_poll_interval=(
+                params.youtube_replay_poll_interval if is_replay else None
+            ),
         )
 
     # -- response handling --------------------------------------------------
@@ -597,8 +607,6 @@ class _ContinuationLoop:
                 )
                 if stop_requested:
                     return
-            elif ctx.is_replay:
-                break
             else:
                 log("debug", "No actions to process.")
 

@@ -164,6 +164,38 @@ def test_resolve_poll_delay_ms(timeout_ms: object, expected: int) -> None:
     assert _resolve_poll_delay_ms(timeout_ms) == expected  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize(
+    ("replay_poll_interval", "expected"),
+    [
+        (0.5, 500),
+        (0.75, 750),
+        (1.0, 1000),
+        (8.0, 8000),
+    ],
+)
+def test_resolve_poll_delay_uses_explicit_replay_override(
+    replay_poll_interval: float,
+    expected: int,
+) -> None:
+    assert (
+        _resolve_poll_delay_ms(
+            5000,
+            replay_poll_interval=replay_poll_interval,
+        )
+        == expected
+    )
+
+
+def test_resolve_poll_delay_respects_provider_without_replay_override() -> None:
+    assert (
+        _resolve_poll_delay_ms(
+            5000,
+            replay_poll_interval=None,
+        )
+        == 5000
+    )
+
+
 # ── _attempt_profile_fallback ─────────────────────────────────────────────────
 
 

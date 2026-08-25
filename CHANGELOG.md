@@ -57,6 +57,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Report the effective Kick WebSocket receive timeout after applying the
   one-second minimum.
 
+### Performance
+
+- Add an explicit bounded YouTube replay polling override while respecting
+  provider delay hints by default, skip terminal waits, and follow continuation
+  tokens across empty replay pages.
+
 ## 2.0.7 — 2026-08-25
 
 ### Tooling

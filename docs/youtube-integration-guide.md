@@ -150,8 +150,10 @@ The runtime repeatedly calls the InnerTube continuation endpoint with:
 
 Each response is parsed for actions, new continuation tokens, and timeout
 hints. YouTube chat polling respects server-provided delay values when present
-and otherwise falls back to five seconds, clamped to 0.5-8 seconds. This polling
-delay is separate from HTTP connect/read timeout settings.
+and otherwise falls back to five seconds, clamped to 0.5-8 seconds. Completed
+replays may explicitly override that delay with `youtube_replay_poll_interval`;
+the bounded override is opt-in because faster polling can be rate-limited. This
+polling delay is separate from HTTP connect/read timeout settings.
 
 Actions then pass through the message pipeline, which:
 
@@ -346,7 +348,8 @@ The YouTube stack is most sensitive to changes in:
 The initial watch-page fetch raises `RetriesExceeded` after all retry attempts
 on 5xx responses are exhausted.
 Invalid or negative continuation delay values from the InnerTube response use
-the five-second polling fallback.
+the five-second polling fallback unless a completed replay has an explicit
+`youtube_replay_poll_interval` override.
 
 When debugging YouTube breakage, inspect modules in this order:
 

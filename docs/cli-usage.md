@@ -143,6 +143,9 @@ Request control:
   configuration.
 - `--auto_profile_fallback` — rotate YouTube request profiles when
   continuation payloads are repeatedly incomplete.
+- `--youtube_replay_poll_interval` — explicitly override completed YouTube
+  replay polling with an interval from 0.5 through 8 seconds. The default
+  respects the provider delay; faster polling is opt-in and can be rate-limited.
 - `--twitch_client_id` — override the public Twitch Client-ID for GraphQL
   and replay requests.
 - `--user-agent`, `--header "Name: Value"` (repeatable) — request headers.
@@ -162,6 +165,9 @@ Debug and automation:
 - YouTube continuation polls report separate processed-action and
   emitted-message counts so skipped or non-emitting provider actions are
   visible without inflating the output count.
+- YouTube terminal continuation responses finish immediately without an
+  unnecessary final wait. Empty replay pages continue when the provider
+  supplies another continuation token.
 - Successful debug runs end with the total retrieved-message count and the
   number of completed records for each output writer. Formatted-writer counts
   can be lower than JSONL counts when semantic duplicates are suppressed.

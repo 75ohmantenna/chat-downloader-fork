@@ -440,6 +440,7 @@ _CLI_CHAT_PARAMS = frozenset(
         "format_file",
         "chat_type",
         "ignore",
+        "youtube_replay_poll_interval",
         "message_receive_timeout",
         "buffer_size",
         "output",

@@ -50,6 +50,7 @@ EXPECTED_OPTION_STRINGS: frozenset[str] = frozenset(
         "--user-agent",
         "--verbose",
         "--version",
+        "--youtube_replay_poll_interval",
         "-c",
         "-e",
         "-h",
@@ -99,6 +100,7 @@ EXPECTED_DEFAULTS: dict[str, Any] = {
     "user_agent": None,
     "verbose": False,
     "version": argparse.SUPPRESS,
+    "youtube_replay_poll_interval": None,
 }
 
 EXPECTED_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
@@ -117,7 +119,11 @@ EXPECTED_GROUP_MEMBERS: dict[str, tuple[str, ...]] = {
         "timeout",
     ),
     "Format Arguments": ("format", "format_file"),
-    "[Site Specific] YouTube Arguments": ("chat_type", "ignore"),
+    "[Site Specific] YouTube Arguments": (
+        "chat_type",
+        "ignore",
+        "youtube_replay_poll_interval",
+    ),
     "Live Transport Arguments": ("message_receive_timeout",),
     "[Site Specific] Twitch Arguments": ("buffer_size",),
     "Output Arguments": ("output", "overwrite", "sort_keys"),
@@ -153,6 +159,10 @@ EXPECTED_HELP: dict[str, str] = {
     "--message_types": (
         "Specific message types to include as one comma-separated argument "
         "(overrides message_groups)"
+    ),
+    "--youtube_replay_poll_interval": (
+        "Override YouTube replay polling interval in seconds "
+        "(0.5-8; None = respect provider delay)"
     ),
 }
 

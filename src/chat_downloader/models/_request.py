@@ -239,6 +239,16 @@ class ChatRequest:
         default=None,
         metadata={"cli": _cli("List of video IDs to ignore", group="youtube")},
     )
+    youtube_replay_poll_interval: float | None = field(
+        default=None,
+        metadata={
+            "cli": _cli(
+                "Override YouTube replay polling interval in seconds "
+                "(0.5-8; None = respect provider delay)",
+                group="youtube",
+            ),
+        },
+    )
 
     # ── Live transport ────────────────────────────────────────────────────────
     message_receive_timeout: float = field(
@@ -294,6 +304,20 @@ class ChatRequest:
             positive=True,
             allow_none=False,
         )
+        _validate_finite_number(
+            "youtube_replay_poll_interval",
+            self.youtube_replay_poll_interval,
+            positive=True,
+            allow_none=True,
+        )
+        if self.youtube_replay_poll_interval is not None and not (
+            0.5 <= self.youtube_replay_poll_interval <= 8
+        ):
+            msg = (
+                "youtube_replay_poll_interval must be between 0.5 and 8 "
+                f"seconds or None, got {self.youtube_replay_poll_interval!r}"
+            )
+            raise ValueError(msg)
         for time_name, time_value in (
             ("start_time", self.start_time),
             ("end_time", self.end_time),
