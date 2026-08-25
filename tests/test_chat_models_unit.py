@@ -393,6 +393,52 @@ def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
     assert formatted_b == ["paid_message:paid-1"]
     assert raw_items == [paid, ticker]
     assert format_calls == [paid]
+    assert dispatcher.writer_summaries == [
+        {
+            "file_name": "x",
+            "records_written": 1,
+        },
+        {"file_name": "x", "records_written": 2},
+        {
+            "file_name": "x",
+            "records_written": 1,
+        },
+    ]
+
+
+def test_writer_summary_does_not_count_failed_write() -> None:
+    """Only completed writer calls contribute to the debug record count."""
+
+    class Writer:
+        file_name = "failed.jsonl"
+        output_mode = "raw"
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            raise AssertionError("already initialized")
+
+        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+            del item, flush
+            raise OSError("disk full")
+
+        def close(self) -> None:
+            pass
+
+    chat = Chat(iter(()), title="Example")
+    dispatcher = _ChatOutputDispatcher(chat)
+    dispatcher.attach_writer(Writer())
+
+    with pytest.raises(OSError, match="disk full"):
+        dispatcher.emit({"message": "not written"})
+
+    assert dispatcher.writer_summaries == [
+        {
+            "file_name": "failed.jsonl",
+            "records_written": 0,
+        }
+    ]
 
 
 def test_raw_only_output_does_not_populate_formatted_dedup_cache() -> None:

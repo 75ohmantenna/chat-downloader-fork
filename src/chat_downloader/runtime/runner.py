@@ -22,6 +22,7 @@ from chat_downloader.errors import (
     ParsingError,
 )
 from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
+from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
 
 from .cli_bridge import categorize_parameters
@@ -134,6 +135,21 @@ def create_message_callback(
     return deduplicating_callback
 
 
+def _log_run_summary(chat: Chat | None, message_count: int) -> None:
+    """Log final message and per-writer record counts for a successful run."""
+    output_dispatcher = getattr(chat, "_output_dispatcher", None)
+    writer_summaries = (
+        output_dispatcher.writer_summaries if output_dispatcher is not None else []
+    )
+    summary = sanitize_for_log(
+        {
+            "message_count": message_count,
+            "output_writers": writer_summaries,
+        }
+    )
+    log("debug", f"Run summary: {summary}")
+
+
 def execute_run(
     downloader_cls: type,
     *,
@@ -197,5 +213,8 @@ def execute_run(
             result.error_message = (
                 "One or more output writers reported errors during close"
             )
+
+    if result.success:
+        _log_run_summary(chat, result.message_count)
 
     return result

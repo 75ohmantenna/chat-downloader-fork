@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
@@ -47,6 +47,13 @@ class _ChatHost(Protocol):
         ...  # pragma: no cover — structural typing declaration
 
 
+class _WriterSummary(TypedDict):
+    """Debug-facing count of records successfully written to one output."""
+
+    file_name: str
+    records_written: int
+
+
 def _expand_output_file_name(
     file_name: str,
     *,
@@ -76,6 +83,7 @@ class _ChatOutputDispatcher:
         self.writers: list[ChatOutputWriter] = []
         self._attached_writer_ids: set[int] = set()
         self._initialised_writer_ids: set[int] = set()
+        self._records_written_by_writer: dict[int, int] = {}
         self._write_error_count: int = 0
         self.closed = False
         self._formatted_deduplicator = _FormattedMessageDeduplicator(
@@ -107,6 +115,7 @@ class _ChatOutputDispatcher:
             return
         self.writers.append(writer)
         self._attached_writer_ids.add(writer_id)
+        self._records_written_by_writer[writer_id] = 0
 
     def emit(self, item: dict[str, Any]) -> None:
         """Write a chat item to all configured outputs."""
@@ -119,6 +128,7 @@ class _ChatOutputDispatcher:
         for writer in self.writers:
             if writer.output_mode != "formatted":
                 writer.write(item, flush=True)
+                self._records_written_by_writer[id(writer)] += 1
                 continue
 
             if emit_formatted is None:
@@ -128,6 +138,7 @@ class _ChatOutputDispatcher:
             if formatted_item is None:
                 formatted_item = self._chat.format(item)
             writer.write(formatted_item, flush=True)
+            self._records_written_by_writer[id(writer)] += 1
 
     def close(self) -> None:
         """Close all attached writers once and log any cleanup failures."""
@@ -150,3 +161,14 @@ class _ChatOutputDispatcher:
     def write_error_count(self) -> int:
         """Return the number of writer close errors encountered."""
         return self._write_error_count
+
+    @property
+    def writer_summaries(self) -> list[_WriterSummary]:
+        """Return successful record counts for attached output writers."""
+        return [
+            {
+                "file_name": writer.file_name,
+                "records_written": self._records_written_by_writer[id(writer)],
+            }
+            for writer in self.writers
+        ]

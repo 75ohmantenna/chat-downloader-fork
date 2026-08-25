@@ -25,6 +25,7 @@ from chat_downloader.runtime.runner import (
     _classify_run_error,
     _configure_testing_mode,
     _finalize_run,
+    _log_run_summary,
     create_message_callback,
     execute_run,
 )
@@ -240,6 +241,143 @@ def test_execute_run_processes_messages_and_closes_downloader() -> None:
     }
     assert FakeDownloader.instance.closed is True
     assert seen_messages == [{"message_type": "text_message", "message_id": "1"}]
+
+
+def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
+    from chat_downloader.sites.models import Chat
+
+    class Writer:
+        def __init__(self, file_name: str, output_mode: str) -> None:
+            self.file_name = file_name
+            self.output_mode = output_mode
+
+        def is_initialised(self) -> bool:
+            return True
+
+        def initialize(self) -> None:
+            raise AssertionError("already initialized")
+
+        def write(self, _item, *, flush: bool = False) -> None:
+            assert flush is True
+
+        def close(self) -> None:
+            pass
+
+    class Downloader:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def get_chat(self, **_kwargs):
+            chat = Chat(
+                iter(
+                    (
+                        {"message_type": "paid_message", "message_id": "same"},
+                        {
+                            "message_type": "ticker_paid_message_item",
+                            "message_id": "same",
+                        },
+                    )
+                )
+            )
+            chat.set_formatter(lambda item: str(item["message_type"]))
+            chat.attach_writer(Writer("chat.jsonl", "raw"))
+            chat.attach_writer(Writer("chat.txt", "formatted"))
+            return chat
+
+        def close(self) -> None:
+            pass
+
+    logged: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda level, message: logged.append((level, message)),
+    )
+
+    result = execute_run(Downloader, quiet=True)
+
+    assert result.success is True
+    assert result.message_count == 2
+    assert logged[-1] == (
+        "debug",
+        (
+            "Run summary: {'message_count': 2, 'output_writers': "
+            "[{'file_name': 'chat.jsonl', 'records_written': 2}, "
+            "{'file_name': 'chat.txt', 'records_written': 1}]}"
+        ),
+    )
+
+
+def test_log_run_summary_redacts_credentials(monkeypatch) -> None:
+    class Dispatcher:
+        def __init__(self) -> None:
+            self.writer_summaries = [
+                {
+                    "file_name": ("https://alice:hunter2@example.invalid/chat.jsonl"),
+                    "records_written": 0,
+                }
+            ]
+
+    class Chat:
+        def __init__(self) -> None:
+            self._output_dispatcher = Dispatcher()
+
+    logged: list[str] = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda _level, message: logged.append(message),
+    )
+
+    _log_run_summary(Chat(), 0)
+
+    assert len(logged) == 1
+    assert "hunter2" not in logged[0]
+    assert "<redacted>@example.invalid" in logged[0]
+
+
+def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> None:
+    from chat_downloader.sites.models import Chat
+
+    class Writer:
+        file_name = "empty.txt"
+        output_mode = "formatted"
+
+        def is_initialised(self) -> bool:
+            return False
+
+        def initialize(self) -> None:
+            raise AssertionError("zero-message writer must stay lazy")
+
+        def write(self, _item, *, flush: bool = False) -> None:
+            raise AssertionError("zero-message writer must not receive writes")
+
+        def close(self) -> None:
+            pass
+
+    class Downloader:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def get_chat(self, **_kwargs):
+            chat = Chat(iter(()))
+            chat.attach_writer(Writer())
+            return chat
+
+        def close(self) -> None:
+            pass
+
+    logged: list[str] = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda _level, message: logged.append(message),
+    )
+
+    result = execute_run(Downloader, quiet=True)
+
+    assert result.success is True
+    assert logged[-1] == (
+        "Run summary: {'message_count': 0, 'output_writers': "
+        "[{'file_name': 'empty.txt', 'records_written': 0}]}"
+    )
 
 
 def test_execute_run_passes_dedup_cache_size_to_message_callback() -> None:
@@ -538,14 +676,16 @@ def test_execute_run_detects_write_errors(
         def get_chat(self, **kwargs: Any) -> _WriteErrorChat:
             return _WriteErrorChat()
 
+    logged: list[tuple[str, str]] = []
     monkeypatch.setattr(
         "chat_downloader.runtime.runner.log",
-        lambda level, message: None,
+        lambda level, message: logged.append((level, message)),
     )
     result = execute_run(_WriteErrorDownloader)
     assert result.success is False
     assert result.error_message is not None
     assert "output writers reported errors" in result.error_message
+    assert not any("Run summary" in message for _level, message in logged)
 
 
 def test_execute_run_raises_downloader_close_error_when_no_primary_error(

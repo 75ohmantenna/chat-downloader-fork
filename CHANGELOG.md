@@ -15,6 +15,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Debugging
 
+- Report final retrieved-message and per-output-writer record counts after a
+  successful debug run.
 - Log Twitch's known optional `user.primaryTeam` GraphQL service error at debug
   level while retaining warnings for unfamiliar service-error paths in the
   same response.

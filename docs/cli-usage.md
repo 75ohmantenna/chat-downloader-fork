@@ -143,6 +143,9 @@ channel URLs reject these bounds because the public live feed cannot seek.
 Debug and automation:
 
 - `--logging debug`, `--verbose` — transport and parser debugging.
+- Successful debug runs end with the total retrieved-message count and the
+  number of completed records for each output writer. Formatted-writer counts
+  can be lower than JSONL counts when semantic duplicates are suppressed.
 - `--quiet`, `--testing`, `--pause_on_debug`, `--exit_on_debug` — automation
   and parser-debug workflows.
 
