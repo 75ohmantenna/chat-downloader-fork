@@ -8,6 +8,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.0.7 — 2026-08-25
+
 ### Tooling
 
 - Add codespell to the locked development toolchain, pre-commit checks, and
