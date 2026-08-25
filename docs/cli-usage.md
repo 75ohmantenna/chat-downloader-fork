@@ -86,6 +86,10 @@ Twitch text output preserves system-event descriptions for subscription,
 raid, and unraid messages. JSONL remains the lossless structured format when
 downstream processing needs provider-specific metadata.
 
+YouTube text output renders moderation events without message text as a
+bracketed notice. The notice identifies the removed message or affected author
+when YouTube supplies that identifier, instead of writing a blank line.
+
 Output names may contain `{title}` and `{id}` placeholders. Metadata is
 sanitized before substitution. Duplicate targets are removed after expansion,
 path resolution, and existing-file identity checks, so aliases and hard links

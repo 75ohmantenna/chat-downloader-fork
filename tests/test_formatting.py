@@ -190,6 +190,71 @@ def test_youtube_live_system_messages_omit_missing_author_separator(
     assert result == f"{expected_prefix}System notice"
 
 
+@pytest.mark.parametrize(
+    ("format_name", "expected_prefix"),
+    [
+        ("youtube", "0:42 | "),
+        ("youtube_live_default", "2020-01-01 00:00:00 | "),
+        ("youtube_live_24_hour", "00:00 | "),
+        ("youtube_live_12_hour", "12:00 AM | "),
+    ],
+)
+@pytest.mark.parametrize(
+    ("fields", "expected_notice"),
+    [
+        ({"target_message_id": "message-id"}, "[Message removed: message-id]"),
+        (
+            {"author": {"id": "channel-id"}},
+            "[Messages removed for author: channel-id]",
+        ),
+        ({"action_type": "remove_chat_item"}, "[Moderation action: remove_chat_item]"),
+    ],
+)
+def test_youtube_moderation_messages_have_nonempty_fallbacks(
+    formatter: ItemFormatter,
+    format_name: str,
+    expected_prefix: str,
+    fields: dict[str, object],
+    expected_notice: str,
+) -> None:
+    item = {
+        "message_type": "ban_user",
+        "message": None,
+        "timestamp": 1577836800000000,  # 2020-01-01 00:00:00 UTC
+        "time_text": "0:42",
+        **fields,
+    }
+
+    result = formatter.format(item, format_name=format_name)
+
+    assert result == f"{expected_prefix}{expected_notice}"
+
+
+@pytest.mark.parametrize(
+    "format_name",
+    [
+        "youtube",
+        "youtube_live_default",
+        "youtube_live_24_hour",
+        "youtube_live_12_hour",
+    ],
+)
+def test_youtube_moderation_message_without_timing_is_not_blank(
+    formatter: ItemFormatter,
+    format_name: str,
+) -> None:
+    item = {
+        "action_type": "remove_chat_item",
+        "message": None,
+        "message_type": "ban_user",
+        "target_message_id": "message-id",
+    }
+
+    result = formatter.format(item, format_name=format_name)
+
+    assert result == "[Message removed: message-id]"
+
+
 def test_youtube_live_system_format_keeps_authored_message_separator(
     formatter: ItemFormatter,
 ) -> None:

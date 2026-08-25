@@ -17,15 +17,25 @@
     },
     "youtube_live_default": [
         {
-            "matching": [
-                "viewer_engagement_message",
-                "deleted_message",
-                "ban_user"
-            ],
+            "matching": "viewer_engagement_message",
             "template": "{timestamp|time_text}{message}",
             "inherit": "default",
             "keys": {
                 "message": "{}"
+            }
+        },
+        {
+            "matching": [
+                "deleted_message",
+                "ban_user"
+            ],
+            "template": "{timestamp|time_text}{message|target_message_id|author.id|action_type}",
+            "inherit": "default",
+            "keys": {
+                "message": "{}",
+                "target_message_id": "[Message removed: {}]",
+                "author.id": "[Messages removed for author: {}]",
+                "action_type": "[Moderation action: {}]"
             }
         },
         {
@@ -44,11 +54,7 @@
     },
     "youtube_live_24_hour": [
         {
-            "matching": [
-                "viewer_engagement_message",
-                "deleted_message",
-                "ban_user"
-            ],
+            "matching": "viewer_engagement_message",
             "template": "{timestamp|time_text}{message}",
             "inherit": "default",
             "keys": {
@@ -56,6 +62,23 @@
                     "format": "%H:%M"
                 },
                 "message": "{}"
+            }
+        },
+        {
+            "matching": [
+                "deleted_message",
+                "ban_user"
+            ],
+            "template": "{timestamp|time_text}{message|target_message_id|author.id|action_type}",
+            "inherit": "default",
+            "keys": {
+                "timestamp": {
+                    "format": "%H:%M"
+                },
+                "message": "{}",
+                "target_message_id": "[Message removed: {}]",
+                "author.id": "[Messages removed for author: {}]",
+                "action_type": "[Moderation action: {}]"
             }
         },
         {
@@ -80,11 +103,7 @@
     },
     "youtube_live_12_hour": [
         {
-            "matching": [
-                "viewer_engagement_message",
-                "deleted_message",
-                "ban_user"
-            ],
+            "matching": "viewer_engagement_message",
             "template": "{timestamp|time_text}{message}",
             "inherit": "default",
             "keys": {
@@ -93,6 +112,24 @@
                     "format": "%I:%M %p"
                 },
                 "message": "{}"
+            }
+        },
+        {
+            "matching": [
+                "deleted_message",
+                "ban_user"
+            ],
+            "template": "{timestamp|time_text}{message|target_message_id|author.id|action_type}",
+            "inherit": "default",
+            "keys": {
+                "timestamp": {
+                    "template": "{} | ",
+                    "format": "%I:%M %p"
+                },
+                "message": "{}",
+                "target_message_id": "[Message removed: {}]",
+                "author.id": "[Messages removed for author: {}]",
+                "action_type": "[Moderation action: {}]"
             }
         },
         {
@@ -119,15 +156,25 @@
     },
     "youtube":[
         {
-            "matching":[
-                "viewer_engagement_message",
-                "deleted_message",
-                "ban_user"
-            ],
+            "matching":"viewer_engagement_message",
             "template":"{time_text|timestamp}{message}",
             "inherit": "default",
             "keys": {
                 "message": "{}"
+            }
+        },
+        {
+            "matching":[
+                "deleted_message",
+                "ban_user"
+            ],
+            "template":"{time_text|timestamp}{message|target_message_id|author.id|action_type}",
+            "inherit": "default",
+            "keys": {
+                "message": "{}",
+                "target_message_id": "[Message removed: {}]",
+                "author.id": "[Messages removed for author: {}]",
+                "action_type": "[Moderation action: {}]"
             }
         }
     ],

@@ -10,6 +10,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Render YouTube moderation events without message text as informative notices
+  instead of blank lines in text output.
 - Render authorless YouTube live system events without a dangling author
   separator in the default, 24-hour, and 12-hour text formats.
 - Preserve signed capture-relative timing for YouTube messages received from

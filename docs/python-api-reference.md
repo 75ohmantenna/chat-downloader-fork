@@ -179,10 +179,12 @@ protocol-relative inputs beginning with `//` are normalized to HTTPS.
 
 For YouTube live chats, the site default text format renders absolute
 timestamps before elapsed replay offsets and omits the author separator for
-authorless system events. Live `time_in_seconds` and `time_text` values are
-relative to capture startup: messages returned in the initial backlog use
-negative values, while later messages use positive values. Replay chats keep
-the standard elapsed-time rendering.
+authorless system events. Moderation events without message text render a
+bracketed notice containing the removed-message or affected-author identifier
+when available. Live `time_in_seconds` and `time_text` values are relative to
+capture startup: messages returned in the initial backlog use negative values,
+while later messages use positive values. Replay chats keep the standard
+elapsed-time rendering.
 
 Kick VOD offsets are relative to the recording start and are clamped to its
 duration. Kick live channel URLs reject `start_time` and `end_time` because the
