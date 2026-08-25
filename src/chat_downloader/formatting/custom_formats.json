@@ -178,6 +178,118 @@
             }
         }
     ],
+    "kick": [
+        {
+            "matching": "message_deleted",
+            "template": "{timestamp|time_text}{metadata.deleted_message_id|message_type}",
+            "inherit": "default",
+            "keys": {
+                "metadata.deleted_message_id": "[Message deleted: {}]",
+                "message_type": "[Message deleted]"
+            }
+        },
+        {
+            "matching": "user_banned",
+            "template": "{timestamp|time_text}{metadata.user.username|metadata.user.id|message_type}",
+            "inherit": "default",
+            "keys": {
+                "metadata.user.username": "[User banned: {}]",
+                "metadata.user.id": "[User banned: {}]",
+                "message_type": "[User banned]"
+            }
+        },
+        {
+            "matching": "user_unbanned",
+            "template": "{timestamp|time_text}{metadata.user.username|metadata.user.id|message_type}",
+            "inherit": "default",
+            "keys": {
+                "metadata.user.username": "[User unbanned: {}]",
+                "metadata.user.id": "[User unbanned: {}]",
+                "message_type": "[User unbanned]"
+            }
+        },
+        {
+            "matching": "chat_clear",
+            "template": "{timestamp|time_text}{message_type}",
+            "inherit": "default",
+            "keys": {
+                "message_type": "[Chat cleared]"
+            }
+        },
+        {
+            "matching": "pinned_message_deleted",
+            "template": "{timestamp|time_text}{metadata.unpinned_message_id|message_type}",
+            "inherit": "default",
+            "keys": {
+                "metadata.unpinned_message_id": "[Pinned message removed: {}]",
+                "message_type": "[Pinned message removed]"
+            }
+        },
+        {
+            "matching": "pinned_message",
+            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "inherit": "default",
+            "keys": {
+                "message_type": "[Pinned message]",
+                "author.badges": {
+                    "template": " ({})",
+                    "separator": ", "
+                },
+                "author.display_name": " {}",
+                "author.name": " {}",
+                "message": " — {}"
+            }
+        },
+        {
+            "matching": "subscription",
+            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "inherit": "default",
+            "keys": {
+                "message_type": "[Subscription]",
+                "author.badges": {
+                    "template": " ({})",
+                    "separator": ", "
+                },
+                "author.display_name": " {}",
+                "author.name": " {}",
+                "message": " — {}"
+            }
+        },
+        {
+            "matching": "gifted_subscriptions",
+            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "inherit": "default",
+            "keys": {
+                "message_type": "[Gifted subscriptions]",
+                "author.badges": {
+                    "template": " ({})",
+                    "separator": ", "
+                },
+                "author.display_name": " {}",
+                "author.name": " {}",
+                "message": " — {}"
+            }
+        },
+        {
+            "matching": "stream_host",
+            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "inherit": "default",
+            "keys": {
+                "message_type": "[Stream host]",
+                "author.badges": {
+                    "template": " ({})",
+                    "separator": ", "
+                },
+                "author.display_name": " {}",
+                "author.name": " {}",
+                "message": " — {}"
+            }
+        },
+        {
+            "matching": "all",
+            "inherit": "default"
+        }
+    ],
     "twitch": [
         {
             "matching": [

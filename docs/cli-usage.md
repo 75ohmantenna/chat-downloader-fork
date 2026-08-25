@@ -86,6 +86,10 @@ Twitch text output preserves system-event descriptions for subscription,
 raid, and unraid messages. JSONL remains the lossless structured format when
 downstream processing needs provider-specific metadata.
 
+Kick text output labels subscription, pin, host, and moderation events. Events
+without ordinary message text render a bracketed notice instead of a blank
+line; JSONL retains their structured identifiers and metadata.
+
 YouTube text output renders moderation events without message text as a
 bracketed notice. The notice identifies the removed message or affected author
 when YouTube supplies that identifier, instead of writing a blank line.

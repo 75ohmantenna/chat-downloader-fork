@@ -288,6 +288,10 @@ The default message group surfaces only `messages`. Use, for example,
 `--message_groups messages subscriptions moderation` to capture non-text
 events.
 
+Kick's default text formatter labels subscription, pin, host, and moderation
+events. Empty-message events such as deletions and chat clears render bracketed
+notices rather than blank lines.
+
 ## Cloudflare Dependency
 
 The REST endpoints sit behind Cloudflare. `http_session.py` uses a three-tier

@@ -48,7 +48,7 @@ def test_rejects_non_channel_urls(url: str) -> None:
 
 def test_site_metadata() -> None:
     assert KickChatDownloader._NAME == "kick.com"
-    assert KickChatDownloader._SITE_DEFAULT_PARAMS["format"] == "default"
+    assert KickChatDownloader._SITE_DEFAULT_PARAMS["format"] == "kick"
 
 
 def test_downloader_close_releases_both_http_sessions(monkeypatch: Any) -> None:

@@ -42,7 +42,7 @@ class KickChatDownloader(BaseChatDownloader):
     _NAME = "kick.com"
 
     _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
-        "format": "default",
+        "format": "kick",
     }
 
     _VALID_URLS: ClassVar[dict[str, str]] = VALID_URLS
