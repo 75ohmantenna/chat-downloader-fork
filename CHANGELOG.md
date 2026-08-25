@@ -10,6 +10,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Preserve millisecond replay offsets when YouTube ticker items embed a paid
+  message renderer with rounded display time, keeping paired JSONL records
+  chronologically aligned.
 - Stop advertising YouTube's transient `placeholder` message group and
   `placeholder_item` type, which the parser intentionally ignores and could
   never emit.

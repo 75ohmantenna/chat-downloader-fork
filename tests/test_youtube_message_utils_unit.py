@@ -472,6 +472,96 @@ def test_parse_item_generates_time_text_from_time_in_seconds(
     assert result["message"] is None
 
 
+def test_parse_item_preserves_authoritative_wrapper_timing_pair(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message.build_remapping",
+        lambda: {"timeText": "time_text"},
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
+        [],
+    )
+
+    result = _parse_item(
+        {
+            "outerRenderer": {
+                "showItemEndpoint": {
+                    "showLiveChatItemEndpoint": {
+                        "renderer": {
+                            "nestedRenderer": {"timeText": "0:09"},
+                        },
+                    },
+                },
+            },
+        },
+        info={"time_in_seconds": 5.25},
+        preserve_wrapper_time=True,
+    )
+
+    assert result["time_in_seconds"] == 5.25
+    assert result["time_text"] == "0:05"
+
+
+def test_parse_item_does_not_treat_empty_nested_shell_as_timing_merge(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message.build_remapping",
+        dict,
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
+        [],
+    )
+
+    result = _parse_item(
+        {
+            "outerRenderer": {
+                "showItemEndpoint": {
+                    "showLiveChatItemEndpoint": {
+                        "renderer": {"nestedRenderer": {}},
+                    },
+                },
+            },
+        },
+        info={"time_in_seconds": 5.25, "time_text": "0:02"},
+        preserve_wrapper_time=True,
+    )
+
+    assert result["time_in_seconds"] == 5.25
+    assert result["time_text"] == "0:02"
+
+
+def test_parse_item_preserves_authoritative_zero_wrapper_time(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message.build_remapping",
+        lambda: {"timeText": "time_text"},
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
+        [],
+    )
+
+    result = _parse_item(
+        {
+            "outerRenderer": {
+                "showItemEndpoint": {
+                    "showLiveChatItemEndpoint": {
+                        "renderer": {
+                            "nestedRenderer": {"timeText": "0:09"},
+                        },
+                    },
+                },
+            },
+        },
+        info={"time_in_seconds": 0},
+        preserve_wrapper_time=True,
+    )
+
+    assert result["time_in_seconds"] == 0
+    assert result["time_text"] == "0:00"
+
+
 def test_parse_video_uses_overlay_style_or_default() -> None:
     live_video = _parse_video(
         {

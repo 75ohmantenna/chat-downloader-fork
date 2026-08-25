@@ -230,17 +230,33 @@ def _merge_nested_renderers(
     item_info: JSONDict,
     offset: float,
     depth: int,
+    *,
+    preserve_wrapper_time: bool,
 ) -> None:
     """Recursively merge showItemEndpoint and header renderers into *info*."""
+    wrapper_time = info.get("time_in_seconds")
+    merged_nested_renderer = False
     item_endpoint = get_dict(item_info, "showItemEndpoint")
     if item_endpoint:
         renderer = multi_get(item_endpoint, "showLiveChatItemEndpoint", "renderer")
         if renderer:
-            info.update(_parse_item(renderer, offset=offset, depth=depth + 1))
+            nested_info = _parse_item(renderer, offset=offset, depth=depth + 1)
+            if nested_info:
+                info.update(nested_info)
+                merged_nested_renderer = True
 
     header = get_dict(item_info, "header")
     if header:
-        info.update(_parse_item(header, offset=offset, depth=depth + 1))
+        nested_info = _parse_item(header, offset=offset, depth=depth + 1)
+        if nested_info:
+            info.update(nested_info)
+            merged_nested_renderer = True
+
+    # Replay wrappers carry millisecond precision; nested UI renderers expose
+    # only rounded display text and must not replace the authoritative offset.
+    if preserve_wrapper_time and wrapper_time is not None and merged_nested_renderer:
+        info["time_in_seconds"] = wrapper_time
+        info["time_text"] = seconds_to_time(wrapper_time)
 
 
 def _parse_item(
@@ -248,6 +264,8 @@ def _parse_item(
     info: dict[str, Any] | None = None,
     offset: float = 0,
     depth: int = 0,
+    *,
+    preserve_wrapper_time: bool = False,
 ) -> dict[str, Any]:
     """Parse a YouTube chat item recursively."""
     if info is None:
@@ -267,7 +285,13 @@ def _parse_item(
         r.remap(info, remapping, key, value)
 
     _apply_colour_keys(info, item_info, colour_keys)
-    _merge_nested_renderers(info, item_info, offset, depth)
+    _merge_nested_renderers(
+        info,
+        item_info,
+        offset,
+        depth,
+        preserve_wrapper_time=preserve_wrapper_time,
+    )
     _normalize_author(info)
     _reconcile_time_fields(info, offset)
 

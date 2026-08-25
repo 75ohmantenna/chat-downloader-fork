@@ -93,6 +93,9 @@ line; JSONL retains their structured identifiers and metadata.
 YouTube text output renders moderation events without message text as a
 bracketed notice. The notice identifies the removed message or affected author
 when YouTube supplies that identifier, instead of writing a blank line.
+YouTube JSONL retains both the main and ticker forms of paid events; replay
+pairs share the precise provider offset even when the ticker's nested display
+text is rounded to whole seconds. TXT output emits one semantic paid event.
 
 Output names may contain `{title}` and `{id}` placeholders. Metadata is
 sanitized before substitution. Duplicate targets are removed after expansion,

@@ -1,0 +1,62 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "item": {
+                    "liveChatPaidMessageRenderer": {
+                      "id": "paid-1",
+                      "purchaseAmountText": {
+                        "simpleText": "R$10.00"
+                      },
+                      "timestampText": {
+                        "simpleText": "18:57"
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "1137252"
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addLiveChatTickerItemAction": {
+                  "item": {
+                    "liveChatTickerPaidMessageItemRenderer": {
+                      "id": "paid-1",
+                      "showItemEndpoint": {
+                        "showLiveChatItemEndpoint": {
+                          "renderer": {
+                            "liveChatPaidMessageRenderer": {
+                              "id": "paid-1",
+                              "purchaseAmountText": {
+                                "simpleText": "R$10.00"
+                              },
+                              "timestampText": {
+                                "simpleText": "18:57"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "1137252"
+          }
+        }
+      ],
+      "continuations": []
+    }
+  }
+}

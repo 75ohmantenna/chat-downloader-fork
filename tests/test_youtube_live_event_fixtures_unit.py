@@ -123,6 +123,30 @@ def test_IzopCEgh2G8_first_live_poll_fixture_parses_text_and_summary_banner() ->
     assert "Chat summary" in summary["message"]
 
 
+def test_replay_paid_ticker_fixture_preserves_shared_precise_offset() -> None:
+    payload = _load_payload("youtube-replay-paid-ticker-shared-offset.json")
+    result = parse_continuation_response(payload)
+    all_filter = MessageFilter(
+        _MESSAGE_GROUPS,
+        groups_to_add=["all"],
+        types_to_add=None,
+    )
+
+    parsed = []
+    for action in result.actions:
+        pipeline_result = process_pipeline_action(action, 0, all_filter, None)
+        assert pipeline_result.message is not None
+        parsed.append(pipeline_result.message)
+
+    assert [item["message_type"] for item in parsed] == [
+        "paid_message",
+        "ticker_paid_message_item",
+    ]
+    assert [item["message_id"] for item in parsed] == ["paid-1", "paid-1"]
+    assert [item["time_in_seconds"] for item in parsed] == [1137.252, 1137.252]
+    assert [item["time_text"] for item in parsed] == ["18:57", "18:57"]
+
+
 def test_mobile_element_chat_fixture_parses_through_real_pipeline() -> None:
     payload = _load_payload("youtube-CH0uI-v2Cbc-mobile-element-chat.json")
     result = parse_continuation_response(payload)

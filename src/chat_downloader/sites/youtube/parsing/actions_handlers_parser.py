@@ -35,7 +35,12 @@ def _handle_item_action(
     original_item = multi_get(action, original_action_type, _PATH_ITEM)
     original_item = _normalize_modern_element_item(original_item)
     original_message_type = try_get_first_key(original_item)
-    data = _parse_item(original_item, data, offset)
+    data = _parse_item(
+        original_item,
+        data,
+        offset,
+        preserve_wrapper_time="time_in_seconds" in data,
+    )
     return (data, original_item, original_message_type, original_action_type)
 
 
