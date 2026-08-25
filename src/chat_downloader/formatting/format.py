@@ -221,7 +221,7 @@ class ItemFormatter:
         for field_path in fallback_keys:
             value = multi_get(item, *field_path.split("."))
 
-            if value is None:
+            if value is None or value == "":
                 continue
 
             return self._format_field_value(field_path, value, format_keys)

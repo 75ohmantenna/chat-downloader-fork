@@ -240,6 +240,59 @@ def test_format_twitch_subscription_type(formatter: ItemFormatter) -> None:
     assert isinstance(result, str)
 
 
+@pytest.mark.parametrize(
+    ("fields", "expected_suffix"),
+    [
+        ({"system_message": "Raid arrived!"}, "Raid arrived!"),
+        ({"message": "Hello chat"}, "raider — Hello chat"),
+        (
+            {"system_message": "Raid arrived!", "message": "Hello chat"},
+            "Raid arrived! — Hello chat",
+        ),
+        (
+            {"system_message": "", "raider_name": "explicit-raider"},
+            "explicit-raider",
+        ),
+        ({}, "raider"),
+    ],
+)
+@pytest.mark.parametrize("message_type", ["raid", "unraid"])
+def test_format_twitch_raid_types_preserve_details_and_fallbacks(
+    formatter: ItemFormatter,
+    message_type: str,
+    fields: dict[str, str],
+    expected_suffix: str,
+) -> None:
+    item = {
+        "message_type": message_type,
+        "author": {"name": "raider"},
+        "timestamp": 1000000,
+        **fields,
+    }
+
+    result = formatter.format(item, format_name="twitch")
+
+    assert result.endswith(expected_suffix)
+
+
+@pytest.mark.parametrize("message_type", ["raid", "unraid"])
+def test_format_twitch_raid_types_prefer_raider_identity(
+    formatter: ItemFormatter,
+    message_type: str,
+) -> None:
+    item = {
+        "message_type": message_type,
+        "raider_display_name": "Explicit Raider",
+        "raider_name": "explicit-raider",
+        "author": {"name": "event-author"},
+        "timestamp": 1000000,
+    }
+
+    result = formatter.format(item, format_name="twitch")
+
+    assert result.endswith("Explicit Raider")
+
+
 def test_format_twitch_fallback_to_all(formatter: ItemFormatter) -> None:
     """_match_format_from_list falls through to the 'all' matcher."""
     item = {
@@ -411,6 +464,20 @@ def test_replace_placeholder_fallback_keys() -> None:
 
     result = fmt._replace_placeholder(FakMatch(), item, {})
     assert result == "DisplayUser"
+
+
+def test_replace_placeholder_empty_string_uses_fallback() -> None:
+    """An empty preferred field must not suppress a populated fallback."""
+    fmt = ItemFormatter()
+    item = {"author": {"display_name": "", "name": "user"}}
+
+    class FakMatch:
+        def group(self, n) -> str:
+            return "author.display_name|author.name"
+
+    result = fmt._replace_placeholder(FakMatch(), item, {})
+
+    assert result == "user"
 
 
 def test_replace_placeholder_all_missing() -> None:

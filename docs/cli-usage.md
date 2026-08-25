@@ -82,6 +82,10 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
 Other extensions, including `.json` and `.csv`, are unsupported. Output paths
 must end in `.jsonl` or `.txt`.
 
+Twitch text output preserves system-event descriptions for subscription,
+raid, and unraid messages. JSONL remains the lossless structured format when
+downstream processing needs provider-specific metadata.
+
 Output names may contain `{title}` and `{id}` placeholders. Metadata is
 sanitized before substitution. Duplicate targets are removed after expansion,
 path resolution, and existing-file identity checks, so aliases and hard links

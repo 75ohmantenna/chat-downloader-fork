@@ -114,6 +114,18 @@
         },
         {
             "matching": [
+                "raid",
+                "unraid"
+            ],
+            "template": "{time_text|timestamp}{author.badges}{system_message|raider_display_name|raider_name|author.display_name|author.name}{message}",
+            "inherit": "default",
+            "keys": {
+                "system_message": "{}",
+                "message": " — {}"
+            }
+        },
+        {
+            "matching": [
                 "highlighted_message"
             ],
             "template": "{time_text|timestamp}[HIGHLIGHTED] {author.badges}{author.display_name|author.name}{message}",
