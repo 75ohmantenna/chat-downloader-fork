@@ -12,6 +12,7 @@ from chat_downloader.utils.json_types import (
     JSONDict,
     JSONList,
     get_dict,
+    get_int,
     get_list,
     get_str,
 )
@@ -86,7 +87,7 @@ def _parse_runs(run_info: object, *, parse_links: bool = True) -> dict[str, Any]
     return message_info
 
 
-def _parse_thumbnails(item: JSONList | JSONDict) -> list[dict[str, Any]]:
+def _parse_thumbnails(item: JSONList | JSONDict) -> list[JSONDict]:
     """Parse thumbnail/image data from YouTube objects."""
     # sometimes thumbnails come as a list
     if isinstance(item, list):
@@ -97,13 +98,28 @@ def _parse_thumbnails(item: JSONList | JSONDict) -> list[dict[str, Any]]:
     if not isinstance(item, dict):
         return []
 
-    thumbnails = get_list(item, "thumbnails")
-    final = [Image(**x).json() for x in thumbnails if isinstance(x, dict)]  # type: ignore[arg-type]
+    final: list[JSONDict] = []
+    for thumbnail in get_list(item, "thumbnails"):
+        if not isinstance(thumbnail, dict):
+            continue
+        url = get_str(thumbnail, "url")
+        if not url.strip():
+            continue
+        final.append(
+            Image(
+                url,
+                width=get_int(thumbnail, "width") or None,
+                height=get_int(thumbnail, "height") or None,
+            ).json()
+        )
 
     if final:
         final.insert(
             0,
-            Image(_get_source_image_url(final[0]["url"]), image_id="source").json(),
+            Image(
+                _get_source_image_url(get_str(final[0], "url")),
+                image_id="source",
+            ).json(),
         )
 
     return final

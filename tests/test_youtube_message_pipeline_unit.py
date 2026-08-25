@@ -241,3 +241,46 @@ def test_process_pipeline_action_yields_valid_message(monkeypatch) -> None:
 
     assert result.disposition == "yield"
     assert result.message == {"message": "hello:5"}
+
+
+def test_process_pipeline_action_tolerates_thumbnail_shape_drift() -> None:
+    result = process_pipeline_action(
+        {
+            "addChatItemAction": {
+                "item": {
+                    "liveChatTextMessageRenderer": {
+                        "id": "message-1",
+                        "timestampUsec": "1700000000000000",
+                        "authorName": {"simpleText": "Author"},
+                        "authorPhoto": {
+                            "thumbnails": [
+                                {
+                                    "url": "https://img.example/avatar=s32",
+                                    "width": 32,
+                                    "height": 32,
+                                    "newField": "ignored",
+                                },
+                                {"width": 64, "height": 64},
+                            ]
+                        },
+                        "message": {"runs": [{"text": "hello"}]},
+                    }
+                }
+            }
+        },
+        0,
+        cast("MessageFilter", _DummyMessageFilter()),
+        None,
+    )
+
+    assert result.disposition == "yield"
+    assert result.message is not None
+    assert result.message["author"]["images"] == [
+        {"url": "https://img.example/avatar", "id": "source"},
+        {
+            "url": "https://img.example/avatar=s32",
+            "width": 32,
+            "height": 32,
+            "id": "32x32",
+        },
+    ]

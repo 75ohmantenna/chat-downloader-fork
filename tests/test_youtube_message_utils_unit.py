@@ -215,6 +215,34 @@ def test_thumbnail_and_action_button_helpers_parse_expected_shapes() -> None:
     assert _parse_action_button({}) == {"url": "", "text": ""}
 
 
+def test_parse_thumbnails_skips_malformed_entries_and_unknown_fields() -> None:
+    assert _parse_thumbnails(
+        {
+            "thumbnails": [
+                {
+                    "url": "//img.example/thumb=s24",
+                    "width": 24,
+                    "height": 24,
+                    "newField": "ignored",
+                },
+                {"width": 48, "height": 48},
+                {"url": None},
+                {"url": 123},
+                {"url": "   "},
+                "not-an-object",
+            ],
+        }
+    ) == [
+        {"url": "https://img.example/thumb", "id": "source"},
+        {
+            "url": "https://img.example/thumb=s24",
+            "width": 24,
+            "height": 24,
+            "id": "24x24",
+        },
+    ]
+
+
 def test_parse_badges_and_currency_cover_icon_and_fallback_paths(
     monkeypatch,
 ) -> None:
