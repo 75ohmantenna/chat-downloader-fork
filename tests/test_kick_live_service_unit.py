@@ -324,6 +324,50 @@ def test_get_chat_by_channel_emits_preloaded_then_live() -> None:
         assert ids == ["preloaded-1", "preloaded-2", "live-1"]
 
 
+def test_get_chat_by_channel_default_transport_binds_diagnostics() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    transports: list[FakeTransport] = []
+    callbacks: list[Any] = []
+
+    def transport_factory(*, diagnostic_callback: Any) -> FakeTransport:
+        callbacks.append(diagnostic_callback)
+        transport = FakeTransport()
+        transports.append(transport)
+        return transport
+
+    frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {"id": "live", "type": "message", "content": "message"},
+    )
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service,
+            "KickPusherTransport",
+            side_effect=transport_factory,
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            frame_iterator=make_frame_iterator([[frame]]),
+        )
+        assert [message["message_id"] for message in chat.chat] == ["live"]
+
+    assert len(transports) == 1
+    assert len(callbacks) == 1
+    callbacks[0]("invalid_websocket_frame_count")
+    assert chat.diagnostics["websocket_frame_count"] == 1
+    assert chat.diagnostics["invalid_websocket_frame_count"] == 1
+
+
 def test_successful_frame_capture_requires_explicit_scope_opt_in(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
