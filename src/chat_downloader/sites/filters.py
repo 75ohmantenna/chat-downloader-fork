@@ -4,9 +4,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from chat_downloader.errors import InvalidParameter
+
+if TYPE_CHECKING:
+    from chat_downloader.models import ChatRequest
 
 
 class MessageFilter:
@@ -39,6 +42,18 @@ class MessageFilter:
             for group_name in groups_to_add:
                 types.update(message_groups_dict.get(group_name, []))
             self._valid_types = types
+
+    @classmethod
+    def from_request(
+        cls,
+        message_groups_dict: dict[str, list[str]],
+        request: ChatRequest,
+    ) -> MessageFilter:
+        """Build a filter from the normalized fields of a chat request."""
+        groups = (
+            request.message_groups if isinstance(request.message_groups, list) else None
+        )
+        return cls(message_groups_dict, groups, request.message_types or [])
 
     def should_add(self, item: dict[str, Any]) -> bool:
         """Return True if the item passes the filter."""

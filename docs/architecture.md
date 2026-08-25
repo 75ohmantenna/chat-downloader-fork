@@ -126,9 +126,8 @@ non-`__init__.py` module remains represented.
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
 | `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
 | `config_guards.py` | Explicit/environment proxy and cookie-authentication safety validation |
-| `runner.py` | Top-level run loop and cleanup |
+| `runner.py` | Top-level run loop, testing-mode selection, and cleanup |
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
-| `testing.py` | Test-mode helpers |
 
 ### `output/`
 | Module | Purpose |
@@ -156,9 +155,7 @@ non-`__init__.py` module remains represented.
 #### `constants_*.py`
 | Module | Purpose |
 |--------|---------|
-| `constants_actions_continuations.py` | Chat continuation token and action-wrapper key constants |
 | `constants_actions_messages_core.py` | Core action-dict path keys for extracting message items |
-| `constants_actions_messages_list.py` | Derived action-type lists assembled from the core constants |
 | `constants_message.py` | Large remapping table for normalizing YouTube chat message fields |
 | `constants_patterns.py` | URL patterns, API endpoint strings, and miscellaneous regex |
 
@@ -178,7 +175,7 @@ non-`__init__.py` module remains represented.
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |
 | `continuation.py` | The cohesive continuation loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`) as methods; stateless composables (`_process_actions`, `_advance_continuation_loop`, `_raise_if_api_error`, `_profiled_innertube_context`) stay at module scope. `_get_chat_messages` is the factory the mixin calls |
 | `continuation_helpers.py` | Pure, downloader-independent helpers: `ContinuationLoopState`, `build_continuation_params`, `update_state_from_result`, live-timing/poll-delay/URL/filter builders |
-| `continuations.py` | Continuation response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
+| `continuations.py` | Continuation token-key definitions and response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
 
 #### Other YouTube modules
 | Module | Purpose |
@@ -224,6 +221,7 @@ non-`__init__.py` module remains represented.
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
 | `errors.py` | `KickError`, `KickServerError` |
 | `parsing/events.py` | Pusher frame dispatch to typed event parsers |
+| `parsing/common_fields.py` | Shared scalar, timestamp, author, and badge normalization for Kick events |
 | `parsing/messages.py` | Chat message normalization (text messages) |
 | `parsing/emotes.py` | Inline emote marker parsing and structured metadata |
 | `parsing/subscriptions.py` | Subscription and gifted-subscription event normalization |
@@ -238,7 +236,7 @@ non-`__init__.py` module remains represented.
 | Guardrail | Where |
 |-----------|-------|
 | Import-layering contracts | `pyproject.toml [tool.importlinter]`; enforced by `uv run lint-imports` (wired into `make lint`). Includes site independence, the `utils`/`models` leaf rules, and the provider-neutral contract keeping `runtime`/`output`/`formatting` free of concrete site packages |
-| Public-API snapshot | `tests/test_public_api_unit.py` — frozen `__all__` sets for `chat_downloader` and `chat_downloader.models`; any intentional surface change must update the snapshot in the same commit |
+| Public-API snapshot | `tests/test_public_api_unit.py` — frozen `__all__` sets for `chat_downloader`, `chat_downloader.models`, `chat_downloader.errors`, and `chat_downloader.sites`; any intentional surface change must update the snapshot in the same commit |
 | Module-size gate | `tests/test_module_size_unit.py` — 400-line ceiling on all source modules (allowlist for intentional data tables and cohesive modules); fails on future bloat |
 | McCabe complexity | `ruff C9` rule, gate = 10; intrinsically branchy transport loops carry `# noqa: C901` with rationale |
 | 100% line coverage | `pyproject.toml [tool.coverage.report]`; enforced by `make coverage` / `make ci` |

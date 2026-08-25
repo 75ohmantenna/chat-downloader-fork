@@ -12,8 +12,11 @@ import contextlib
 from typing import Any
 
 from chat_downloader.errors import ParsingError
-from chat_downloader.sites.kick.parsing.messages import _opt_str, _parse_author
-from chat_downloader.utils.time_utils import timestamp_to_microseconds
+from chat_downloader.sites.kick.parsing.common_fields import (
+    _opt_str,
+    _parse_author,
+    _parse_timestamp,
+)
 
 
 def _extract_pinned_message(
@@ -41,12 +44,9 @@ def _extract_pinned_message(
     if sender:
         metadata["pinned_by"] = sender
 
-    pinned_created_at = raw_message.get("created_at")
-    if isinstance(pinned_created_at, str) and pinned_created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            metadata["pinned_message_created_at"] = timestamp_to_microseconds(
-                pinned_created_at,
-            )
+    pinned_created_at = _parse_timestamp(raw_message.get("created_at"))
+    if pinned_created_at is not None:
+        metadata["pinned_message_created_at"] = pinned_created_at
 
 
 def parse_pinned_message_created_event(raw: object) -> dict[str, Any]:
@@ -77,10 +77,9 @@ def parse_pinned_message_created_event(raw: object) -> dict[str, Any]:
         "message": "",
     }
 
-    created_at = raw.get("created_at")
-    if isinstance(created_at, str) and created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            info["timestamp"] = timestamp_to_microseconds(created_at)
+    timestamp = _parse_timestamp(raw.get("created_at"))
+    if timestamp is not None:
+        info["timestamp"] = timestamp
 
     metadata: dict[str, Any] = {}
 
@@ -125,10 +124,9 @@ def parse_pinned_message_deleted_event(raw: object) -> dict[str, Any]:
         "message": "",
     }
 
-    created_at = raw.get("created_at")
-    if isinstance(created_at, str) and created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            info["timestamp"] = timestamp_to_microseconds(created_at)
+    timestamp = _parse_timestamp(raw.get("created_at"))
+    if timestamp is not None:
+        info["timestamp"] = timestamp
 
     raw_message = raw.get("message")
     if isinstance(raw_message, dict):

@@ -331,6 +331,11 @@ Common exceptions:
 If you are writing an integration, catch `ChatDownloaderError` at the top level
 and handle narrower subclasses only when you need custom recovery behavior.
 
+`TwitchError` remains exported for compatibility with earlier releases. Current
+Twitch paths classify failures with narrower shared exceptions such as
+`VideoUnavailable`, `UserNotFound`, `NoChatReplay`, and `ParsingError`; callers
+should not rely on new Twitch failures being wrapped in `TwitchError`.
+
 ## Top-Level Exports
 
 Import these names directly from `chat_downloader`:

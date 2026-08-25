@@ -10,30 +10,31 @@ from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
 
 
+def _normalize_limit(limit: int | float | str | None) -> int:
+    """Return a bounded-cache limit while preserving legacy fallback rules."""
+    try:
+        normalized_limit = int(limit) if limit is not None else -1
+    except (TypeError, ValueError):
+        normalized_limit = -1
+
+    if normalized_limit == 0:
+        return DEFAULT_MAX_SEEN_MESSAGE_IDS
+    if normalized_limit > 0:
+        return normalized_limit
+
+    log(
+        "warning",
+        f"_SeenMessageCache: ignoring invalid limit {limit!r}; "
+        f"falling back to default {DEFAULT_MAX_SEEN_MESSAGE_IDS}.",
+    )
+    return DEFAULT_MAX_SEEN_MESSAGE_IDS
+
+
 class _SeenMessageCache:
     """Track recently seen message IDs with bounded FIFO eviction."""
 
     def __init__(self, limit: int = DEFAULT_MAX_SEEN_MESSAGE_IDS) -> None:
-        try:
-            normalized_limit = int(limit)
-        except (TypeError, ValueError):
-            log(
-                "warning",
-                f"_SeenMessageCache: ignoring invalid limit {limit!r}; "
-                f"falling back to default {DEFAULT_MAX_SEEN_MESSAGE_IDS}.",
-            )
-            normalized_limit = DEFAULT_MAX_SEEN_MESSAGE_IDS
-        else:
-            if normalized_limit < 0:
-                log(
-                    "warning",
-                    f"_SeenMessageCache: ignoring invalid limit {limit!r}; "
-                    f"falling back to default {DEFAULT_MAX_SEEN_MESSAGE_IDS}.",
-                )
-                normalized_limit = DEFAULT_MAX_SEEN_MESSAGE_IDS
-            elif normalized_limit == 0:
-                normalized_limit = DEFAULT_MAX_SEEN_MESSAGE_IDS
-        self.limit = normalized_limit
+        self.limit = _normalize_limit(limit)
         self.message_ids: OrderedDict[str, None] = OrderedDict()
         self.evictions = 0
 

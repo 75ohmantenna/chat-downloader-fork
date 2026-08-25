@@ -329,11 +329,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     transport_factory = transport_factory or KickPusherTransport
     frame_iterator = frame_iterator or read_frames
 
-    msg_filter = MessageFilter(
-        MESSAGE_GROUPS,
-        request.message_groups if isinstance(request.message_groups, list) else None,
-        request.message_types or [],
-    )
+    msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     seen_message_cache = _SeenMessageCache(limit=_KICK_LIVE_SEEN_MESSAGE_LIMIT)
 
     def emit(message: dict[str, Any]) -> bool:

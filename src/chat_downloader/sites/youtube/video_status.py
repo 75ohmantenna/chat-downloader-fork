@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 from typing import Any
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.time_utils import parse_iso8601
 
@@ -27,8 +28,6 @@ def parse_video_details(
     video_type: str = "video",
 ) -> VideoDetails:
     """Parse player-response and initial-data into :class:`VideoDetails`."""
-    from chat_downloader.errors import ParsingError
-
     streaming_data = player_response_info.get("streamingData") or {}
     first_format: dict[str, Any] = (
         multi_get(streaming_data, "adaptiveFormats", 0)

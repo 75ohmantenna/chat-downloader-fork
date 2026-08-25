@@ -113,6 +113,3 @@ _VIDEO_TYPE_REMAPPING = {
     "shorts": "shorts",
     "live": "streams",
 }
-
-# Consent ID regex
-_CONSENT_ID_REGEX = r"PENDING\+(\d+)"

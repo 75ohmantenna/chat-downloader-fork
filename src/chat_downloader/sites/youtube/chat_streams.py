@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.time_utils import ensure_seconds
 
@@ -55,8 +56,6 @@ class YouTubeChatStreamsMixin:
         clip_end_time = initial_info.get("clip_end_time")
 
         if clip_start_time is None or clip_end_time is None:
-            from chat_downloader.errors import ParsingError
-
             msg = f"Could not determine clip time range for clip {clip_id!r}"
             raise ParsingError(msg)
 

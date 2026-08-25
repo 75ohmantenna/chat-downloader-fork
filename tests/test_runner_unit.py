@@ -19,9 +19,11 @@ from chat_downloader.errors import (
     ParsingError,
     SiteNotSupported,
 )
+from chat_downloader.models import RunConfig
 from chat_downloader.runtime.runner import (
     SITE_CHANGE_ERROR_HINT,
     _classify_run_error,
+    _configure_testing_mode,
     _finalize_run,
     create_message_callback,
     execute_run,
@@ -269,11 +271,11 @@ def test_execute_run_passes_dedup_cache_size_to_message_callback() -> None:
 
 
 def test_execute_run_applies_typed_run_debug_controls(monkeypatch) -> None:
-    captured_modes: list[dict[str, bool]] = []
+    captured_modes: list[str] = []
 
     monkeypatch.setattr(
-        "chat_downloader.runtime.runner.setup_testing_mode",
-        lambda kwargs: captured_modes.append(dict(kwargs)),
+        "chat_downloader.runtime.runner.set_testing_mode",
+        lambda mode: captured_modes.append(mode.name),
     )
 
     execute_run(
@@ -282,7 +284,7 @@ def test_execute_run_applies_typed_run_debug_controls(monkeypatch) -> None:
         pause_on_debug=False,
     )
 
-    assert captured_modes == [{"exit_on_debug": True, "pause_on_debug": False}]
+    assert captured_modes == ["EXIT_ON_DEBUG"]
 
 
 def test_execute_run_closes_chat_when_iteration_is_interrupted() -> None:
@@ -600,35 +602,31 @@ def test_execute_run_propagates_keyboard_interrupt_when_requested() -> None:
         ({}, "NONE"),
     ],
 )
-def test_setup_testing_mode_sets_expected_mode(
+def test_configure_testing_mode_sets_expected_mode(
     monkeypatch, kwargs, expected_mode
 ) -> None:
-    seen_modes = []
+    seen_modes: list[str] = []
 
     monkeypatch.setattr(
-        "chat_downloader.runtime.testing.set_testing_mode",
+        "chat_downloader.runtime.runner.set_testing_mode",
         lambda mode: seen_modes.append(mode.name),
     )
 
-    from chat_downloader.runtime.testing import setup_testing_mode
-
-    setup_testing_mode(kwargs)
+    _configure_testing_mode(RunConfig.from_kwargs(**kwargs))
 
     assert seen_modes == [expected_mode]
 
 
-def test_setup_testing_mode_resets_to_none_when_no_flags(monkeypatch) -> None:
-    """setup_testing_mode must reset to NONE when neither flag is set."""
-    seen_modes = []
+def test_configure_testing_mode_resets_to_none_when_no_flags(monkeypatch) -> None:
+    """Testing mode must reset to NONE when neither flag is set."""
+    seen_modes: list[str] = []
 
     monkeypatch.setattr(
-        "chat_downloader.runtime.testing.set_testing_mode",
+        "chat_downloader.runtime.runner.set_testing_mode",
         lambda mode: seen_modes.append(mode.name),
     )
 
-    from chat_downloader.runtime.testing import setup_testing_mode
-
-    setup_testing_mode({"exit_on_debug": True})
-    setup_testing_mode({})
+    _configure_testing_mode(RunConfig(exit_on_debug=True))
+    _configure_testing_mode(RunConfig())
 
     assert seen_modes == ["EXIT_ON_DEBUG", "NONE"]

@@ -196,7 +196,6 @@ def _build_continuation_urls(
 
 def _build_message_filters(
     params: ChatRequest,
-    messages_types_to_add: list[str],
     *,
     is_replay: bool,
     start_time: float | None,
@@ -204,16 +203,7 @@ def _build_message_filters(
     offset: float | None,
 ) -> tuple[MessageFilter, TimeRangeFilter | None]:
     """Assemble the message-group filter and optional replay time filter."""
-    messages_groups_to_add = (
-        []
-        if messages_types_to_add
-        else (params.message_groups if isinstance(params.message_groups, list) else [])
-    )
-    msg_filter = MessageFilter(
-        _MESSAGE_GROUPS,
-        messages_groups_to_add or None,
-        messages_types_to_add,
-    )
+    msg_filter = MessageFilter.from_request(_MESSAGE_GROUPS, params)
     time_filter = (
         TimeRangeFilter(
             start_time,

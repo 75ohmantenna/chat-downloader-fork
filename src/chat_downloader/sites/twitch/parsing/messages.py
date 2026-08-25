@@ -31,7 +31,9 @@ from chat_downloader.sites.twitch.parsing.message_irc_resolve import (
     _set_message_type,
 )
 from chat_downloader.sites.twitch.remappings import (
+    build_comment_remapping,
     build_game_remapping,
+    build_irc_remapping,
     build_user_remapping,
 )
 from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
@@ -175,8 +177,6 @@ def _parse_item(
     Returns:
         Parsed comment dictionary
     """
-    from chat_downloader.sites.twitch.remappings import build_comment_remapping
-
     comment_remapping = build_comment_remapping()
 
     info: dict[str, Any] = {}
@@ -223,8 +223,6 @@ def _parse_irc_item(
     Returns:
         Parsed IRC message dictionary
     """
-    from chat_downloader.sites.twitch.remappings import build_irc_remapping
-
     irc_remapping = build_irc_remapping()
     info = _parse_irc_tags(match.group(1).split(";"), irc_remapping)
 

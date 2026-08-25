@@ -10,7 +10,12 @@ from typing import TYPE_CHECKING, Any, Protocol
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import RequestException
 
-from chat_downloader.debugging import TestingException, log
+from chat_downloader.debugging import (
+    TestingException,
+    TestingModes,
+    log,
+    set_testing_mode,
+)
 from chat_downloader.errors import (
     ChatDownloaderError,
     ChatGeneratorError,
@@ -20,7 +25,6 @@ from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
 from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
 
 from .cli_bridge import categorize_parameters
-from .testing import setup_testing_mode
 
 SITE_CHANGE_ERROR_HINT = (
     "This usually means the site response changed. Re-run with "
@@ -35,6 +39,16 @@ if TYPE_CHECKING:
 
 class _ClosableDownloader(Protocol):
     def close(self) -> None: ...
+
+
+def _configure_testing_mode(run_config: RunConfig) -> None:
+    """Apply the debug testing mode represented by a typed run config."""
+    if run_config.exit_on_debug:
+        set_testing_mode(TestingModes.EXIT_ON_DEBUG)
+    elif run_config.pause_on_debug:
+        set_testing_mode(TestingModes.PAUSE_ON_DEBUG)
+    else:
+        set_testing_mode(TestingModes.NONE)
 
 
 def _classify_run_error(e: Exception) -> str:
@@ -134,12 +148,7 @@ def execute_run(
     init_params, chat_params, run_params = categorize_parameters(kwargs)
     run_config = RunConfig.from_kwargs(**run_params)
 
-    setup_testing_mode(
-        {
-            "exit_on_debug": run_config.exit_on_debug,
-            "pause_on_debug": run_config.pause_on_debug,
-        },
-    )
+    _configure_testing_mode(run_config)
     downloader = None
     result = RunResult()
     chat = None

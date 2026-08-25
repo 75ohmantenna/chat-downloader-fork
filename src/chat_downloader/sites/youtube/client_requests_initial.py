@@ -9,7 +9,12 @@ from typing import TYPE_CHECKING, Any, cast
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
-from chat_downloader.errors import CaptchaChallengeRequired, RetriesExceeded
+from chat_downloader.errors import (
+    CaptchaChallengeRequired,
+    ParsingError,
+    RetriesExceeded,
+    VideoNotFound,
+)
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.retry_utils import RetryPolicy
 from chat_downloader.utils.string_utils import (
@@ -102,8 +107,6 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                 title = get_title_of_webpage(html)
                 error_message = title or f"HTTP {response.status_code}"
                 if response.status_code == 404:
-                    from chat_downloader.errors import VideoNotFound
-
                     raise VideoNotFound(error_message)
                 if response.status_code in (403, 429):
                     _raise_if_challenge_response(
@@ -150,8 +153,6 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
 
             if not yt_initial_data:
                 log("debug", f"HTML ({len(html)} chars): {html[:500]}")
-                from chat_downloader.errors import ParsingError
-
                 msg = "Unable to parse initial video data"
                 raise ParsingError(msg)
 

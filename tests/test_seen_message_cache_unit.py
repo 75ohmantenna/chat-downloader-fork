@@ -33,7 +33,17 @@ def test_seen_message_cache_warns_on_invalid_limit(
         cache = _SeenMessageCache(limit=bad_limit)  # type: ignore[arg-type]
 
     assert cache.limit == DEFAULT_MAX_SEEN_MESSAGE_IDS
-    assert any("ignoring invalid limit" in record.message for record in caplog.records)
+    warnings = [
+        record.message
+        for record in caplog.records
+        if "_SeenMessageCache: ignoring invalid limit" in record.message
+    ]
+    assert warnings == [
+        (
+            f"_SeenMessageCache: ignoring invalid limit {bad_limit!r}; "
+            f"falling back to default {DEFAULT_MAX_SEEN_MESSAGE_IDS}."
+        )
+    ]
 
 
 def test_seen_message_cache_zero_limit_silent_fallback_to_default(

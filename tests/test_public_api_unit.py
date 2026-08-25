@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import chat_downloader
-from chat_downloader import models
+from chat_downloader import errors, models, sites
 
 EXPECTED_TOP_LEVEL: frozenset[str] = frozenset(
     {
@@ -75,6 +75,50 @@ EXPECTED_MODELS: frozenset[str] = frozenset(
     }
 )
 
+EXPECTED_ERRORS: frozenset[str] = frozenset(
+    {
+        "CaptchaChallengeRequired",
+        "ChatDisabled",
+        "ChatDownloaderError",
+        "ChatGeneratorError",
+        "CookieError",
+        "FormatError",
+        "FormatFileNotFound",
+        "FormatNotFound",
+        "IncompleteContinuationError",
+        "InvalidParameter",
+        "InvalidURL",
+        "LoginRequired",
+        "NoChatReplay",
+        "NoContinuation",
+        "NoVideos",
+        "ParsingError",
+        "RetriesExceeded",
+        "SiteError",
+        "SiteNotSupported",
+        "URLNotProvided",
+        "UserNotFound",
+        "VideoNotFound",
+        "VideoUnavailable",
+        "VideoUnplayable",
+    }
+)
+
+EXPECTED_SITES: frozenset[str] = frozenset(
+    {
+        "BaseChatDownloader",
+        "Chat",
+        "Image",
+        "KickChatDownloader",
+        "KickError",
+        "Remapper",
+        "TwitchChatDownloader",
+        "TwitchError",
+        "YouTubeChatDownloader",
+        "get_all_sites",
+    }
+)
+
 
 def test_top_level_public_surface_is_stable() -> None:
     assert set(chat_downloader.__all__) == EXPECTED_TOP_LEVEL
@@ -86,3 +130,15 @@ def test_models_public_surface_is_stable() -> None:
     assert set(models.__all__) == EXPECTED_MODELS
     for name in EXPECTED_MODELS:
         assert hasattr(models, name), name
+
+
+def test_errors_public_surface_is_stable() -> None:
+    assert set(errors.__all__) == EXPECTED_ERRORS
+    for name in EXPECTED_ERRORS:
+        assert hasattr(errors, name), name
+
+
+def test_sites_public_surface_is_stable() -> None:
+    assert set(sites.__all__) == EXPECTED_SITES
+    for name in EXPECTED_SITES:
+        assert hasattr(sites, name), name

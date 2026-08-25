@@ -11,8 +11,11 @@ import contextlib
 from typing import Any
 
 from chat_downloader.errors import ParsingError
-from chat_downloader.sites.kick.parsing.messages import _opt_str, _parse_author
-from chat_downloader.utils.time_utils import timestamp_to_microseconds
+from chat_downloader.sites.kick.parsing.common_fields import (
+    _opt_str,
+    _parse_author,
+    _parse_timestamp,
+)
 
 
 def _extract_host_metadata(raw_meta: object) -> dict[str, Any]:
@@ -74,10 +77,9 @@ def parse_stream_host_event(raw: object) -> dict[str, Any]:
         "message": content if isinstance(content, str) else "",
     }
 
-    created_at = raw.get("created_at")
-    if isinstance(created_at, str) and created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            info["timestamp"] = timestamp_to_microseconds(created_at)
+    timestamp = _parse_timestamp(raw.get("created_at"))
+    if timestamp is not None:
+        info["timestamp"] = timestamp
 
     author = _parse_author(raw.get("sender"))
     if author:

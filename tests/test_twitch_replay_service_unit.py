@@ -182,7 +182,11 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
         patch.object(
             _replay_vod_loop, "TimeRangeFilter", return_value=fake_time_filter
         ),
-        patch.object(_replay_vod_loop, "MessageFilter", return_value=fake_msg_filter),
+        patch.object(
+            _replay_vod_loop.MessageFilter,
+            "from_request",
+            return_value=fake_msg_filter,
+        ),
         patch.object(replay_service, "_parse_item", side_effect=parsed_messages),
         patch.object(
             replay_service,

@@ -17,9 +17,14 @@ from chat_downloader.utils.json_types import (
     get_str,
 )
 
-from .constants_actions_continuations import (
-    _KNOWN_CHAT_CONTINUATIONS,
-    _KNOWN_SEEK_CONTINUATIONS,
+_KNOWN_SEEK_CONTINUATIONS: frozenset[str] = frozenset({"playerSeekContinuationData"})
+_KNOWN_CHAT_CONTINUATIONS: frozenset[str] = frozenset(
+    {
+        "invalidationContinuationData",
+        "liveChatReplayContinuationData",
+        "reloadContinuationData",
+        "timedContinuationData",
+    }
 )
 
 

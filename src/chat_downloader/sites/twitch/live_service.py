@@ -85,11 +85,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     """Yield live IRC chat messages for a stream."""
     irc_factory = irc_factory or TwitchChatIRC
     message_generator = message_generator or get_chat_messages_by_stream_id
-    msg_filter = MessageFilter(
-        MESSAGE_GROUPS,
-        request.message_groups if isinstance(request.message_groups, list) else None,
-        request.message_types or [],
-    )
+    msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
 
     def create_connection() -> TwitchChatIRC:
         connect_timeout = getattr(downloader, "_http_timeout", (10.0, 30.0))[0]

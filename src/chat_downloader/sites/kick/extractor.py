@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from chat_downloader.errors import UserNotFound
 from chat_downloader.sites.base import BaseChatDownloader
 
 from .api_client import KickApiClient
@@ -47,14 +46,6 @@ class KickChatDownloader(BaseChatDownloader):
     }
 
     _VALID_URLS: ClassVar[dict[str, str]] = VALID_URLS
-
-    _TESTS: ClassVar[list[dict[str, Any]]] = [
-        {
-            "name": "Offline Kick channels fail clearly.",
-            "params": {"url": "https://kick.com/somelikelyofflinechannel"},
-            "expected_result": {"error": UserNotFound},
-        },
-    ]
 
     def __init__(self, **kwargs: object) -> None:
         """Initialize base HTTP state and an isolated Kick API session."""

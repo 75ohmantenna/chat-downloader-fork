@@ -42,39 +42,6 @@ class _InitializationDummy(YouTubeVideoInitializationMixin):
         return SimpleNamespace(text="<html></html>")
 
 
-def test_video_metadata_wrapper_methods_delegate_to_mapper(monkeypatch) -> None:
-    from chat_downloader.sites.youtube import video_metadata
-
-    age_gate_calls = []
-    unplayable_calls = []
-
-    def fake_is_age_gated(player_response) -> bool:
-        age_gate_calls.append(player_response)
-        return True
-
-    def fake_is_unplayable(player_response) -> bool:
-        unplayable_calls.append(player_response)
-        return False
-
-    monkeypatch.setattr(
-        video_metadata,
-        "_mapper_is_age_gated",
-        fake_is_age_gated,
-    )
-    monkeypatch.setattr(
-        video_metadata,
-        "_mapper_is_unplayable",
-        fake_is_unplayable,
-    )
-
-    player_response = {"playabilityStatus": {"status": "LOGIN_REQUIRED"}}
-
-    assert YouTubeVideoMetadataCoreMixin._is_age_gated(player_response) is True
-    assert YouTubeVideoMetadataCoreMixin._is_unplayable(player_response) is False
-    assert age_gate_calls == [player_response]
-    assert unplayable_calls == [player_response]
-
-
 def test_parse_video_data_uses_watch_url_and_serializes_video_details(
     monkeypatch,
 ) -> None:

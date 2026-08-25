@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from chat_downloader.errors import InvalidParameter
+from chat_downloader.models import ChatRequest
 from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 
 _MESSAGE_GROUPS = {
@@ -171,6 +172,42 @@ def test_all_keyword_in_types() -> None:
 def test_missing_message_type_in_filter() -> None:
     f = MessageFilter(_FILTER_GROUPS, groups_to_add=["messages"])
     assert not f.should_add({"author": "test"})
+
+
+def test_filter_from_request_ignores_unresolved_site_default() -> None:
+    request = ChatRequest(url="https://example.com")
+    f = MessageFilter.from_request(_FILTER_GROUPS, request)
+    assert f.should_add({"message_type": "unknown"})
+
+
+def test_filter_from_request_uses_explicit_groups() -> None:
+    request = ChatRequest(
+        url="https://example.com",
+        message_groups=["messages"],
+    )
+    f = MessageFilter.from_request(_FILTER_GROUPS, request)
+    assert f.should_add({"message_type": "text_message"})
+    assert not f.should_add({"message_type": "paid_message"})
+
+
+def test_filter_from_request_types_override_groups() -> None:
+    request = ChatRequest(
+        url="https://example.com",
+        message_groups=["all"],
+        message_types=["paid_message"],
+    )
+    f = MessageFilter.from_request(_FILTER_GROUPS, request)
+    assert f.should_add({"message_type": "paid_message"})
+    assert not f.should_add({"message_type": "text_message"})
+
+
+def test_filter_from_request_rejects_unknown_group() -> None:
+    request = ChatRequest(
+        url="https://example.com",
+        message_groups=["unknown"],
+    )
+    with pytest.raises(InvalidParameter, match="Invalid groups specified"):
+        MessageFilter.from_request(_FILTER_GROUPS, request)
 
 
 # ---------------------------------------------------------------------------

@@ -355,7 +355,6 @@ class _ContinuationLoop:
         check_for_invalid_types(messages_types_to_add, _MESSAGE_TYPES)
         msg_filter, time_filter = _build_message_filters(
             params,
-            messages_types_to_add,
             is_replay=is_replay,
             start_time=start_time,
             end_time=end_time,

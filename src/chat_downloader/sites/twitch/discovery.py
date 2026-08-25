@@ -8,6 +8,7 @@ import base64
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
+from chat_downloader.errors import UserNotFound
 from chat_downloader.sites.remap import (
     Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
 )
@@ -102,8 +103,6 @@ def _extract_user_videos(
 ) -> JSONDict | None:
     """Validate user existence and return the videos dict, or None to break."""
     if multi_get(info, 0, "data", "user", "id") == "":
-        from chat_downloader.errors import UserNotFound
-
         msg = f'Channel "{username}" not found'
         raise UserNotFound(msg)
     videos: JSONDict | None = multi_get(info, 0, "data", "user", "videos")

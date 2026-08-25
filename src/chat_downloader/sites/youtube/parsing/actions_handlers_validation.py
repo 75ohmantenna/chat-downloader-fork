@@ -11,9 +11,6 @@ from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_ACTION_TYPES,
 )
-from chat_downloader.sites.youtube.constants_actions_messages_list import (
-    _KNOWN_IGNORE_MESSAGE_TYPES,
-)
 from chat_downloader.sites.youtube.constants_message import (
     known_keys,
 )
@@ -30,6 +27,10 @@ _MODE_ICON_TO_TYPE: dict[str, str] = {
     "SUBSCRIBERS_ONLY": "subscribers_only_mode_message",
     "EMOTE_ONLY": "emote_only_mode_message",
 }
+
+_KNOWN_IGNORE_MESSAGE_TYPES: frozenset[str] = frozenset(
+    {"liveChatPlaceholderItemRenderer"}
+)
 
 
 def _emit_parse_diagnostics(

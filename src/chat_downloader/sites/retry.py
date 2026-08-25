@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import RetriesExceeded
+from chat_downloader.utils.conversion_utils import attempts
 from chat_downloader.utils.retry_utils import RetryPolicy
 from chat_downloader.utils.string_utils import get_title_of_webpage
 from chat_downloader.utils.timed_generator import polling_sleep
@@ -24,8 +25,6 @@ def _attempt_numbers(max_attempts: int) -> range:
         raise RetriesExceeded(
             msg,
         )
-    from chat_downloader.utils.conversion_utils import attempts
-
     return attempts(max_attempts)
 
 

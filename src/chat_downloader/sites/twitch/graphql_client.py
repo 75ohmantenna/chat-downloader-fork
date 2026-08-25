@@ -11,7 +11,15 @@ from typing import TYPE_CHECKING, Any, cast
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
-from chat_downloader.errors import CaptchaChallengeRequired
+from chat_downloader.errors import (
+    CaptchaChallengeRequired,
+    LoginRequired,
+    ParsingError,
+    VideoNotFound,
+    VideoUnavailable,
+    VideoUnplayable,
+)
+from chat_downloader.metadata import __version__
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_list, get_str
 from chat_downloader.utils.string_utils import contains_any_hint
@@ -87,14 +95,6 @@ def _handle_gql_errors(
     operation_names: list[str] | None = None,
 ) -> None:
     """Handle GraphQL errors by mapping them to downloader exceptions."""
-    from chat_downloader.errors import (
-        LoginRequired,
-        ParsingError,
-        VideoNotFound,
-        VideoUnavailable,
-        VideoUnplayable,
-    )
-
     if not errors:
         return
 
@@ -161,9 +161,6 @@ def _download_gql(
         if operation_name not in OPERATION_HASHES
     ]
     if missing_operation_names:
-        from chat_downloader.errors import ParsingError
-        from chat_downloader.metadata import __version__
-
         missing_text = ", ".join(missing_operation_names)
         msg = (
             "Missing Twitch persisted GraphQL hash mapping for "

@@ -17,8 +17,6 @@ from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
-from .playability import is_age_gated as _mapper_is_age_gated
-from .playability import is_unplayable as _mapper_is_unplayable
 from .video_status import parse_video_details, video_details_to_dict
 
 if TYPE_CHECKING:
@@ -30,16 +28,6 @@ if TYPE_CHECKING:
 
 class YouTubeVideoMetadataCoreMixin:
     """Methods for parsing and exposing base YouTube video metadata."""
-
-    @staticmethod
-    def _is_age_gated(player_response_info: JSONDict) -> bool:
-        """Check if video is age-gated based on yt-dlp implementation."""
-        return _mapper_is_age_gated(player_response_info)
-
-    @staticmethod
-    def _is_unplayable(player_response_info: JSONDict) -> bool:
-        """Check if video is marked as unplayable based on yt-dlp mapping."""
-        return _mapper_is_unplayable(player_response_info)
 
     def _parse_video_data(
         self,

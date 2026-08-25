@@ -209,7 +209,7 @@ def test_base_downloader_exposes_session_interface_and_rotation_warning(
     assert [level for level, _ in logs].count("debug") == 1
 
 
-def test_base_downloader_cookie_profile_and_json_interface(monkeypatch) -> None:
+def test_base_downloader_cookie_and_profile_interface(monkeypatch) -> None:
     fake = _FakeSession()
     monkeypatch.setattr("chat_downloader.sites.session.requests.Session", lambda: fake)
     downloader = BaseChatDownloader(request_profile="youtube_web")
@@ -218,11 +218,7 @@ def test_base_downloader_cookie_profile_and_json_interface(monkeypatch) -> None:
     assert downloader.get_session_headers("X-Test") == "1"
     assert downloader.apply_request_profile("youtube_web") is True
     downloader.set_cookie_value(".example.com", "sid", "abc", path="/watch")
-    assert downloader._get_cookies_dict() == {"sid": "abc"}
     assert downloader.get_cookie_value("sid") == "abc"
-    assert downloader._session_get_json("https://example.com/json")["url"].endswith(
-        "/json"
-    )
     downloader.clear_cookies()
     assert downloader.get_cookie_value("sid") is None
     with pytest.raises(TypeError):

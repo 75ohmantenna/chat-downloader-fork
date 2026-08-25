@@ -321,7 +321,6 @@ def test_build_continuation_urls_replay() -> None:
 def test_build_message_filters_live_no_time_filter() -> None:
     msg_filter, time_filter = _build_message_filters(
         ChatRequest(url="https://www.youtube.com/watch?v=abc"),
-        [],
         is_replay=False,
         start_time=None,
         end_time=None,
@@ -334,7 +333,6 @@ def test_build_message_filters_live_no_time_filter() -> None:
 def test_build_message_filters_replay_has_time_filter() -> None:
     _msg_filter, time_filter = _build_message_filters(
         ChatRequest(url="https://www.youtube.com/watch?v=abc"),
-        [],
         is_replay=True,
         start_time=0.0,
         end_time=None,
@@ -352,7 +350,6 @@ def test_build_message_filters_types_override_groups() -> None:
     )
     msg_filter, _ = _build_message_filters(
         params,
-        ["paid_message"],
         is_replay=False,
         start_time=None,
         end_time=None,
@@ -370,7 +367,6 @@ def test_build_message_filters_groups_non_list_yields_empty() -> None:
     )
     msg_filter, _ = _build_message_filters(
         params,
-        [],
         is_replay=False,
         start_time=None,
         end_time=None,

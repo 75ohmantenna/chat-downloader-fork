@@ -12,7 +12,7 @@ from chat_downloader.sites.youtube import constants_message as cm
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_ACTION_TYPES,
 )
-from chat_downloader.sites.youtube.constants_actions_messages_list import (
+from chat_downloader.sites.youtube.parsing.actions_handlers_validation import (
     _KNOWN_IGNORE_MESSAGE_TYPES,
 )
 from chat_downloader.utils.string_utils import (

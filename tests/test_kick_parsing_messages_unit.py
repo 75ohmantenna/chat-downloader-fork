@@ -57,8 +57,9 @@ def test_missing_content_yields_empty_message() -> None:
     assert "emotes" not in msg
 
 
-def test_invalid_timestamp_is_omitted() -> None:
-    msg = parse_chat_message({"id": "x", "created_at": "not-a-date"})
+@pytest.mark.parametrize("created_at", ["", "not-a-date", 123])
+def test_invalid_timestamp_is_omitted(created_at: object) -> None:
+    msg = parse_chat_message({"id": "x", "created_at": created_at})
     assert "timestamp" not in msg
 
 

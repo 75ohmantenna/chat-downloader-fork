@@ -5,15 +5,10 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Any, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.debugging import log
-from chat_downloader.errors import (
-    InvalidURL,
-    SiteNotSupported,
-    URLNotProvided,
-)
-from chat_downloader.models import SiteDefault
+from chat_downloader.models import SiteDefault, coerce_chat_request
 
 from .retry import retry as perform_retry
 from .session import ChatDownloaderSession, CookieSpec
@@ -24,7 +19,6 @@ if TYPE_CHECKING:
     import requests
 
     from chat_downloader.models import ChatRequest
-    from chat_downloader.utils.json_types import JSONAny
 
 
 class BaseChatDownloader:
@@ -44,57 +38,6 @@ class BaseChatDownloader:
         "message_groups": ["messages"],
         "format": "default",
     }
-
-    _TESTS: ClassVar[list[dict[str, Any]]] = [
-        {
-            "name": "Inactivity timeout",
-            "params": {
-                "url": "https://twitch.tv/xenova",
-                "inactivity_timeout": 5,
-                "timeout": 20,
-            },
-            "expected_result": {
-                "chat_condition": lambda chat: bool(chat.id and chat.title),
-            },
-        },
-        {
-            "name": "Get a certain number of messages from a livestream.",
-            "params": {
-                "url": "https://www.youtube.com/watch?v=wXspodtIxYU",
-                "max_messages": 10,
-                "timeout": 60,
-            },
-            "expected_result": {
-                "messages_condition": lambda messages: 0 < len(messages) <= 10,
-            },
-        },
-        {
-            "name": "Scheme not supplied",
-            "params": {
-                "url": "www.youtube.com/watch?v=wXspodtIxYU",
-                "max_messages": 10,
-                "timeout": 60,
-            },
-            "expected_result": {
-                "messages_condition": lambda messages: 0 < len(messages) <= 10,
-            },
-        },
-        {
-            "name": "No URL provided.",
-            "params": {"url": ""},
-            "expected_result": {"error": URLNotProvided},
-        },
-        {
-            "name": "Site not supported",
-            "params": {"url": "https://www.example.com"},
-            "expected_result": {"error": SiteNotSupported},
-        },
-        {
-            "name": "Invalid URL",
-            "params": {"url": "#"},
-            "expected_result": {"error": InvalidURL},
-        },
-    ]
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialise session state for the downloader instance."""
@@ -163,9 +106,6 @@ class BaseChatDownloader:
         """Remove all cookies from the active HTTP session."""
         self._http.clear_cookies()
 
-    def _get_cookies_dict(self) -> dict[str, str]:
-        return self._http.cookies_dict()
-
     def set_cookie_value(
         self,
         domain: str,
@@ -227,9 +167,6 @@ class BaseChatDownloader:
         self._check_cookie_rotation()
         return response
 
-    def _session_get_json(self, url: str, **kwargs: Any) -> JSONAny:
-        return cast("JSONAny", self._session_get(url, **kwargs).json())
-
     def get_site_value(self, value: Any) -> Any:
         """Resolve a ``SiteDefault`` marker to its concrete value.
 
@@ -269,8 +206,6 @@ class BaseChatDownloader:
     def _coerce_chat_request(
         params_or_request: ChatRequest | dict[str, Any],
     ) -> ChatRequest:
-        from chat_downloader.models import coerce_chat_request
-
         return coerce_chat_request(params_or_request)
 
     _VALID_URLS: ClassVar[dict[str, str]] = {}

@@ -103,6 +103,8 @@ def test_loopback_proxy_with_cookies_warns_not_raises(
     [
         "http://127.0.0.1:8080",
         "http://localhost:8888",
+        "http://127.5.6.7:8080",
+        "http://[::1]:8080",
     ],
 )
 def test_loopback_proxy_with_cookies_emits_warning(
@@ -137,29 +139,6 @@ def test_spoofed_loopback_proxy_with_cookies_raises(proxy: str, tmp_path) -> Non
 
     with pytest.raises(InvalidParameter):
         ChatDownloader(proxy=proxy, cookies=str(cookie_file))
-
-
-@pytest.mark.parametrize(
-    "proxy",
-    [
-        "http://127.5.6.7:8080",
-        "http://[::1]:8080",
-    ],
-)
-def test_real_loopback_subnet_proxy_with_cookies_warns(
-    proxy: str, tmp_path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """127.0.0.0/8 and ::1 are genuine loopback: warn but allow."""
-    import logging
-
-    cookie_file = tmp_path / "cookies.txt"
-    cookie_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
-
-    with caplog.at_level(logging.WARNING):
-        session = ChatDownloader(proxy=proxy, cookies=str(cookie_file))
-    session.close()
-
-    assert any("local proxy" in r.message for r in caplog.records)
 
 
 @pytest.mark.network

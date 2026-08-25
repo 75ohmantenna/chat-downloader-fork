@@ -9,15 +9,28 @@ from typing import TYPE_CHECKING, Any, cast
 import pytest
 
 from chat_downloader import ChatDownloader
-from chat_downloader.sites import BaseChatDownloader, get_all_sites
+from chat_downloader.sites import (
+    BaseChatDownloader,
+    KickChatDownloader,
+    TwitchChatDownloader,
+    get_all_sites,
+)
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
+from tests.fixtures.extractor_tests import (
+    BASE_EXTRACTOR_TESTS,
+    KICK_EXTRACTOR_TESTS,
+    TWITCH_EXTRACTOR_TESTS,
+)
 from tests.fixtures.youtube.extractor_tests import YOUTUBE_EXTRACTOR_TESTS
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 _SITE_TESTS: dict[type[BaseChatDownloader], list[dict[str, Any]]] = {
+    BaseChatDownloader: BASE_EXTRACTOR_TESTS,
+    KickChatDownloader: KICK_EXTRACTOR_TESTS,
+    TwitchChatDownloader: TWITCH_EXTRACTOR_TESTS,
     YouTubeChatDownloader: YOUTUBE_EXTRACTOR_TESTS,
 }
 
@@ -49,7 +62,7 @@ _ALL_SITE_TESTS = [
         marks=_case_marks(test),
     )
     for site in get_all_sites(include_parent=True)
-    for test in _SITE_TESTS.get(site, getattr(site, "_TESTS", []))
+    for test in _SITE_TESTS[site]
 ]
 
 

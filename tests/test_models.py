@@ -293,17 +293,6 @@ def test_from_kwargs_known_key_mapped() -> None:
     assert req.max_messages == 50
 
 
-def test_from_kwargs_unknown_keys_silently_ignored() -> None:
-    req = ChatRequest.from_kwargs(
-        url="https://youtube.com/watch?v=x",
-        not_a_real_param="oops",
-        another_bogus=42,
-    )
-    assert req.url == "https://youtube.com/watch?v=x"
-    assert not hasattr(req, "not_a_real_param")
-    assert not hasattr(req, "another_bogus")
-
-
 def test_from_kwargs_round_trip_all_fields() -> None:
     original = ChatRequest(
         url="https://youtube.com/watch?v=XYZ",

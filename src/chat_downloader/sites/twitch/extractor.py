@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.debugging import logger
-from chat_downloader.errors import NoChatReplay, SiteError, VideoUnavailable
+from chat_downloader.errors import SiteError
 from chat_downloader.sites.base import BaseChatDownloader
 
 from .constants import VALID_URLS
@@ -64,63 +64,6 @@ class TwitchChatDownloader(BaseChatDownloader):
     }
 
     _VALID_URLS: ClassVar[dict[str, str]] = VALID_URLS
-
-    _TESTS: ClassVar[list[dict[str, Any]]] = [
-        # Live
-        {
-            "name": "Livestream",
-            "params": {"url": "https://www.twitch.tv/xenova", "timeout": 5},
-            "expected_result": {
-                "chat_condition": lambda chat: bool(chat.id and chat.title),
-            },
-        },
-        # Past broadcasts
-        {
-            "name": "Past broadcast with chat replay.",
-            "params": {
-                "url": "https://www.twitch.tv/videos/87136772",
-                "max_messages": 30,
-            },
-            "expected_result": {
-                # Exact message_types would be fragile; check useful invariants
-                # instead.
-                "messages_condition": lambda messages: (
-                    len(messages) <= 30
-                    and any(m.get("message_type") == "text_message" for m in messages)
-                ),
-            },
-        },
-        # Clip
-        {
-            "name": "Clip with chat replay.",
-            "params": {
-                "url": "https://clips.twitch.tv/TrappedFrigidPenguinSeemsGood",
-            },
-            "expected_result": {
-                "message_types": ["text_message"],
-                "messages_condition": lambda messages: len(messages) > 0,
-            },
-        },
-        {
-            "name": (
-                "This clip's past broadcast has expired and chat "
-                "replay is no longer available."
-            ),
-            "params": {
-                "url": ("https://clips.twitch.tv/AverageSparklyTortoisePeoplesChamp"),
-            },
-            "expected_result": {"error": NoChatReplay},
-        },
-        {
-            "name": (
-                "Sorry. Unless you've got a time machine, that content is unavailable."
-            ),
-            "params": {
-                "url": "https://www.twitch.tv/videos/1",
-            },
-            "expected_result": {"error": VideoUnavailable},
-        },
-    ]
 
     def __init__(self, **kwargs: Any) -> None:
         """Initialize TwitchChatDownloader with an owned badge cache."""

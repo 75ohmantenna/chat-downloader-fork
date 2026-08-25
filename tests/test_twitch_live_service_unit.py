@@ -169,14 +169,17 @@ def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -
         {"message_type": "text_message", "message_id": str(index)}
         for index in range(251)
     ]
+    fake_filter = Mock()
+    fake_filter.should_add.side_effect = [False] + [True] * 250
 
     with (
         patch.object(live_service, "log") as mock_log,
-        patch.object(live_service, "MessageFilter") as mock_filter_cls,
+        patch.object(
+            live_service.MessageFilter,
+            "from_request",
+            return_value=fake_filter,
+        ),
     ):
-        fake_filter = Mock()
-        fake_filter.should_add.side_effect = [False] + [True] * 250
-        mock_filter_cls.return_value = fake_filter
         result = list(
             live_service.iter_stream_chat_messages(
                 cast("Any", downloader),

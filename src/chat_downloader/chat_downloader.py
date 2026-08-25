@@ -46,7 +46,7 @@ class ChatDownloader:
     """Main class for downloading chat messages from streaming platforms.
 
     ChatDownloader orchestrates the retrieval of chat messages from
-    various streaming services (YouTube, Twitch). It manages
+    various streaming services (YouTube, Twitch, Kick). It manages
     sessions for each site, handles URL routing, and provides a unified
     interface for chat retrieval with support for filtering, formatting,
     and output options.

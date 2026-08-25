@@ -19,9 +19,8 @@ DEFAULT_CAP = 2
 
 # Baseline captured after Round-03 typing migrations; frozen at Round-10.4 (2026-06).
 # Counts are total occurrences of `Any` in each file (not line count).
-# Files at DEFAULT_CAP or below are omitted — they are implicitly capped.
-# Every entry above DEFAULT_CAP is a genuine payload/accumulator boundary;
-# do not raise these values. Tighten opportunistically alongside typing work.
+# Files omitted here inherit DEFAULT_CAP. Explicit entries may tighten that cap
+# below the default. Do not raise values; tighten them alongside typing work.
 # See docs/maintenance-decisions.md "Distinguish raw JSON from assembled output".
 BASELINE: dict[str, int] = {
     # Format spec objects loaded from JSON config files (dict[str,Any] is the

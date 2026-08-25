@@ -9,12 +9,13 @@ Handles ``App\Events\UserBannedEvent``, ``App\Events\UserUnbannedEvent``,
 
 from __future__ import annotations
 
-import contextlib
 from typing import Any
 
 from chat_downloader.errors import ParsingError
-from chat_downloader.sites.kick.parsing.messages import _opt_str
-from chat_downloader.utils.time_utils import timestamp_to_microseconds
+from chat_downloader.sites.kick.parsing.common_fields import (
+    _opt_str,
+    _parse_timestamp,
+)
 
 
 def _parse_moderator(raw_mod: object) -> dict[str, Any]:
@@ -69,10 +70,9 @@ def parse_user_banned_event(raw: object) -> dict[str, Any]:
         "message": "",
     }
 
-    created_at = raw.get("created_at")
-    if isinstance(created_at, str) and created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            info["timestamp"] = timestamp_to_microseconds(created_at)
+    timestamp = _parse_timestamp(raw.get("created_at"))
+    if timestamp is not None:
+        info["timestamp"] = timestamp
 
     metadata: dict[str, Any] = {}
 
@@ -86,12 +86,11 @@ def parse_user_banned_event(raw: object) -> dict[str, Any]:
 
     expires_at = raw.get("expires_at")
     if expires_at is not None:
-        if (
-            isinstance(expires_at, str) and expires_at
-        ):  # pragma: no cover — string path not hit by fixture
-            with contextlib.suppress(ValueError, TypeError):
-                metadata["expires_at"] = timestamp_to_microseconds(expires_at)
-        else:  # pragma: no cover — non-string path not hit by fixture
+        if isinstance(expires_at, str) and expires_at:
+            parsed_expires_at = _parse_timestamp(expires_at)
+            if parsed_expires_at is not None:
+                metadata["expires_at"] = parsed_expires_at
+        else:
             metadata["expires_at"] = expires_at
 
     if metadata:
@@ -128,10 +127,9 @@ def parse_user_unbanned_event(raw: object) -> dict[str, Any]:
         "message": "",
     }
 
-    created_at = raw.get("created_at")
-    if isinstance(created_at, str) and created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            info["timestamp"] = timestamp_to_microseconds(created_at)
+    timestamp = _parse_timestamp(raw.get("created_at"))
+    if timestamp is not None:
+        info["timestamp"] = timestamp
 
     metadata: dict[str, Any] = {}
 
@@ -177,10 +175,9 @@ def parse_message_deleted_event(raw: object) -> dict[str, Any]:
         "message": "",
     }
 
-    created_at = raw.get("created_at")
-    if isinstance(created_at, str) and created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            info["timestamp"] = timestamp_to_microseconds(created_at)
+    timestamp = _parse_timestamp(raw.get("created_at"))
+    if timestamp is not None:
+        info["timestamp"] = timestamp
 
     raw_message = raw.get("message")
     if isinstance(raw_message, dict):
@@ -219,10 +216,9 @@ def parse_chat_clear_event(raw: object) -> dict[str, Any]:
         "message": "",
     }
 
-    created_at = raw.get("created_at")
-    if isinstance(created_at, str) and created_at:
-        with contextlib.suppress(ValueError, TypeError):
-            info["timestamp"] = timestamp_to_microseconds(created_at)
+    timestamp = _parse_timestamp(raw.get("created_at"))
+    if timestamp is not None:
+        info["timestamp"] = timestamp
 
     chatroom_id = raw.get("chatroom_id")
     if chatroom_id is not None:

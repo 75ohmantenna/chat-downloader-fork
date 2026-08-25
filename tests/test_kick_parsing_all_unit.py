@@ -8,6 +8,8 @@ modules: valid parsing, None/empty/missing-field edge cases.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import pytest
 
 from chat_downloader.errors import ParsingError
@@ -27,6 +29,57 @@ from chat_downloader.sites.kick.parsing.subscriptions import (
     parse_subscription_event,
 )
 from tests.kick_helpers import load_fixture
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+@pytest.mark.parametrize(
+    "parser",
+    [
+        pytest.param(parse_message_deleted_event, id="message-deleted"),
+        pytest.param(parse_pinned_message_created_event, id="pin-created"),
+        pytest.param(parse_pinned_message_deleted_event, id="pin-deleted"),
+        pytest.param(parse_stream_host_event, id="stream-host"),
+    ],
+)
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(None, id="none"),
+        pytest.param(3.14, id="non-object"),
+    ],
+)
+def test_event_parsers_reject_non_object_payloads(
+    parser: Callable[[object], dict[str, Any]],
+    payload: object,
+) -> None:
+    with pytest.raises(ParsingError):
+        parser(payload)
+
+
+@pytest.mark.parametrize(
+    "parser",
+    [
+        parse_subscription_event,
+        parse_gifted_subscriptions_event,
+        parse_user_banned_event,
+        parse_user_unbanned_event,
+        parse_message_deleted_event,
+        parse_chat_clear_event,
+        parse_pinned_message_created_event,
+        parse_pinned_message_deleted_event,
+        parse_stream_host_event,
+    ],
+)
+@pytest.mark.parametrize("created_at", ["", "not-a-date", 123])
+def test_event_parsers_omit_invalid_timestamps(
+    parser: Callable[[object], dict[str, Any]],
+    created_at: object,
+) -> None:
+    message = parser({"id": "x", "created_at": created_at})
+    assert "timestamp" not in message
+
 
 # ── subscription ───────────────────────────────────────────────────────
 
@@ -214,11 +267,6 @@ def test_parse_message_deleted_event() -> None:
     assert msg["metadata"]["deleted_message_id"] == "original-msg-999"
 
 
-def test_message_deleted_none_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_message_deleted_event(None)
-
-
 def test_message_deleted_empty_dict_raises() -> None:
     with pytest.raises(ParsingError):
         parse_message_deleted_event({})
@@ -230,11 +278,6 @@ def test_message_deleted_missing_optional_fields() -> None:
     assert msg["message_type"] == "message_deleted"
     assert "timestamp" not in msg
     assert "metadata" not in msg
-
-
-def test_message_deleted_non_dict_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_message_deleted_event(None)
 
 
 # ── chat_clear ─────────────────────────────────────────────────────────
@@ -289,11 +332,6 @@ def test_parse_pinned_message_created_event() -> None:
     assert msg["metadata"]["duration"] == 120
 
 
-def test_pinned_message_created_none_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_pinned_message_created_event(None)
-
-
 def test_pinned_message_created_empty_dict_raises() -> None:
     with pytest.raises(ParsingError):
         parse_pinned_message_created_event({})
@@ -306,11 +344,6 @@ def test_pinned_message_created_missing_optional_fields() -> None:
     assert msg["message"] == ""
     assert "timestamp" not in msg
     assert "metadata" not in msg
-
-
-def test_pinned_message_created_non_dict_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_pinned_message_created_event(None)
 
 
 # ── pinned_message_deleted ─────────────────────────────────────────────
@@ -326,11 +359,6 @@ def test_parse_pinned_message_deleted_event() -> None:
     assert msg["metadata"]["unpinned_message_id"] == "pinned-msg-001"
 
 
-def test_pinned_message_deleted_none_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_pinned_message_deleted_event(None)
-
-
 def test_pinned_message_deleted_empty_dict_raises() -> None:
     with pytest.raises(ParsingError):
         parse_pinned_message_deleted_event({})
@@ -342,11 +370,6 @@ def test_pinned_message_deleted_missing_optional_fields() -> None:
     assert msg["message_type"] == "pinned_message_deleted"
     assert "timestamp" not in msg
     assert "metadata" not in msg
-
-
-def test_pinned_message_deleted_non_dict_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_pinned_message_deleted_event(None)
 
 
 # ── stream_host ────────────────────────────────────────────────────────
@@ -366,11 +389,6 @@ def test_parse_stream_host_event() -> None:
     assert msg["metadata"]["optional_message"] == "Come check out my stream!"
 
 
-def test_stream_host_none_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_stream_host_event(None)
-
-
 def test_stream_host_empty_dict_raises() -> None:
     with pytest.raises(ParsingError):
         parse_stream_host_event({})
@@ -386,11 +404,6 @@ def test_stream_host_missing_optional_fields() -> None:
     assert "metadata" not in msg
 
 
-def test_stream_host_non_dict_raises() -> None:
-    with pytest.raises(ParsingError):
-        parse_stream_host_event(None)
-
-
 # --- int-id coercion regression (Round-13) -----------------------------------
 # Moderation events can have numeric top-level ids; _opt_str must stringify them.
 
@@ -399,6 +412,28 @@ def test_user_banned_numeric_id_coerced() -> None:
     """parse_user_banned_event accepts a numeric id and stringifies it."""
     msg = parse_user_banned_event({"id": 777})
     assert msg["message_id"] == "777"
+
+
+def test_user_banned_parses_string_expiry() -> None:
+    msg = parse_user_banned_event({"id": "x", "expires_at": "2024-01-01T00:01:00Z"})
+    assert msg["metadata"]["expires_at"] == 1704067260000000
+
+
+def test_user_banned_omits_invalid_string_expiry() -> None:
+    msg = parse_user_banned_event({"id": "x", "expires_at": "not-a-date"})
+    assert "metadata" not in msg
+
+
+def test_user_banned_preserves_empty_string_expiry() -> None:
+    msg = parse_user_banned_event({"id": "x", "expires_at": ""})
+    assert msg["metadata"]["expires_at"] == ""
+
+
+def test_pinned_message_omits_invalid_nested_timestamp() -> None:
+    msg = parse_pinned_message_created_event(
+        {"id": "x", "message": {"id": "pinned", "created_at": "not-a-date"}}
+    )
+    assert "pinned_message_created_at" not in msg["metadata"]
 
 
 def test_user_unbanned_numeric_id_coerced() -> None:
