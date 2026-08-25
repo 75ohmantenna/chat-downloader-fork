@@ -10,6 +10,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Keep paired YouTube paid and ticker replay items aligned in the zero-offset
+  preroll by retaining their signed nested display timing.
 - Ignore malformed, non-finite, and negative YouTube replay-wrapper offsets and
   apply clip rebasing once so nested ticker timing remains usable.
 - Continue across YouTube replay pages that remain just before `start_time`,

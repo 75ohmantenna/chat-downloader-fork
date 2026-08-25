@@ -150,6 +150,63 @@ def test_replay_paid_ticker_fixture_preserves_shared_precise_offset() -> None:
 
 
 @pytest.mark.parametrize(
+    ("clip_offset", "expected_time", "expected_text"),
+    [(0, -15, "-0:15"), (100, -115, "-1:55")],
+)
+def test_replay_paid_ticker_fixture_shares_zero_wrapper_preroll_timing(
+    clip_offset,
+    expected_time,
+    expected_text,
+) -> None:
+    payload = _load_payload("youtube-replay-paid-ticker-shared-offset.json")
+    actions = payload["continuationContents"]["liveChatContinuation"]["actions"]
+    direct_renderer = actions[0]["replayChatItemAction"]["actions"][0][
+        "addChatItemAction"
+    ]["item"]["liveChatPaidMessageRenderer"]
+    ticker_renderer = actions[1]["replayChatItemAction"]["actions"][0][
+        "addLiveChatTickerItemAction"
+    ]["item"]["liveChatTickerPaidMessageItemRenderer"]["showItemEndpoint"][
+        "showLiveChatItemEndpoint"
+    ]["renderer"]["liveChatPaidMessageRenderer"]
+    for action in actions:
+        action["replayChatItemAction"]["videoOffsetTimeMsec"] = "0"
+    for renderer in (direct_renderer, ticker_renderer):
+        renderer["timestampText"]["simpleText"] = "-0:15"
+
+    result = parse_continuation_response(payload)
+    all_filter = MessageFilter(
+        _MESSAGE_GROUPS,
+        groups_to_add=["all"],
+        types_to_add=None,
+    )
+
+    parsed = []
+    for action in result.actions:
+        pipeline_result = process_pipeline_action(
+            action,
+            clip_offset,
+            all_filter,
+            None,
+        )
+        assert pipeline_result.message is not None
+        parsed.append(pipeline_result.message)
+
+    assert [item["message_type"] for item in parsed] == [
+        "paid_message",
+        "ticker_paid_message_item",
+    ]
+    assert [item["message_id"] for item in parsed] == ["paid-1", "paid-1"]
+    assert [item["time_in_seconds"] for item in parsed] == [
+        expected_time,
+        expected_time,
+    ]
+    assert [item["time_text"] for item in parsed] == [
+        expected_text,
+        expected_text,
+    ]
+
+
+@pytest.mark.parametrize(
     "raw_offset",
     ["", "not-a-number", "nan", "inf", "-1", 123, [], True],
 )

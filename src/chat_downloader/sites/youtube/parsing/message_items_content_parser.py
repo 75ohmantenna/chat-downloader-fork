@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from functools import cache
+from math import isfinite
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.sites.remap import (
@@ -251,9 +252,16 @@ def _merge_nested_renderers(
             info.update(nested_info)
             merged_nested_renderer = True
 
-    # Replay wrappers carry millisecond precision; nested UI renderers expose
-    # only rounded display text and must not replace the authoritative offset.
-    if preserve_wrapper_time and wrapper_time is not None and merged_nested_renderer:
+    # Positive replay wrappers carry millisecond precision; zero is the
+    # provider's preroll floor, where nested renderers can retain signed time.
+    if (
+        preserve_wrapper_time
+        and merged_nested_renderer
+        and isinstance(wrapper_time, (int, float))
+        and not isinstance(wrapper_time, bool)
+        and isfinite(wrapper_time)
+        and wrapper_time > 0
+    ):
         info["time_in_seconds"] = wrapper_time
         info["time_text"] = seconds_to_time(wrapper_time)
 

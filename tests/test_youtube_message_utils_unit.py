@@ -532,7 +532,7 @@ def test_parse_item_does_not_treat_empty_nested_shell_as_timing_merge(
     assert result["time_text"] == "0:02"
 
 
-def test_parse_item_preserves_authoritative_zero_wrapper_time(monkeypatch) -> None:
+def test_parse_item_uses_nested_timing_for_zero_wrapper_time(monkeypatch) -> None:
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.constants_message.build_remapping",
         lambda: {"timeText": "time_text"},
@@ -558,8 +558,8 @@ def test_parse_item_preserves_authoritative_zero_wrapper_time(monkeypatch) -> No
         preserve_wrapper_time=True,
     )
 
-    assert result["time_in_seconds"] == 0
-    assert result["time_text"] == "0:00"
+    assert result["time_in_seconds"] == 9
+    assert result["time_text"] == "0:09"
 
 
 def test_parse_video_uses_overlay_style_or_default() -> None:
