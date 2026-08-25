@@ -97,17 +97,20 @@ Twitch text output preserves system-event descriptions for subscription,
 raid, and unraid messages. JSONL remains the lossless structured format when
 downstream processing needs provider-specific metadata.
 
-Custom format field definitions accept a `template` and an optional
-`singular_template`. The singular form is selected only for an exact numeric
-value of one; zero, other numbers, booleans, and numeric strings use the normal
-template.
+Custom format field definitions accept a `template`, optional
+`singular_template`, and optional `omit_if_false`. The singular form is selected
+only for an exact numeric value of one; zero, other numbers, booleans, and
+numeric strings use the normal template. `omit_if_false: true` suppresses the
+field's complete rendered fragment for false, zero, empty, or null values.
 
 Kick text output labels subscription, pin, host, and moderation events. Events
 without ordinary message text render a bracketed notice instead of a blank
 line; JSONL retains their structured identifiers and metadata. When a Kick
 live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
-display fallback.
+display fallback. AI deletion notices retain their AI-moderated marker and
+violated-rule labels in TXT instead of becoming indistinguishable from ordinary
+deletions.
 
 YouTube text output renders moderation events without message text as a
 bracketed notice. The notice identifies the removed message or affected author

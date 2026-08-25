@@ -278,6 +278,11 @@ for item in chat:
 - `TimedGenerator`: generator wrapper that enforces timeout and inactivity
   limits
 
+Custom `ItemFormatter` field definitions may set `omit_if_false: true` to
+suppress the field's whole rendered fragment for false, zero, empty, or null
+values. This supports conditional notices without adding presentation-only
+fields to normalized JSONL records.
+
 The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
 output. JSON-array `.json` output is not supported.

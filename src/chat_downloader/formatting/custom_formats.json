@@ -185,11 +185,20 @@
     "kick": [
         {
             "matching": "message_deleted",
-            "template": "{timestamp|received_timestamp|time_text}{metadata.deleted_message_id|message_type}",
+            "template": "{timestamp|received_timestamp|time_text}{metadata.deleted_message_id|message_type}{metadata.ai_moderated}{metadata.violated_rules}",
             "inherit": "default",
             "keys": {
                 "metadata.deleted_message_id": "[Message deleted: {}]",
-                "message_type": "[Message deleted]"
+                "message_type": "[Message deleted]",
+                "metadata.ai_moderated": {
+                    "template": " [AI moderated]",
+                    "omit_if_false": true
+                },
+                "metadata.violated_rules": {
+                    "template": " (rules: {})",
+                    "separator": ", ",
+                    "omit_if_false": true
+                }
             }
         },
         {

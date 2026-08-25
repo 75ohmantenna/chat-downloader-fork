@@ -59,6 +59,7 @@ class ItemFormatter:
     KEY_SEPARATOR = "separator"
     KEY_SINGULAR_TEMPLATE = "singular_template"
     KEY_COLLAPSE_LEADING_ZEROES = "collapse_leading_zeroes"
+    KEY_OMIT_IF_FALSE = "omit_if_false"
 
     # Special field names that require custom formatting
     FIELD_TIMESTAMP = "timestamp"
@@ -241,6 +242,12 @@ class ItemFormatter:
 
         if field_config is None:
             return str(value)
+        if (
+            isinstance(field_config, dict)
+            and field_config.get(self.KEY_OMIT_IF_FALSE) is True
+            and not value
+        ):
+            return ""
 
         template = self._select_field_template(field_config, value)
         formatted_value = self._apply_field_formatting(field_path, value, field_config)

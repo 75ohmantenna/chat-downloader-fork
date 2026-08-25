@@ -84,6 +84,7 @@ def test_format_constants() -> None:
     assert ItemFormatter.KEY_KEYS == "keys"
     assert ItemFormatter.KEY_MATCHING == "matching"
     assert ItemFormatter.KEY_SINGULAR_TEMPLATE == "singular_template"
+    assert ItemFormatter.KEY_OMIT_IF_FALSE == "omit_if_false"
     assert ItemFormatter.DEFAULT_FORMAT_NAME == "default"
 
 
@@ -541,6 +542,46 @@ def test_extract_template_not_str_or_dict(formatter: ItemFormatter) -> None:
 
     result = formatter._extract_template([])
     assert result == ""
+
+
+@pytest.mark.parametrize("value", [False, 0, "", [], {}, None])
+def test_omit_if_false_suppresses_falsey_field_values(
+    formatter: ItemFormatter,
+    value: object,
+) -> None:
+    result = formatter.format(
+        {"value": value},
+        format_object={
+            "template": "before{value}after",
+            "keys": {
+                "value": {
+                    "template": " [{}]",
+                    "omit_if_false": True,
+                }
+            },
+        },
+    )
+
+    assert result == "beforeafter"
+
+
+def test_omit_if_false_preserves_truthy_constant_template(
+    formatter: ItemFormatter,
+) -> None:
+    result = formatter.format(
+        {"value": True},
+        format_object={
+            "template": "before{value}after",
+            "keys": {
+                "value": {
+                    "template": " [present]",
+                    "omit_if_false": True,
+                }
+            },
+        },
+    )
+
+    assert result == "before [present]after"
 
 
 def test_format_time_text_field() -> None:

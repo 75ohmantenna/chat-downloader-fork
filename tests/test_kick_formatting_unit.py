@@ -172,8 +172,24 @@ def test_provider_shaped_system_events_render_end_to_end(
     )
 
     assert formatter.format(deleted, format_name="kick") == (
-        "[Message deleted: ai-deleted-message]"
+        "[Message deleted: ai-deleted-message] [AI moderated] (rules: hate, harassment)"
     )
     assert formatter.format(pinned, format_name="kick") == (
         "[Pinned message] (Subscriber) MessageAuthor — Current pin payload"
+    )
+
+
+def test_kick_non_ai_deletion_omits_ai_context(formatter: ItemFormatter) -> None:
+    deleted = {
+        "message_type": "message_deleted",
+        "message": "",
+        "metadata": {
+            "deleted_message_id": "deleted-id",
+            "ai_moderated": False,
+            "violated_rules": [],
+        },
+    }
+
+    assert formatter.format(deleted, format_name="kick") == (
+        "[Message deleted: deleted-id]"
     )
