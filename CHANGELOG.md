@@ -8,6 +8,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.1.0 — 2026-08-25
+
 ### Features
 
 - Add bounded Kick clip chat replay through
