@@ -307,7 +307,10 @@ To turn a captured drift sample into a permanent regression anchor:
      `src/chat_downloader/sites/youtube/constants_message.py`; the invariant
      test `test_every_routed_renderer_has_a_message_group` (in
      `tests/test_youtube_remapping_invariants_unit.py`) will fail if you miss
-     this step.
+     this step. Contentless transient UI renderers that must never be emitted
+     belong in `_KNOWN_IGNORE_MESSAGE_TYPES` instead and must not have a public
+     message group; `test_ignored_renderers_are_not_advertised_as_message_types`
+     guards that contract.
    - New field → add to `build_remapping()` in
      `src/chat_downloader/sites/youtube/constants_message.py`; `known_keys()`
      is derived from that mapping.

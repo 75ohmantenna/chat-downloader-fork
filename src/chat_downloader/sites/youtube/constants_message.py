@@ -55,7 +55,6 @@ _MESSAGE_GROUPS = {
     "polls": ["poll", "poll_closed_event"],
     "deleted": ["deleted_message"],
     "bans": ["ban_user"],
-    "placeholder": ["placeholder_item"],  # placeholder
 }
 
 _MESSAGE_TYPES = ["all"]

@@ -10,6 +10,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Stop advertising YouTube's transient `placeholder` message group and
+  `placeholder_item` type, which the parser intentionally ignores and could
+  never emit.
 - Avoid scanning Kick's homepage and JavaScript bundles before every live-chat
   WebSocket connection; use the compiled public Pusher key first and reserve
   best-effort discovery for rejected-key recovery.

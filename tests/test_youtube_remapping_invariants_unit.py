@@ -8,6 +8,10 @@ failures appear in CI instead of emitting a runtime debug_log that nobody sees.
 
 from __future__ import annotations
 
+import pytest
+
+from chat_downloader.errors import InvalidParameter
+from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.youtube import constants_message as cm
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_ACTION_TYPES,
@@ -55,6 +59,11 @@ def _renderer_to_message_type(renderer: str) -> str:
     return camel_case_split(name)
 
 
+def _effective_message_type(renderer: str) -> str:
+    """Resolve a renderer through the same derived/override contract."""
+    return _MESSAGE_TYPE_OVERRIDES.get(renderer, _renderer_to_message_type(renderer))
+
+
 def test_remapping_contributor_sets_are_disjoint() -> None:
     """No key may appear in both build_remapping() and _KEYS_TO_IGNORE."""
     remap = set(cm.build_remapping())
@@ -91,11 +100,24 @@ def test_every_routed_renderer_has_a_message_group() -> None:
                 or renderer in _KNOWN_IGNORE_MESSAGE_TYPES
             ):
                 continue
-            mt = _MESSAGE_TYPE_OVERRIDES.get(
-                renderer, _renderer_to_message_type(renderer)
-            )
+            mt = _effective_message_type(renderer)
             if mt not in cm._MESSAGE_TYPES:
                 missing.append((renderer, mt))
     assert not missing, "Routed renderers with no message group:\n" + "\n".join(
         f"  {r!r} → {mt!r}" for r, mt in missing
     )
+
+
+def test_ignored_renderers_are_not_advertised_as_message_types() -> None:
+    """Transient UI renderers must not expose unreachable filter types."""
+    advertised_ignored_types = {
+        _effective_message_type(renderer)
+        for renderer in _KNOWN_IGNORE_MESSAGE_TYPES
+        if _effective_message_type(renderer) in cm._MESSAGE_TYPES
+    }
+
+    assert advertised_ignored_types == set()
+    assert "placeholder" not in cm._MESSAGE_GROUPS
+    assert "placeholder_item" not in cm._MESSAGE_TYPES
+    with pytest.raises(InvalidParameter, match="Invalid groups specified"):
+        MessageFilter(cm._MESSAGE_GROUPS, groups_to_add=["placeholder"])
