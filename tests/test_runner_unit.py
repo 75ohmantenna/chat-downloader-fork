@@ -22,6 +22,7 @@ from chat_downloader.errors import (
 from chat_downloader.models import RunConfig
 from chat_downloader.runtime.runner import (
     SITE_CHANGE_ERROR_HINT,
+    RunResult,
     _classify_run_error,
     _configure_testing_mode,
     _finalize_run,
@@ -57,6 +58,16 @@ class _FakeDownloader:
 
     def close(self) -> None:
         self.closed = True
+
+
+def test_run_result_preserves_existing_positional_field_order() -> None:
+    result = RunResult(True, 7, True, "stopped")
+
+    assert result.success is True
+    assert result.message_count == 7
+    assert result.interrupted is True
+    assert result.error_message == "stopped"
+    assert result.message_type_counts == {}
 
 
 def _make_error_downloader(error_to_raise: BaseException) -> type:

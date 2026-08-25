@@ -113,9 +113,9 @@ class RunResult:
 
     success: bool = False
     message_count: int = 0
-    message_type_counts: dict[str, int] = field(default_factory=dict)
     interrupted: bool = False
     error_message: str | None = None
+    message_type_counts: dict[str, int] = field(default_factory=dict)
 
 
 def create_message_callback(

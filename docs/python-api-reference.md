@@ -94,9 +94,9 @@ these fields:
 | --- | --- |
 | `success` | Whether the run completed without a terminal error |
 | `message_count` | Number of messages processed |
-| `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error |
 | `interrupted` | Whether execution ended through `KeyboardInterrupt` or `SIGTERM` |
 | `error_message` | Terminal error text, or `None` on success |
+| `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.
