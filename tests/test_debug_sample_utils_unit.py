@@ -74,6 +74,7 @@ def test_twitch_unknown_irc_shape_maps_to_message_fixtures() -> None:
         ("kick-unknown-message-type-abc123def456.json", "messages"),
         ("kick-malformed-preloaded-message-abc123def456.json", "messages"),
         ("kick-malformed-preloaded-pin-abc123def456.json", "events"),
+        ("kick-websocket-frame-abc123def456.json", "events"),
         ("kick-unknown-websocket-shape-abc123def456.json", "transport"),
     ],
 )

@@ -1,17 +1,18 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick Pusher application-key discovery.
+"""Kick Pusher application-key selection and refresh.
 
-The Pusher app key is shipped in Kick's public Next.js JavaScript bundle
-(``NEXT_PUBLIC_PUSHER_KEY``). It is not a secret — it grants only anonymous,
-read-only subscription to public chatroom channels.
+Kick has historically published the Pusher app key in its public Next.js
+JavaScript bundle as ``NEXT_PUBLIC_PUSHER_KEY``. It is not a secret — it grants
+only anonymous, read-only subscription to public chatroom channels.
 
-This module fetches Kick's homepage, scans linked JS chunks for the current key,
-caches the result for the process lifetime, and falls back to a compiled-in
-default when discovery fails or is unavailable. It is separate from
-:mod:`chat_downloader.sites.kick.constants` so that the constant module stays
-free of network I/O and so the discovery logic can be unit-tested with a fake
-HTTP client.
+This module uses a compiled-in key for the normal connection path. After an
+explicit refresh request, it fetches Kick's homepage, scans linked JS chunks
+for a replacement, caches the result for the process lifetime, and falls back
+to the compiled-in default when discovery fails or is unavailable. It is
+separate from :mod:`chat_downloader.sites.kick.constants` so that the constant
+module stays free of network I/O and so the discovery logic can be unit-tested
+with a fake HTTP client.
 """
 
 from __future__ import annotations
@@ -23,9 +24,9 @@ from typing import Protocol, cast
 
 import requests
 
-#: Default Pusher application key compiled into Kick's JS bundle.
-#: This is not a secret; it is shipped in Kick's public JavaScript bundle and
-#: grants only anonymous, read-only subscription to public chatroom channels.
+#: Default public Pusher application key used by Kick chat.
+#: This is not a secret; it grants only anonymous, read-only subscription to
+#: public chatroom channels.
 _PUSHER_DEFAULT_KEY = "32cbd69e4b950bf97679"
 _DISCOVERY_REQUEST_TIMEOUT_SECONDS = 3.0
 _DISCOVERY_TOTAL_TIMEOUT_SECONDS = 10.0
@@ -192,20 +193,20 @@ def resolve_pusher_key(
     http_client: _HttpClient | None = None,
     cache: PusherKeyCache | None = None,
 ) -> str:
-    """Return the current Pusher application key, discovering it if needed.
+    """Return the current Pusher application key.
 
-    The key lives in Kick's Next.js JS bundle as ``NEXT_PUBLIC_PUSHER_KEY``.
-    It is stable across page loads but can change when Kick rebuilds their
-    frontend. This function fetches the homepage on first call to extract the
-    current value, falling back to the compiled-in default if discovery fails.
+    Kick has historically published the key in a Next.js JS bundle as
+    ``NEXT_PUBLIC_PUSHER_KEY``. Normal calls use the compiled-in default without
+    network I/O. Forced calls scan the live page for a replacement and fall
+    back to that default if discovery fails.
 
     Discovery scans at most 15 JS bundles within a ten-second total budget and
     a three-second per-request timeout. Once resolved the key is cached for the
     process lifetime.
 
     Args:
-        force_discover: If True, skip the cache and re-discover from the live
-            page. Useful when a ``pusher:error`` suggests the key has rotated.
+        force_discover: If True, skip the cache and attempt discovery from the
+            live page. Useful when a ``pusher:error`` suggests the key rotated.
         http_client: Optional HTTP client for dependency injection (tests
             supply a fake). Defaults to a browser-like ``requests`` session.
         cache: Optional key cache to read/populate. Defaults to the shared
@@ -216,7 +217,9 @@ def resolve_pusher_key(
     """
     key_cache = cache if cache is not None else _pusher_key_cache
 
-    if key_cache.key is not None and not force_discover:
+    if not force_discover:
+        if key_cache.key is None:
+            key_cache.key = _PUSHER_DEFAULT_KEY
         return key_cache.key
 
     client = http_client or _RequestsHttpClient()
@@ -240,8 +243,9 @@ def get_pusher_ws_url(
     """Return the Pusher WebSocket URL with the current app key.
 
     Args:
-        force_discover: If True, force re-discovery of the app key from
-            Kick's live JS bundle before building the URL.
+        force_discover: If True, attempt re-discovery of the app key from
+            Kick's live JS bundle before building the URL. Otherwise use the
+            cached or compiled-in key without network I/O.
         http_client: Optional HTTP client carrying downloader session settings.
 
     Returns:

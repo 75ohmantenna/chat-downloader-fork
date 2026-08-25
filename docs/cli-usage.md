@@ -155,6 +155,9 @@ Debug and automation:
 - With `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`, Kick captures bounded,
   sanitized samples for unknown or malformed REST/Pusher payloads; see the
   Kick integration guide for storage and review guidance.
+- With both that setting and `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`, Kick also
+  captures the first three successfully parsed raw event frames for clean-run
+  schema review.
 - YouTube continuation polls report separate processed-action and
   emitted-message counts so skipped or non-emitting provider actions are
   visible without inflating the output count.

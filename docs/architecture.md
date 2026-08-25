@@ -216,7 +216,7 @@ non-`__init__.py` module is represented and rejects stale module names.
 | `replay_service.py` | VOD metadata, reverse pagination, time-window filtering, and chronological spooled output |
 | `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, and VOD endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
-| `pusher_discovery.py` | Pusher application-key discovery, cache ownership, and WebSocket URL construction |
+| `pusher_discovery.py` | Default-first Pusher application-key selection, rejected-key refresh, cache ownership, and WebSocket URL construction |
 | `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
 | `errors.py` | `KickError`, `KickServerError` |

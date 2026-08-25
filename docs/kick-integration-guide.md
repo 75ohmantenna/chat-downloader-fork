@@ -72,8 +72,8 @@ The Kick flow depends on the target type.
 4. Fetch preloaded recent messages and the current pin state (best-effort;
    non-fatal on failure). The API returns messages newest-first; they are
    reversed into chronological order before the current pin is emitted.
-5. Open the Pusher WebSocket, subscribe to the public chatroom channel, and
-   stream live frames.
+5. Open the Pusher WebSocket with the compiled public application key,
+   subscribe to the public chatroom channel, and stream live frames.
 6. Dispatch each frame to a typed parser, deduplicate against preloaded and
    recent message IDs, filter by message groups/types, and yield.
 7. On disconnect, reconnect and resubscribe. If Pusher rejects the application
@@ -139,8 +139,8 @@ The Kick flow depends on the target type.
 - `constants.py`: URL patterns, REST endpoints, Pusher/event name constants,
   event-to-message-type and
   message-type-to-group maps, emote patterns, and Cloudflare markers.
-- `pusher_discovery.py`: Pusher application-key discovery, injected/cache
-  ownership, and WebSocket URL construction.
+- `pusher_discovery.py`: default-first Pusher application-key selection,
+  best-effort refresh, cache ownership, and WebSocket URL construction.
 - `errors.py`: `KickError` and the retryable `KickServerError` subclass.
 
 There is no `client.py` facade in the Kick package. Import focused modules
@@ -224,19 +224,21 @@ its duration.
 
 ### Pusher application key discovery
 
-The Pusher app key is shipped in Kick's public Next.js JS bundle
-(`NEXT_PUBLIC_PUSHER_KEY`) and is not a secret — it grants only anonymous,
-read-only subscription to public chatrooms. `pusher_discovery.py::resolve_pusher_key`
-fetches the homepage without following redirects, scans the JS chunks for the
-key, caches it, and falls back to the compiled-in default if discovery fails,
-including homepage transport errors or redirect responses. Discovery uses the
-downloader's HTTP session and timeout policy, with a three-second per-request
-limit and a ten-second total scan budget.
-The live service normally uses the cached/default key first. If Pusher returns
-`pusher:error`, it closes the transport, forces discovery, and reconnects once.
-A second Pusher error is terminal, preventing an invalid key from causing an
-unbounded reconnect loop. `force_discover=True` remains an internal test and
-maintenance seam on the transport.
+The compiled Pusher app key is not a secret — it grants only anonymous,
+read-only subscription to public chatrooms. The normal connection path uses
+that key without fetching Kick's homepage or JavaScript bundles. This avoids a
+bounded but unnecessary scan on every new CLI process.
+
+If Pusher returns `pusher:error`, `pusher_discovery.py::resolve_pusher_key`
+performs one best-effort compatibility scan for the historical
+`NEXT_PUBLIC_PUSHER_KEY` marker, caches a discovered replacement, and
+reconnects. Current Kick bundles may omit that marker, so refresh falls back to
+the compiled key when the homepage, bundle requests, or extraction do not
+succeed. Discovery follows the downloader's HTTP timeout policy, does not
+follow redirects, and retains a three-second per-request and ten-second total
+budget. A second Pusher error is terminal, preventing an invalid key from
+causing an unbounded reconnect loop. `force_discover=True` remains an internal
+test and maintenance seam on the transport.
 
 ### Dedup and filtering
 
@@ -359,9 +361,21 @@ CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
 chat_downloader "https://kick.com/xqc" --logging debug
 ```
 
+For clean-run schema review, a second explicit opt-in captures the first three
+raw WebSocket frames that successfully parse as supported Kick events. The
+per-run attempt bound survives reconnects and excludes Pusher control, unknown,
+and malformed frames:
+
+```bash
+CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
+CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1 \
+chat_downloader "https://kick.com/xqc" --logging debug
+```
+
 Set `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR` to retain samples in a chosen private
 directory. Each anomaly label captures at most ten unique payloads per process
-and directory. The shared sanitizer redacts credential-bearing fields, URL
+and directory; successful frame capture attempts at most three payloads per
+retrieval run. The shared sanitizer redacts credential-bearing fields, URL
 tokens, and token-like strings before secure `0600` files are written. Samples
 can still contain public chat content, so review them before sharing or
 promoting one into `tests/fixtures/kick/`.

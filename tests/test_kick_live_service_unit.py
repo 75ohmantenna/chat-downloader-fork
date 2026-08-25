@@ -299,6 +299,105 @@ def test_get_chat_by_channel_emits_preloaded_then_live() -> None:
         assert ids == ["preloaded-1", "preloaded-2", "live-1"]
 
 
+def test_successful_frame_capture_requires_explicit_scope_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES", raising=False)
+    captured = []
+    monkeypatch.setattr(
+        live_service,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {"id": "live", "content": "message"},
+    )
+
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([[frame]]),
+        )
+        assert [message["message_id"] for message in chat.chat] == ["live"]
+
+    assert captured == []
+
+
+def test_successful_frame_capture_is_bounded_across_reconnects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES", "yes")
+    captured = []
+    monkeypatch.setattr(
+        live_service,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frames = [
+        pusher_frame(
+            CHAT_MESSAGE_EVENT,
+            {"id": str(index), "content": f"message {index}"},
+        )
+        for index in range(5)
+    ]
+    control_frame = {"event": "pusher:connection_established", "data": "{}"}
+    unknown_frame = {"event": "App\\Events\\FutureEvent", "data": "{}"}
+    malformed_frame = {"event": CHAT_MESSAGE_EVENT, "data": "not JSON"}
+
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [
+                        control_frame,
+                        unknown_frame,
+                        malformed_frame,
+                        *frames[:2],
+                        ConnectionError("drop"),
+                    ],
+                    frames[2:],
+                ]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == [
+            str(index) for index in range(5)
+        ]
+
+    successful_captures = [
+        call for call in captured if call[0][0] == "kick-websocket-frame"
+    ]
+    assert successful_captures == [
+        (
+            ("kick-websocket-frame", frame),
+            {"sample_limit": 3},
+        )
+        for frame in frames[:3]
+    ]
+
+
 def test_get_chat_by_channel_emits_current_pin_after_preloaded_history() -> None:
     downloader = FakeDownloader()
     session = FakeKickSession(

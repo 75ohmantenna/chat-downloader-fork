@@ -86,7 +86,17 @@ def test_is_kick_origin_rejects_other_domain() -> None:
     assert pusher_discovery._is_kick_origin("https://evil.com/app.js") is False
 
 
-def test_resolve_pusher_key_uses_requests_adapter_by_default(
+def test_resolve_pusher_key_uses_default_without_network() -> None:
+    client = _FakeClient({})
+
+    key = resolve_pusher_key(http_client=client)
+
+    assert key == _PUSHER_DEFAULT_KEY
+    assert client.requested_urls == []
+    assert client.closed is False
+
+
+def test_forced_discovery_uses_requests_adapter_by_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Exercise the production ``requests`` adapter path with a fake session."""
@@ -116,7 +126,7 @@ def test_resolve_pusher_key_uses_requests_adapter_by_default(
 
     monkeypatch.setattr(pusher_discovery.requests, "Session", _FakeRequestsSession)
 
-    key = resolve_pusher_key()
+    key = resolve_pusher_key(force_discover=True)
 
     assert key == "feedfacedead"
     assert "https://kick.com/" in calls
@@ -175,7 +185,7 @@ def test_resolve_pusher_key_discovers_key_from_bundle() -> None:
         }
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == "a1b2c3d4e5f6"
     assert client.closed
@@ -196,7 +206,7 @@ def test_resolve_pusher_key_caches_result() -> None:
         }
     )
 
-    key1 = resolve_pusher_key(http_client=client)
+    key1 = resolve_pusher_key(force_discover=True, http_client=client)
     key2 = resolve_pusher_key(http_client=_FakeClient({}))
 
     assert key1 == key2 == "abcdef123456"
@@ -217,7 +227,11 @@ def test_resolve_pusher_key_uses_injected_cache() -> None:
         }
     )
 
-    key1 = resolve_pusher_key(http_client=client, cache=cache)
+    key1 = resolve_pusher_key(
+        force_discover=True,
+        http_client=client,
+        cache=cache,
+    )
     # A pre-seeded injected cache is returned without re-discovering.
     key2 = resolve_pusher_key(http_client=_FakeClient({}), cache=cache)
 
@@ -251,7 +265,7 @@ def test_resolve_pusher_key_force_discover_bypasses_cache(
 def test_resolve_pusher_key_falls_back_when_homepage_fails() -> None:
     client = _FakeClient({"https://kick.com/": _FakeResponse(False, "")})
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
 
@@ -271,7 +285,7 @@ def test_resolve_pusher_key_rejects_homepage_redirect_response() -> None:
         }
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
     assert client.requested_urls == ["https://kick.com/"]
@@ -280,7 +294,7 @@ def test_resolve_pusher_key_rejects_homepage_redirect_response() -> None:
 def test_resolve_pusher_key_falls_back_when_homepage_request_raises() -> None:
     client = _FakeClient({}, errors={"https://kick.com/"})
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
     assert client.closed
@@ -300,7 +314,7 @@ def test_resolve_pusher_key_stops_scanning_when_budget_expires(
     monotonic = MagicMock(side_effect=[0.0, 11.0])
     monkeypatch.setattr(pusher_discovery.time, "monotonic", monotonic)
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
     assert client.requested_urls == ["https://kick.com/"]
@@ -317,7 +331,7 @@ def test_resolve_pusher_key_falls_back_when_no_bundle_matches() -> None:
         }
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
 
@@ -337,7 +351,7 @@ def test_resolve_pusher_key_rejects_bundle_redirect_response() -> None:
         }
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
 
@@ -352,7 +366,7 @@ def test_resolve_pusher_key_skips_foreign_script_urls() -> None:
         }
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
 
@@ -367,7 +381,7 @@ def test_resolve_pusher_key_skips_http_script_urls() -> None:
         }
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == _PUSHER_DEFAULT_KEY
 
@@ -390,7 +404,7 @@ def test_resolve_pusher_key_skips_unreachable_bundle_and_uses_next() -> None:
         errors={"https://kick.com/_next/static/bad.js"},
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == "123abcdef012"
 
@@ -413,6 +427,6 @@ def test_resolve_pusher_key_skips_non_ok_bundle() -> None:
         }
     )
 
-    key = resolve_pusher_key(http_client=client)
+    key = resolve_pusher_key(force_discover=True, http_client=client)
 
     assert key == "0a1b2c3d4e5f"

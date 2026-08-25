@@ -28,6 +28,7 @@ _GROUP_RULES: tuple[tuple[str, str], ...] = (
     ("pusher-error", "events"),
     ("malformed-preloaded-message", "messages"),
     ("malformed-preloaded-pin", "events"),
+    ("websocket-frame", "events"),
     ("unknown-websocket-shape", "transport"),
 )
 

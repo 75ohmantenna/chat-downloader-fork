@@ -10,6 +10,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Avoid scanning Kick's homepage and JavaScript bundles before every live-chat
+  WebSocket connection; use the compiled public Pusher key first and reserve
+  best-effort discovery for rejected-key recovery.
 - Render YouTube moderation events without message text as informative notices
   instead of blank lines in text output.
 - Render authorless YouTube live system events without a dangling author
@@ -28,6 +31,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Debugging
 
+- Add a separately opted-in, sanitized capture of the first three successfully
+  parsed Kick WebSocket event frames, with one bound spanning reconnects.
 - Add a separately opted-in, sanitized capture of the first three structurally
   valid YouTube continuation responses for clean-run diagnosis.
 - Distinguish processed YouTube actions from emitted messages in per-poll

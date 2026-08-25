@@ -14,6 +14,7 @@ streams messages regardless of stream status.
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 from requests.exceptions import RequestException
@@ -53,6 +54,9 @@ if TYPE_CHECKING:
     from .extractor import KickChatDownloader
 
 _KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
+_SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES"
+_SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 def _fetch_channel_with_retry(
@@ -349,6 +353,11 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
 
     msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     seen_message_cache = _SeenMessageCache(limit=_KICK_LIVE_SEEN_MESSAGE_LIMIT)
+    capture_successful_frames = (
+        os.environ.get(_SUCCESSFUL_FRAME_CAPTURE_ENV, "").strip().lower()
+        in _TRUTHY_ENV_VALUES
+    )
+    successful_frame_capture_attempts = 0
 
     def emit(message: dict[str, Any]) -> bool:
         message_id = message.get("message_id")
@@ -396,6 +405,17 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     consecutive_connection_failures = 0
                     live_message = dispatch_event(frame)
                     if live_message is not None:
+                        if (
+                            capture_successful_frames
+                            and successful_frame_capture_attempts
+                            < _SUCCESSFUL_FRAME_CAPTURE_LIMIT
+                        ):
+                            successful_frame_capture_attempts += 1
+                            capture_debug_sample(
+                                "kick-websocket-frame",
+                                frame,
+                                sample_limit=_SUCCESSFUL_FRAME_CAPTURE_LIMIT,
+                            )
                         pusher_error_recoveries = 0
                         if emit(live_message):
                             yield live_message

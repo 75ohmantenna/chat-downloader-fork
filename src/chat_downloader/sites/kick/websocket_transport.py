@@ -146,8 +146,8 @@ class KickPusherTransport:
                 and an optional ``proxy_url`` keyword argument.
                 Defaults to a real ``websocket-client`` connection; tests inject
                 a fake.
-            url: Pusher WebSocket URL to connect to. Defaults to the auto-
-                discovered Pusher URL from Kick's JS bundle.
+            url: Pusher WebSocket URL to connect to. Defaults to the cached or
+                compiled-in Pusher URL.
             proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
             pusher_http_client: HTTP client used to discover the Pusher key.
         """
@@ -167,7 +167,8 @@ class KickPusherTransport:
 
         Args:
             timeout: Initial socket timeout in seconds, or ``None`` to block.
-            force_discover: Bypass the cached Pusher key before connecting.
+            force_discover: Attempt to refresh the cached Pusher key before
+                connecting.
 
         Raises:
             ConnectionError: If the underlying connection attempt fails.
