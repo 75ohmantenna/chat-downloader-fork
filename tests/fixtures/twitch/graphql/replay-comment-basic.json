@@ -1,0 +1,32 @@
+{
+  "raw": {
+    "__typename": "VideoCommentEdge",
+    "cursor": "cursor-1",
+    "node": {
+      "__typename": "Comment",
+      "id": "message-1",
+      "createdAt": "2026-08-25T00:00:00Z",
+      "contentOffsetSeconds": 1.0,
+      "commenter": {
+        "__typename": "User",
+        "id": "user-1",
+        "login": "fixture-user",
+        "displayName": "FixtureUser",
+        "profileImageURL": "https://example.invalid/profile.png",
+        "primaryColorHex": "#abcdef"
+      },
+      "message": {
+        "__typename": "Message",
+        "userColor": "#abcdef",
+        "userBadges": [],
+        "fragments": [
+          {
+            "__typename": "MessageFragment",
+            "text": "hello",
+            "emote": null
+          }
+        ]
+      }
+    }
+  }
+}

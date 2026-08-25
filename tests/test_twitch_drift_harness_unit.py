@@ -1,20 +1,23 @@
 # SPDX-License-Identifier: MIT
 
-r"""Drift regression harness for Twitch IRC chat parsing.
+r"""Drift regression harness for Twitch IRC and GraphQL chat parsing.
 
 Each fixture in ``tests/fixtures/twitch/live_events/`` that contains a raw
 IRC message string (JSON object with a ``"raw"`` key) is replayed through
-the full IRC parser.  The test asserts that the spy-patched ``debug_log``
-is **never** called with a drift-sentinel message, so previously-fixed drift
-becomes a permanent regression anchor.
+the full IRC parser. The test asserts that the spy-patched ``debug_log`` is
+**never** called, so previously-fixed drift becomes a permanent regression
+anchor.
+
+Each fixture in ``tests/fixtures/twitch/graphql/`` is likewise replayed through
+the real VOD edge processor and must yield without any drift report.
 
 Workflow for new drift
 ----------------------
-1. Capture a raw IRC message that triggers ``debug_log`` at runtime.
+1. Capture a raw IRC message or GraphQL edge that reports drift at runtime.
 2. Identify the cause (unknown action type, unknown message type, etc.).
 3. Fix the parsing code.
-4. Add a ``{"raw": "<irc line>\\r\\n"}`` fixture to
-   ``tests/fixtures/twitch/live_events/`` and name it descriptively.
+4. Add the reviewed fixture to the matching ``live_events/`` or ``graphql/``
+   directory and name it descriptively.
 5. Run this harness — it must pass before merging.
 
 GraphQL hash-rotation guard
@@ -29,6 +32,7 @@ the guard flags immediately if a caller references an unlisted operation.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -36,20 +40,17 @@ import pytest
 
 import chat_downloader.sites.twitch.parsing.message_emotes as _me
 import chat_downloader.sites.twitch.parsing.message_irc_resolve as _mir
+import chat_downloader.sites.twitch.parsing.messages as _messages
+import chat_downloader.sites.twitch.replay_service as _replay
 from chat_downloader.sites.twitch.constants import (
     MESSAGE_REGEX,
     OPERATION_HASHES,
+    build_known_irc_keys,
 )
-from chat_downloader.sites.twitch.parsing.messages import _parse_irc_item
 from chat_downloader.sites.twitch.types import BadgeSet
 
 _FX_DIR = Path(__file__).resolve().parent / "fixtures" / "twitch" / "live_events"
-
-# Sentinel substrings that indicate an unhandled IRC action or message type.
-_DRIFT_MARKERS = (
-    "Unknown action type",
-    "Unknown message type",
-)
+_GQL_FX_DIR = Path(__file__).resolve().parent / "fixtures" / "twitch" / "graphql"
 
 
 def _raw_irc_fixtures() -> list[Path]:
@@ -67,16 +68,16 @@ def _raw_irc_fixtures() -> list[Path]:
 
 @pytest.fixture
 def drift_recorder(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Spy on debug_log in IRC parsing modules; record drift-sentinel calls."""
+    """Record any unexpected-data debug call in Twitch parsing composition."""
     seen: list[str] = []
 
     def _spy(*args: Any, **_kwargs: Any) -> None:
-        text = " ".join(str(a) for a in args)
-        if any(marker in text for marker in _DRIFT_MARKERS):
-            seen.append(text)
+        seen.append(" ".join(str(a) for a in args))
 
     monkeypatch.setattr(_mir, "debug_log", _spy)
     monkeypatch.setattr(_me, "debug_log", _spy)
+    monkeypatch.setattr(_messages, "debug_log", _spy)
+    monkeypatch.setattr(_replay, "debug_log", _spy)
     return seen
 
 
@@ -93,12 +94,53 @@ def test_irc_fixture_parses_without_drift(
     raw: str = payload["raw"]
     match = MESSAGE_REGEX.search(raw)
     if match is None:
-        pytest.skip(f"{path.name}: MESSAGE_REGEX did not match the raw string")
+        pytest.fail(f"{path.name}: MESSAGE_REGEX did not match the raw string")
     badge_set = BadgeSet(global_badges={}, channel_badges={})
-    _parse_irc_item(match, badge_set=badge_set)
+    parsed = _messages._parse_irc_item(match, badge_set=badge_set)
+    unexpected_keys = parsed.keys() - build_known_irc_keys()
     assert not drift_recorder, f"{path.name} triggered drift log(s):\n" + "\n".join(
         f"  {line}" for line in drift_recorder
     )
+    assert not unexpected_keys, (
+        f"{path.name} produced unexpected parsed keys: {sorted(unexpected_keys)}"
+    )
+
+
+class _AllowAll:
+    def check(self, _data: dict[str, Any]) -> str:
+        return "yield"
+
+    def should_add(self, _data: dict[str, Any]) -> bool:
+        return True
+
+
+@pytest.mark.parametrize(
+    "path",
+    sorted(_GQL_FX_DIR.glob("*.json")),
+    ids=lambda p: p.name,
+)
+def test_graphql_fixture_parses_without_drift(
+    path: Path,
+    drift_recorder: list[str],
+) -> None:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    edge = payload["raw"]
+
+    drift_logger = logging.getLogger("twitch-drift-harness")
+    drift_logger.setLevel(logging.DEBUG)
+    data, disposition = _replay._process_vod_edge(
+        edge,
+        offset=0.0,
+        creator_channel_id="123",
+        badge_set=BadgeSet(global_badges={}, channel_badges={}),
+        time_filter=_AllowAll(),
+        msg_filter=_AllowAll(),
+        logger_obj=drift_logger,
+    )
+
+    assert disposition == "yield"
+    assert data is not None
+    assert not drift_recorder, f"{path.name} triggered drift log(s): {drift_recorder}"
 
 
 # ---------------------------------------------------------------------------

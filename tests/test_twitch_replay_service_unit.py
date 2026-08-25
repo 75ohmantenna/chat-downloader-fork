@@ -194,6 +194,11 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
             return_value={"message_type", "message_id"},
         ),
         patch.object(replay_service, "debug_log") as mock_debug_log,
+        patch.object(replay_service.logger, "isEnabledFor", return_value=True),
+        patch.object(
+            replay_service,
+            "capture_debug_sample",
+        ) as mock_capture_debug_sample,
     ):
         result = list(
             replay_service.iter_vod_chat_messages(
@@ -206,7 +211,21 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
         )
 
     assert result == [{"message_type": "text_message", "message_id": "kept"}]
-    mock_debug_log.assert_called_once()
+    assert mock_debug_log.call_count == 3
+    assert mock_capture_debug_sample.call_count == 3
+    mock_capture_debug_sample.assert_any_call(
+        "twitch-unknown-gql-shape",
+        {
+            "raw": {
+                "__typename": "VideoCommentEdge",
+                "cursor": "c4",
+                "node": {"__typename": "Comment", "id": "skip"},
+            },
+            "unexpected_output_keys": ["extra"],
+            "parsed": parsed_messages[0],
+        },
+        sample_limit=10,
+    )
 
 
 def test_replay_service_iter_vod_chat_messages_logs_count_on_completed_page() -> None:

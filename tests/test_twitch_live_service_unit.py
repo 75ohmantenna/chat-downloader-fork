@@ -119,6 +119,44 @@ def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
     )
 
 
+def test_live_service_logs_effective_clamped_receive_timeout() -> None:
+    irc = Mock()
+    downloader = SimpleNamespace(
+        badge_cache=SimpleNamespace(snapshot=dict),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/example",
+        max_attempts=1,
+        message_receive_timeout=0.1,
+        message_groups=["messages"],
+    )
+
+    with patch.object(live_service, "log") as mock_log:
+        result = list(
+            live_service.iter_stream_chat_messages(
+                cast("Any", downloader),
+                "example",
+                request,
+                irc_factory=cast(
+                    "live_service._IRCFactory",
+                    Mock(return_value=irc),
+                ),
+                message_generator=cast(
+                    "live_service._MessageGenerator",
+                    Mock(return_value=iter(())),
+                ),
+            ),
+        )
+
+    assert result == []
+    irc.set_timeout.assert_called_once_with(1.0)
+    mock_log.assert_any_call(
+        "debug",
+        "Twitch IRC receive timeout: requested=0.1s, effective=1.0s.",
+    )
+
+
 def test_live_service_default_messages_include_social_sharing_badge() -> None:
     irc = Mock()
     downloader = SimpleNamespace(

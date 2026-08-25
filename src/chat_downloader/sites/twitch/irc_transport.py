@@ -11,6 +11,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.proxy import _ProxySocket, open_proxied_tls_socket
 
 from .constants import (
@@ -22,6 +23,7 @@ from .constants import (
     MESSAGE_REGEX,
     PING_TEXT,
     PONG_TEXT,
+    TWITCH_DEBUG_SAMPLE_LIMIT,
 )
 from .parsing.messages import _parse_irc_item
 
@@ -362,6 +364,11 @@ def get_chat_messages_by_stream_id(
                 # Buffer was fully consumed with no matches — log unrecognized
                 # traffic.
                 if not _is_benign_unmatched_irc_buffer(unmatched_full_buffer):
+                    capture_debug_sample(
+                        "twitch-unknown-irc-shape",
+                        {"raw": unmatched_full_buffer},
+                        sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
+                    )
                     log(
                         "debug",
                         f'No matches found in "\n{unmatched_full_buffer.strip()}\n"',

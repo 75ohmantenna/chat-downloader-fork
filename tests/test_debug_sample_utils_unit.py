@@ -45,3 +45,9 @@ def test_shared_name_inference_helpers_match_promoter_behavior() -> None:
     assert normalize_fixture_name(sample_path) == (
         "youtube-missing-keys-liveChatMadeUpRenderer"
     )
+
+
+def test_twitch_unknown_irc_shape_maps_to_message_fixtures() -> None:
+    sample_path = Path("twitch-unknown-irc-shape-abc123def456.json")
+
+    assert infer_group_from_sample_name(sample_path) == "messages"

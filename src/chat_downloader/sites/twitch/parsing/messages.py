@@ -13,12 +13,15 @@ Public entry points:
 
 from __future__ import annotations
 
+from logging import DEBUG
 from typing import TYPE_CHECKING, Any
 
-from chat_downloader.debugging import debug_log
+from chat_downloader.debugging import debug_log, logger
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.remap import (
     Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
 )
+from chat_downloader.sites.twitch.constants import TWITCH_DEBUG_SAMPLE_LIMIT
 from chat_downloader.sites.twitch.parsing.badges import _parse_badge_info
 from chat_downloader.sites.twitch.parsing.message_emotes import (
     _generate_emote_image_list,
@@ -130,6 +133,8 @@ def _parse_game(item: dict[str, Any] | None) -> dict[str, Any] | None:
 def _parse_irc_tags(
     split_info: list[str],
     irc_remapping: dict[str, Any],
+    *,
+    raw_payload: str | None,
 ) -> dict[str, Any]:
     """Parse raw IRC tag string segments into a remapped info dictionary.
 
@@ -138,16 +143,21 @@ def _parse_irc_tags(
             produced by splitting the raw tag string on ``";"``.
         irc_remapping: Remapping table produced by
             :func:`~chat_downloader.sites.twitch.constants.build_irc_remapping`.
+        raw_payload: Original IRC line for unknown-tag capture when debug
+            logging is enabled.
 
     Returns:
         Dictionary of remapped tag key/value pairs.
     """
     info: dict[str, Any] = {}
+    unknown_tags: set[str] | None = set() if raw_payload is not None else None
     for item in split_info:
         keys = item.split("=", 1)
         if len(keys) == 1:
             # If there's no equals, we assign the tag a value of true.
             keys.append("1")  # Use "1" string instead of True for type safety
+        if unknown_tags is not None and keys[0] not in irc_remapping:
+            unknown_tags.add(keys[0])
         r.remap(
             info,
             irc_remapping,
@@ -155,6 +165,15 @@ def _parse_irc_tags(
             keys[1],
             keep_unknown_keys=True,
             replace_char_with_underscores="-",
+        )
+    if unknown_tags:
+        capture_debug_sample(
+            "twitch-unknown-irc-tag",
+            {
+                "raw": raw_payload,
+                "unknown_tags": sorted(unknown_tags),
+            },
+            sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
         )
     return info
 
@@ -202,7 +221,7 @@ def _parse_item(
 
     original_message_type = info.get("message_type")
     if original_message_type:
-        _set_message_type(info, original_message_type)
+        _set_message_type(info, original_message_type, raw_payload=item)
     else:
         info["message_type"] = "text_message"
 
@@ -224,7 +243,14 @@ def _parse_irc_item(
         Parsed IRC message dictionary
     """
     irc_remapping = build_irc_remapping()
-    info = _parse_irc_tags(match.group(1).split(";"), irc_remapping)
+    # MESSAGE_REGEX excludes the IRC line terminator; retain it in captured
+    # samples so they can be promoted directly into drift fixtures.
+    raw_payload = f"{match.group(0)}\r\n" if logger.isEnabledFor(DEBUG) else None
+    info = _parse_irc_tags(
+        match.group(1).split(";"),
+        irc_remapping,
+        raw_payload=raw_payload,
+    )
 
     message_match = match.group(3)
     _resolve_irc_message_and_emotes(info, match)
@@ -245,6 +271,11 @@ def _parse_irc_item(
     _move_to_dict(info, "author")
 
     original_action_type = match.group(2)
-    _resolve_irc_action_and_message_type(info, original_action_type, message_match)
+    _resolve_irc_action_and_message_type(
+        info,
+        original_action_type,
+        message_match,
+        raw_payload=raw_payload,
+    )
 
     return info

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 from chat_downloader.sites.twitch.constants import (
     MESSAGE_GROUPS,
     MESSAGE_REGEX,
@@ -446,6 +448,119 @@ def test_set_message_type_and_add_text_for_emotes_handle_unknown_and_invalid(
         "Invalid emote: {'locations': ['bad-location']}",
         "Message: hello",
     )
+
+
+def test_set_message_type_captures_unknown_raw_payload(monkeypatch) -> None:
+    capture_calls = []
+    monkeypatch.setattr(
+        tw_irc_resolve,
+        "capture_debug_sample",
+        lambda *items, **kwargs: capture_calls.append((deepcopy(items), kwargs)),
+    )
+    info: dict[str, object] = {}
+    raw = {"message": {"messageType": "mystery_type"}}
+
+    tw_irc_resolve._set_message_type(info, "mystery_type", raw_payload=raw)
+
+    assert capture_calls == [
+        (
+            (
+                "twitch-unknown-message-type",
+                {
+                    "raw": raw,
+                    "message_type": "mystery_type",
+                    "parsed": info,
+                },
+            ),
+            {"sample_limit": 10},
+        )
+    ]
+
+
+def test_parse_irc_item_captures_unknown_action_with_raw_line(monkeypatch) -> None:
+    capture_calls = []
+    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: True)
+    monkeypatch.setattr(
+        tw_irc_resolve,
+        "capture_debug_sample",
+        lambda *items, **kwargs: capture_calls.append((deepcopy(items), kwargs)),
+    )
+    raw = (
+        "@badge-info=;badges=;display-name=TestUser;room-id=999;"
+        "tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv MYSTERY "
+        "#channel :hello\r\n"
+    )
+    match = MESSAGE_REGEX.search(raw)
+    assert match is not None
+
+    parsed = _parse_irc_item(match)
+
+    assert capture_calls == [
+        (
+            (
+                "twitch-unknown-irc-action",
+                {
+                    "raw": raw,
+                    "action_type": "MYSTERY",
+                    "parsed": parsed,
+                },
+            ),
+            {"sample_limit": 10},
+        )
+    ]
+
+
+def test_parse_irc_item_captures_unknown_tag_with_raw_line(monkeypatch) -> None:
+    capture_calls = []
+    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: True)
+    monkeypatch.setattr(
+        tw_messages,
+        "capture_debug_sample",
+        lambda *items, **kwargs: capture_calls.append((items, kwargs)),
+    )
+    raw = (
+        "@badge-info=;badges=;display-name=TestUser;made-up-tag=value;"
+        "room-id=999;tmi-sent-ts=1;user-id=12345 "
+        ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG "
+        "#channel :hello\r\n"
+    )
+    match = MESSAGE_REGEX.search(raw)
+    assert match is not None
+
+    _parse_irc_item(match)
+
+    assert capture_calls == [
+        (
+            (
+                "twitch-unknown-irc-tag",
+                {"raw": raw, "unknown_tags": ["made-up-tag"]},
+            ),
+            {"sample_limit": 10},
+        )
+    ]
+
+
+def test_parse_irc_item_skips_raw_tag_capture_outside_debug(monkeypatch) -> None:
+    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: False)
+    capture_calls = []
+    monkeypatch.setattr(
+        tw_messages,
+        "capture_debug_sample",
+        lambda *items, **kwargs: capture_calls.append((items, kwargs)),
+    )
+    raw = (
+        "@badge-info=;badges=;display-name=TestUser;made-up-tag=value;"
+        "room-id=999;tmi-sent-ts=1;user-id=12345 "
+        ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG "
+        "#channel :hello\r\n"
+    )
+    match = MESSAGE_REGEX.search(raw)
+    assert match is not None
+
+    parsed = _parse_irc_item(match)
+
+    assert parsed["made_up_tag"] == "value"
+    assert capture_calls == []
 
 
 def test_parse_item_defaults_to_text_message_and_drops_empty_badges() -> None:

@@ -7,9 +7,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import debug_log
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.twitch.constants import (
     ACTION_TYPE_REMAPPING,
     MESSAGE_TYPE_REMAPPING,
+    TWITCH_DEBUG_SAMPLE_LIMIT,
 )
 from chat_downloader.sites.twitch.parsing.badges import _parse_irc_badges
 from chat_downloader.sites.twitch.parsing.message_emotes import (
@@ -56,18 +58,33 @@ def _apply_subscriber_badge_metadata(
         )
 
 
-def _set_message_type(info: dict[str, Any], original_message_type: str) -> None:
+def _set_message_type(
+    info: dict[str, Any],
+    original_message_type: str,
+    *,
+    raw_payload: object | None = None,
+) -> None:
     """Set standardized message type from original type.
 
     Args:
         info: Message info dictionary to update
         original_message_type: Original message type from Twitch
+        raw_payload: Original IRC line or GraphQL object for debug capture.
     """
     new_message_type = MESSAGE_TYPE_REMAPPING.get(original_message_type)
 
     if new_message_type:
         info["message_type"] = new_message_type
     else:
+        capture_debug_sample(
+            "twitch-unknown-message-type",
+            {
+                "raw": raw_payload,
+                "message_type": original_message_type,
+                "parsed": info,
+            },
+            sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
+        )
         debug_log(
             f"Unknown message type: {original_message_type}",
             f"Parsed data: {info}",
@@ -166,7 +183,10 @@ def _resolve_irc_shared_chat_metadata(
         )
 
 
-def _resolve_action_type(info: dict[str, Any], original_action_type: str) -> None:
+def _resolve_action_type(
+    info: dict[str, Any],
+    original_action_type: str,
+) -> bool:
     """Map *original_action_type* through :data:`ACTION_TYPE_REMAPPING`.
 
     Stores the mapped name (or the raw value for unknowns) as
@@ -175,24 +195,26 @@ def _resolve_action_type(info: dict[str, Any], original_action_type: str) -> Non
     Args:
         info: Partially-built message dictionary, mutated in place.
         original_action_type: Raw IRC command string (e.g. ``"PRIVMSG"``).
+
+    Returns:
+        ``True`` when the action type is unknown and needs drift capture after
+        the remaining message fields have been resolved.
     """
     if original_action_type:
         new_action_type = ACTION_TYPE_REMAPPING.get(original_action_type)
         if new_action_type:
             info["action_type"] = new_action_type
         else:
-            # Unknown action type
             info["action_type"] = original_action_type
-            debug_log(
-                [
-                    f"Unknown action type: {info['action_type']}",
-                    original_action_type,
-                    info,
-                ]
-            )
+            return True
+    return False
 
 
-def _resolve_message_type(info: dict[str, Any]) -> None:
+def _resolve_message_type(
+    info: dict[str, Any],
+    *,
+    raw_payload: object | None = None,
+) -> None:
     """Map ``info["message_type"]`` via :func:`_set_message_type`.
 
     When no ``message_type`` tag is present, falls back to the already-resolved
@@ -200,10 +222,15 @@ def _resolve_message_type(info: dict[str, Any]) -> None:
 
     Args:
         info: Partially-built message dictionary, mutated in place.
+        raw_payload: Original IRC line for debug capture.
     """
     original_message_type = info.get("message_type")
     if original_message_type:
-        _set_message_type(info, original_message_type)
+        _set_message_type(
+            info,
+            original_message_type,
+            raw_payload=raw_payload,
+        )
     else:
         info["message_type"] = info.get("action_type", "")
 
@@ -273,6 +300,8 @@ def _resolve_irc_action_and_message_type(
     info: dict[str, Any],
     original_action_type: str,
     message_match: str | None,
+    *,
+    raw_payload: object | None = None,
 ) -> None:
     """Resolve action/message type, CLEARCHAT, follower-only, slow-mode.
 
@@ -295,12 +324,30 @@ def _resolve_irc_action_and_message_type(
         original_action_type: Raw IRC command string (e.g. ``"PRIVMSG"``).
         message_match: Third capture group of the IRC regex, or ``None`` when
             the message body was absent (used by CLEARCHAT logic).
+        raw_payload: Original IRC line for debug capture.
     """
-    _resolve_action_type(info, original_action_type)
-    _resolve_message_type(info)
+    unknown_action = _resolve_action_type(info, original_action_type)
+    _resolve_message_type(info, raw_payload=raw_payload)
     _resolve_clearchat_ban(info, original_action_type, message_match)
     _normalize_follower_only(info)
     _normalize_slow_mode(info)
+    if unknown_action:
+        capture_debug_sample(
+            "twitch-unknown-irc-action",
+            {
+                "raw": raw_payload,
+                "action_type": original_action_type,
+                "parsed": info,
+            },
+            sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
+        )
+        debug_log(
+            [
+                f"Unknown action type: {info['action_type']}",
+                original_action_type,
+                info,
+            ]
+        )
 
 
 def _resolve_irc_message_and_emotes(

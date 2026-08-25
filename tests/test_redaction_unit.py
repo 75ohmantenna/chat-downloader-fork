@@ -341,6 +341,62 @@ def test_capture_debug_sample_writes_sanitized_json_deterministically() -> None:
         }
 
 
+def test_capture_debug_sample_limits_unique_payloads_per_label() -> None:
+    with (
+        tempfile.TemporaryDirectory() as temp_dir,
+        patch.dict(
+            os.environ,
+            {
+                "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES": "1",
+                "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR": temp_dir,
+            },
+            clear=False,
+        ),
+    ):
+        dbg.set_log_level("debug")
+        first = red.capture_debug_sample("bounded-label", {"value": 1}, sample_limit=2)
+        second = red.capture_debug_sample("bounded-label", {"value": 2}, sample_limit=2)
+        dropped = red.capture_debug_sample(
+            "bounded-label",
+            {"value": 3},
+            sample_limit=2,
+        )
+        duplicate = red.capture_debug_sample(
+            "bounded-label",
+            {"value": 1},
+            sample_limit=2,
+        )
+
+        assert first is not None
+        assert second is not None
+        assert dropped is None
+        assert duplicate == first
+        assert len(list(Path(temp_dir).glob("*.json"))) == 2
+
+
+def test_capture_debug_sample_rejects_negative_limit() -> None:
+    with (
+        tempfile.TemporaryDirectory() as temp_dir,
+        patch.dict(
+            os.environ,
+            {
+                "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES": "1",
+                "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR": temp_dir,
+            },
+            clear=False,
+        ),
+    ):
+        dbg.set_log_level("debug")
+        result = red.capture_debug_sample(
+            "negative-limit",
+            {"value": 1},
+            sample_limit=-1,
+        )
+
+        assert result is None
+        assert list(Path(temp_dir).iterdir()) == []
+
+
 def test_capture_debug_sample_logs_fixture_hint() -> None:
     with (
         tempfile.TemporaryDirectory() as temp_dir,
@@ -663,12 +719,17 @@ def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
         failed_path = red.capture_debug_sample(
             "write-failure",
             {"value": "sample"},
+            sample_limit=1,
         )
 
     assert failed_path is None
     assert list(sample_dir.iterdir()) == []
 
-    retry_path = red.capture_debug_sample("write-failure", {"value": "sample"})
+    retry_path = red.capture_debug_sample(
+        "write-failure",
+        {"value": "sample"},
+        sample_limit=1,
+    )
 
     assert retry_path is not None
     assert json.loads(Path(retry_path).read_text(encoding="utf-8")) == {

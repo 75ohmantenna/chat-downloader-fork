@@ -288,7 +288,8 @@ raises `ValueError` at the output boundary to keep timestamps unambiguous.
 - `sanitize_for_log(...)` for redacting cookies, proxies, known secret fields,
   custom header names containing auth/token/secret/credential markers, API-key
   headers, and Basic/Bearer/OAuth/SAPISIDHASH values before logging or capture
-- `capture_debug_sample(label, payload)` for opt-in sanitized sample capture
+- `capture_debug_sample(label, payload, *, sample_limit=None)` for opt-in
+  sanitized sample capture
 
 Project log handlers sanitize structured values, exception text, stack
 information, URL credentials, sensitive query parameters, and terminal control
@@ -302,7 +303,9 @@ directories must be owned by the current user with mode `0700`; sample files
 use mode `0600`. Capture rejects symbolic links, unexpected file types, foreign
 ownership, and broader permissions. Platforms without secure
 directory-relative no-follow creation refuse capture rather than use a
-path-based fallback.
+path-based fallback. Set `sample_limit` to bound the number of unique payloads
+written for one label and output directory during the current process;
+duplicate payloads continue to resolve to their deterministic existing path.
 
 `chat_downloader.debug_sample_utils` contains naming helpers used to turn
 captured samples into stable fixture names.

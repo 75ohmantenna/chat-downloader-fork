@@ -391,6 +391,10 @@ def test_irc_transport_logs_unknown_full_buffer_when_no_matches() -> None:
             return_value=False,
         ),
         patch.object(irc_transport, "log") as mock_log,
+        patch.object(
+            irc_transport,
+            "capture_debug_sample",
+        ) as mock_capture_debug_sample,
         pytest.raises(ConnectionError),
     ):
         list(
@@ -402,6 +406,11 @@ def test_irc_transport_logs_unknown_full_buffer_when_no_matches() -> None:
         )
 
     mock_log.assert_any_call("debug", 'No matches found in "\nUNKNOWN LINE\n"')
+    mock_capture_debug_sample.assert_called_once_with(
+        "twitch-unknown-irc-shape",
+        {"raw": "UNKNOWN LINE\r\n"},
+        sample_limit=10,
+    )
 
 
 def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive() -> (

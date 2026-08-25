@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from json.decoder import JSONDecodeError
+from logging import DEBUG
 from typing import TYPE_CHECKING, Protocol, cast
 
 from requests.exceptions import RequestException
@@ -17,16 +18,18 @@ from chat_downloader.errors import (
     UserNotFound,
     VideoUnavailable,
 )
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_float, get_list, get_str
 
 from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
-from .constants import build_known_comment_keys
+from .constants import TWITCH_DEBUG_SAMPLE_LIMIT, build_known_comment_keys
 from .graphql_client import _handle_gql_errors
 from .parsing.messages import _parse_item
 from .replay_transport import get_chat_messages_by_vod_id
+from .validation_keys import find_unexpected_vod_edge_paths
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -84,6 +87,23 @@ def _process_vod_edge(
         - ``"skip"`` — caller should skip to the next edge.
         - ``"stop"`` — caller must ``return`` (end the generator).
     """
+    unexpected_paths = (
+        find_unexpected_vod_edge_paths(edge) if logger_obj.isEnabledFor(DEBUG) else []
+    )
+    if unexpected_paths:
+        capture_debug_sample(
+            "twitch-unknown-gql-shape",
+            {
+                "raw": edge,
+                "unexpected_paths": unexpected_paths,
+            },
+            sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
+        )
+        debug_log(
+            f"Unexpected Twitch GraphQL paths: {unexpected_paths}",
+            f"Original edge: {edge}",
+        )
+
     edge_typename = edge.get("__typename")
     if edge_typename not in ("VideoCommentEdge", None):
         logger_obj.debug("Skipping unexpected edge type: %s", edge_typename)
@@ -103,6 +123,15 @@ def _process_vod_edge(
     )
     unexpected_keys = data.keys() - build_known_comment_keys()
     if unexpected_keys:
+        capture_debug_sample(
+            "twitch-unknown-gql-shape",
+            {
+                "raw": edge,
+                "unexpected_output_keys": sorted(unexpected_keys),
+                "parsed": data,
+            },
+            sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
+        )
         debug_log(
             f"Unexpected keys found: {unexpected_keys}",
             f"Original data: {node}",

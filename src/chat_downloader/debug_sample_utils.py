@@ -18,6 +18,7 @@ _GROUP_RULES: tuple[tuple[str, str], ...] = (
     ("unknown-message-type", "messages"),
     # Twitch-specific groups
     ("unknown-irc-action", "messages"),
+    ("unknown-irc-shape", "messages"),
     ("unknown-irc-tag", "messages"),
     ("unknown-gql-shape", "graphql"),
 )

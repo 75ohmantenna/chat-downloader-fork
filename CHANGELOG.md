@@ -8,6 +8,20 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Fixes
+
+- Preserve Twitch raid and unraid system-event descriptions in text output,
+  with safe raider/author fallbacks when optional fields are missing or empty.
+
+### Debugging
+
+- Capture sanitized Twitch drift samples for unknown IRC actions, message
+  types, tags, unmatched lines, and unexpected replay shapes while retaining
+  promotable raw payloads. Twitch captures are limited to ten unique samples
+  per drift label and process to prevent unbounded diagnostic output.
+- Report the effective Twitch IRC receive timeout after applying the one-second
+  minimum.
+
 ## 2.0.7 — 2026-08-25
 
 ### Tooling

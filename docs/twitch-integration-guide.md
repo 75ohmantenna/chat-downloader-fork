@@ -80,7 +80,7 @@ The Twitch flow depends on the target type.
 - `parsing/tag_decoding.py`: IRC tag decoding and boolean parsing
 - `parsing/badges.py`: badge parsing and icon shaping helpers
 - `remappings.py`: remapping dictionary builders
-- `validation_keys.py`: known-key sets used by debug validation
+- `validation_keys.py`: known-key sets and raw replay-shape debug validation
 - `types.py`: badge cache and related immutable snapshots
 - `constants.py`: persisted-query names and hashes, message groups, IRC
   constants, GraphQL operation payloads, and known-key builders
@@ -121,6 +121,10 @@ Live chat uses Twitch IRC over TLS. The transport:
 The low-level `TwitchChatIRC` class lives in `irc_transport.py`. The live
 service constructs it and passes parsed IRC frames through
 `parsing/messages.py`.
+
+Debug logging reports both the requested socket receive timeout and the
+effective timeout. Twitch clamps values below one second to one second to
+avoid idle CPU churn.
 
 ### Filtering and deduplication
 
@@ -209,8 +213,15 @@ These are structural offline checks; no network access is required.
 
 ## Capture and fix parser drift
 
-When a live IRC message or GraphQL response triggers `debug_log` with an
-unknown type, the runtime emits a sentinel and can save a sanitized snapshot.
+When a live IRC message or GraphQL response contains an unknown type, tag, or
+shape, the runtime emits a drift diagnostic and saves a sanitized snapshot when
+debug-sample capture is enabled. Unknown IRC actions, message types, tags, and
+unmatched IRC shapes retain the original IRC line, including its `\r\n` line
+terminator, so the snapshot can be promoted directly into a drift fixture.
+Unexpected replay shapes retain the complete original GraphQL edge, including
+fields that normalized remapping would otherwise discard. Each Twitch drift
+label captures at most ten unique payloads per process and output directory, so
+a newly ubiquitous provider field cannot create one file per message.
 See [Debug sample capture](development-workflow-guide.md#debug-sample-capture)
 for capture configuration. Promote reviewed samples into
 `tests/fixtures/twitch/`.
@@ -219,8 +230,9 @@ To turn a captured drift sample into a permanent regression anchor:
 
 1. Reproduce the failure with
    `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1` and `--logging debug`.
-2. Read the snapshot. The two sentinel phrases checked by the
-   harness are `"Unknown action type"` and `"Unknown message type"`.
+2. Read and review the sanitized snapshot. The harness rejects any
+   unexpected-data `debug_log()` call, unmatched IRC fixture, unexpected
+   normalized IRC key, or raw GraphQL schema drift.
 3. Update the relevant parser contract:
    - New IRC action type → extend `ACTION_TYPE_REMAPPING` in `constants.py`.
    - New IRC message type → extend `MESSAGE_GROUP_REMAPPINGS` in
@@ -228,16 +240,20 @@ To turn a captured drift sample into a permanent regression anchor:
    - New IRC tag → add it to `build_irc_remapping()` or
      `build_message_param_remapping()` in `remappings.py`; the known-key set
      derives from those mappings.
+   - New replay field or typename → update the VOD edge schema in
+     `validation_keys.py`, then update the parser/remapping when the field is
+     useful.
    - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`;
      see GraphQL Hash Rotation below.
-4. Add a `{"raw": "<irc line>\\r\\n"}` fixture to
-   `tests/fixtures/twitch/live_events/` with a descriptive name.
+4. Promote reviewed IRC samples into `tests/fixtures/twitch/live_events/` and
+   replay samples into `tests/fixtures/twitch/graphql/`. The drift harness runs
+   both fixture families through their real parser composition.
 5. Run the drift harness, then the canonical validation:
    ```bash
    uv run pytest -q tests/test_twitch_drift_harness_unit.py
    make ci
    ```
-   It replays every fixture and asserts no sentinel fires. A passing harness
+   It replays every fixture and asserts no drift report fires. A passing harness
    makes the fix a permanent regression anchor.
 
 ## Common Failure Points

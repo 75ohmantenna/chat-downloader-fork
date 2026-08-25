@@ -64,6 +64,10 @@ _RESERVED_CHANNEL_PATHS = (
     "wallet",
 )
 
+# Bound opt-in drift captures so a newly ubiquitous field cannot create one
+# file per message during a long-running Twitch download.
+TWITCH_DEBUG_SAMPLE_LIMIT = 10
+
 VALID_URLS = {
     # e.g. 'http://www.twitch.tv/riotgames/v/6528877?t=5m10s'
     "_get_chat_by_vod_id": r"""(?x)

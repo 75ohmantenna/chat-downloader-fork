@@ -14,6 +14,7 @@ import tempfile
 from contextlib import suppress
 from itertools import pairwise
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from urllib.parse import parse_qsl, unquote_plus, urlencode, urlsplit, urlunsplit
 
@@ -23,6 +24,9 @@ REDACTED = "<redacted>"
 _DEBUG_SAMPLE_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES"
 _DEBUG_SAMPLE_DIR_ENV = "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+_DEBUG_SAMPLE_DIGESTS: dict[tuple[str, str], set[str]] = {}
+_DEBUG_SAMPLE_LIMIT_WARNED: set[tuple[str, str]] = set()
+_DEBUG_SAMPLE_LIMIT_LOCK = Lock()
 _SENSITIVE_KEY_COMPONENTS = frozenset(
     {
         "auth",
@@ -348,18 +352,69 @@ def _write_or_validate_sample(
         raise
 
 
-def capture_debug_sample(label: str, payload: Any) -> str | None:
+def _reserve_debug_sample(
+    sample_dir: Path,
+    label: str,
+    digest: str,
+    sample_limit: int | None,
+) -> tuple[bool, bool]:
+    """Reserve one unique bounded sample and report whether it is new."""
+    if sample_limit is None:
+        return True, False
+    if sample_limit < 0:
+        msg = "sample_limit must be greater than or equal to zero"
+        raise ValueError(msg)
+
+    key = (str(sample_dir.absolute()), slugify_debug_label(label))
+    with _DEBUG_SAMPLE_LIMIT_LOCK:
+        digests = _DEBUG_SAMPLE_DIGESTS.setdefault(key, set())
+        if digest in digests:
+            return True, False
+        if len(digests) >= sample_limit:
+            if key not in _DEBUG_SAMPLE_LIMIT_WARNED:
+                _DEBUG_SAMPLE_LIMIT_WARNED.add(key)
+                _get_logger().debug(
+                    "Debug sample limit reached: label=%s limit=%d directory=%s",
+                    label,
+                    sample_limit,
+                    sample_dir,
+                )
+            return False, False
+        digests.add(digest)
+        return True, True
+
+
+def _release_debug_sample(sample_dir: Path, label: str, digest: str) -> None:
+    """Release a failed bounded-sample reservation so it can be retried."""
+    key = (str(sample_dir.absolute()), slugify_debug_label(label))
+    with _DEBUG_SAMPLE_LIMIT_LOCK:
+        digests = _DEBUG_SAMPLE_DIGESTS.get(key)
+        if digests is not None:
+            digests.discard(digest)
+
+
+def capture_debug_sample(
+    label: str,
+    payload: Any,
+    *,
+    sample_limit: int | None = None,
+) -> str | None:
     """Write a sanitized debug payload to a deterministic JSON file.
 
     This is opt-in and only active when:
 
     - the logger is in debug mode
     - ``CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES`` is set to a truthy value
+
+    When *sample_limit* is provided, at most that many unique payloads are
+    captured for the label and output directory during the current process.
     """
     if not _debug_sample_capture_enabled():
         return None
 
     logger = _get_logger()
+    reserved = False
+    sample_dir: Path | None = None
     try:
         sanitized = sanitize_for_log(payload)
         serialized = json.dumps(
@@ -383,6 +438,14 @@ def capture_debug_sample(label: str, payload: Any) -> str | None:
         sample_dir = Path(
             os.environ.get(_DEBUG_SAMPLE_DIR_ENV, default_sample_dir),
         )
+        allowed, reserved = _reserve_debug_sample(
+            sample_dir,
+            label,
+            digest,
+            sample_limit,
+        )
+        if not allowed:
+            return None
         directory_fd = _prepare_sample_directory(sample_dir)
         try:
             path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
@@ -400,6 +463,8 @@ def capture_debug_sample(label: str, payload: Any) -> str | None:
         )
         return str(path)
     except (OSError, TypeError, ValueError) as exc:
+        if reserved and sample_dir is not None:
+            _release_debug_sample(sample_dir, label, digest)
         logger.warning("Unable to capture debug sample for %r: %s", label, exc)
         return None
 

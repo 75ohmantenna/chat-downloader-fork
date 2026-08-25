@@ -100,12 +100,17 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     connect_timeout=connect_timeout,
                     proxy_url=proxy_url,
                 )
-                irc.set_timeout(
-                    max(
-                        request.message_receive_timeout,
-                        _MIN_RECEIVE_TIMEOUT_SECONDS,
-                    )
+                effective_receive_timeout = max(
+                    request.message_receive_timeout,
+                    _MIN_RECEIVE_TIMEOUT_SECONDS,
                 )
+                log(
+                    "debug",
+                    "Twitch IRC receive timeout: "
+                    f"requested={request.message_receive_timeout}s, "
+                    f"effective={effective_receive_timeout}s.",
+                )
+                irc.set_timeout(effective_receive_timeout)
                 irc.join_channel(stream_id)
             except OSError as error:
                 if irc is not None:
