@@ -40,6 +40,7 @@ from chat_downloader.sites.twitch.remappings import (
     build_user_remapping,
 )
 from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
+from chat_downloader.utils.json_types import JSONDict, get_str
 from chat_downloader.utils.time_utils import seconds_to_time
 
 if TYPE_CHECKING:
@@ -208,14 +209,23 @@ def _parse_item(
         info["time_text"] = seconds_to_time(int(info["time_in_seconds"]))
 
     badges = info.pop("author_badges", None)
-    if badges:
-        info["author"]["badges"] = [
-            _parse_badge_info(x.get("setID"), x.get("version"), channel_id, badge_set)
-            for x in badges
-            if x.get("setID") and x.get("version")
-        ]
-        if not info["author"]["badges"]:
-            del info["author"]["badges"]
+    parsed_badges: list[JSONDict] = []
+    for badge in badges if isinstance(badges, list) else []:
+        if not isinstance(badge, dict):
+            continue
+        badge_name = get_str(badge, "setID")
+        badge_version = get_str(badge, "version")
+        if badge_name and badge_version:
+            parsed_badges.append(
+                _parse_badge_info(
+                    badge_name,
+                    badge_version,
+                    channel_id,
+                    badge_set,
+                )
+            )
+    if parsed_badges:
+        info.setdefault("author", {})["badges"] = parsed_badges
 
     _move_to_dict(info, "author")
 

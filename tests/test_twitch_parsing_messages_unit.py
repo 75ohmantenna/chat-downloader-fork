@@ -591,6 +591,27 @@ def test_parse_item_defaults_to_text_message_and_drops_empty_badges() -> None:
     assert "badges" not in parsed["author"]
 
 
+def test_parse_item_attaches_badges_without_commenter() -> None:
+    parsed = tw_messages._parse_item(
+        {
+            "id": "msg-1",
+            "message": {
+                "userBadges": [
+                    None,
+                    {"setID": "subscriber"},
+                    {"setID": "moderator", "version": "1"},
+                ],
+                "fragments": [{"text": "hello"}],
+            },
+        },
+        offset=0,
+        channel_id="123",
+    )
+
+    assert parsed["message"] == "hello"
+    assert parsed["author"] == {"badges": [{"name": "moderator", "version": 1}]}
+
+
 def test_parse_item_remaps_known_message_type(monkeypatch, request) -> None:
     item = {
         "id": "msg-2",

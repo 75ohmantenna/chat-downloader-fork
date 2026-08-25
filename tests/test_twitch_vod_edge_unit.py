@@ -179,6 +179,32 @@ class TestProcessVodEdge:
         assert disposition == "yield"
         assert result_data == parsed_data
 
+    def test_edge_with_badges_and_no_commenter_yields_data(self) -> None:
+        """Badge-bearing anonymous comments survive the real edge parser."""
+        _process_vod_edge = _import()
+        node = _make_node()
+        node.pop("commenter")
+        node["message"] = {
+            "userBadges": [{"setID": "moderator", "version": "1"}],
+            "fragments": [{"text": "hello"}],
+        }
+
+        result_data, disposition = _process_vod_edge(
+            _make_edge(node=node),
+            offset=0.0,
+            creator_channel_id="chan-1",
+            badge_set=None,
+            time_filter=_AlwaysYieldTimeFilter(),
+            msg_filter=_AllowMsgFilter(),
+            logger_obj=_LOGGER,
+        )
+
+        assert disposition == "yield"
+        assert result_data is not None
+        assert result_data["author"] == {
+            "badges": [{"name": "moderator", "version": 1}]
+        }
+
     def test_unexpected_edge_typename_skips(self) -> None:
         """An edge with an unexpected __typename returns (None, 'skip')."""
         _process_vod_edge = _import()
