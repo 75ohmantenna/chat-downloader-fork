@@ -70,10 +70,13 @@ same interfaces as production callers.
 | Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` and preserves explicit/environment proxy policy | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
 | Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures; the first `pusher:error` forces key discovery and one reconnect, while a repeated error is terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
 
-`Chat.close()` propagates closure through message-limit and timeout wrappers to
-the provider generator before output writers are finalized. This is the common
-Ctrl-C/SIGTERM and early-stop cleanup path. Reconnect diagnostics are debug-only;
-normal message output and file formats are unchanged.
+`Chat.close()` requests closure through message-limit and timeout wrappers before
+output writers are finalized. When the timeout worker is actively advancing the
+provider iterator, its join is intentionally bounded; writer finalization may
+finish first, and the worker closes the provider iterator as soon as that active
+advance returns or raises. This is the common Ctrl-C/SIGTERM and early-stop
+cleanup path. Reconnect diagnostics are debug-only; normal message output and
+file formats are unchanged.
 
 JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing

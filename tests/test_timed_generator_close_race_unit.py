@@ -30,6 +30,7 @@ class QueueBlockingIterator:
         self.second_item_requested = threading.Event()
         self.closed = threading.Event()
         self.calls = 0
+        self.close_calls = 0
 
     def __iter__(self):
         return self
@@ -41,7 +42,24 @@ class QueueBlockingIterator:
         return self.calls
 
     def close(self) -> None:
+        self.close_calls += 1
         self.closed.set()
+
+
+class BlockingFailingCloseableIterator(BlockingCloseableIterator):
+    def __next__(self):
+        self.entered.set()
+        self.release.wait(timeout=5)
+        raise RuntimeError("source failed during shutdown")
+
+
+class StopBetweenLoopAndAdvance:
+    def __init__(self) -> None:
+        self.checks = 0
+
+    def is_set(self) -> bool:
+        self.checks += 1
+        return self.checks >= 2
 
 
 def test_cancel_timers_defers_close_while_worker_is_advancing() -> None:
@@ -60,6 +78,24 @@ def test_cancel_timers_defers_close_while_worker_is_advancing() -> None:
     assert source.closed.is_set()
 
 
+def test_close_defers_source_cleanup_until_failing_next_unwinds() -> None:
+    source = BlockingFailingCloseableIterator()
+    tg = TimedGenerator(source)
+
+    assert source.entered.wait(timeout=1)
+
+    tg.close()
+
+    assert tg._worker.is_alive()
+    assert not source.closed.is_set()
+
+    source.release.set()
+    tg._worker.join(timeout=1)
+
+    assert not tg._worker.is_alive()
+    assert source.closed.is_set()
+
+
 def test_close_unblocks_worker_waiting_to_publish_result() -> None:
     source = QueueBlockingIterator()
     tg = TimedGenerator(source)
@@ -70,6 +106,20 @@ def test_close_unblocks_worker_waiting_to_publish_result() -> None:
 
     assert not tg._worker.is_alive()
     assert source.closed.is_set()
+    assert source.close_calls == 1
+
+
+def test_worker_rechecks_stop_before_advancing_source() -> None:
+    tg = TimedGenerator(iter(()))
+    tg._worker.join(timeout=1)
+    source = QueueBlockingIterator()
+    tg.generator = source
+    tg._stop_requested = StopBetweenLoopAndAdvance()
+
+    tg._worker_loop()
+
+    assert source.calls == 0
+    assert source.close_calls == 1
 
 
 def test_cancel_timers_suppresses_reentrant_generator_close_error(

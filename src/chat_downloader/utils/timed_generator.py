@@ -46,6 +46,8 @@ class TimedGenerator:
         self._stop_requested = threading.Event()
         self._worker_state_lock = threading.Lock()
         self._worker_advancing = False
+        self._generator_close_lock = threading.Lock()
+        self._generator_closed = False
         self._start_time = time.monotonic()
         self._timeout_expired = threading.Event()
         self._inactivity_expired = threading.Event()
@@ -164,8 +166,13 @@ class TimedGenerator:
         self._close_generator()
 
     def _close_generator(self) -> None:
-        close = getattr(self.generator, "close", None)
-        if callable(close):
+        with self._generator_close_lock:
+            if self._generator_closed:
+                return
+            close = getattr(self.generator, "close", None)
+            if not callable(close):
+                self._generator_closed = True
+                return
             try:
                 close()
             except (RuntimeError, StopIteration, ValueError) as error:
@@ -174,31 +181,36 @@ class TimedGenerator:
                 from chat_downloader.debugging import log  # cycle guard
 
                 log("debug", f"Suppressed generator close() error: {error}")
+            self._generator_closed = True
 
     def _worker_loop(self) -> None:
-        while not self._stop_requested.is_set():
-            try:
-                with self._worker_state_lock:
-                    self._worker_advancing = True
+        try:
+            while not self._stop_requested.is_set():
                 try:
-                    item = next(self.generator)
-                finally:
                     with self._worker_state_lock:
-                        self._worker_advancing = False
-                if self._stop_requested.is_set():
-                    self._close_generator()
+                        if self._stop_requested.is_set():
+                            return
+                        self._worker_advancing = True
+                    try:
+                        item = next(self.generator)
+                    finally:
+                        with self._worker_state_lock:
+                            self._worker_advancing = False
+                    if self._stop_requested.is_set():
+                        return
+                    if not self._publish_result(("item", item, time.monotonic())):
+                        return
+                except StopIteration:
+                    self._publish_result(("stop", None, time.monotonic()))
                     return
-                if not self._publish_result(("item", item, time.monotonic())):
-                    self._close_generator()
+                except BaseException as error:
+                    if isinstance(error, (SystemExit, GeneratorExit)):
+                        raise
+                    self._publish_result(("error", error, time.monotonic()))
                     return
-            except StopIteration:
-                self._publish_result(("stop", None, time.monotonic()))
-                return
-            except BaseException as error:
-                if isinstance(error, (SystemExit, GeneratorExit)):
-                    raise
-                self._publish_result(("error", error, time.monotonic()))
-                return
+        finally:
+            if self._stop_requested.is_set():
+                self._close_generator()
 
     def _publish_result(self, result: tuple[str, object, float]) -> bool:
         """Publish a worker result without blocking forever during shutdown."""
@@ -211,7 +223,12 @@ class TimedGenerator:
         return False
 
     def close(self) -> None:
-        """Request worker shutdown and close the wrapped iterator when safe."""
+        """Request bounded worker shutdown and close the iterator when safe.
+
+        If the worker is advancing the iterator, this method returns after a
+        short bounded join. The worker closes the iterator when that active
+        advancement returns or raises.
+        """
         if self._closed:
             return
         self._closed = True
