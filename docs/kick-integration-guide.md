@@ -288,9 +288,11 @@ message types:
 | `pins` | `pinned_message`, `pinned_message_deleted` |
 | `hosts` | `stream_host` |
 
-The default message group surfaces only `messages`. Use, for example,
-`--message_groups messages,subscriptions,moderation` to capture non-text
-events.
+The default message group surfaces only `messages`. Use `--message_groups all`
+for full-spectrum diagnostics, or pass a comma-separated subset such as
+`messages,subscriptions,moderation` when only selected non-text events are
+needed. `all` is the shared unfiltered selector rather than an entry in the
+site-specific group map.
 
 Kick's default text formatter labels subscription, pin, host, and moderation
 events. Empty-message events such as deletions and chat clears render bracketed

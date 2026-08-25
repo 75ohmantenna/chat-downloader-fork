@@ -160,7 +160,7 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `timeout` | `None` | Overall runtime limit |
 | `inactivity_timeout` | `None` | Stop after idle period |
 | `max_messages` | `None` | Stop after this many messages |
-| `message_groups` | site default | High-level message filtering |
+| `message_groups` | site default | High-level message filtering; `["all"]` accepts every supported provider event type |
 | `message_types` | `None` | Explicit message-type filtering; overrides `message_groups` when supplied |
 | `output` | `None` | Output path or list of paths |
 | `overwrite` | `True` | Replace existing output files |

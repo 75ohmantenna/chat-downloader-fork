@@ -32,11 +32,11 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
   --output chat.txt
 ```
 
-Capture a Kick live channel, including subscription and moderation events:
+Capture every supported Kick live event type:
 
 ```bash
 chat_downloader "https://kick.com/xqc" \
-  --message_groups messages,subscriptions,moderation \
+  --message_groups all \
   --output kick-chat.jsonl
 ```
 
@@ -120,6 +120,7 @@ Filtering and output:
 
 - `--message_groups` and `--message_types` are mutually exclusive CLI filters.
   Pass multiple names as one comma-separated argument.
+  Use `--message_groups all` for a provider's complete supported event surface.
   In typed API requests, an explicit `ChatRequest.message_types` value overrides
   `message_groups`, including the `all` group.
 - `--format` or `--format_file` — change rendered text output.
