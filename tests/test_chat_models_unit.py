@@ -396,11 +396,13 @@ def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
     assert dispatcher.writer_summaries == [
         {
             "file_name": "x",
+            "file_created": True,
             "records_written": 1,
         },
-        {"file_name": "x", "records_written": 2},
+        {"file_name": "x", "file_created": True, "records_written": 2},
         {
             "file_name": "x",
+            "file_created": True,
             "records_written": 1,
         },
     ]
@@ -436,6 +438,7 @@ def test_writer_summary_does_not_count_failed_write() -> None:
     assert dispatcher.writer_summaries == [
         {
             "file_name": "failed.jsonl",
+            "file_created": True,
             "records_written": 0,
         }
     ]

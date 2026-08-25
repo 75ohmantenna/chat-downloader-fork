@@ -301,8 +301,9 @@ def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
         "debug",
         (
             "Run summary: {'message_count': 2, 'output_writers': "
-            "[{'file_name': 'chat.jsonl', 'records_written': 2}, "
-            "{'file_name': 'chat.txt', 'records_written': 1}]}"
+            "[{'file_name': 'chat.jsonl', 'file_created': True, "
+            "'records_written': 2}, {'file_name': 'chat.txt', "
+            "'file_created': True, 'records_written': 1}]}"
         ),
     )
 
@@ -313,6 +314,7 @@ def test_log_run_summary_redacts_credentials(monkeypatch) -> None:
             self.writer_summaries = [
                 {
                     "file_name": ("https://alice:hunter2@example.invalid/chat.jsonl"),
+                    "file_created": False,
                     "records_written": 0,
                 }
             ]
@@ -329,9 +331,9 @@ def test_log_run_summary_redacts_credentials(monkeypatch) -> None:
 
     _log_run_summary(Chat(), 0)
 
-    assert len(logged) == 1
-    assert "hunter2" not in logged[0]
-    assert "<redacted>@example.invalid" in logged[0]
+    assert len(logged) == 2
+    assert all("hunter2" not in message for message in logged)
+    assert all("<redacted>@example.invalid" in message for message in logged)
 
 
 def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> None:
@@ -374,10 +376,77 @@ def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> 
     result = execute_run(Downloader, quiet=True)
 
     assert result.success is True
-    assert logged[-1] == (
-        "Run summary: {'message_count': 0, 'output_writers': "
-        "[{'file_name': 'empty.txt', 'records_written': 0}]}"
+    assert logged[-2:] == [
+        "Lazy output file was not created because no records were retrieved: empty.txt",
+        (
+            "Run summary: {'message_count': 0, 'output_writers': "
+            "[{'file_name': 'empty.txt', 'file_created': False, "
+            "'records_written': 0}]}"
+        ),
+    ]
+
+
+def test_execute_run_reports_uncreated_lazy_jsonl_and_txt(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    from chat_downloader.output.continuous_write import ContinuousWriter
+    from chat_downloader.sites.models import Chat
+
+    jsonl_path = tmp_path / "empty.jsonl"
+    txt_path = tmp_path / "empty.txt"
+
+    class Downloader:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def get_chat(self, **_kwargs):
+            chat = Chat(iter(()))
+            chat.attach_writer(
+                ContinuousWriter(
+                    str(jsonl_path),
+                    overwrite=True,
+                    lazy_initialise=True,
+                )
+            )
+            chat.attach_writer(
+                ContinuousWriter(
+                    str(txt_path),
+                    overwrite=True,
+                    lazy_initialise=True,
+                )
+            )
+            return chat
+
+        def close(self) -> None:
+            pass
+
+    logged: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda level, message: logged.append((level, message)),
     )
+
+    result = execute_run(Downloader, quiet=True)
+
+    assert result.success is True
+    assert not jsonl_path.exists()
+    assert not txt_path.exists()
+    assert (
+        "info",
+        (
+            "Lazy output file was not created because no records were retrieved: "
+            f"{jsonl_path}"
+        ),
+    ) in logged
+    assert (
+        "info",
+        (
+            "Lazy output file was not created because no records were retrieved: "
+            f"{txt_path}"
+        ),
+    ) in logged
+    assert "'file_created': False" in logged[-1][1]
 
 
 def test_execute_run_passes_dedup_cache_size_to_message_callback() -> None:

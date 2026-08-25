@@ -278,6 +278,11 @@ The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
 output. JSON-array `.json` output is not supported.
 
+Attached output writers initialize on the first record. A successful
+zero-record run therefore does not create configured `.jsonl` or `.txt` files;
+the runtime logs each uncreated path and includes `file_created: False` in its
+debug writer summary.
+
 Output paths support `{title}` and `{id}` placeholders. The substituted values
 are sanitized as single filename components. Targets are deduplicated after
 placeholder expansion and canonical path resolution; existing hard links are

@@ -147,6 +147,17 @@ def _log_run_summary(chat: Chat | None, message_count: int) -> None:
             "output_writers": writer_summaries,
         }
     )
+    for writer_summary in writer_summaries:
+        if (
+            not writer_summary["file_created"]
+            and writer_summary["records_written"] == 0
+        ):
+            file_name = sanitize_for_log(writer_summary["file_name"])
+            log(
+                "info",
+                "Lazy output file was not created because no records were "
+                f"retrieved: {file_name}",
+            )
     log("debug", f"Run summary: {summary}")
 
 

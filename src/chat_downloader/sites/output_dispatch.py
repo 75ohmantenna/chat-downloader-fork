@@ -48,9 +48,10 @@ class _ChatHost(Protocol):
 
 
 class _WriterSummary(TypedDict):
-    """Debug-facing count of records successfully written to one output."""
+    """Debug-facing creation state and record count for one output."""
 
     file_name: str
+    file_created: bool
     records_written: int
 
 
@@ -168,6 +169,7 @@ class _ChatOutputDispatcher:
         return [
             {
                 "file_name": writer.file_name,
+                "file_created": writer.is_initialised(),
                 "records_written": self._records_written_by_writer[id(writer)],
             }
             for writer in self.writers

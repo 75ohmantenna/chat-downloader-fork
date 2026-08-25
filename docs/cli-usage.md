@@ -88,6 +88,11 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
 Other extensions, including `.json` and `.csv`, are unsupported. Output paths
 must end in `.jsonl` or `.txt`.
 
+Output writers initialize lazily on the first record. When a successful run
+retrieves zero records, configured `.jsonl` and `.txt` files are not created.
+The final info log names each uncreated lazy output, and the debug run summary
+reports `file_created: False` with `records_written: 0`.
+
 Twitch text output preserves system-event descriptions for subscription,
 raid, and unraid messages. JSONL remains the lossless structured format when
 downstream processing needs provider-specific metadata.
@@ -188,8 +193,10 @@ Debug and automation:
   unnecessary final wait. Empty replay pages continue when the provider
   supplies another continuation token.
 - Successful debug runs end with the total retrieved-message count and the
-  number of completed records for each output writer. Formatted-writer counts
-  can be lower than JSONL counts when semantic duplicates are suppressed.
+  creation state and completed-record count for each output writer.
+  Formatted-writer counts can be lower than JSONL counts when semantic
+  duplicates are suppressed. Zero-record lazy outputs are named explicitly as
+  files that were not created.
 - `--quiet`, `--testing`, `--pause_on_debug`, `--exit_on_debug` — automation
   and parser-debug workflows.
 
