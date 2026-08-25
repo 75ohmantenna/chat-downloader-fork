@@ -179,6 +179,71 @@ def test_process_actions_counts_non_message_action_without_yielding() -> None:
     assert stop_requested is False
 
 
+def test_process_actions_keeps_backlog_timing_signed_and_polling_nonnegative(
+    monkeypatch,
+) -> None:
+    from chat_downloader.sites.filters import MessageFilter
+
+    state = _make_loop_state()
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            disposition="yield",
+            message={"timestamp": 500_000},
+        ),
+    )
+
+    messages = list(
+        _process_actions(
+            [{"id": 1}],
+            offset=None,
+            msg_filter=MessageFilter({}),
+            time_filter=None,
+            loop_state=state,
+            live_start_time_ms=1000,
+            is_replay=False,
+        )
+    )
+
+    assert messages == [
+        {
+            "timestamp": 500_000,
+            "time_in_seconds": -0.5,
+            "time_text": "-0:00",
+        }
+    ]
+    assert state.offset_milliseconds == 0
+
+
+def test_process_actions_does_not_regress_polling_offset_for_late_backlog(
+    monkeypatch,
+) -> None:
+    from chat_downloader.sites.filters import MessageFilter
+
+    state = ContinuationLoopState(continuation="tok", offset_milliseconds=5000)
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            disposition="yield",
+            message={"timestamp": 500_000},
+        ),
+    )
+
+    list(
+        _process_actions(
+            [{"id": 1}],
+            offset=None,
+            msg_filter=MessageFilter({}),
+            time_filter=None,
+            loop_state=state,
+            live_start_time_ms=1000,
+            is_replay=False,
+        )
+    )
+
+    assert state.offset_milliseconds == 5000
+
+
 def test_enrich_live_message_timing_skips_when_time_in_seconds_present() -> None:
     from chat_downloader.sites.youtube.continuation import (
         enrich_live_message_timing,

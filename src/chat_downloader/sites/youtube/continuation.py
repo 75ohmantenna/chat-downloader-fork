@@ -135,11 +135,12 @@ def _apply_live_timing(
     loop_state: ContinuationLoopState,
     live_start_time_ms: int,
 ) -> None:
-    """Enrich a live message with player-offset timing and update loop state."""
+    """Add signed presentation timing and advance nonnegative polling state."""
     live_offset = derive_live_offset_milliseconds(message, live_start_time_ms)
     if live_offset is not None:
         enrich_live_message_timing(message, live_offset)
-        loop_state.offset_milliseconds = live_offset
+        current_poll_offset = loop_state.offset_milliseconds or 0
+        loop_state.offset_milliseconds = max(current_poll_offset, live_offset, 0)
 
 
 def _raise_if_api_error(yt_info: JSONDict) -> None:
@@ -208,8 +209,9 @@ def _process_actions(
 ) -> Generator[JSONDict, None, bool]:
     """Walk *actions*, apply filters, and yield accepted messages.
 
-    Updates *loop_state.offset_milliseconds* in-place when a live message
-    carries a usable timestamp.
+    Advances the nonnegative *loop_state.offset_milliseconds* in-place when a
+    live message carries a usable timestamp. Presentation timing remains signed
+    so initial-backlog messages retain their capture-relative ordering.
 
     Args:
         actions: Raw action dicts from the ``liveChatContinuation`` payload.

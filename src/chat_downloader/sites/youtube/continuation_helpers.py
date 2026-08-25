@@ -40,6 +40,8 @@ class ContinuationLoopState:
 
     continuation: str
     click_tracking_params: str | None = None
+    # Nonnegative polling position. Presentation timing is derived separately
+    # and may be negative for messages in the initial live-chat backlog.
     offset_milliseconds: float | None = None
 
 
@@ -87,19 +89,21 @@ def derive_live_offset_milliseconds(
     message: JSONDict,
     live_start_time_ms: int,
 ) -> int | None:
-    """Derive a rolling live offset from a message timestamp.
+    """Derive a signed capture-relative offset from a message timestamp.
 
     yt-dlp computes a live offset by comparing ``timestampUsec`` to a wall-clock
     start time captured when live chat retrieval begins. We use the same idea to
-    improve follow-up ``playerOffsetMs`` requests and to backfill presentation
-    timing fields for live messages.
+    backfill presentation timing fields for live messages. Negative offsets
+    identify messages that arrived in the initial backlog before retrieval
+    began; the continuation loop separately keeps ``playerOffsetMs``
+    nonnegative.
     """
     timestamp = message.get("timestamp")
     if not isinstance(timestamp, int):
         return None
 
     timestamp_ms = timestamp // 1000
-    return max(timestamp_ms - live_start_time_ms, 0)
+    return timestamp_ms - live_start_time_ms
 
 
 def enrich_live_message_timing(

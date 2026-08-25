@@ -170,8 +170,12 @@ For live streams, polling continues until:
 - the caller hits `max_messages`, `timeout`, or `inactivity_timeout`
 - an unrecoverable error occurs
 
-The live path also derives a live offset when possible so downstream timing is
-more consistent.
+The live path also derives capture-relative presentation timing when a message
+timestamp is available. Messages returned from before retrieval started keep a
+negative `time_in_seconds` value and signed `time_text`; later messages use
+positive values. The separate InnerTube `playerOffsetMs` polling position stays
+nonnegative and never moves backward when YouTube delivers an older message
+late.
 
 ### Replays and completed streams
 

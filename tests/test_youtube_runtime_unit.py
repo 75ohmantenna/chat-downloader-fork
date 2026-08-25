@@ -406,9 +406,14 @@ def test_build_continuation_params_omits_player_offset_when_unavailable() -> Non
     }
 
 
-def test_derive_live_offset_milliseconds_returns_non_negative_value() -> None:
+def test_derive_live_offset_milliseconds_returns_positive_live_value() -> None:
     message = {"timestamp": 6_000_000}
     assert derive_live_offset_milliseconds(message, live_start_time_ms=1000) == 5000
+
+
+def test_derive_live_offset_milliseconds_returns_negative_backlog_value() -> None:
+    message = {"timestamp": 500_000}
+    assert derive_live_offset_milliseconds(message, live_start_time_ms=1000) == -500
 
 
 def test_derive_live_offset_milliseconds_returns_none_without_timestamp() -> None:
@@ -421,6 +426,14 @@ def test_enrich_live_message_timing_backfills_time_fields() -> None:
 
     assert message["time_in_seconds"] == 5.0
     assert message["time_text"] == "0:05"
+
+
+def test_enrich_live_message_timing_preserves_signed_backlog_offset() -> None:
+    message = {"timestamp": 500_000}
+    enrich_live_message_timing(message, -1500)
+
+    assert message["time_in_seconds"] == -1.5
+    assert message["time_text"] == "-0:01"
 
 
 def test_enrich_live_message_timing_preserves_existing_time_fields() -> None:
