@@ -339,6 +339,11 @@ contain ordinary public chat data. Set
 raw Twitch IRC frames across reconnects. The shared capture flag and debug
 logging must also be enabled.
 
+Set `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1` to capture up to three successfully
+parsed raw Kick WebSocket frames per normalized event type across reconnects.
+It likewise requires the shared capture flag and debug logging; control,
+unsupported, and malformed frames remain excluded from successful samples.
+
 `chat_downloader.debug_sample_utils` contains naming helpers used to turn
 captured samples into stable fixture names.
 

@@ -217,9 +217,9 @@ live-event fixtures.
 
 Kick supports the equivalent clean-run workflow with
 `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`. Combined with the shared capture flag
-and debug logging, it captures at most the first three raw WebSocket frames
-that successfully parse as supported events. The per-run attempt cap spans
-reconnects and excludes control, unknown, and malformed frames.
+and debug logging, it captures at most the first three raw WebSocket frames per
+normalized event type that successfully parses. Type-specific per-run attempt
+caps span reconnects and exclude control, unknown, and malformed frames.
 
 The logging handler applies the same structured and string redaction to project
 messages, exception text, and stack information. It redacts credentials in

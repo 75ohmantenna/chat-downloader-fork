@@ -190,8 +190,8 @@ Debug and automation:
   `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1`, Twitch captures the first
   three successfully parsed raw IRC frames for clean-run schema review.
 - With both that setting and `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`, Kick also
-  captures the first three successfully parsed raw event frames for clean-run
-  schema review.
+  captures the first three successfully parsed raw frames per normalized event
+  type for clean-run schema review.
 - YouTube continuation polls report separate processed-action and
   emitted-message counts. Non-emitting actions are aggregated by bounded
   reason: known ignored controls or renderers, unparsed actions, invalid

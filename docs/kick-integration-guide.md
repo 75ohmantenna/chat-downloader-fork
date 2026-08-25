@@ -384,9 +384,9 @@ chat_downloader "https://kick.com/xqc" --logging debug
 ```
 
 For clean-run schema review, a second explicit opt-in captures the first three
-raw WebSocket frames that successfully parse as supported Kick events. The
-per-run attempt bound survives reconnects and excludes Pusher control, unknown,
-and malformed frames:
+raw WebSocket frames for each normalized event type that successfully parses.
+Type-specific per-run attempt bounds survive reconnects and exclude Pusher
+control, unknown, and malformed frames:
 
 ```bash
 CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
@@ -397,10 +397,11 @@ chat_downloader "https://kick.com/xqc" --logging debug
 Set `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR` to retain samples in a chosen private
 directory. Each anomaly label captures at most ten unique payloads per process
 and directory; successful frame capture attempts at most three payloads per
-retrieval run. The shared sanitizer redacts credential-bearing fields, URL
-tokens, and token-like strings before secure `0600` files are written. Samples
-can still contain public chat content, so review them before sharing or
-promoting one into `tests/fixtures/kick/`.
+normalized event type and retrieval run. Type-specific labels make the sampled
+surface visible without opening every file. The shared sanitizer redacts
+credential-bearing fields, URL tokens, and token-like strings before secure
+`0600` files are written. Samples can still contain public chat content, so
+review them before sharing or promoting one into `tests/fixtures/kick/`.
 
 ## Testing
 

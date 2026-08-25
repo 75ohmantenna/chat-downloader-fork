@@ -404,7 +404,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         os.environ.get(_SUCCESSFUL_FRAME_CAPTURE_ENV, "").strip().lower()
         in _TRUTHY_ENV_VALUES
     )
-    successful_frame_capture_attempts = 0
+    successful_frame_capture_attempts: dict[str, int] = {}
 
     def emit(message: dict[str, Any]) -> bool:
         message_id = message.get("message_id")
@@ -461,14 +461,23 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                                 "received_timestamp",
                                 received_timestamp,
                             )
+                        message_type = live_message.get("message_type")
+                        capture_attempts = (
+                            successful_frame_capture_attempts.get(message_type, 0)
+                            if isinstance(message_type, str)
+                            else 0
+                        )
                         if (
                             capture_successful_frames
-                            and successful_frame_capture_attempts
-                            < _SUCCESSFUL_FRAME_CAPTURE_LIMIT
+                            and isinstance(message_type, str)
+                            and capture_attempts < _SUCCESSFUL_FRAME_CAPTURE_LIMIT
                         ):
-                            successful_frame_capture_attempts += 1
+                            successful_frame_capture_attempts[message_type] = (
+                                capture_attempts + 1
+                            )
                             capture_debug_sample(
-                                "kick-websocket-frame",
+                                "kick-websocket-frame-"
+                                + message_type.replace("_", "-"),
                                 frame,
                                 sample_limit=_SUCCESSFUL_FRAME_CAPTURE_LIMIT,
                             )

@@ -21,6 +21,7 @@ from chat_downloader.sites.kick.constants import (
     MESSAGE_DELETED_EVENT,
     PINNED_MESSAGE_CREATED_EVENT,
     PUSHER_ERROR,
+    SUBSCRIPTION_EVENT,
 )
 from chat_downloader.sites.kick.errors import KickError
 from tests.kick_helpers import (
@@ -375,12 +376,19 @@ def test_successful_frame_capture_is_bounded_across_reconnects(
             FakeResponse(200, {"data": {"messages": []}}),
         ]
     )
-    frames = [
+    message_frames = [
         pusher_frame(
             CHAT_MESSAGE_EVENT,
-            {"id": str(index), "content": f"message {index}"},
+            {"id": str(index), "type": "message", "content": f"message {index}"},
         )
         for index in range(5)
+    ]
+    subscription_frames = [
+        pusher_frame(
+            SUBSCRIPTION_EVENT,
+            {"id": f"sub-{index}", "content": f"subscription {index}"},
+        )
+        for index in range(4)
     ]
     control_frame = {"event": "pusher:connection_established", "data": "{}"}
     unknown_frame = {"event": "App\\Events\\FutureEvent", "data": "{}"}
@@ -399,27 +407,103 @@ def test_successful_frame_capture_is_bounded_across_reconnects(
                         control_frame,
                         unknown_frame,
                         malformed_frame,
-                        *frames[:2],
+                        *message_frames[:2],
+                        *subscription_frames[:2],
                         ConnectionError("drop"),
                     ],
-                    frames[2:],
+                    [*message_frames[2:], *subscription_frames[2:]],
                 ]
             ),
         )
-        assert [message["message_id"] for message in chat.chat] == [
-            str(index) for index in range(5)
+        messages = list(chat.chat)
+        assert [message["message_id"] for message in messages] == [
+            "0",
+            "1",
+            "sub-0",
+            "sub-1",
+            "2",
+            "3",
+            "4",
+            "sub-2",
+            "sub-3",
         ]
 
     successful_captures = [
-        call for call in captured if call[0][0] == "kick-websocket-frame"
+        call for call in captured if call[0][0].startswith("kick-websocket-frame-")
     ]
     assert successful_captures == [
         (
-            ("kick-websocket-frame", frame),
+            ("kick-websocket-frame-text-message", frame),
             {"sample_limit": 3},
         )
-        for frame in frames[:3]
+        for frame in message_frames[:2]
+    ] + [
+        (
+            ("kick-websocket-frame-subscription", frame),
+            {"sample_limit": 3},
+        )
+        for frame in subscription_frames[:2]
+    ] + [
+        (
+            ("kick-websocket-frame-text-message", frame),
+            {"sample_limit": 3},
+        )
+        for frame in message_frames[2:3]
+    ] + [
+        (
+            ("kick-websocket-frame-subscription", frame),
+            {"sample_limit": 3},
+        )
+        for frame in subscription_frames[2:3]
     ]
+
+
+def test_successful_frame_capture_writes_independent_type_samples(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    caplog.set_level("DEBUG", logger=live_service.logger.name)
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    message_frames = [
+        pusher_frame(
+            CHAT_MESSAGE_EVENT,
+            {"id": f"msg-{index}", "type": "message", "content": "message"},
+        )
+        for index in range(4)
+    ]
+    subscription_frames = [
+        pusher_frame(
+            SUBSCRIPTION_EVENT,
+            {"id": f"sub-{index}", "content": "subscription"},
+        )
+        for index in range(4)
+    ]
+
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [[*message_frames, *subscription_frames]]
+            ),
+        )
+        assert len(list(chat.chat)) == 8
+
+    assert len(list(sample_dir.glob("kick-websocket-frame-text-message-*.json"))) == 3
+    assert len(list(sample_dir.glob("kick-websocket-frame-subscription-*.json"))) == 3
 
 
 def test_get_chat_by_channel_emits_current_pin_after_preloaded_history() -> None:

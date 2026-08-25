@@ -81,6 +81,7 @@ def test_twitch_irc_frame_maps_to_message_fixtures() -> None:
         ("kick-malformed-preloaded-message-abc123def456.json", "messages"),
         ("kick-malformed-preloaded-pin-abc123def456.json", "events"),
         ("kick-websocket-frame-abc123def456.json", "events"),
+        ("kick-websocket-frame-user-banned-abc123def456.json", "events"),
         ("kick-unknown-websocket-shape-abc123def456.json", "transport"),
     ],
 )
