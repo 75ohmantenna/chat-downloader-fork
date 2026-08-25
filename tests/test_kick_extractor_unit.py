@@ -27,9 +27,13 @@ REJECTED = [
     "https://kick.com/popout/xqc/chat",
     "https://kick.com/video/123",
     "https://kick.com/xqc/videos/123",
+    "https://kick.com/n3on/clips/not-a-clip-id",
     "https://www.youtube.com/watch?v=abc",
     "https://twitch.tv/xqc",
 ]
+
+CLIP_ID = "clip_01M0BHEHDAX2NEAGXG0DA8V9S5"
+CLIP_URL = f"https://kick.com/n3on/clips/{CLIP_ID}"
 
 
 @pytest.mark.parametrize("url", ACCEPTED)
@@ -44,6 +48,24 @@ def test_accepts_channel_urls(url: str) -> None:
 @pytest.mark.parametrize("url", REJECTED)
 def test_rejects_non_channel_urls(url: str) -> None:
     assert KickChatDownloader.matches(url) is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        CLIP_URL,
+        f"https://www.kick.com/n3on/clips/{CLIP_ID}/",
+        f"https://kick.com/n3on/clips/{CLIP_ID}?autoplay=true",
+    ],
+)
+def test_accepts_clip_urls(url: str) -> None:
+    match = KickChatDownloader.matches(url)
+
+    assert match is not None
+    handler, regex_match = match
+    assert handler == "_get_chat_by_clip"
+    assert regex_match.group("id") == "n3on"
+    assert regex_match.group("clip_id") == CLIP_ID
 
 
 def test_site_metadata() -> None:
@@ -171,4 +193,41 @@ def test_get_chat_by_video_passes_owned_client_to_builder(monkeypatch: Any) -> N
     assert result == "VOD"
     assert captured["username"] == "creator"
     assert captured["video_id"] == "video-id"
+    assert captured["api_client"] is downloader._kick_client
+
+
+def test_get_chat_by_clip_routes_identifiers_and_owned_client(
+    monkeypatch: Any,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def fake_build(
+        username: str,
+        clip_id: str,
+        request: ChatRequest,
+        *,
+        api_client: Any,
+    ) -> str:
+        captured.update(
+            username=username,
+            clip_id=clip_id,
+            request=request,
+            api_client=api_client,
+        )
+        return "CLIP"
+
+    monkeypatch.setattr(extractor, "build_clip_chat", fake_build)
+    downloader = KickChatDownloader()
+    match = KickChatDownloader.matches(CLIP_URL)
+    assert match is not None
+
+    result = downloader._get_chat_by_clip(
+        match[1],
+        {"url": CLIP_URL, "start_time": 5},
+    )
+
+    assert result == "CLIP"
+    assert captured["username"] == "n3on"
+    assert captured["clip_id"] == CLIP_ID
+    assert captured["request"].start_time == 5
     assert captured["api_client"] is downloader._kick_client

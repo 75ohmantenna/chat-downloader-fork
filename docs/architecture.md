@@ -67,7 +67,7 @@ same interfaces as production callers.
 |-----------|----------------|-----------------------|------------|
 | Shared HTTP (YouTube and Twitch) | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, and a 180-second idle watchdog | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
-| Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` and preserves explicit/environment proxy policy | Kick live metadata and VOD pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
+| Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` and preserves explicit/environment proxy policy | Kick live, VOD, and clip metadata plus replay pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
 | Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures; the first `pusher:error` forces key discovery and one reconnect, while a repeated error is terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
 
 `Chat.close()` requests closure through message-limit and timeout wrappers before
@@ -85,8 +85,9 @@ text append mode also terminates an existing final line before appending. Output
 path aliases resolving to the same file are attached only once. Writer targets
 are compared after `{title}`/`{id}` expansion; existing hard links are compared
 by device and inode.
-Kick VOD reverse pagination spills to a temporary file after 1 MiB, keeping replay
-memory bounded independently of the number of fetched messages.
+Kick VOD and clip reverse pagination starts from the selected end time and
+spills to a temporary file after 1 MiB, keeping replay memory and request scope
+bounded independently of channel activity after the recording.
 
 ---
 
@@ -218,7 +219,8 @@ non-`__init__.py` module is represented and rejects stale module names.
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
 | `live_service.py` | Live chat orchestration: channel metadata, chatroom resolution, message streaming with deduplication, bounded reconnect, and rejected-key recovery |
 | `replay_service.py` | VOD metadata, reverse pagination, time-window filtering, and chronological spooled output |
-| `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, and VOD endpoints |
+| `clip_service.py` | Clip metadata validation, clip-relative bounds, and source-VOD replay assembly |
+| `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, VOD, and clip endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
 | `pusher_discovery.py` | Default-first Pusher application-key selection, rejected-key refresh, cache ownership, and WebSocket URL construction |
 | `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |

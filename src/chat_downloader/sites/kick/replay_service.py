@@ -225,6 +225,28 @@ def _classify_message(
         return parsed, False
 
 
+def _cursor_after(timestamp: datetime) -> str:
+    """Return a provider cursor safely after an inclusive end timestamp.
+
+    Kick's history cursor is a UTC Unix timestamp in microseconds and the
+    endpoint returns messages strictly before it, while message timestamps may
+    be second-granular. Advancing one second avoids dropping messages whose
+    displayed timestamp equals the inclusive replay end; classification still
+    filters any precisely timestamped message beyond the boundary.
+    """
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=UTC)
+    timestamp = timestamp.astimezone(UTC)
+    epoch = datetime(1970, 1, 1, tzinfo=UTC)
+    delta = timestamp - epoch
+    microseconds = (
+        (delta.days * 86_400 + delta.seconds) * 1_000_000
+        + delta.microseconds
+        + 1_000_000
+    )
+    return str(microseconds)
+
+
 def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output require branch handling
     channel_id: str,
     start_dt: datetime,
@@ -235,15 +257,15 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized VOD chat messages within the time window.
 
-    Paginates through channel messages (newest first) and yields those
-    whose ``created_at`` falls within the VOD's time window. Unlike live
-    chat which streams messages as they arrive, VOD replay accumulates
-    all pages, reverses them to chronological order, and yields the result.
-    Cursor cycles terminate pagination safely. With ``max_messages`` set,
-    the oldest *N* messages (i.e. the first *N* from the stream start) are
-    returned.
+    Seeds pagination at the selected end time, then pages through channel
+    messages (newest first) and yields those whose ``created_at`` falls within
+    the VOD's time window. Unlike live chat which streams messages as they
+    arrive, VOD replay accumulates all pages, reverses them to chronological
+    order, and yields the result. Cursor cycles terminate pagination safely.
+    With ``max_messages`` set, the oldest *N* messages (i.e. the first *N* from
+    the stream start) are returned.
     """
-    cursor: str | None = None
+    cursor: str | None = _cursor_after(end_dt)
     done = False
     page_offsets: list[int] = []
     requested_cursors: set[str] = set()

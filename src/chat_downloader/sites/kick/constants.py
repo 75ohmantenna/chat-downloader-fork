@@ -32,6 +32,9 @@ CHATROOM_CHANNEL_TEMPLATE = "chatrooms.{chatroom_id}.v2"
 #: Video metadata endpoint, formatted with a video UUID.
 VIDEO_API_TEMPLATE = "https://kick.com/api/v1/video/{video_id}"
 
+#: Clip metadata endpoint, formatted with a provider clip ID.
+CLIP_API_TEMPLATE = "https://kick.com/api/v2/clips/{clip_id}"
+
 #: Channel messages endpoint (VOD replay), formatted with a channel id.
 CHANNEL_MESSAGES_API = "https://kick.com/api/v2/channels/{channel_id}/messages"
 
@@ -45,6 +48,20 @@ def is_numeric_id(value: str) -> bool:
     characters into the outbound request.
     """
     return value.isascii() and value.isdigit()
+
+
+_VIDEO_ID_PATTERN = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+_CLIP_ID_PATTERN = r"clip_[A-Za-z0-9_-]{1,128}"
+
+
+def is_video_id(value: str) -> bool:
+    """Return whether *value* is a canonical lowercase Kick VOD UUID."""
+    return re.fullmatch(_VIDEO_ID_PATTERN, value) is not None
+
+
+def is_clip_id(value: str) -> bool:
+    """Return whether *value* is safe to interpolate into a clip API path."""
+    return re.fullmatch(_CLIP_ID_PATTERN, value) is not None
 
 
 # Pusher protocol event names.
@@ -209,7 +226,16 @@ VALID_URLS = {
         r"(?:www\.)?kick\.com/"
         rf"(?P<id>{_USERNAME_CHARS})"
         r"/videos/"
-        r"(?P<video_id>[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"
+        rf"(?P<video_id>{_VIDEO_ID_PATTERN})"
+        r"/?(?=[?#]|$)"
+    ),
+    "_get_chat_by_clip": (
+        r"(?x)"
+        r"https?://"
+        r"(?:www\.)?kick\.com/"
+        rf"(?P<id>{_USERNAME_CHARS})"
+        r"/clips/"
+        rf"(?P<clip_id>{_CLIP_ID_PATTERN})"
         r"/?(?=[?#]|$)"
     ),
 }

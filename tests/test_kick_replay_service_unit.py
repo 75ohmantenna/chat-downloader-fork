@@ -319,6 +319,34 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
     assert created_spools[0]._rolled is True
 
 
+def test_iter_vod_messages_seeds_pagination_just_after_window_end() -> None:
+    api_client = _client_for_page({"data": {"messages": [], "cursor": None}})
+    end = datetime(2026, 1, 2, tzinfo=UTC)
+
+    assert (
+        list(
+            replay_service._iter_vod_messages(
+                "123",
+                datetime(2026, 1, 1, tzinfo=UTC),
+                end,
+                ChatRequest(max_attempts=1, interruptible_retry=False),
+                api_client=api_client,
+            )
+        )
+        == []
+    )
+    api_client.fetch_message_page.assert_called_once_with(
+        "123",
+        str(int(end.timestamp() * 1_000_000) + 1_000_000),
+    )
+
+
+def test_cursor_after_treats_naive_timestamp_as_utc() -> None:
+    timestamp = datetime(1970, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+
+    assert replay_service._cursor_after(timestamp) == "1000000"
+
+
 def test_iter_vod_messages_stops_repeated_cursor_without_duplicates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

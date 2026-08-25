@@ -53,6 +53,13 @@ chat_downloader "https://kick.com/xqc/videos/<uuid>" \
   --output kick-vod.jsonl
 ```
 
+Capture chat for a Kick clip:
+
+```bash
+chat_downloader "https://kick.com/<channel>/clips/<clip_id>" \
+  --output kick-clip.jsonl
+```
+
 Use cookies and custom headers:
 
 ```bash
@@ -177,8 +184,10 @@ Request control:
   and replay requests.
 - `--user-agent`, `--header "Name: Value"` (repeatable) — request headers.
 
-Kick accepts `--start_time` and `--end_time` for VOD replay URLs. Kick live
-channel URLs reject these bounds because the public live feed cannot seek.
+Kick accepts `--start_time` and `--end_time` for VOD and clip replay URLs.
+VOD bounds are relative to the recording; clip bounds are relative to the clip
+and clamp to its duration. Kick live channel URLs reject these bounds because
+the public live feed cannot seek.
 
 Debug and automation:
 

@@ -214,6 +214,26 @@ def test_fetch_video_metadata_uses_endpoint_specific_not_found_error() -> None:
         client.fetch_video_metadata("vod-1")
 
 
+def test_fetch_clip_metadata_uses_clip_endpoint() -> None:
+    payload = load_fixture("clip_metadata.json")
+    client, session = _client([FakeResponse(200, payload)])
+
+    assert client.fetch_clip_metadata("clip_01M0BHEHDAX2NEAGXG0DA8V9S5") == payload
+    assert session.calls == [
+        (
+            "https://kick.com/api/v2/clips/clip_01M0BHEHDAX2NEAGXG0DA8V9S5",
+            {"params": None, "timeout": (10.0, 30.0)},
+        )
+    ]
+
+
+def test_fetch_clip_metadata_uses_endpoint_specific_not_found_error() -> None:
+    client, _ = _client([FakeResponse(404, {})])
+
+    with pytest.raises(KickError, match="clip not found"):
+        client.fetch_clip_metadata("clip_missing")
+
+
 def test_fetch_message_page_passes_non_empty_cursor_only() -> None:
     client, session = _client(
         [

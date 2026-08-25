@@ -22,6 +22,7 @@ from chat_downloader.utils.json_types import (
 from .constants import (
     CHANNEL_API_TEMPLATE,
     CHANNEL_MESSAGES_API,
+    CLIP_API_TEMPLATE,
     CLOUDFLARE_MARKERS,
     MESSAGES_API_TEMPLATE,
     VIDEO_API_TEMPLATE,
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     import requests
 
 _DEFAULT_TIMEOUT = (10.0, 30.0)
-_ResourceKind = Literal["channel", "video", "messages"]
+_ResourceKind = Literal["channel", "video", "clip", "messages"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +101,14 @@ class KickApiClient:
             VIDEO_API_TEMPLATE.format(video_id=video_id),
             context=video_id,
             resource="video",
+        )
+
+    def fetch_clip_metadata(self, clip_id: str) -> JSONDict:
+        """Fetch clip metadata by provider clip ID."""
+        return self._request_object(
+            CLIP_API_TEMPLATE.format(clip_id=clip_id),
+            context=clip_id,
+            resource="clip",
         )
 
     def fetch_message_page(

@@ -63,6 +63,7 @@ class FakeKickSession:
 
     def __init__(self, responses: list[Any] | None = None) -> None:
         self._responses = list(responses or [])
+        self.trust_env = True
         self.requested_urls: list[str] = []
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.close_calls = 0

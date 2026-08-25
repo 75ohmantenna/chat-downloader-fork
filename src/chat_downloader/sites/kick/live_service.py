@@ -202,7 +202,7 @@ def get_chat_by_channel(
     if request.start_time is not None or request.end_time is not None:
         msg = (
             "Kick live chat does not support --start_time or --end_time. "
-            "Use a Kick VOD URL to retrieve a bounded replay."
+            "Use a Kick VOD or clip URL to retrieve a bounded replay."
         )
         raise InvalidParameter(msg)
 

@@ -153,8 +153,8 @@ and default below with the dataclass definitions used by the facade and CLI:
 | Field | Default | Description |
 | --- | --- | --- |
 | `url` | `""` | Stream, video, or clip URL |
-| `start_time` | `None` | Replay start offset; supported by YouTube, Twitch replay, and Kick VOD URLs |
-| `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD URLs |
+| `start_time` | `None` | Replay start offset; supported by YouTube, Twitch replay, and Kick VOD/clip URLs |
+| `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD/clip URLs |
 | `max_attempts` | `15` | Maximum retry attempts |
 | `retry_timeout` | `None` | Delay before retry; `None` uses exponential backoff, while a negative value waits for user input |
 | `interruptible_retry` | `True` | Allow a waiting retry to be triggered immediately |
@@ -189,11 +189,12 @@ while later messages use positive values. Replay chats keep the standard
 elapsed-time rendering.
 
 Kick VOD offsets are relative to the recording start and are clamped to its
-duration. Kick live channel URLs reject `start_time` and `end_time` because the
-public live feed cannot seek. A Kick live WebSocket event that lacks a valid
-provider `timestamp` receives a distinct UTC-microsecond `received_timestamp`;
-provider timestamps retain priority, TXT labels the fallback `[received]`, and
-replay/preloaded records are unchanged.
+duration. Kick clip offsets are relative to the clip, then mapped onto and
+bounded by its source VOD. Kick live channel URLs reject `start_time` and
+`end_time` because the public live feed cannot seek. A Kick live WebSocket
+event that lacks a valid provider `timestamp` receives a distinct
+UTC-microsecond `received_timestamp`; provider timestamps retain priority, TXT
+labels the fallback `[received]`, and replay/preloaded records are unchanged.
 
 Validation raises `ValueError` for non-positive or non-integer message, retry,
 or buffer counts; malformed or non-finite start/end times; a non-finite
@@ -445,6 +446,8 @@ from chat_downloader import KickChatDownloader, KickError
 `get_all_sites()` returns every registered site class, including
 `KickChatDownloader`.
 
-Kick URLs (`kick.com/{username}` for live chat and
-`kick.com/{username}/videos/{uuid}` for VOD replay) work through the standard
-`get_chat()` and `get_chat_request()` entry points like any other site.
+Kick URLs (`kick.com/{username}` for live chat,
+`kick.com/{username}/videos/{uuid}` for VOD replay, and
+`kick.com/{username}/clips/{clip_id}` for clip replay) work through the
+standard `get_chat()` and `get_chat_request()` entry points like any other
+site.

@@ -3,11 +3,11 @@
 """Kick chat downloader extractor.
 
 Thin routing layer for Kick. URL matching and the public API live here; the
-actual work is delegated to :mod:`chat_downloader.sites.kick.live_service`
-(live chat) and :mod:`chat_downloader.sites.kick.replay_service` (VOD replay).
+actual work is delegated to the live, VOD replay, and clip service modules.
 
-Supports live chat (``kick.com/{username}``) and VOD chat replay
-(``kick.com/{username}/videos/{uuid}``).
+Supports live chat (``kick.com/{username}``), VOD chat replay
+(``kick.com/{username}/videos/{uuid}``), and bounded clip replay
+(``kick.com/{username}/clips/{clip_id}``).
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from chat_downloader.sites.base import BaseChatDownloader
 
 from .api_client import KickApiClient
+from .clip_service import get_clip_chat as build_clip_chat
 from .constants import VALID_URLS
 from .errors import KickError
 from .live_service import get_chat_by_channel as build_channel_chat
@@ -32,16 +33,17 @@ __all__ = ["KickChatDownloader", "KickError"]
 
 
 class KickChatDownloader(BaseChatDownloader):
-    """Download unauthenticated Kick channel chat or VOD replay.
+    """Download unauthenticated Kick live, VOD, or clip chat.
 
     Supports:
     - Live: ``https://kick.com/{username}``
     - VOD:  ``https://kick.com/{username}/videos/{uuid}``
+    - Clip: ``https://kick.com/{username}/clips/{clip_id}``
     """
 
     _NAME = "kick.com"
 
-    _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
+    _SITE_DEFAULT_PARAMS: ClassVar[dict[str, str]] = {
         "format": "kick",
     }
 
@@ -115,6 +117,18 @@ class KickChatDownloader(BaseChatDownloader):
             match.group("id"), match.group("video_id"), params
         )
 
+    def _get_chat_by_clip(
+        self,
+        match: re.Match[str],
+        params: ChatRequest | dict[str, Any],
+    ) -> Chat:
+        """Route a clip URL match to the bounded replay builder."""
+        return self.get_chat_by_clip(
+            match.group("id"),
+            match.group("clip_id"),
+            params,
+        )
+
     def get_chat_by_channel(
         self,
         username: str,
@@ -163,3 +177,22 @@ class KickChatDownloader(BaseChatDownloader):
             request,
             api_client=self._kick_client,
         )  # pragma: no cover
+
+    def get_chat_by_clip(
+        self,
+        username: str,
+        clip_id: str,
+        params: ChatRequest | dict[str, Any],
+    ) -> Chat:
+        """Get chat replay for a Kick clip.
+
+        ``start_time`` and ``end_time`` remain relative to the clip and are
+        clamped to its duration before being mapped onto the source VOD.
+        """
+        request = self._coerce_chat_request(params)
+        return build_clip_chat(
+            username,
+            clip_id,
+            request,
+            api_client=self._kick_client,
+        )

@@ -35,7 +35,7 @@ a security audit and do not replace your own review. **Use at your own risk.**
 | --- | --- |
 | YouTube | Live and replay chat, including paid messages and memberships |
 | Twitch | Live IRC events plus text-message replay for VODs and clips |
-| Kick | Live Pusher events plus bounded, chronological VOD chat replay |
+| Kick | Live Pusher events plus bounded, chronological VOD and clip replay |
 
 ## Installation
 
@@ -93,7 +93,7 @@ Full CLI examples, output-format details, options, and troubleshooting are in
 - [`docs/twitch-integration-guide.md`](docs/twitch-integration-guide.md) —
   Twitch capture flow and transport map
 - [`docs/kick-integration-guide.md`](docs/kick-integration-guide.md) —
-  Kick Pusher live capture and VOD replay flow
+  Kick Pusher live capture plus VOD and clip replay flow
 - [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md) —
   development workflow and validation commands
 - [`docs/architecture.md`](docs/architecture.md) — package ownership,

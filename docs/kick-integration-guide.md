@@ -2,13 +2,13 @@
 
 This guide explains how the Kick integration works in
 `chat-downloader-fork`. It is intended for maintainers debugging the live
-Pusher path or the REST-backed VOD replay path.
+Pusher path or the REST-backed VOD and clip replay paths.
 
 The Kick stack is split across two transport families:
 
 - A Pusher (WebSocket) feed for live chat.
-- Kick's unauthenticated web JSON endpoints (`api/v2` for channel metadata and
-  messages, plus `api/v1/video` for VOD metadata).
+- Kick's unauthenticated web JSON endpoints (`api/v2` for channel, clip, and
+  message data, plus `api/v1/video` for VOD metadata).
 
 Kick's OAuth-scoped official Public API is a useful schema reference, but it
 does not expose the unauthenticated read-chat or replay stream this tool needs.
@@ -22,14 +22,14 @@ shapes, and Cloudflare bot-protection on the REST endpoints.
 
 The Kick implementation is responsible for:
 
-- matching Kick live channel and VOD URLs
-- retrieving channel and video metadata
+- matching Kick live channel, VOD, and clip URLs
+- retrieving channel, video, and clip metadata
 - streaming live chat from the Pusher WebSocket (live *and* offline channels —
   the chatroom stays active when the stream is down)
 - emitting preloaded recent history and current pin state on connect, then
   deduplicating them against the live feed
-- reading historical chat for VODs by paginating the channel message API and
-  filtering to the VOD time window
+- reading historical chat for VODs and clips by paginating the channel message
+  API and filtering to the selected replay window
 - parsing Kick-specific message, badge, emote, subscription, moderation, pin,
   and host event data
 
@@ -37,9 +37,9 @@ Primary entry point:
 
 - `src/chat_downloader/sites/kick/extractor.py`
 
-Public site methods are `get_chat_by_channel` and `get_chat_by_video`. URL
-matching routes live channel URLs and VOD URLs to those methods through
-`BaseChatDownloader.matches()`.
+Public site methods are `get_chat_by_channel`, `get_chat_by_video`, and
+`get_chat_by_clip`. URL matching routes live channel, VOD, and clip URLs to
+those methods through `BaseChatDownloader.matches()`.
 
 Main implementation areas:
 
@@ -52,11 +52,13 @@ Main implementation areas:
 | --- | --- | --- |
 | `kick.com/{username}` | `_get_chat_by_channel` | Live chat (works while offline) |
 | `kick.com/{username}/videos/{uuid}` | `_get_chat_by_video` | VOD chat replay |
+| `kick.com/{username}/clips/{clip_id}` | `_get_chat_by_clip` | Bounded clip chat replay |
 
 URL matching lives in `constants.py::VALID_URLS`. Reserved first-path segments
 (`about`, `browse`, `videos`, `settings`, …) in `RESERVED_PATHS` are Kick site
 routes and are never treated as channel names. The VOD pattern requires a
-canonical UUID for the `video_id` group.
+canonical UUID for the `video_id` group. Clip IDs are restricted to bounded,
+path-safe provider identifiers before they are interpolated into an API URL.
 
 ## End-to-End Flow
 
@@ -88,11 +90,28 @@ The Kick flow depends on the target type.
    `duration`).
 4. Narrow the metadata window with request-relative `start_time` and
    `end_time` offsets when supplied.
-5. Page through `api/v2/channels/{id}/messages` (newest-first) using the
-   timestamp cursor.
+5. Seed `api/v2/channels/{id}/messages` at the selected end timestamp, then
+   page backward (newest-first) using the returned cursor.
 6. Keep messages whose `created_at` falls inside the selected window; stop once
    messages predate the window start.
 7. Reverse into chronological order, apply `max_messages`, and yield.
+
+### Clips
+
+1. Resolve the channel slug and clip ID from the URL.
+2. Fetch `api/v2/clips/{clip_id}` and validate the returned identity, source
+   VOD UUID, channel ID, non-negative VOD offset, and positive duration.
+3. Fetch the source VOD metadata and require its channel to agree with the
+   clip. A missing source VOD is reported as `NoChatReplay`.
+4. Treat request `start_time` and `end_time` as clip-relative, clamp them to
+   the clip duration, then translate them to source-VOD offsets.
+5. Clamp the translated window again to the source recording. Timestamp-seeded
+   VOD pagination then retrieves only the clip interval and emits it in
+   chronological order.
+
+Kick's clip `started_at` can include a short HLS keyframe lead-in. Chat mapping
+therefore uses `vod_starts_at` plus `duration`, which describes the intended
+source-VOD interval, rather than the playlist's padded wall-clock start.
 
 ## Module Guide
 
@@ -102,12 +121,14 @@ The Kick flow depends on the target type.
 - `live_service.py`: live chat orchestration (metadata, chatroom resolution,
   preloaded history, WebSocket loop, deduplication, reconnect)
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
+- `clip_service.py`: clip metadata validation and source-VOD replay assembly
 
 ### Transport and API access
 
 - `api_client.py`: downloader-owned HTTP client for the unauthenticated
-  `kick.com/api/v1` and `api/v2` JSON endpoints. It owns endpoint status,
-  challenge, JSON, and object-shape classification but does no chat parsing.
+  `kick.com/api/v1` and `api/v2` channel, history, VOD, and clip JSON endpoints.
+  It owns endpoint status, challenge, JSON, and object-shape classification but
+  does no chat parsing.
 - `http_session.py`: constructs the client's isolated curl-cffi,
   cloudscraper, or requests transport and defines its narrow session Protocol.
 - `websocket_transport.py`: the *only* module that imports `websocket-client`.
@@ -233,9 +254,9 @@ Per-type output counts remain separate because filtering and preloaded history
 can make them differ from raw Pusher counts.
 
 Kick live channel URLs reject `start_time` and `end_time` because the public
-Pusher feed and short preloaded history cannot seek. Use a Kick VOD URL for
-bounded replay; VOD offsets are relative to the recording start and clamped to
-its duration.
+Pusher feed and short preloaded history cannot seek. Use a Kick VOD or clip URL
+for bounded replay. VOD offsets are relative to the recording start; clip
+offsets are relative to the clip. Both are clamped to the available recording.
 
 ### Pusher application key discovery
 
@@ -312,7 +333,8 @@ events. Empty-message events such as deletions and chat clears render bracketed
 notices rather than blank lines. Live WebSocket events without a valid provider
 `timestamp` retain a distinct UTC-microsecond `received_timestamp`; the Kick
 formatter uses it only as a fallback and marks it `[received]` in TXT.
-Preloaded history and VOD replay do not receive this live-arrival field.
+Preloaded history plus VOD and clip replay do not receive this live-arrival
+field.
 AI-moderated deletion notices append `[AI moderated]` and any violated-rule
 labels, while ordinary deletion notices stay compact.
 
@@ -338,7 +360,7 @@ endpoint with better IP reputation).
 
 Status mapping in `api_client.py::_check_status`:
 
-- channel `404` → `UserNotFound`; VOD/history `404` → terminal `KickError`
+- channel `404` → `UserNotFound`; VOD/clip/history `404` → terminal `KickError`
 - `403` / challenge body → `CaptchaChallengeRequired`
 - `429` / `5xx` → `KickServerError` (transient, retried)
 - other non-`200` → `KickError`
