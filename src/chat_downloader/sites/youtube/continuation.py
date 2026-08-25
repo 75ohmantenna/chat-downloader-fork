@@ -12,6 +12,7 @@ at module scope here are the stateless ones that carry no downloader dependency
 
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -27,7 +28,7 @@ from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.request_profiles import get_next_request_profile
 from chat_downloader.sites.common import check_for_invalid_types
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import get_dict
+from chat_downloader.utils.json_types import get_dict, get_str
 from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import polling_sleep
 
@@ -105,6 +106,7 @@ class _ContinuationProgress:
     max_profile_fallbacks: int
     no_progress_count: int = field(default=0)
     fallback_count: int = field(default=0)
+    latest_replay_offset_milliseconds: float | None = field(default=None)
 
     def register_fallback(self) -> bool:
         """Count an incomplete-continuation fallback; True if exhausted."""
@@ -119,11 +121,49 @@ class _ContinuationProgress:
         self.no_progress_count += 1
         return self.no_progress_count >= self.max_no_progress_polls
 
+    def response_advanced(
+        self,
+        actions: list[JSONDict],
+        *,
+        token_changed: bool,
+        is_replay: bool,
+    ) -> bool:
+        """Return whether a response advanced its token or replay position."""
+        if not is_replay:
+            return bool(actions) or token_changed
+
+        latest_offset = _latest_replay_action_offset_milliseconds(actions)
+        offset_advanced = latest_offset is not None and (
+            self.latest_replay_offset_milliseconds is None
+            or latest_offset > self.latest_replay_offset_milliseconds
+        )
+        if offset_advanced:
+            self.latest_replay_offset_milliseconds = latest_offset
+        return token_changed or offset_advanced
+
 
 # ---------------------------------------------------------------------------
 # Stateless helpers (no downloader dependency) — kept at module scope so they
 # stay independently unit-testable.
 # ---------------------------------------------------------------------------
+
+
+def _latest_replay_action_offset_milliseconds(
+    actions: list[JSONDict],
+) -> float | None:
+    """Return the greatest valid replay-wrapper offset in an action page."""
+    latest_offset: float | None = None
+    for action in actions:
+        replay_action = get_dict(action, "replayChatItemAction")
+        raw_offset = get_str(replay_action, "videoOffsetTimeMsec")
+        try:
+            offset = float(raw_offset)
+        except ValueError:
+            continue
+        if not math.isfinite(offset) or offset < 0:
+            continue
+        latest_offset = max(latest_offset or 0, offset)
+    return latest_offset
 
 
 def _profiled_innertube_context(
@@ -614,15 +654,18 @@ class _ContinuationLoop:
                 ended_cleanly = True
                 break
 
-            made_progress = (
-                bool(actions) or ctx.loop_state.continuation != token_before_request
+            made_progress = self.progress.response_advanced(
+                actions,
+                token_changed=(ctx.loop_state.continuation != token_before_request),
+                is_replay=ctx.is_replay,
             )
             if self.progress.register_poll(made_progress=made_progress):
                 msg = (
                     "No progress on YouTube continuation: "
-                    f"{self.progress.max_no_progress_polls} consecutive empty "
-                    "polls with an unchanged continuation token. The live chat "
-                    "may have ended without a terminator, or the token is stale."
+                    f"{self.progress.max_no_progress_polls} consecutive polls "
+                    "without continuation-token or replay-offset advancement. "
+                    "The live chat may have ended without a terminator, or the "
+                    "token is stale."
                 )
                 raise NoContinuation(msg)
 

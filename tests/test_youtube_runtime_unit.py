@@ -25,6 +25,7 @@ from chat_downloader.sites.youtube.continuation import (
     ContinuationLoopState,
     _advance_continuation_loop,
     _ContinuationLoop,
+    _ContinuationProgress,
     _get_chat_messages,
     _resolve_poll_delay_ms,
     build_continuation_params,
@@ -1449,6 +1450,69 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
     assert continuation_requests == ["live-token", "first-token", "last-token"]
     assert sleep_calls == [0.75, 0.75]
     assert end_page_calls == ["end", "end"]
+
+
+def test_replay_progress_rejects_repeated_stale_action_pages() -> None:
+    progress = _ContinuationProgress(
+        max_no_progress_polls=2,
+        max_profile_fallbacks=1,
+    )
+    before_start_actions = [
+        {
+            "replayChatItemAction": {
+                "videoOffsetTimeMsec": "1797798",
+            },
+        },
+    ]
+
+    assert progress.response_advanced(
+        before_start_actions,
+        token_changed=False,
+        is_replay=True,
+    )
+    assert not progress.register_poll(made_progress=True)
+
+    assert not progress.response_advanced(
+        before_start_actions,
+        token_changed=False,
+        is_replay=True,
+    )
+    assert not progress.register_poll(made_progress=False)
+    assert not progress.response_advanced(
+        before_start_actions,
+        token_changed=False,
+        is_replay=True,
+    )
+    assert progress.register_poll(made_progress=False)
+
+    crossing_actions = [
+        {
+            "replayChatItemAction": {
+                "videoOffsetTimeMsec": "1800332",
+            },
+        },
+    ]
+    assert progress.response_advanced(
+        crossing_actions,
+        token_changed=False,
+        is_replay=True,
+    )
+    assert not progress.register_poll(made_progress=True)
+    assert progress.no_progress_count == 0
+
+
+@pytest.mark.parametrize("raw_offset", ["", "nan", "-1"])
+def test_replay_progress_ignores_invalid_offsets(raw_offset: str) -> None:
+    progress = _ContinuationProgress(
+        max_no_progress_polls=1,
+        max_profile_fallbacks=1,
+    )
+
+    assert not progress.response_advanced(
+        [{"replayChatItemAction": {"videoOffsetTimeMsec": raw_offset}}],
+        token_changed=False,
+        is_replay=True,
+    )
 
 
 def test_user_chat_lookup_skips_ignored_and_non_live_videos_before_yield() -> None:

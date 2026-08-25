@@ -226,7 +226,7 @@ def _build_message_filters(
             start_time,
             end_time,
             offset=offset,
-            skip_mode="first_page",
+            skip_mode="always",
         )
         if is_replay
         else None

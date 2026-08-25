@@ -182,7 +182,11 @@ late.
 ### Replays and completed streams
 
 For replay content, the loop uses replay offsets and a `TimeRangeFilter` to
-support `start_time` and `end_time`.
+support `start_time` and `end_time`. Before-start actions remain skippable
+across continuation-page boundaries because dense chats can require more than
+one response to reach the requested offset. Those pages must still advance the
+continuation token or their greatest replay offset; repeated stale responses
+eventually trigger the bounded no-progress guard.
 
 `NoChatReplay` is most likely to appear in replay mode, when YouTube simply
 does not expose replay chat for the target.

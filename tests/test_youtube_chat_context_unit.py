@@ -326,15 +326,21 @@ def test_build_message_filters_live_no_time_filter() -> None:
     assert msg_filter is not None
 
 
-def test_build_message_filters_replay_has_time_filter() -> None:
+def test_build_message_filters_replay_skips_pre_range_actions_across_pages() -> None:
     _msg_filter, time_filter = _build_message_filters(
         ChatRequest(url="https://www.youtube.com/watch?v=abc"),
         is_replay=True,
-        start_time=0.0,
+        start_time=10.0,
         end_time=None,
         offset=None,
     )
     assert isinstance(time_filter, TimeRangeFilter)
+    assert time_filter.check({"time_in_seconds": 9.0}) == "skip"
+
+    time_filter.end_page()
+
+    assert time_filter.check({"time_in_seconds": 9.5}) == "skip"
+    assert time_filter.check({"time_in_seconds": 10.0}) == "yield"
 
 
 def test_build_message_filters_types_override_groups() -> None:
