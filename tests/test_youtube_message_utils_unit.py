@@ -153,6 +153,28 @@ def test_emoji_without_shortcuts_falls_back_to_colon_wrapped_emoji_id() -> None:
     assert parsed["emotes"][0]["name"] == ":UC_custom_abc123:"
 
 
+@pytest.mark.parametrize("emoji", [{}, None])
+def test_emoji_without_name_or_id_uses_stable_placeholder(emoji: object) -> None:
+    assert _parse_runs({"runs": [{"emoji": emoji}]}) == {"message": ":emoji:"}
+
+
+def test_non_string_emoji_shortcut_falls_back_to_emoji_id() -> None:
+    parsed = _parse_runs(
+        {"runs": [{"emoji": {"emojiId": "emoji-1", "shortcuts": [123]}}]}
+    )
+
+    assert parsed["message"] == ":emoji-1:"
+    assert parsed["emotes"][0]["name"] == ":emoji-1:"
+
+
+def test_parse_runs_ignores_invalid_containers_and_entries() -> None:
+    assert _parse_runs({"runs": 123}) == {"message": ""}
+    assert _parse_runs({"runs": [None, 123, "text", {"text": "valid"}]}) == {
+        "message": "valid"
+    }
+    assert _parse_runs({"content": 123}) == {"message": ""}
+
+
 def test_thumbnail_and_action_button_helpers_parse_expected_shapes() -> None:
     thumbnails = _parse_thumbnails(
         {

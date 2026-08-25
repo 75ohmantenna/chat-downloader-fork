@@ -284,3 +284,27 @@ def test_process_pipeline_action_tolerates_thumbnail_shape_drift() -> None:
             "id": "32x32",
         },
     ]
+
+
+def test_process_pipeline_action_tolerates_malformed_emoji() -> None:
+    result = process_pipeline_action(
+        {
+            "addChatItemAction": {
+                "item": {
+                    "liveChatTextMessageRenderer": {
+                        "id": "message-1",
+                        "timestampUsec": "1700000000000000",
+                        "authorName": {"simpleText": "Author"},
+                        "message": {"runs": [{"emoji": None}]},
+                    }
+                }
+            }
+        },
+        0,
+        cast("MessageFilter", _DummyMessageFilter()),
+        None,
+    )
+
+    assert result.disposition == "yield"
+    assert result.message is not None
+    assert result.message["message"] == ":emoji:"

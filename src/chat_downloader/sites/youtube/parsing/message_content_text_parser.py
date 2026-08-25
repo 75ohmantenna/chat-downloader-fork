@@ -49,9 +49,9 @@ def _append_run(
     elif "emoji" in run:
         emoji = get_dict(run, "emoji")
         emoji_id = get_str(emoji, "emojiId") or None
-        name = multi_get(emoji, "shortcuts", 0) or (
-            f":{emoji_id}:" if emoji_id else None
-        )
+        raw_name = multi_get(emoji, "shortcuts", 0)
+        shortcut = raw_name if isinstance(raw_name, str) and raw_name else None
+        name = shortcut or (f":{emoji_id}:" if emoji_id else None) or ":emoji:"
         if emoji_id and emoji_id not in message_emotes:
             message_emotes[emoji_id] = {
                 "id": emoji_id,
@@ -73,13 +73,15 @@ def _parse_runs(run_info: object, *, parse_links: bool = True) -> dict[str, Any]
     if not isinstance(run_info, dict):
         return message_info
 
-    if "content" in run_info and not run_info.get("runs"):
-        message_info["message"] = run_info.get("content", "")
+    runs = get_list(run_info, "runs")
+    if "content" in run_info and not runs:
+        message_info["message"] = get_str(run_info, "content")
         return message_info
 
     message_emotes: dict[str, dict[str, Any]] = {}
-    for run in run_info.get("runs") or []:
-        _append_run(message_info, run, message_emotes, parse_links=parse_links)
+    for run in runs:
+        if isinstance(run, dict):
+            _append_run(message_info, run, message_emotes, parse_links=parse_links)
 
     if message_emotes:
         message_info["emotes"] = list(message_emotes.values())
