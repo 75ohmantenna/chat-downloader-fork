@@ -62,6 +62,7 @@ class ItemFormatter:
 
     # Special field names that require custom formatting
     FIELD_TIMESTAMP = "timestamp"
+    FIELD_RECEIVED_TIMESTAMP = "received_timestamp"
     FIELD_TIME_TEXT = "time_text"
     FIELD_AUTHOR_BADGES = "author.badges"
 
@@ -301,7 +302,7 @@ class ItemFormatter:
         if not format_string:
             return value
 
-        if field_path == self.FIELD_TIMESTAMP:
+        if field_path in {self.FIELD_TIMESTAMP, self.FIELD_RECEIVED_TIMESTAMP}:
             return microseconds_to_timestamp(value, format_string)
 
         if field_path == self.FIELD_TIME_TEXT:

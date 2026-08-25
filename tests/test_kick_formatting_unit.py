@@ -143,6 +143,26 @@ def test_kick_text_messages_keep_default_rendering(formatter: ItemFormatter) -> 
     )
 
 
+def test_kick_moderation_uses_receive_timestamp_only_as_fallback(
+    formatter: ItemFormatter,
+) -> None:
+    item = {
+        "message_type": "user_banned",
+        "message": "",
+        "received_timestamp": 1_577_836_800_000_000,
+        "metadata": {"user": {"username": "BadUser"}},
+    }
+
+    assert formatter.format(item, format_name="kick") == (
+        "2020-01-01 00:00:00 [received] | [User banned: BadUser]"
+    )
+
+    item["timestamp"] = 1_577_923_200_000_000
+    assert formatter.format(item, format_name="kick") == (
+        "2020-01-02 00:00:00 | [User banned: BadUser]"
+    )
+
+
 def test_provider_shaped_system_events_render_end_to_end(
     formatter: ItemFormatter,
 ) -> None:

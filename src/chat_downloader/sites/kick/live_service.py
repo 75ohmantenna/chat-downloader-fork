@@ -85,10 +85,12 @@ class _KickLiveDiagnostics:
         if isinstance(value, int):
             self.summary[name] = value + 1
 
-    def record_frame(self) -> None:
-        """Record successful receipt of a decoded WebSocket frame."""
+    def record_frame(self) -> int:
+        """Record and return a decoded frame's UTC receive timestamp."""
+        received_timestamp = time.time_ns() // 1_000
         self.increment("websocket_frame_count")
-        self.summary["last_websocket_frame_timestamp"] = time.time_ns() // 1_000
+        self.summary["last_websocket_frame_timestamp"] = received_timestamp
+        return received_timestamp
 
 
 def _fetch_channel_with_retry(
@@ -448,12 +450,17 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     # A decoded application frame proves this connection made
                     # progress, even when it is not a chat-message event.
                     consecutive_connection_failures = 0
-                    diagnostics.record_frame()
+                    received_timestamp = diagnostics.record_frame()
                     live_message = dispatch_event(
                         frame,
                         record_diagnostic=diagnostics.increment,
                     )
                     if live_message is not None:
+                        if "timestamp" not in live_message:
+                            live_message.setdefault(
+                                "received_timestamp",
+                                received_timestamp,
+                            )
                         if (
                             capture_successful_frames
                             and successful_frame_capture_attempts

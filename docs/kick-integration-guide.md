@@ -309,7 +309,10 @@ site-specific group map.
 
 Kick's default text formatter labels subscription, pin, host, and moderation
 events. Empty-message events such as deletions and chat clears render bracketed
-notices rather than blank lines.
+notices rather than blank lines. Live WebSocket events without a valid provider
+`timestamp` retain a distinct UTC-microsecond `received_timestamp`; the Kick
+formatter uses it only as a fallback and marks it `[received]` in TXT.
+Preloaded history and VOD replay do not receive this live-arrival field.
 
 ## Cloudflare Dependency
 

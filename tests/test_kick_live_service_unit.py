@@ -12,11 +12,13 @@ from chat_downloader.errors import (
     InvalidParameter,
     RetriesExceeded,
 )
+from chat_downloader.formatting import ItemFormatter
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import live_service
 from chat_downloader.sites.kick.api_client import PreloadedChatState
 from chat_downloader.sites.kick.constants import (
     CHAT_MESSAGE_EVENT,
+    MESSAGE_DELETED_EVENT,
     PINNED_MESSAGE_CREATED_EVENT,
     PUSHER_ERROR,
 )
@@ -638,6 +640,57 @@ def test_get_chat_by_channel_reports_live_diagnostics() -> None:
         "pusher_key_recovery_count": 0,
         "last_websocket_frame_timestamp": None,
     }
+
+
+def test_get_chat_by_channel_adds_distinct_receive_timestamp_fallback() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    missing_timestamp = pusher_frame(
+        MESSAGE_DELETED_EVENT,
+        {"id": "missing", "message": {"id": "deleted"}},
+    )
+    provider_timestamp = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "provider",
+            "type": "message",
+            "content": "provider time",
+            "created_at": "2025-06-14T12:00:00Z",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[1_700_000_000_000_000_000, 1_800_000_000_000_000_000],
+        ),
+    ):
+        chat = _build_chat(
+            downloader,
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [[missing_timestamp, provider_timestamp]]
+            ),
+        )
+        messages = list(chat.chat)
+
+    assert messages[0]["received_timestamp"] == 1_700_000_000_000_000
+    assert "timestamp" not in messages[0]
+    assert ItemFormatter().format(messages[0], format_name="kick") == (
+        "2023-11-14 22:13:20 [received] | [Message deleted: deleted]"
+    )
+    assert messages[1]["timestamp"] == 1_749_902_400_000_000
+    assert "received_timestamp" not in messages[1]
 
 
 def test_get_chat_by_channel_rediscovers_key_after_pusher_error() -> None:

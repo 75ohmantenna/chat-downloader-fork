@@ -7,6 +7,10 @@
                 "template": "{} | ",
                 "format": "%Y-%m-%d %H:%M:%S"
             },
+            "received_timestamp": {
+                "template": "{} [received] | ",
+                "format": "%Y-%m-%d %H:%M:%S"
+            },
             "author.badges": {
                 "template": "({}) ",
                 "separator": ", "
@@ -181,7 +185,7 @@
     "kick": [
         {
             "matching": "message_deleted",
-            "template": "{timestamp|time_text}{metadata.deleted_message_id|message_type}",
+            "template": "{timestamp|received_timestamp|time_text}{metadata.deleted_message_id|message_type}",
             "inherit": "default",
             "keys": {
                 "metadata.deleted_message_id": "[Message deleted: {}]",
@@ -190,7 +194,7 @@
         },
         {
             "matching": "user_banned",
-            "template": "{timestamp|time_text}{metadata.user.username|metadata.user.id|message_type}",
+            "template": "{timestamp|received_timestamp|time_text}{metadata.user.username|metadata.user.id|message_type}",
             "inherit": "default",
             "keys": {
                 "metadata.user.username": "[User banned: {}]",
@@ -200,7 +204,7 @@
         },
         {
             "matching": "user_unbanned",
-            "template": "{timestamp|time_text}{metadata.user.username|metadata.user.id|message_type}",
+            "template": "{timestamp|received_timestamp|time_text}{metadata.user.username|metadata.user.id|message_type}",
             "inherit": "default",
             "keys": {
                 "metadata.user.username": "[User unbanned: {}]",
@@ -210,7 +214,7 @@
         },
         {
             "matching": "chat_clear",
-            "template": "{timestamp|time_text}{message_type}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Chat cleared]"
@@ -218,7 +222,7 @@
         },
         {
             "matching": "pinned_message_deleted",
-            "template": "{timestamp|time_text}{metadata.unpinned_message_id|message_type}",
+            "template": "{timestamp|received_timestamp|time_text}{metadata.unpinned_message_id|message_type}",
             "inherit": "default",
             "keys": {
                 "metadata.unpinned_message_id": "[Pinned message removed: {}]",
@@ -227,7 +231,7 @@
         },
         {
             "matching": "pinned_message",
-            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Pinned message]",
@@ -242,7 +246,7 @@
         },
         {
             "matching": "subscription",
-            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Subscription]",
@@ -257,7 +261,7 @@
         },
         {
             "matching": "gifted_subscriptions",
-            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Gifted subscriptions]",
@@ -272,7 +276,7 @@
         },
         {
             "matching": "stream_host",
-            "template": "{timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Stream host]",
@@ -287,7 +291,8 @@
         },
         {
             "matching": "all",
-            "inherit": "default"
+            "inherit": "default",
+            "template": "{time_text|timestamp|received_timestamp}{author.badges}{money.text}{author.display_name|author.name}{message}"
         }
     ],
     "twitch": [

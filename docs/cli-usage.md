@@ -104,7 +104,10 @@ template.
 
 Kick text output labels subscription, pin, host, and moderation events. Events
 without ordinary message text render a bracketed notice instead of a blank
-line; JSONL retains their structured identifiers and metadata.
+line; JSONL retains their structured identifiers and metadata. When a Kick
+live event omits its provider timestamp, JSONL records a separate
+`received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
+display fallback.
 
 YouTube text output renders moderation events without message text as a
 bracketed notice. The notice identifies the removed message or affected author

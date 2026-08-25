@@ -190,7 +190,10 @@ elapsed-time rendering.
 
 Kick VOD offsets are relative to the recording start and are clamped to its
 duration. Kick live channel URLs reject `start_time` and `end_time` because the
-public live feed cannot seek.
+public live feed cannot seek. A Kick live WebSocket event that lacks a valid
+provider `timestamp` receives a distinct UTC-microsecond `received_timestamp`;
+provider timestamps retain priority, TXT labels the fallback `[received]`, and
+replay/preloaded records are unchanged.
 
 Validation raises `ValueError` for non-positive or non-integer message, retry,
 or buffer counts; malformed or non-finite start/end times; a non-finite

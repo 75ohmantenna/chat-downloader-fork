@@ -90,6 +90,7 @@ def test_format_constants() -> None:
 def test_format_special_fields() -> None:
     """Test that special fields are defined."""
     assert ItemFormatter.FIELD_TIMESTAMP == "timestamp"
+    assert ItemFormatter.FIELD_RECEIVED_TIMESTAMP == "received_timestamp"
     assert ItemFormatter.FIELD_TIME_TEXT == "time_text"
     assert ItemFormatter.FIELD_AUTHOR_BADGES == "author.badges"
 
