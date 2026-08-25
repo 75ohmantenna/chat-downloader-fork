@@ -311,16 +311,26 @@
         {
             "matching": [
                 "subscription",
-                "subscription_gift",
                 "resubscription",
+                "subscription_gift",
+                "anonymous_subscription_gift",
+                "anonymous_mystery_subscription_gift",
                 "mystery_subscription_gift",
+                "extend_subscription",
+                "standard_pay_forward",
+                "community_pay_forward",
+                "prime_community_gift_received",
+                "prime_paid_upgrade",
+                "gift_paid_upgrade",
+                "reward_gift",
+                "anonymous_gift_paid_upgrade",
                 "viewermilestone"
             ],
             "template": "{time_text|timestamp}{author.badges}{system_message}{message}",
             "inherit": "default",
             "keys": {
                 "system_message": "{}",
-                "message": "{}"
+                "message": " — {}"
             }
         },
         {

@@ -339,16 +339,52 @@ def test_format_with_list_format_object(formatter: ItemFormatter) -> None:
     assert isinstance(result, str)
 
 
-def test_format_twitch_subscription_type(formatter: ItemFormatter) -> None:
-    """_match_format_from_list matches a subscription type."""
+@pytest.mark.parametrize(
+    "message_type",
+    [
+        "subscription",
+        "resubscription",
+        "subscription_gift",
+        "anonymous_subscription_gift",
+        "anonymous_mystery_subscription_gift",
+        "mystery_subscription_gift",
+        "extend_subscription",
+        "standard_pay_forward",
+        "community_pay_forward",
+        "prime_community_gift_received",
+        "prime_paid_upgrade",
+        "gift_paid_upgrade",
+        "reward_gift",
+        "anonymous_gift_paid_upgrade",
+        "viewermilestone",
+    ],
+)
+@pytest.mark.parametrize(
+    ("message", "expected_suffix"),
+    [
+        ("Hello chat", "Test subscribed! — Hello chat"),
+        ("", "Test subscribed!"),
+        (None, "Test subscribed!"),
+    ],
+)
+def test_format_twitch_subscription_types_separate_optional_message(
+    formatter: ItemFormatter,
+    message_type: str,
+    message: str | None,
+    expected_suffix: str,
+) -> None:
     item = {
-        "message_type": "subscription",
+        "message_type": message_type,
         "system_message": "Test subscribed!",
         "author": {"name": "user"},
         "timestamp": 1000000,
     }
+    if message is not None:
+        item["message"] = message
+
     result = formatter.format(item, format_name="twitch")
-    assert isinstance(result, str)
+
+    assert result.endswith(expected_suffix)
 
 
 @pytest.mark.parametrize(
