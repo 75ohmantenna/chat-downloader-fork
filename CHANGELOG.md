@@ -10,8 +10,19 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Render authorless YouTube live system events without a dangling author
+  separator in the default, 24-hour, and 12-hour text formats.
+- Preserve signed capture-relative timing for YouTube messages received from
+  the initial live backlog while keeping continuation polling offsets
+  nonnegative and monotonic.
 - Preserve Twitch raid and unraid system-event descriptions in text output,
   with safe raider/author fallbacks when optional fields are missing or empty.
+
+### Security / hardening
+
+- Redact YouTube continuation tokens and credential-shaped Google API keys
+  from debug logs, including urllib3 request-target messages that log paths
+  separately from origins.
 
 ### Debugging
 
