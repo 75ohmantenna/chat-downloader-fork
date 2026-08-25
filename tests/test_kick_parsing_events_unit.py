@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import stat
+from typing import TYPE_CHECKING
+
 import pytest
 
 from chat_downloader.sites.kick.constants import (
@@ -13,8 +17,12 @@ from chat_downloader.sites.kick.constants import (
     PUSHER_SUBSCRIPTION_SUCCEEDED,
 )
 from chat_downloader.sites.kick.errors import KickError
+from chat_downloader.sites.kick.parsing import events
 from chat_downloader.sites.kick.parsing.events import dispatch_event
 from tests.kick_helpers import load_fixture, pusher_frame
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_chat_message_event_is_parsed() -> None:
@@ -63,9 +71,19 @@ def test_unparseable_chat_payload_is_skipped() -> None:
     assert dispatch_event(pusher_frame(CHAT_MESSAGE_EVENT, {"content": "x"})) is None
 
 
-def test_pusher_error_raises() -> None:
+def test_pusher_error_is_captured_before_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured = []
+    monkeypatch.setattr(
+        events,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+
     with pytest.raises(KickError):
         dispatch_event(pusher_frame(PUSHER_ERROR, {"message": "bad"}))
+
+    assert captured[0][0][0] == "kick-pusher-error"
+    assert captured[0][1]["sample_limit"] == 10
 
 
 @pytest.mark.parametrize(
@@ -76,9 +94,107 @@ def test_control_events_are_ignored(event: str) -> None:
     assert dispatch_event(pusher_frame(event, {})) is None
 
 
-def test_unknown_event_is_skipped() -> None:
-    assert dispatch_event(pusher_frame("App\\Events\\SubscriptionEvent", {})) is None
+def test_unknown_event_is_captured_and_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        events,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+    frame = pusher_frame("App\\Events\\FutureEvent", {"future": True})
+
+    assert dispatch_event(frame) is None
+
+    assert captured[0][0] == (
+        "kick-unknown-event",
+        {"raw": frame, "event_name": "App\\Events\\FutureEvent"},
+    )
+    assert captured[0][1]["sample_limit"] == 10
 
 
-def test_frame_without_event_is_skipped() -> None:
+def test_malformed_known_event_is_captured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        events,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+    frame = pusher_frame("App\\Events\\SubscriptionEvent", {})
+
+    assert dispatch_event(frame) is None
+
+    assert captured[0][0][0] == "kick-malformed-event"
+    assert captured[0][0][1]["raw"] == frame
+    assert captured[0][0][1]["message_type"] == "subscription"
+
+
+def test_frame_without_event_is_captured_and_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        events,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+
     assert dispatch_event({"data": "{}"}) is None
+
+    assert captured[0][0][0] == "kick-unknown-event"
+    assert captured[0][0][1]["reason"] == "missing or non-string event name"
+
+
+def test_unknown_event_capture_is_sanitized_on_disk(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    caplog.set_level("DEBUG", logger=events.logger.name)
+    frame = {
+        "event": "App\\Events\\FutureEvent",
+        "data": {
+            "authorization": "Bearer should-not-survive",
+            "message": "visible\u001btext",
+            "url": "https://example.test/watch?token=should-not-survive&safe=yes",
+        },
+    }
+
+    assert dispatch_event(frame) is None
+
+    samples = list(sample_dir.glob("kick-unknown-event-*.json"))
+    assert len(samples) == 1
+    sample_text = samples[0].read_text(encoding="utf-8")
+    captured = json.loads(sample_text)
+    assert captured["raw"]["data"]["authorization"] == "<redacted>"
+    assert captured["raw"]["data"]["message"] == "visible\u001btext"
+    assert captured["raw"]["data"]["url"].startswith(
+        "https://example.test/watch?token=<redacted>"
+    )
+    assert "should-not-survive" not in sample_text
+    assert "\u001b" not in sample_text
+    assert "\\u001b" in sample_text
+    assert stat.S_IMODE(samples[0].stat().st_mode) == 0o600
+
+
+def test_unknown_event_capture_is_bounded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    caplog.set_level("DEBUG", logger=events.logger.name)
+
+    for index in range(12):
+        dispatch_event(pusher_frame(f"App\\Events\\Future{index}", {"index": index}))
+
+    assert len(list(sample_dir.glob("kick-unknown-event-*.json"))) == 10
+    assert "Debug sample limit reached" in caplog.text

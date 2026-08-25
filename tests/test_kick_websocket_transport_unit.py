@@ -240,14 +240,37 @@ def test_recv_empty_payload_raises_connection_error() -> None:
         transport.recv()
 
 
-def test_recv_malformed_frame_returns_none() -> None:
+def test_recv_malformed_frame_is_captured(monkeypatch: Any) -> None:
+    captured = []
+    monkeypatch.setattr(
+        wt,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
     transport = _connected(FakeWebSocket(["{not json"]))
+
     assert transport.recv() is None
 
+    assert captured[0][0][0] == "kick-unknown-websocket-shape"
+    assert captured[0][0][1]["reason"] == "invalid JSON"
+    assert captured[0][1]["sample_limit"] == 10
 
-def test_recv_non_object_frame_returns_none() -> None:
+
+def test_recv_non_object_frame_is_captured(monkeypatch: Any) -> None:
+    captured = []
+    monkeypatch.setattr(
+        wt,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
     transport = _connected(FakeWebSocket(["[1, 2, 3]"]))
+
     assert transport.recv() is None
+
+    assert captured[0][0][1] == {
+        "raw": [1, 2, 3],
+        "reason": "decoded frame was not an object",
+    }
 
 
 def test_recv_valid_frame_returns_dict() -> None:

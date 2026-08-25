@@ -22,6 +22,13 @@ _GROUP_RULES: tuple[tuple[str, str], ...] = (
     ("unknown-irc-shape", "messages"),
     ("unknown-irc-tag", "messages"),
     ("unknown-gql-shape", "graphql"),
+    # Kick-specific groups
+    ("unknown-event", "events"),
+    ("malformed-event", "events"),
+    ("pusher-error", "events"),
+    ("malformed-preloaded-message", "messages"),
+    ("malformed-preloaded-pin", "events"),
+    ("unknown-websocket-shape", "transport"),
 )
 
 

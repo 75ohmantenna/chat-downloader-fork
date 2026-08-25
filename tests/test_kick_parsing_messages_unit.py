@@ -7,6 +7,7 @@ import json
 import pytest
 
 from chat_downloader.errors import ParsingError
+from chat_downloader.sites.kick.parsing import messages
 from chat_downloader.sites.kick.parsing.messages import (
     parse_chat_message,
     parse_preloaded_messages,
@@ -87,9 +88,22 @@ def test_reply_uses_original_message_sender_fallback() -> None:
     assert msg["in_reply_to"]["author"]["display_name"] == "NestedAuthor"
 
 
-def test_unknown_type_falls_back_to_default() -> None:
+def test_unknown_type_is_captured_and_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        messages,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+
     msg = parse_chat_message({"id": "x", "type": "something_new", "content": "hi"})
+
     assert msg["message_type"] == "text_message"
+    assert captured[0][0][0] == "kick-unknown-message-type"
+    assert captured[0][0][1]["message_type"] == "something_new"
+    assert captured[0][1]["sample_limit"] == 10
 
 
 def test_non_dict_payload_raises() -> None:
@@ -100,6 +114,22 @@ def test_non_dict_payload_raises() -> None:
 def test_missing_id_raises() -> None:
     with pytest.raises(ParsingError):
         parse_chat_message({"content": "no id"})
+
+
+def test_malformed_preloaded_message_is_captured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+    monkeypatch.setattr(
+        messages,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+
+    assert parse_preloaded_messages([{"content": "missing id"}]) == []
+
+    assert captured[0][0][0] == "kick-malformed-preloaded-message"
+    assert captured[0][0][1]["raw"] == {"content": "missing id"}
 
 
 def test_missing_content_yields_empty_message() -> None:

@@ -28,10 +28,12 @@ from websocket import (
 )
 
 from chat_downloader.debugging import logger
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.proxy import open_proxied_tls_socket
 
 from .constants import (
     CHATROOM_CHANNEL_TEMPLATE,
+    KICK_DEBUG_SAMPLE_LIMIT,
     PUSHER_PING,
     PUSHER_PONG,
     PUSHER_SUBSCRIBE,
@@ -267,9 +269,19 @@ class KickPusherTransport:
         try:
             frame = json.loads(raw)
         except (json.JSONDecodeError, ValueError):
+            capture_debug_sample(
+                "kick-unknown-websocket-shape",
+                {"raw": raw, "reason": "invalid JSON"},
+                sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+            )
             logger.debug("Discarding malformed Kick WebSocket frame.")
             return None
         if not isinstance(frame, dict):
+            capture_debug_sample(
+                "kick-unknown-websocket-shape",
+                {"raw": frame, "reason": "decoded frame was not an object"},
+                sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+            )
             logger.debug("Discarding non-object Kick WebSocket frame.")
             return None
         return cast("JSONDict", frame)

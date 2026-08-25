@@ -12,8 +12,10 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import ParsingError
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.kick.constants import (
     DEFAULT_MESSAGE_TYPE,
+    KICK_DEBUG_SAMPLE_LIMIT,
     MESSAGE_TYPE_REMAPPING,
 )
 from chat_downloader.sites.kick.parsing.common_fields import (
@@ -107,11 +109,19 @@ def parse_chat_message(raw: object) -> dict[str, Any]:
     content = raw.get("content")
     text, emotes = parse_emotes(content if isinstance(content, str) else "")
 
+    raw_message_type = str(raw.get("type"))
+    message_type = MESSAGE_TYPE_REMAPPING.get(raw_message_type)
+    if message_type is None:
+        capture_debug_sample(
+            "kick-unknown-message-type",
+            {"raw": raw, "message_type": raw_message_type},
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
+        message_type = DEFAULT_MESSAGE_TYPE
+
     info: dict[str, Any] = {
         "message_id": message_id,
-        "message_type": MESSAGE_TYPE_REMAPPING.get(
-            str(raw.get("type")), DEFAULT_MESSAGE_TYPE
-        ),
+        "message_type": message_type,
         "message": text,
     }
 
@@ -147,6 +157,11 @@ def parse_preloaded_messages(raw_messages: Iterable[object]) -> list[dict[str, A
     for raw in raw_messages:
         try:
             parsed.append(parse_chat_message(raw))
-        except ParsingError:
+        except ParsingError as error:
+            capture_debug_sample(
+                "kick-malformed-preloaded-message",
+                {"raw": raw, "error": str(error)},
+                sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+            )
             continue
     return parsed

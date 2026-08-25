@@ -672,7 +672,10 @@ def test_preloaded_history_does_not_swallow_keyboard_interrupt() -> None:
         )
 
 
-def test_preloaded_chat_skips_malformed_current_pin(caplog: Any) -> None:
+def test_preloaded_chat_captures_and_skips_malformed_current_pin(
+    caplog: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class MalformedPinClient:
         @staticmethod
         def fetch_preloaded_chat_state(
@@ -683,6 +686,12 @@ def test_preloaded_chat_skips_malformed_current_pin(caplog: Any) -> None:
     downloader = MagicMock()
     downloader._kick_client = MalformedPinClient()
     caplog.set_level("DEBUG", logger=live_service.logger.name)
+    captured = []
+    monkeypatch.setattr(
+        live_service,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
 
     messages = list(
         live_service._iter_preloaded_chat(
@@ -695,3 +704,6 @@ def test_preloaded_chat_skips_malformed_current_pin(caplog: Any) -> None:
 
     assert messages == []
     assert "Skipping malformed Kick startup pin" in caplog.text
+    assert captured[0][0][0] == "kick-malformed-preloaded-pin"
+    assert captured[0][0][1]["raw"] == {"duration": 1}
+    assert captured[0][1]["sample_limit"] == 10

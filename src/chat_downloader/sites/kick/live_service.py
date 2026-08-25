@@ -25,13 +25,14 @@ from chat_downloader.errors import (
     ParsingError,
     RetriesExceeded,
 )
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 
-from .constants import MESSAGE_GROUPS, is_numeric_id
+from .constants import KICK_DEBUG_SAMPLE_LIMIT, MESSAGE_GROUPS, is_numeric_id
 from .errors import KickError, KickServerError
 from .parsing.events import dispatch_event
 from .parsing.messages import parse_preloaded_messages
@@ -320,6 +321,11 @@ def _iter_preloaded_chat(
                 preloaded.pinned_message
             )
         except (ParsingError, ValueError, TypeError, KeyError, IndexError) as error:
+            capture_debug_sample(
+                "kick-malformed-preloaded-pin",
+                {"raw": preloaded.pinned_message, "error": str(error)},
+                sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+            )
             logger.debug("Skipping malformed Kick startup pin: %s", error)
         else:
             if emit(pinned_message):

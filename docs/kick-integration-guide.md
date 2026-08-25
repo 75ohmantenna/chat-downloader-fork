@@ -347,6 +347,25 @@ When debugging Kick breakage, inspect modules in this order:
 6. `websocket_transport.py` — Pusher framing, subscribe, reconnect signals
 7. `parsing/events.py` and per-event parsers — dispatch and field assembly
 
+## Debug Sample Capture
+
+Kick can capture sanitized diagnostic samples for unsupported event names,
+unknown chat-message types, malformed event/preloaded payloads, Pusher errors,
+and invalid WebSocket shapes. Capture requires both debug logging and explicit
+opt-in:
+
+```bash
+CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
+chat_downloader "https://kick.com/xqc" --logging debug
+```
+
+Set `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR` to retain samples in a chosen private
+directory. Each anomaly label captures at most ten unique payloads per process
+and directory. The shared sanitizer redacts credential-bearing fields, URL
+tokens, and token-like strings before secure `0600` files are written. Samples
+can still contain public chat content, so review them before sharing or
+promoting one into `tests/fixtures/kick/`.
+
 ## Testing
 
 The Kick suite is fully offline. The WebSocket connector and frame iterator,

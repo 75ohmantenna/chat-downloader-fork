@@ -55,6 +55,9 @@ PUSHER_PING = "pusher:ping"
 PUSHER_PONG = "pusher:pong"
 PUSHER_ERROR = "pusher:error"
 
+#: Maximum unique diagnostic payloads captured for one Kick anomaly label.
+KICK_DEBUG_SAMPLE_LIMIT = 10
+
 #: Kick chat-message event name carried inside a Pusher frame's ``event`` field.
 CHAT_MESSAGE_EVENT = "App\\Events\\ChatMessageEvent"
 

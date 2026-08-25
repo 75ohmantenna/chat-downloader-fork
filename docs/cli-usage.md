@@ -151,6 +151,9 @@ channel URLs reject these bounds because the public live feed cannot seek.
 Debug and automation:
 
 - `--logging debug`, `--verbose` — transport and parser debugging.
+- With `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`, Kick captures bounded,
+  sanitized samples for unknown or malformed REST/Pusher payloads; see the
+  Kick integration guide for storage and review guidance.
 - YouTube continuation polls report separate processed-action and
   emitted-message counts so skipped or non-emitting provider actions are
   visible without inflating the output count.

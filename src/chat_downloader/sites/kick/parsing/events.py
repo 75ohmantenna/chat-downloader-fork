@@ -4,9 +4,9 @@
 
 A dispatch dictionary maps normalized message types (resolved from raw Pusher
 ``event`` names via ``EVENT_NAME_MAP``) to parser functions. Pusher protocol
-control frames are recognized and ignored; unknown events are debug-logged
-using their sanitized name only—never their payload body—and skipped so
-they can never crash normal chat logging.
+control frames are recognized and ignored; unknown events are debug-logged by
+name and can be captured through the sanitized opt-in sample mechanism before
+being skipped so they can never crash normal chat logging.
 """
 
 from __future__ import annotations
@@ -16,8 +16,10 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import logger
 from chat_downloader.errors import ParsingError
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.kick.constants import (
     EVENT_NAME_MAP,
+    KICK_DEBUG_SAMPLE_LIMIT,
     PUSHER_CONNECTION_ESTABLISHED,
     PUSHER_ERROR,
     PUSHER_PING,
@@ -114,6 +116,11 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
 
     # --- Pusher protocol errors -----------------------------------------------
     if event_name == PUSHER_ERROR:
+        capture_debug_sample(
+            "kick-pusher-error",
+            {"raw": frame},
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
         msg = "Kick Pusher returned an error event (subscription/protocol failure)."
         raise KickError(msg)
 
@@ -124,18 +131,35 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
 
     # --- Resolve the Pusher event name to a normalized message type -----------
     if not isinstance(event_name, str):
+        capture_debug_sample(
+            "kick-unknown-event",
+            {"raw": frame, "reason": "missing or non-string event name"},
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
         logger.debug("Kick Pusher frame has no event name; skipping.")
         return None
     message_type = EVENT_NAME_MAP.get(event_name)
-    if (
-        message_type is None
-    ):  # pragma: no cover — unsupported events cannot hit this path in tests
+    if message_type is None:
+        capture_debug_sample(
+            "kick-unknown-event",
+            {"raw": frame, "event_name": event_name},
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
         logger.debug("Skipping unsupported Kick event: %s", event_name)
         return None
 
     # --- Look up the parser and run it ----------------------------------------
     parser = _PARSER_DISPATCH.get(message_type)
     if parser is None:  # pragma: no cover — programming error guard
+        capture_debug_sample(
+            "kick-malformed-event",
+            {
+                "raw": frame,
+                "message_type": message_type,
+                "reason": "no registered parser",
+            },
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
         logger.debug("No parser registered for message type: %s", message_type)
         return None
 
@@ -148,8 +172,17 @@ def dispatch_event(frame: Mapping[str, object]) -> dict[str, Any] | None:
         TypeError,
         KeyError,
         IndexError,
-    ) as error:  # pragma: no cover — defensive
+    ) as error:
         # A single malformed frame must never tear down the live download
         # loop (which only retries on ConnectionError); skip it instead.
+        capture_debug_sample(
+            "kick-malformed-event",
+            {
+                "raw": frame,
+                "message_type": message_type,
+                "error": str(error),
+            },
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
         logger.debug("Skipping malformed Kick %s: %s", message_type, error)
         return None
