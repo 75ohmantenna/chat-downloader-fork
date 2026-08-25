@@ -55,6 +55,51 @@ def test_youtube_video_id_extraction(url: str, expected_id: str) -> None:
     assert video_id == expected_id
 
 
+@pytest.mark.parametrize(
+    ("url", "expected_id", "expected_type"),
+    [
+        (
+            "https://www.youtube.com/channel/UCR3TOnFWDeAlT-Ho6LueDmg/live",
+            "UCR3TOnFWDeAlT-Ho6LueDmg",
+            "channel/",
+        ),
+        ("https://www.youtube.com/@example/live", "example", "@"),
+        ("https://www.youtube.com/user/example/live", "example", "user/"),
+    ],
+)
+def test_youtube_live_channel_url_matching(
+    url: str,
+    expected_id: str,
+    expected_type: str,
+) -> None:
+    result = YouTubeChatDownloader.matches(url)
+
+    assert result is not None
+    function_name, match = result
+    assert function_name == "_get_chat_by_user"
+    assert match.group("id") == expected_id
+    assert match.group("type") == expected_type
+    assert match.end() == len(url)
+
+
+def test_youtube_live_channel_url_accepts_query_suffix() -> None:
+    url = "https://www.youtube.com/@example/live?app=desktop"
+
+    result = YouTubeChatDownloader.matches(url)
+
+    assert result is not None
+    function_name, match = result
+    assert function_name == "_get_chat_by_user"
+    assert match.group("id") == "example"
+
+
+@pytest.mark.parametrize("suffix", ["/lives", "/live/extra"])
+def test_youtube_live_channel_url_rejects_lookalike_suffix(suffix: str) -> None:
+    url = f"https://www.youtube.com/@example{suffix}"
+
+    assert YouTubeChatDownloader.matches(url) is None
+
+
 def test_youtube_without_protocol() -> None:
     """Test YouTube URL matching without protocol."""
     url = "www.youtube.com/watch?v=jfKfPfyJRdk"

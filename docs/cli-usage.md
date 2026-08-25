@@ -16,6 +16,12 @@ Print messages to stdout:
 chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" --max_messages 20
 ```
 
+YouTube channel, user, and handle live shortcuts are accepted directly:
+
+```bash
+chat_downloader "https://www.youtube.com/@example/live" --max_messages 20
+```
+
 Capture a Twitch VOD to JSONL:
 
 ```bash

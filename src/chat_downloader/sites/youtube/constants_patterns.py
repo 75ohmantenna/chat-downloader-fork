@@ -104,7 +104,8 @@ _VALID_URLS = {
                 (?:
                     (?P<type>channel/|c/|user/|@)
                 )?
-                (?P<id>[a-zA-Z0-9_-]+)""",
+                (?P<id>[a-zA-Z0-9_-]+)
+                (?:/live)?""",
 }
 
 # Live playlist used for discovery tests
