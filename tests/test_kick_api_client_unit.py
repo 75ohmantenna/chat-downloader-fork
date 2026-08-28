@@ -234,19 +234,76 @@ def test_fetch_clip_metadata_uses_endpoint_specific_not_found_error() -> None:
         client.fetch_clip_metadata("clip_missing")
 
 
-def test_fetch_message_page_passes_non_empty_cursor_only() -> None:
+def test_fetch_message_page_passes_one_pagination_parameter() -> None:
     client, session = _client(
         [
+            FakeResponse(200, {"data": {}}),
             FakeResponse(200, {"data": {}}),
             FakeResponse(200, {"data": {}}),
         ]
     )
 
-    client.fetch_message_page("123", "next")
-    client.fetch_message_page("123", "")
+    client.fetch_message_page("123", cursor="next")
+    client.fetch_message_page("123", start_time="2026-01-01T00:00:00.000000Z")
+    client.fetch_message_page("123", cursor="")
 
     assert session.calls[0][1]["params"] == {"cursor": "next"}
-    assert session.calls[1][1]["params"] is None
+    assert session.calls[1][1]["params"] == {
+        "start_time": "2026-01-01T00:00:00.000000Z"
+    }
+    assert session.calls[2][1]["params"] is None
+
+
+def test_fetch_message_page_rejects_mixed_pagination_parameters() -> None:
+    client, session = _client([])
+
+    with pytest.raises(ValueError, match="either cursor or start_time"):
+        client.fetch_message_page("123", cursor="older", start_time="newer")
+
+    assert session.calls == []
+
+
+@pytest.mark.parametrize("status", [400, 422])
+def test_fetch_forward_message_page_classifies_start_time_rejection(
+    status: int,
+) -> None:
+    client, _ = _client([FakeResponse(status, {"errors": {"start_time": ["invalid"]}})])
+
+    with pytest.raises(api_client.KickForwardHistoryRejected):
+        client.fetch_message_page("123", start_time="2026-01-01T00:00:00Z")
+
+
+@pytest.mark.parametrize("status", [400, 422])
+def test_fetch_forward_message_page_preserves_unrelated_client_error(
+    status: int,
+) -> None:
+    client, _ = _client([FakeResponse(status, {"errors": {"channel": ["bad"]}})])
+
+    with pytest.raises(KickError, match=f"unexpected HTTP {status}"):
+        client.fetch_message_page("123", start_time="2026-01-01T00:00:00Z")
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        FakeResponse(400, [], malformed=False),
+        FakeResponse(422, {}, malformed=True),
+    ],
+)
+def test_fetch_forward_message_page_requires_decodable_object_error(
+    response: FakeResponse,
+) -> None:
+    client, _ = _client([response])
+
+    with pytest.raises(KickError, match="unexpected HTTP"):
+        client.fetch_message_page("123", start_time="2026-01-01T00:00:00Z")
+
+
+def test_fetch_reverse_message_page_preserves_terminal_bad_request() -> None:
+    client, _ = _client([FakeResponse(400, {})])
+
+    with pytest.raises(KickError, match="unexpected HTTP 400"):
+        client.fetch_message_page("123", cursor="older")
 
 
 def test_fetch_message_page_forbidden_is_challenge() -> None:

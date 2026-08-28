@@ -10,6 +10,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Features
 
+- Stream Kick VOD and clip replay chronologically from the requested start
+  timestamp, allowing bounded and `max_messages` requests to stop without
+  downloading later pages from the selected window.
 - Preserve Kick's image-backed modern sender badges in structured output
   alongside legacy role and subscription badges, including selection state and
   provider metadata.

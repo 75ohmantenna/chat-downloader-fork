@@ -23,3 +23,7 @@ class KickServerError(KickError):
     another attempt, distinguishing it from terminal :class:`KickError`
     conditions such as a missing chatroom id.
     """
+
+
+class KickForwardHistoryRejected(KickError):
+    """Raised for a validated rejection of forward history's start field."""

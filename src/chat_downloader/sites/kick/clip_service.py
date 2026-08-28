@@ -19,10 +19,10 @@ from .constants import is_clip_id, is_numeric_id, is_video_id
 from .errors import KickError
 from .replay_service import (
     _apply_request_window,
-    _fetch_with_retry,
     _iter_vod_messages,
     _resolve_vod_window,
 )
+from .request_retry import fetch_with_retry
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
@@ -136,12 +136,12 @@ def get_clip_chat(
         msg = f"Invalid Kick clip id: {clip_id!r}."
         raise KickError(msg)
 
-    clip_data = _fetch_with_retry(
+    clip_data = fetch_with_retry(
         lambda: api_client.fetch_clip_metadata(clip_id),
         request,
     )
     metadata = _resolve_clip_metadata(clip_data, clip_id)
-    video_data = _fetch_with_retry(
+    video_data = fetch_with_retry(
         lambda: api_client.fetch_video_metadata(metadata.video_id),
         request,
     )

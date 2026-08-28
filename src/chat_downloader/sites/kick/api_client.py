@@ -27,7 +27,7 @@ from .constants import (
     MESSAGES_API_TEMPLATE,
     VIDEO_API_TEMPLATE,
 )
-from .errors import KickError, KickServerError
+from .errors import KickError, KickForwardHistoryRejected, KickServerError
 from .http_session import _KickSession, create_kick_session
 
 if TYPE_CHECKING:
@@ -114,15 +114,25 @@ class KickApiClient:
     def fetch_message_page(
         self,
         channel_id: str,
+        *,
         cursor: str | None = None,
+        start_time: str | None = None,
     ) -> JSONDict:
-        """Fetch one VOD message-history page."""
-        params = {"cursor": cursor} if cursor else None
+        """Fetch one message-history page in one pagination direction."""
+        if cursor and start_time:
+            msg = "Kick message history accepts either cursor or start_time."
+            raise ValueError(msg)
+        params = None
+        if cursor:
+            params = {"cursor": cursor}
+        elif start_time:
+            params = {"start_time": start_time}
         return self._request_object(
             CHANNEL_MESSAGES_API.format(channel_id=channel_id),
             context=channel_id,
             resource="messages",
             params=params,
+            forward_history=bool(start_time),
         )
 
     def _request_object(
@@ -132,12 +142,16 @@ class KickApiClient:
         context: str,
         resource: _ResourceKind,
         params: dict[str, str] | None = None,
+        forward_history: bool = False,
     ) -> JSONDict:
         """GET one endpoint and require a JSON-object response."""
         session = self._require_open_session()
         response = session.get(url, params=params, timeout=self._timeout)
         if _body_looks_like_challenge(response):
             _raise_for_challenge(response, context)
+        if forward_history and _response_rejects_start_time(response):
+            msg = f"Kick rejected forward message history for {context!r}."
+            raise KickForwardHistoryRejected(msg)
         _check_status(response, context=context, resource=resource)
         data = _decode_json(response, context=context, resource=resource)
         if not isinstance(data, dict):
@@ -161,6 +175,22 @@ class KickApiClient:
             self._session.close()
         except (OSError, RuntimeError) as error:
             logger.debug("Error closing Kick API session: %s", error)
+
+
+def _response_rejects_start_time(response: requests.Response) -> bool:
+    """Return whether a 400/422 response names ``start_time`` as invalid."""
+    if response.status_code not in {
+        HTTPStatus.BAD_REQUEST,
+        HTTPStatus.UNPROCESSABLE_ENTITY,
+    }:
+        return False
+    try:
+        payload = response.json()
+    except (JSONDecodeError, ValueError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    return "start_time" in get_dict(payload, "errors")
 
 
 def _body_looks_like_challenge(response: requests.Response) -> bool:

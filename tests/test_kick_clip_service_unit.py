@@ -92,7 +92,7 @@ def test_clip_replay_composes_real_client_metadata_cursor_and_parser() -> None:
         (
             "https://kick.com/api/v2/channels/1227772/messages",
             {
-                "params": {"cursor": "1787093724000000"},
+                "params": {"start_time": "2026-08-18T22:54:23.000000Z"},
                 "timeout": (10.0, 30.0),
             },
         ),
@@ -125,7 +125,7 @@ def test_clip_bounds_are_relative_clamped_and_do_not_mutate_request() -> None:
     assert list(chat) == []
     client.fetch_message_page.assert_called_once_with(
         "1227772",
-        "1787093724000000",
+        start_time="2026-08-18T22:54:33.000000Z",
     )
 
 

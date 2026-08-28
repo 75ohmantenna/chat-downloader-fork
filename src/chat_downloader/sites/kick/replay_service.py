@@ -6,9 +6,11 @@ Fetches chat messages for a past broadcast by paginating through the
 channel's message history and filtering by the VOD's time window.
 
 The VOD chat is served through the same ``api/v2/channels/{id}/messages``
-endpoint as preloaded live messages, but filtered to the VOD's start-to-end
-time range. Messages arrive newest-first; the generator reverses them to
-chronological order.
+endpoint as preloaded live messages. Timestamp-forward pagination streams the
+selected window chronologically without retaining the complete replay.
+If Kick explicitly identifies ``start_time`` as an invalid request field on
+the first page, the prior reverse/spooled protocol remains available as a
+compatibility path.
 """
 
 from __future__ import annotations
@@ -20,41 +22,27 @@ from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
-from requests.exceptions import RequestException
-
 from chat_downloader.debugging import log
-from chat_downloader.errors import ParsingError, RetriesExceeded
+from chat_downloader.errors import ParsingError
+from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.retry import retry
-from chat_downloader.utils.json_types import JSONDict, JSONList, get_dict, get_list
 from chat_downloader.utils.time_utils import ensure_seconds
 
-from .constants import is_numeric_id
-from .errors import KickError, KickServerError
+from .constants import MESSAGE_GROUPS, is_numeric_id
+from .errors import KickError, KickForwardHistoryRejected
+from .history import fetch_validated_page, iter_forward_history
 from .parsing.messages import parse_chat_message
+from .request_retry import fetch_with_retry
 
 _VOD_SPOOL_MEMORY_BYTES = 1024 * 1024
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator
+    from collections.abc import Generator
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict
 
     from .api_client import KickApiClient
-
-
-def _fetch_with_retry[T](fetch: Callable[[], T], request: ChatRequest) -> T:
-    """Run a transient Kick VOD request with the configured retry policy."""
-    for attempt_number in range(1, request.max_attempts + 1):
-        try:
-            return fetch()
-        except (
-            KickServerError,
-            RequestException,
-            OSError,
-        ) as error:
-            retry(attempt_number, error=error, request=request)
-    raise RetriesExceeded(request.max_attempts)  # pragma: no cover
 
 
 def _resolve_vod_window(
@@ -140,7 +128,7 @@ def get_vod_chat(
     Returns:
         A configured :class:`Chat` whose generator yields message dicts.
     """
-    video_data = _fetch_with_retry(
+    video_data = fetch_with_retry(
         lambda: api_client.fetch_video_metadata(video_id),
         request,
     )
@@ -189,18 +177,7 @@ def _apply_request_window(
 def _classify_message(
     raw: dict[str, Any], start_dt: datetime, end_dt: datetime
 ) -> tuple[dict[str, Any] | None, bool]:
-    """Classify a raw message as in-window, out-of-range, or unparsable.
-
-    Args:
-        raw: Raw message dict.
-        start_dt: VOD start time.
-        end_dt: VOD end time.
-
-    Returns:
-        ``(parsed, done)`` where ``parsed`` is the normalized message if within
-        the window, ``None`` otherwise; ``done`` is ``True`` when we've passed
-        the VOD start (messages come newest-first so older messages are past).
-    """
+    """Classify one newest-first record for reverse compatibility replay."""
     created_raw = raw.get("created_at", "")
     if not isinstance(created_raw, str):
         return None, False
@@ -221,19 +198,11 @@ def _classify_message(
         parsed = parse_chat_message(raw)
     except ParsingError:
         return None, False
-    else:
-        return parsed, False
+    return parsed, False
 
 
 def _cursor_after(timestamp: datetime) -> str:
-    """Return a provider cursor safely after an inclusive end timestamp.
-
-    Kick's history cursor is a UTC Unix timestamp in microseconds and the
-    endpoint returns messages strictly before it, while message timestamps may
-    be second-granular. Advancing one second avoids dropping messages whose
-    displayed timestamp equals the inclusive replay end; classification still
-    filters any precisely timestamped message beyond the boundary.
-    """
+    """Return a reverse cursor after the inclusive, second-granular end."""
     if timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=UTC)
     timestamp = timestamp.astimezone(UTC)
@@ -247,7 +216,7 @@ def _cursor_after(timestamp: datetime) -> str:
     return str(microseconds)
 
 
-def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output require branch handling
+def _iter_vod_messages(
     channel_id: str,
     start_dt: datetime,
     end_dt: datetime,
@@ -257,16 +226,59 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized VOD chat messages within the time window.
 
-    Seeds pagination at the selected end time, then pages through channel
-    messages (newest first) and yields those whose ``created_at`` falls within
-    the VOD's time window. Unlike live chat which streams messages as they
-    arrive, VOD replay accumulates all pages, reverses them to chronological
-    order, and yields the result. Cursor cycles terminate pagination safely.
-    With ``max_messages`` set, the oldest *N* messages (i.e. the first *N* from
-    the stream start) are returned.
+    Timestamp-forward history lets chronological messages and ``max_messages``
+    stream without buffering later replay pages. Filtering occurs before the
+    message limit so excluded records do not consume the caller's allowance.
     """
+    msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
+    try:
+        emitted = 0
+        for raw in iter_forward_history(
+            api_client,
+            channel_id,
+            start_dt,
+            end_dt,
+            request,
+        ):
+            try:
+                parsed = parse_chat_message(raw)
+            except ParsingError:
+                continue
+            if not msg_filter.should_add(parsed):
+                continue
+            emitted += 1
+            yield parsed
+            if request.max_messages is not None and emitted >= request.max_messages:
+                return
+    except KickForwardHistoryRejected:
+        log(
+            "debug",
+            "Kick rejected timestamp-forward history; using reverse pagination.",
+        )
+        yield from _iter_reverse_vod_messages(
+            channel_id,
+            start_dt,
+            end_dt,
+            request,
+            api_client=api_client,
+            msg_filter=msg_filter,
+        )
+
+
+def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards are cohesive
+    channel_id: str,
+    start_dt: datetime,
+    end_dt: datetime,
+    request: ChatRequest,
+    *,
+    api_client: KickApiClient,
+    msg_filter: MessageFilter | None = None,
+) -> Generator[JSONDict, None, None]:
+    """Yield replay through Kick's legacy newest-first cursor protocol."""
     if end_dt <= start_dt:
         return
+    if msg_filter is None:
+        msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
 
     cursor: str | None = _cursor_after(end_dt)
     done = False
@@ -274,9 +286,6 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
     requested_cursors: set[str] = set()
     seen_page_digests: set[bytes] = set()
 
-    # The API is newest-first, so chronological output requires a reverse
-    # pass. Spill page batches to disk after 1 MiB instead of retaining an
-    # entire multi-hour replay in RAM.
     with tempfile.SpooledTemporaryFile(max_size=_VOD_SPOOL_MEMORY_BYTES) as spool:
         while not done:
             if cursor is not None:
@@ -288,19 +297,15 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
                     )
                     break
                 requested_cursors.add(cursor)
-            page = _fetch_with_retry(
+            raw_messages, cursor = fetch_with_retry(
                 partial(
-                    api_client.fetch_message_page,
+                    fetch_validated_page,
+                    api_client,
                     channel_id,
-                    cursor,
+                    cursor=cursor,
                 ),
                 request,
             )
-            data_section = get_dict(page, "data")
-            raw_messages: JSONList = get_list(data_section, "messages")
-            cursor_val = data_section.get("cursor")
-            cursor = cursor_val if isinstance(cursor_val, str) else None
-
             if not raw_messages:
                 break
             page_digest = hashlib.sha256(
@@ -322,8 +327,8 @@ def _iter_vod_messages(  # noqa: C901 — reverse pagination and spooled output 
                 if msg_done:
                     done = True
                     break
-                if parsed is not None:
-                    page_messages.append(parsed)
+                if parsed is not None and msg_filter.should_add(parsed):
+                    page_messages.append(cast("JSONDict", parsed))
 
             if page_messages:
                 page_offsets.append(spool.tell())

@@ -93,11 +93,14 @@ The Kick flow depends on the target type.
    `duration`).
 4. Narrow the metadata window with request-relative `start_time` and
    `end_time` offsets when supplied.
-5. Seed `api/v2/channels/{id}/messages` at the selected end timestamp, then
-   page backward (newest-first) using the returned cursor.
-6. Keep messages whose `created_at` falls inside the selected window; stop once
-   messages predate the window start.
-7. Reverse into chronological order, apply `max_messages`, and yield.
+5. Seed `api/v2/channels/{id}/messages` with the selected start timestamp, then
+   advance through returned Unix-microsecond cursors without floating-point
+   conversion.
+6. Stably order each page by `created_at`, keep messages inside the inclusive
+   window, and stop once the page passes the selected end.
+7. Parse and yield chronologically so `max_messages` can end retrieval early.
+   If a first-page HTTP 400 or 422 validation response explicitly names
+   `start_time`, use the prior bounded reverse/spooled protocol.
 
 ### Clips
 
@@ -125,6 +128,9 @@ source-VOD interval, rather than the playlist's padded wall-clock start.
   preloaded history, WebSocket loop, deduplication, reconnect)
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
 - `clip_service.py`: clip metadata validation and source-VOD replay assembly
+- `history.py`: chronological timestamp pagination, exact cursor advancement,
+  bounded ID deduplication, and cursor/page guards for replay history
+- `request_retry.py`: shared retry policy for transient Kick service requests
 
 ### Transport and API access
 
@@ -309,16 +315,21 @@ preloaded live history, not a dedicated replay API. `replay_service.py`:
 
 - loads video metadata and derives the `(start, end)` window from `start_time`
   and `duration`
-- pages newest-first using the timestamp `cursor` until the time window is
-  exhausted; repeated cursors or pages stop pagination safely
-- classifies each message as in-window, after-window (skip), or before-window
-  (stop — older messages cannot belong to the VOD)
-- reverses the collected messages into chronological order and applies
-  `max_messages`
+- pages forward from the selected start using the timestamp `start_time` and
+  returned Unix-microsecond cursor until the window is exhausted
+- converts cursor values with integer arithmetic, sorts each page stably, and
+  stops regressive cursors or repeated pages safely
+- deduplicates IDs in bounded state while retaining distinct messages whose
+  second-granular `created_at` values span a microsecond cursor boundary
+- classifies each message against the inclusive window, yields
+  chronologically, applies message filters, and counts only included records
+  toward `max_messages` without reading later pages
+- retains reverse pagination as a compatibility path only when a first-page
+  400/422 validation body explicitly identifies `start_time` as rejected
 
-The VOD orchestration and spooled reverse-pagination path are covered by
-offline service tests. Coverage pragmas remain only on defensive or
-network-only branches with inline rationale.
+The VOD orchestration, forward protocol, reverse compatibility path, and real
+client composition are covered by offline service tests. Coverage pragmas
+remain only on defensive or network-only branches with inline rationale.
 
 ## Message Groups and Types
 

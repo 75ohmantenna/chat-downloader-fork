@@ -14,46 +14,9 @@ from unittest.mock import Mock
 
 import pytest
 
-from chat_downloader.errors import RetriesExceeded
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import KickError, replay_service
-from chat_downloader.sites.kick.errors import KickServerError
-
-
-def test_fetch_with_retry_recovers_from_temporary_failure() -> None:
-    fetch = Mock(side_effect=[OSError("timeout"), {"ok": True}])
-    request = ChatRequest(
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-    )
-
-    assert replay_service._fetch_with_retry(fetch, request) == {"ok": True}
-    assert fetch.call_count == 2
-
-
-def test_fetch_with_retry_exhausts_transient_failures() -> None:
-    fetch = Mock(side_effect=KickServerError("rate limited"))
-    request = ChatRequest(
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-    )
-
-    with pytest.raises(RetriesExceeded):
-        replay_service._fetch_with_retry(fetch, request)
-
-    assert fetch.call_count == 2
-
-
-def test_fetch_with_retry_does_not_retry_terminal_failure() -> None:
-    fetch = Mock(side_effect=KickError("not found"))
-    request = ChatRequest(max_attempts=3, retry_timeout=0)
-
-    with pytest.raises(KickError, match="not found"):
-        replay_service._fetch_with_retry(fetch, request)
-
-    fetch.assert_called_once()
+from chat_downloader.sites.kick.errors import KickForwardHistoryRejected
 
 
 def _video_data() -> dict:
@@ -298,7 +261,10 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
         lambda raw, _start, _end: (raw, False),
     )
     api_client = Mock()
-    api_client.fetch_message_page.side_effect = pages
+    api_client.fetch_message_page.side_effect = [
+        KickForwardHistoryRejected("rejected"),
+        *pages,
+    ]
 
     messages = list(
         replay_service._iter_vod_messages(
@@ -317,9 +283,12 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
         "newest-2",
     ]
     assert created_spools[0]._rolled is True
+    assert api_client.fetch_message_page.call_args_list[1].kwargs == {
+        "cursor": replay_service._cursor_after(datetime(2026, 1, 2, tzinfo=UTC))
+    }
 
 
-def test_iter_vod_messages_seeds_pagination_just_after_window_end() -> None:
+def test_iter_vod_messages_seeds_forward_pagination_at_window_start() -> None:
     api_client = _client_for_page({"data": {"messages": [], "cursor": None}})
     end = datetime(2026, 1, 2, tzinfo=UTC)
 
@@ -337,7 +306,7 @@ def test_iter_vod_messages_seeds_pagination_just_after_window_end() -> None:
     )
     api_client.fetch_message_page.assert_called_once_with(
         "123",
-        str(int(end.timestamp() * 1_000_000) + 1_000_000),
+        start_time="2026-01-01T00:00:00.000000Z",
     )
 
 
@@ -354,14 +323,14 @@ def test_cursor_after_treats_naive_timestamp_as_utc() -> None:
         datetime(2025, 12, 31, tzinfo=UTC),
     ],
 )
-def test_iter_vod_messages_does_not_fetch_empty_or_reversed_window(
+def test_reverse_vod_messages_does_not_fetch_empty_or_reversed_window(
     end: datetime,
 ) -> None:
     api_client = Mock()
 
     assert (
         list(
-            replay_service._iter_vod_messages(
+            replay_service._iter_reverse_vod_messages(
                 "123",
                 datetime(2026, 1, 1, tzinfo=UTC),
                 end,
@@ -389,7 +358,11 @@ def test_iter_vod_messages_stops_repeated_cursor_without_duplicates(
         lambda raw, _start, _end: (raw, False),
     )
     api_client = Mock()
-    api_client.fetch_message_page.return_value = page
+    api_client.fetch_message_page.side_effect = [
+        KickForwardHistoryRejected("rejected"),
+        page,
+        page,
+    ]
 
     messages = list(
         replay_service._iter_vod_messages(
@@ -402,7 +375,7 @@ def test_iter_vod_messages_stops_repeated_cursor_without_duplicates(
     )
 
     assert messages == [{"message_id": "same-message"}]
-    assert api_client.fetch_message_page.call_count == 2
+    assert api_client.fetch_message_page.call_count == 3
 
 
 def test_iter_vod_messages_stops_cursor_cycle_before_refetch(
@@ -423,7 +396,10 @@ def test_iter_vod_messages_stops_cursor_cycle_before_refetch(
         lambda raw, _start, _end: (raw, False),
     )
     api_client = Mock()
-    api_client.fetch_message_page.side_effect = pages
+    api_client.fetch_message_page.side_effect = [
+        KickForwardHistoryRejected("rejected"),
+        *pages,
+    ]
 
     messages = list(
         replay_service._iter_vod_messages(
@@ -440,7 +416,7 @@ def test_iter_vod_messages_stops_cursor_cycle_before_refetch(
         "message-1",
         "message-0",
     ]
-    assert api_client.fetch_message_page.call_count == 3
+    assert api_client.fetch_message_page.call_count == 4
 
 
 def test_iter_vod_messages_has_no_silent_page_ceiling(
@@ -462,7 +438,10 @@ def test_iter_vod_messages_has_no_silent_page_ceiling(
         lambda raw, _start, _end: (raw, False),
     )
     api_client = Mock()
-    api_client.fetch_message_page.side_effect = pages
+    api_client.fetch_message_page.side_effect = [
+        KickForwardHistoryRejected("rejected"),
+        *pages,
+    ]
 
     messages = list(
         replay_service._iter_vod_messages(
@@ -475,7 +454,7 @@ def test_iter_vod_messages_has_no_silent_page_ceiling(
     )
 
     assert len(messages) == page_count
-    assert api_client.fetch_message_page.call_count == page_count
+    assert api_client.fetch_message_page.call_count == page_count + 1
 
 
 class TestGetVodChat:
@@ -609,13 +588,13 @@ def _client_for_page(page: dict[str, Any]) -> Mock:
     return client
 
 
-def test_iter_vod_messages_stops_on_empty_page() -> None:
+def test_reverse_vod_messages_stops_on_empty_page() -> None:
     page = {"data": {"messages": [], "cursor": None}}
     api_client = _client_for_page(page)
     request = ChatRequest(max_attempts=1, interruptible_retry=False)
 
     messages = list(
-        replay_service._iter_vod_messages(
+        replay_service._iter_reverse_vod_messages(
             "123",
             datetime(2026, 1, 1, tzinfo=UTC),
             datetime(2026, 1, 2, tzinfo=UTC),
@@ -627,7 +606,7 @@ def test_iter_vod_messages_stops_on_empty_page() -> None:
     assert messages == []
 
 
-def test_iter_vod_messages_classifies_and_stops_at_window_edge() -> None:
+def test_reverse_vod_messages_classifies_and_stops_at_window_edge() -> None:
     start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
     end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
     page = {
@@ -645,7 +624,7 @@ def test_iter_vod_messages_classifies_and_stops_at_window_edge() -> None:
     request = ChatRequest(max_attempts=1, interruptible_retry=False)
 
     messages = list(
-        replay_service._iter_vod_messages(
+        replay_service._iter_reverse_vod_messages(
             "123",
             start,
             end,
@@ -660,7 +639,7 @@ def test_iter_vod_messages_classifies_and_stops_at_window_edge() -> None:
     ]
 
 
-def test_iter_vod_messages_respects_max_messages() -> None:
+def test_reverse_vod_messages_respects_max_messages() -> None:
     start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
     end = datetime(2026, 1, 1, 1, 0, 0, tzinfo=UTC)
     page = {
@@ -680,7 +659,7 @@ def test_iter_vod_messages_respects_max_messages() -> None:
     )
 
     messages = list(
-        replay_service._iter_vod_messages(
+        replay_service._iter_reverse_vod_messages(
             "123",
             start,
             end,
@@ -691,3 +670,141 @@ def test_iter_vod_messages_respects_max_messages() -> None:
 
     assert len(messages) == 1
     assert messages[0]["message_id"] == "msg-1"
+
+
+def test_forward_vod_messages_skip_parser_failures() -> None:
+    page = {
+        "data": {
+            "messages": [
+                {
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "content": "missing id",
+                    "type": "message",
+                },
+                _make_raw_msg("valid", "2026-01-01T00:00:01Z"),
+            ],
+            "cursor": None,
+        }
+    }
+    api_client = _client_for_page(page)
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(max_attempts=1, interruptible_retry=False),
+            api_client=api_client,
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == ["valid"]
+
+
+def test_forward_vod_messages_respect_max_messages() -> None:
+    pages = [
+        {
+            "data": {
+                "messages": [_make_raw_msg("first", "2026-01-01T00:00:00Z")],
+                "cursor": "1767225600000000",
+            }
+        },
+        {
+            "data": {
+                "messages": [_make_raw_msg("second", "2026-01-01T00:00:01Z")],
+                "cursor": None,
+            }
+        },
+    ]
+    api_client = Mock()
+    api_client.fetch_message_page.side_effect = pages
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(
+                max_attempts=1,
+                interruptible_retry=False,
+                max_messages=1,
+            ),
+            api_client=api_client,
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == ["first"]
+    api_client.fetch_message_page.assert_called_once()
+
+
+def test_forward_vod_filtering_precedes_message_limit() -> None:
+    page = {
+        "data": {
+            "messages": [
+                {
+                    **_make_raw_msg("excluded", "2026-01-01T00:00:00Z"),
+                    "type": "subscription",
+                },
+                _make_raw_msg("included", "2026-01-01T00:00:01Z"),
+            ],
+            "cursor": "1767225601000000",
+        }
+    }
+    api_client = Mock()
+    api_client.fetch_message_page.return_value = page
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(
+                message_groups=["messages"],
+                max_messages=1,
+                max_attempts=1,
+                interruptible_retry=False,
+            ),
+            api_client=api_client,
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == ["included"]
+    api_client.fetch_message_page.assert_called_once()
+
+
+def test_reverse_vod_filtering_precedes_message_limit() -> None:
+    page = {
+        "data": {
+            "messages": [
+                _make_raw_msg("newer", "2026-01-01T00:00:02Z"),
+                {
+                    **_make_raw_msg("excluded", "2026-01-01T00:00:01Z"),
+                    "type": "subscription",
+                },
+                _make_raw_msg("oldest", "2026-01-01T00:00:00Z"),
+            ],
+            "cursor": None,
+        }
+    }
+    api_client = Mock()
+    api_client.fetch_message_page.side_effect = [
+        KickForwardHistoryRejected("rejected"),
+        page,
+    ]
+
+    messages = list(
+        replay_service._iter_vod_messages(
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            ChatRequest(
+                message_groups=["messages"],
+                max_messages=1,
+                max_attempts=1,
+                interruptible_retry=False,
+            ),
+            api_client=api_client,
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == ["oldest"]

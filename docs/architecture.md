@@ -85,9 +85,13 @@ text append mode also terminates an existing final line before appending. Output
 path aliases resolving to the same file are attached only once. Writer targets
 are compared after `{title}`/`{id}` expansion; existing hard links are compared
 by device and inode.
-Kick VOD and clip reverse pagination starts from the selected end time and
-spills to a temporary file after 1 MiB, keeping replay memory and request scope
-bounded independently of channel activity after the recording.
+Kick VOD and clip replay pages forward from the selected start time, so
+chronological output streams without buffering later history. Exact cursor
+advancement is paired with bounded ID deduplication because Kick's visible
+message timestamps have lower precision than its pagination cursors. A
+first-page 400/422 validation body naming `start_time` can activate the prior
+reverse/spooled compatibility path without converting unrelated client errors
+into an expensive replay crawl.
 
 ---
 
@@ -241,14 +245,16 @@ module names.
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
 | `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, reconnect backfill, bounded diagnostics, and rejected-key recovery |
-| `replay_service.py` | VOD metadata, reverse pagination, time-window filtering, and chronological spooled output |
+| `replay_service.py` | VOD metadata, replay-window and message filtering, chronological parsing, and reverse compatibility output |
 | `clip_service.py` | Clip metadata validation, clip-relative bounds, and source-VOD replay assembly |
+| `history.py` | Timestamp-forward message pagination, exact microsecond cursor advancement, bounded ID deduplication, and loop guards |
+| `request_retry.py` | Shared transient-request retry policy for Kick services |
 | `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, VOD, and clip endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
 | `pusher_discovery.py` | Default-first Pusher application-key selection, rejected-key refresh, cache ownership, and WebSocket URL construction |
 | `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
-| `errors.py` | `KickError`, `KickServerError` |
+| `errors.py` | Terminal, transient, and validated history-fallback error classifications |
 | `parsing/events.py` | Pusher frame dispatch to typed event parsers |
 | `parsing/common_fields.py` | Shared scalar, timestamp, author, and badge normalization for Kick events |
 | `parsing/messages.py` | Chat message normalization (text messages) |
