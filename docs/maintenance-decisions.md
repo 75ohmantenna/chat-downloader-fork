@@ -33,6 +33,18 @@ more than one real consumer.
 **Revisit when:** a new provider or repeated cross-provider change shows that a
 shared abstraction would remove knowledge rather than merely move code.
 
+## Keep Kick clip fallback evidence together
+
+**Decision:** `sites/kick/clip_service.py` owns web and mobile clip-contract
+validation, cross-endpoint evidence reconciliation, source-VOD fallback policy,
+and bounded replay assembly as one cohesive security boundary. It is
+intentionally allowlisted above 400 lines rather than split into temporal
+lookup and response phases whose ordering would hide when identity and bounds
+must fail closed.
+
+**Revisit when:** a pure metadata-validation component gains another real
+consumer, or a new ownership boundary can remove state and fallback coupling.
+
 ## Distinguish raw JSON from assembled output
 
 **Decision:** Incoming platform payloads use `utils/json_types` aliases and

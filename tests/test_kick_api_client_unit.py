@@ -17,6 +17,8 @@ from tests.kick_helpers import (
     load_text_fixture,
 )
 
+CLIP_ID = "clip_01M0BHEHDAX2NEAGXG0DA8V9S5"
+
 
 def _client(
     responses: list[Any],
@@ -24,7 +26,10 @@ def _client(
     timeout: tuple[float, float] = (10.0, 30.0),
 ) -> tuple[KickApiClient, FakeKickSession]:
     session = FakeKickSession(responses)
-    return KickApiClient(session=session, timeout=timeout), session
+    return (
+        KickApiClient(session=session, mobile_session=session, timeout=timeout),
+        session,
+    )
 
 
 def test_fetch_channel_success_uses_owned_session_and_timeout() -> None:
@@ -62,6 +67,100 @@ def test_client_copies_proxy_and_header_configuration(monkeypatch: Any) -> None:
         "extra_headers": {"Authorization": "secret"},
         "trust_env": True,
     }
+
+
+def test_mobile_session_is_origin_isolated_and_omits_sensitive_headers(
+    monkeypatch: Any,
+) -> None:
+    payload = load_fixture("clip_metadata_mobile.json")
+    primary_session = FakeKickSession([])
+    mobile_session = FakeKickSession([FakeResponse(200, payload)])
+    sessions = [primary_session, mobile_session]
+    captured: list[dict[str, Any]] = []
+
+    def fake_create(**kwargs: Any) -> FakeKickSession:
+        captured.append(kwargs)
+        return sessions.pop(0)
+
+    monkeypatch.setattr(api_client, "create_kick_session", fake_create)
+    proxy = {"https": "http://proxy.example:8080"}
+    headers = {
+        "Authorization": "Bearer secret",
+        "Cookie": "session=secret",
+        "X-Api-Key": "secret",
+        "X-Custom": "Bearer secret",
+        "User-Agent": "safe-agent",
+        "X-Trace": "safe-trace",
+    }
+    client = KickApiClient(
+        proxy=proxy,
+        extra_headers=headers,
+        timeout=(3.0, 7.0),
+        trust_env=False,
+    )
+
+    assert client.fetch_mobile_clip_metadata(CLIP_ID) == payload
+    assert captured == [
+        {
+            "proxy": proxy,
+            "extra_headers": headers,
+            "trust_env": False,
+        },
+        {
+            "proxy": proxy,
+            "extra_headers": {
+                "User-Agent": "safe-agent",
+                "X-Trace": "safe-trace",
+            },
+            "trust_env": False,
+        },
+    ]
+    assert mobile_session.calls == [
+        (
+            f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}",
+            {
+                "params": None,
+                "timeout": (3.0, 7.0),
+                "headers": {
+                    "Authorization": None,
+                    "Cookie": None,
+                    "X-Api-Key": None,
+                    "X-Custom": None,
+                },
+            },
+        )
+    ]
+
+    client.close()
+
+    assert primary_session.close_calls == 1
+    assert mobile_session.close_calls == 1
+
+
+def test_injected_primary_session_is_not_reused_for_mobile_origin(
+    monkeypatch: Any,
+) -> None:
+    payload = load_fixture("clip_metadata_mobile.json")
+    primary_session = FakeKickSession([])
+    primary_session.headers = {"Authorization": "Bearer resident-secret"}
+    mobile_session = FakeKickSession([FakeResponse(200, payload)])
+    captured: list[dict[str, Any]] = []
+
+    def fake_create(**kwargs: Any) -> FakeKickSession:
+        captured.append(kwargs)
+        return mobile_session
+
+    monkeypatch.setattr(api_client, "create_kick_session", fake_create)
+    client = KickApiClient(session=primary_session)
+
+    assert client.fetch_mobile_clip_metadata(CLIP_ID) == payload
+    assert primary_session.calls == []
+    assert captured == [{"proxy": None, "extra_headers": None, "trust_env": True}]
+
+    client.close()
+
+    assert primary_session.close_calls == 1
+    assert mobile_session.close_calls == 1
 
 
 def test_client_close_is_idempotent_and_use_after_close_fails() -> None:
@@ -222,6 +321,21 @@ def test_fetch_clip_metadata_uses_clip_endpoint() -> None:
     assert session.calls == [
         (
             "https://kick.com/api/v2/clips/clip_01M0BHEHDAX2NEAGXG0DA8V9S5",
+            {"params": None, "timeout": (10.0, 30.0)},
+        )
+    ]
+
+
+def test_fetch_mobile_clip_metadata_uses_anonymous_mobile_endpoint() -> None:
+    payload = load_fixture("clip_metadata_mobile.json")
+    client, session = _client([FakeResponse(200, payload)])
+
+    assert (
+        client.fetch_mobile_clip_metadata("clip_01M0BHEHDAX2NEAGXG0DA8V9S5") == payload
+    )
+    assert session.calls == [
+        (
+            "https://mobile.kick.com/api/v1/clips/clip_01M0BHEHDAX2NEAGXG0DA8V9S5",
             {"params": None, "timeout": (10.0, 30.0)},
         )
     ]

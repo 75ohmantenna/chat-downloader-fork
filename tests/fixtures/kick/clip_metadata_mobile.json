@@ -1,0 +1,37 @@
+{
+  "data": {
+    "category": {
+      "id": 8549,
+      "name": "IRL",
+      "slug": "irl"
+    },
+    "channel": {
+      "id": 1227772,
+      "is_live": false,
+      "is_verified": true,
+      "profile_picture": "https://files.kick.com/images/user/1269875/profile_image/conversion/5362823c-9750-4564-ba3d-5e984ff7fc03-medium.webp",
+      "slug": "n3on",
+      "username": "n3on"
+    },
+    "created_at": "2026-08-18T22:56:54.673974Z",
+    "creator": {
+      "id": 19806015,
+      "slug": "kingdaclips",
+      "username": "KINGDACLIPS"
+    },
+    "duration": 60,
+    "id": "clip_01M0BHEHDAX2NEAGXG0DA8V9S5",
+    "is_mature": false,
+    "playback_url": "https://clips.kick.com/clips/19/clip_01M0BHEHDAX2NEAGXG0DA8V9S5/playlist.m3u8",
+    "started_at": "2026-08-18T22:54:21Z",
+    "thumbnail_url": "https://clips.kick.com/clips/19/clip_01M0BHEHDAX2NEAGXG0DA8V9S5/thumbnail.webp",
+    "title": "woah",
+    "video": {
+      "id": "01a016f6-2428-7600-beea-25a1621e91a4",
+      "offset": 2038,
+      "title": "N3on x Newman Family"
+    },
+    "views_count": 28817
+  },
+  "message": "success"
+}

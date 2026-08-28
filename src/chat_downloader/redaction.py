@@ -207,7 +207,7 @@ def _sanitize_secret_string(value: str) -> str:
     return _redact_labeled_values(value)
 
 
-def _is_sensitive_header(name: object, value: object) -> bool:
+def is_sensitive_header(name: object, value: object) -> bool:
     """Return whether a header name or authentication value carries a secret."""
     return (isinstance(name, str) and _is_sensitive_key(name)) or (
         isinstance(value, str) and _AUTH_HEADER_VALUE_RE.match(value) is not None
@@ -225,7 +225,7 @@ def sanitize_for_log(value: Any) -> Any:
                 and isinstance(item, dict)
             ):
                 sanitized[key] = {
-                    k: REDACTED if _is_sensitive_header(k, v) else sanitize_for_log(v)
+                    k: REDACTED if is_sensitive_header(k, v) else sanitize_for_log(v)
                     for k, v in item.items()
                 }
             elif isinstance(key, str) and _is_sensitive_key(key):

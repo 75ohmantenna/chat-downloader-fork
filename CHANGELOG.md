@@ -10,6 +10,13 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Features
 
+- Fall back to Kick's anonymous mobile clip metadata when web clip or source-VOD
+  metadata is unavailable, reconciling any known channel identity and using a
+  validated, provider-bounded absolute time window for clip chat replay. The
+  cross-origin mobile request uses an isolated session without credential-shaped
+  user headers.
+- Normalize timezone-qualified Kick VOD starts to UTC and classify unusable
+  provider time windows without leaking built-in datetime exceptions.
 - Stream Kick VOD and clip replay chronologically from the requested start
   timestamp, allowing bounded and `max_messages` requests to stop without
   downloading later pages from the selected window.

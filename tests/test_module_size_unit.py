@@ -32,6 +32,11 @@ ALLOWLIST: frozenset[str] = frozenset(
         # lifecycle. Splitting those phases would obscure their shared retry,
         # deduplication, and transport-close invariants.
         "sites/kick/live_service.py",
+        # Cohesive Kick clip replay: web/mobile contract validation, fallback
+        # evidence reconciliation, and relative-window assembly form one
+        # security boundary. Splitting the lookup phases would obscure when
+        # cross-endpoint identity and bounds must fail closed.
+        "sites/kick/clip_service.py",
         # Cohesive security boundary: structured/string redaction and secure
         # debug-sample creation share the same secret-classification rules.
         # Splitting file creation from sanitization would duplicate or weaken

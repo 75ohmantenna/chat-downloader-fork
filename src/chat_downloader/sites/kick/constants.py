@@ -35,6 +35,12 @@ VIDEO_API_TEMPLATE = "https://kick.com/api/v1/video/{video_id}"
 #: Clip metadata endpoint, formatted with a provider clip ID.
 CLIP_API_TEMPLATE = "https://kick.com/api/v2/clips/{clip_id}"
 
+#: Mobile clip metadata fallback, formatted with a provider clip ID.
+MOBILE_CLIP_API_TEMPLATE = "https://mobile.kick.com/api/v1/clips/{clip_id}"
+
+#: Maximum duration accepted from the mobile clip contract.
+MOBILE_CLIP_MAX_DURATION_SECONDS = 180
+
 #: Channel messages endpoint (VOD replay), formatted with a channel id.
 CHANNEL_MESSAGES_API = "https://kick.com/api/v2/channels/{channel_id}/messages"
 

@@ -128,6 +128,33 @@ class TestResolveVodWindow:
         assert start_dt.tzinfo is UTC
         assert end_dt == start_dt + timedelta(hours=1)
 
+    def test_aware_start_time_normalized_to_utc(self) -> None:
+        data = _video_data()
+        data["livestream"]["start_time"] = "2026-06-13T01:29:45+01:00"
+
+        _, _, _, start_dt, end_dt = replay_service._resolve_vod_window(
+            data,
+            "testuser",
+        )
+
+        assert start_dt == datetime(2026, 6, 13, 0, 29, 45, tzinfo=UTC)
+        assert end_dt == start_dt + timedelta(hours=1)
+
+    def test_aware_start_time_underflow_raises_provider_error(self) -> None:
+        data = _video_data()
+        data["livestream"]["start_time"] = "0001-01-01T00:00:00+01:00"
+
+        with pytest.raises(KickError, match="unusable start_time"):
+            replay_service._resolve_vod_window(data, "testuser")
+
+    @pytest.mark.parametrize("duration", [float("nan"), float("inf"), 1e20])
+    def test_unusable_duration_raises_provider_error(self, duration: float) -> None:
+        data = _video_data()
+        data["livestream"]["duration"] = duration
+
+        with pytest.raises(KickError, match="unusable duration"):
+            replay_service._resolve_vod_window(data, "testuser")
+
 
 class TestClassifyMessage:
     """Tests for ``_classify_message``."""

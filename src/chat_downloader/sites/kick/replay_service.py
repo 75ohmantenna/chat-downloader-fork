@@ -45,6 +45,27 @@ if TYPE_CHECKING:
     from .api_client import KickApiClient
 
 
+def _parse_vod_start(livestream: JSONDict, username: str) -> datetime:
+    """Parse one provider VOD start and normalize it to UTC."""
+    start_time_raw = livestream.get("start_time")
+    if not isinstance(start_time_raw, str):
+        msg = f"Kick video for {username!r} is missing a start_time."
+        raise KickError(msg)
+    try:
+        start_dt = datetime.fromisoformat(start_time_raw)
+    except (ValueError, TypeError, OverflowError) as error:
+        msg = f"Kick video for {username!r} has an unparsable start_time: {error}"
+        raise KickError(msg) from error
+
+    if start_dt.tzinfo is None:
+        return start_dt.replace(tzinfo=UTC)
+    try:
+        return start_dt.astimezone(UTC)
+    except (ValueError, OverflowError) as error:
+        msg = f"Kick video for {username!r} has an unusable start_time."
+        raise KickError(msg) from error
+
+
 def _resolve_vod_window(
     data: JSONDict, username: str
 ) -> tuple[str, str, str, datetime, datetime]:
@@ -82,26 +103,17 @@ def _resolve_vod_window(
 
     title = str(livestream.get("session_title", username))
 
-    # Parse VOD time window
-    start_time_raw = livestream.get("start_time")
-    if not isinstance(start_time_raw, str):
-        msg = f"Kick video for {username!r} is missing a start_time."
-        raise KickError(msg)
-
-    try:
-        start_dt = datetime.fromisoformat(start_time_raw)
-    except (ValueError, TypeError) as error:
-        msg = f"Kick video for {username!r} has an unparsable start_time: {error}"
-        raise KickError(msg) from error
-
-    if start_dt.tzinfo is None:
-        start_dt = start_dt.replace(tzinfo=UTC)
+    start_dt = _parse_vod_start(livestream, username)
 
     duration_ms = livestream.get("duration", 0)
     duration_seconds = (
         duration_ms if isinstance(duration_ms, (int, float)) else 0
     ) / 1000
-    end_dt = start_dt + timedelta(seconds=duration_seconds)
+    try:
+        end_dt = start_dt + timedelta(seconds=duration_seconds)
+    except (ValueError, OverflowError) as error:
+        msg = f"Kick video for {username!r} has an unusable duration."
+        raise KickError(msg) from error
 
     return channel_id, chatroom_id, title, start_dt, end_dt
 

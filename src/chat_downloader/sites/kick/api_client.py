@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Owned client for Kick's unauthenticated web JSON endpoints."""
+"""Owned client for Kick's unauthenticated JSON endpoints."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Literal, NoReturn, cast
 
 from chat_downloader.debugging import logger
 from chat_downloader.errors import CaptchaChallengeRequired, UserNotFound
+from chat_downloader.redaction import is_sensitive_header
 from chat_downloader.utils.json_types import (
     JSONAny,
     JSONDict,
@@ -25,6 +26,7 @@ from .constants import (
     CLIP_API_TEMPLATE,
     CLOUDFLARE_MARKERS,
     MESSAGES_API_TEMPLATE,
+    MOBILE_CLIP_API_TEMPLATE,
     VIDEO_API_TEMPLATE,
 )
 from .errors import KickError, KickForwardHistoryRejected, KickServerError
@@ -46,7 +48,7 @@ class PreloadedChatState:
 
 
 class KickApiClient:
-    """Own one HTTP session and apply one response policy to Kick endpoints."""
+    """Own origin-scoped sessions and one response policy for Kick endpoints."""
 
     def __init__(
         self,
@@ -56,13 +58,27 @@ class KickApiClient:
         timeout: tuple[float, float] = _DEFAULT_TIMEOUT,
         trust_env: bool = True,
         session: _KickSession | None = None,
+        mobile_session: _KickSession | None = None,
     ) -> None:
-        """Create a client that owns either the supplied or a new session."""
+        """Create a client with origin-scoped supplied or new sessions."""
         self._session = session or create_kick_session(
             proxy=dict(proxy) if proxy else None,
             extra_headers=dict(extra_headers) if extra_headers else None,
             trust_env=trust_env,
         )
+        self._mobile_session = mobile_session
+        self._mobile_proxy = dict(proxy) if proxy else None
+        self._mobile_extra_headers = {
+            name: value
+            for name, value in (extra_headers or {}).items()
+            if not is_sensitive_header(name, value)
+        } or None
+        self._mobile_trust_env = trust_env
+        self._mobile_header_overrides = {
+            name: None
+            for name, value in (extra_headers or {}).items()
+            if is_sensitive_header(name, value)
+        }
         self._timeout = tuple(timeout)
         self._closed = False
 
@@ -111,6 +127,15 @@ class KickApiClient:
             resource="clip",
         )
 
+    def fetch_mobile_clip_metadata(self, clip_id: str) -> JSONDict:
+        """Fetch the anonymous mobile clip-metadata fallback."""
+        return self._request_object(
+            MOBILE_CLIP_API_TEMPLATE.format(clip_id=clip_id),
+            context=clip_id,
+            resource="clip",
+            mobile=True,
+        )
+
     def fetch_message_page(
         self,
         channel_id: str,
@@ -143,10 +168,17 @@ class KickApiClient:
         resource: _ResourceKind,
         params: dict[str, str] | None = None,
         forward_history: bool = False,
+        mobile: bool = False,
     ) -> JSONDict:
         """GET one endpoint and require a JSON-object response."""
-        session = self._require_open_session()
-        response = session.get(url, params=params, timeout=self._timeout)
+        session = self._require_open_session(mobile=mobile)
+        request_kwargs: dict[str, object] = {
+            "params": params,
+            "timeout": self._timeout,
+        }
+        if mobile and self._mobile_header_overrides:
+            request_kwargs["headers"] = dict(self._mobile_header_overrides)
+        response = session.get(url, **request_kwargs)
         if _body_looks_like_challenge(response):
             _raise_for_challenge(response, context)
         if forward_history and _response_rejects_start_time(response):
@@ -159,22 +191,39 @@ class KickApiClient:
             raise KickServerError(msg)
         return data
 
-    def _require_open_session(self) -> _KickSession:
+    def _require_open_session(self, *, mobile: bool = False) -> _KickSession:
         """Return the owned session or fail deterministically after close."""
         if self._closed:
             msg = "KickApiClient is closed."
             raise RuntimeError(msg)
+        if mobile:
+            mobile_session = self._mobile_session
+            if mobile_session is None:
+                mobile_session = create_kick_session(
+                    proxy=self._mobile_proxy,
+                    extra_headers=self._mobile_extra_headers,
+                    trust_env=self._mobile_trust_env,
+                )
+                self._mobile_session = mobile_session
+            return mobile_session
         return self._session
 
     def close(self) -> None:
-        """Close the owned HTTP session exactly once."""
+        """Close the owned HTTP sessions exactly once."""
         if self._closed:
             return
         self._closed = True
-        try:
-            self._session.close()
-        except (OSError, RuntimeError) as error:
-            logger.debug("Error closing Kick API session: %s", error)
+        sessions = [self._session]
+        if (
+            self._mobile_session is not None
+            and self._mobile_session is not self._session
+        ):
+            sessions.append(self._mobile_session)
+        for session in sessions:
+            try:
+                session.close()
+            except (OSError, RuntimeError) as error:
+                logger.debug("Error closing Kick API session: %s", error)
 
 
 def _response_rejects_start_time(response: requests.Response) -> bool:

@@ -8,7 +8,8 @@ The Kick stack is split across two transport families:
 
 - A Pusher (WebSocket) feed for live chat.
 - Kick's unauthenticated web JSON endpoints (`api/v2` for channel, clip, and
-  message data, plus `api/v1/video` for VOD metadata).
+  message data, plus `api/v1/video` for VOD metadata) and the anonymous mobile
+  `api/v1/clips` fallback.
 
 Kick's OAuth-scoped official Public API is a useful schema reference, but it
 does not expose the unauthenticated read-chat or replay stream this tool needs.
@@ -23,7 +24,7 @@ shapes, and Cloudflare bot-protection on the REST endpoints.
 The Kick implementation is responsible for:
 
 - matching Kick live channel, VOD, and clip URLs
-- retrieving channel, video, and clip metadata
+- retrieving channel, video, and web/mobile clip metadata
 - streaming live chat from the Pusher WebSocket (live *and* offline channels —
   the chatroom stays active when the stream is down)
 - emitting preloaded recent history and current pin state on connect, then
@@ -94,7 +95,8 @@ The Kick flow depends on the target type.
 1. Resolve the username and video UUID from the URL.
 2. Fetch video metadata from `api/v1/video/{video_id}`.
 3. Derive the channel ID and the VOD time window (`start_time` plus
-   `duration`).
+   `duration`), normalizing timezone-qualified starts to UTC and rejecting
+   unusable datetime ranges as provider errors.
 4. Narrow the metadata window with request-relative `start_time` and
    `end_time` offsets when supplied.
 5. Seed `api/v2/channels/{id}/messages` with the selected start timestamp, then
@@ -109,19 +111,29 @@ The Kick flow depends on the target type.
 ### Clips
 
 1. Resolve the channel slug and clip ID from the URL.
-2. Fetch `api/v2/clips/{clip_id}` and validate the returned identity, source
-   VOD UUID, channel ID, non-negative VOD offset, and positive duration.
-3. Fetch the source VOD metadata and require its channel to agree with the
-   clip. A missing source VOD is reported as `NoChatReplay`.
-4. Treat request `start_time` and `end_time` as clip-relative, clamp them to
-   the clip duration, then translate them to source-VOD offsets.
-5. Clamp the translated window again to the source recording. Timestamp-seeded
-   VOD pagination then retrieves only the clip interval and emits it in
-   chronological order.
+2. Prefer `kick.com/api/v2/clips/{clip_id}` and validate the returned identity,
+   source VOD UUID, channel ID, non-negative VOD offset, and positive duration.
+3. When that web request, its required replay fields, or its source-VOD metadata
+   are unavailable, fetch `mobile.kick.com/api/v1/clips/{clip_id}` and validate
+   its `data.id`, `data.channel.id`, timezone-qualified `data.started_at`, and a
+   positive duration no greater than the provider's 180-second clip limit.
+   Known invalid start-time sentinels are rejected. Challenge responses remain
+   terminal and do not activate the alternate endpoint.
+4. On the web path, fetch the source VOD metadata and require its channel to
+   agree with the clip. On the mobile path, use the returned absolute
+   `started_at` and channel directly, without treating the mobile `video.id` as
+   a web VOD UUID. If usable web metadata already established a channel or
+   duration, the mobile response must agree with it.
+5. Treat request `start_time` and `end_time` as clip-relative and clamp them to
+   the clip duration. Translate them to source-VOD offsets on the web path or
+   absolute timestamps on the mobile path.
+6. Timestamp-seeded pagination then retrieves only the selected clip interval
+   and emits it in chronological order.
 
-Kick's clip `started_at` can include a short HLS keyframe lead-in. Chat mapping
-therefore uses `vod_starts_at` plus `duration`, which describes the intended
-source-VOD interval, rather than the playlist's padded wall-clock start.
+Kick's web clip `started_at` can include a short HLS keyframe lead-in. The
+preferred path therefore uses `vod_starts_at` plus `duration`, which describes
+the intended source-VOD interval. The mobile fallback has no compatible web
+VOD UUID and deliberately follows its absolute `started_at` contract instead.
 
 ## Module Guide
 
@@ -131,7 +143,8 @@ source-VOD interval, rather than the playlist's padded wall-clock start.
 - `live_service.py`: live chat orchestration (metadata, chatroom resolution,
   preloaded history, WebSocket loop, deduplication, reconnect)
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
-- `clip_service.py`: clip metadata validation and source-VOD replay assembly
+- `clip_service.py`: web/mobile clip metadata validation and source-VOD or
+  absolute-time replay assembly
 - `history.py`: chronological timestamp pagination, exact cursor advancement,
   bounded ID deduplication, and cursor/page guards for replay and reconnect
   history
@@ -140,9 +153,12 @@ source-VOD interval, rather than the playlist's padded wall-clock start.
 ### Transport and API access
 
 - `api_client.py`: downloader-owned HTTP client for the unauthenticated
-  `kick.com/api/v1` and `api/v2` channel, history, VOD, and clip JSON endpoints.
-  It owns endpoint status, challenge, JSON, and object-shape classification but
-  does no chat parsing.
+  `kick.com/api/v1` and `api/v2` channel, history, VOD, and clip JSON endpoints,
+  plus `mobile.kick.com/api/v1` clip metadata. It owns endpoint status,
+  challenge, JSON, and object-shape classification but does no chat parsing.
+  The mobile origin uses a separate session that retains proxy, trust,
+  timeout, browser-profile, and safe custom-header policy while excluding
+  credential-shaped user headers and cookies from the main origin.
 - `http_session.py`: constructs the client's isolated curl-cffi,
   cloudscraper, or requests transport and defines its narrow session Protocol.
 - `websocket_transport.py`: the *only* module that imports `websocket-client`.
@@ -210,7 +226,8 @@ Known gaps:
 
 - The official docs do not document `https://kick.com/api/v2/channels/{slug}`,
   `https://kick.com/api/v2/channels/{id}/messages`,
-  `https://kick.com/api/v2/clips/{clip_id}`, or the VOD
+  `https://kick.com/api/v2/clips/{clip_id}`,
+  `https://mobile.kick.com/api/v1/clips/{clip_id}`, or the VOD
   `api/v1/video/{uuid}` endpoint this tool currently uses.
 - The official docs do not document Pusher event names such as
   `App\Events\ChatMessageEvent`, `App\Events\PinnedMessageCreatedEvent`, or
@@ -419,7 +436,8 @@ The Kick stack is most sensitive to changes in:
 - Cloudflare bot-protection on the REST endpoints
 - channel/video metadata structure (`chatroom.id`, `livestream`, `start_time`,
   `duration`)
-- clip metadata identity, source-VOD, channel, `vod_starts_at`, and `duration`
+- web clip metadata identity, source-VOD, channel, `vod_starts_at`, and
+  `duration` fields, plus mobile fallback `data`, `started_at`, and channel
   fields
 - divergence between official webhook schemas and live Pusher payloads; the
   official docs are schema hints, not authoritative contracts for the Pusher
