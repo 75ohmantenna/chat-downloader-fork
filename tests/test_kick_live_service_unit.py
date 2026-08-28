@@ -21,9 +21,14 @@ from chat_downloader.sites.kick.constants import (
     MESSAGE_DELETED_EVENT,
     PINNED_MESSAGE_CREATED_EVENT,
     PUSHER_ERROR,
+    PUSHER_SUBSCRIPTION_SUCCEEDED,
     SUBSCRIPTION_EVENT,
 )
-from chat_downloader.sites.kick.errors import KickError
+from chat_downloader.sites.kick.errors import (
+    KickError,
+    KickForwardHistoryRejected,
+    KickServerError,
+)
 from tests.kick_helpers import (
     FakeDownloader,
     FakeKickSession,
@@ -285,6 +290,350 @@ def test_open_subscribed_transport_preserves_terminal_connection_error() -> None
         )
 
 
+@pytest.mark.parametrize(
+    ("checkpoint", "expected"),
+    [
+        (None, 10_000_000),
+        (5_000_000, 10_000_000),
+        (15_000_000, 15_000_000),
+        (20_000_000, 10_000_000),
+        (21_000_000, 10_000_000),
+    ],
+)
+def test_bounded_reconnect_start_limits_and_validates_checkpoint(
+    checkpoint: int | None,
+    expected: int,
+) -> None:
+    assert live_service._bounded_reconnect_start(checkpoint, 20_000_000) == expected
+
+
+def test_newest_provider_timestamp_ignores_invalid_and_regressive_values() -> None:
+    assert live_service._newest_provider_timestamp(None, {}) is None
+    assert live_service._newest_provider_timestamp(12, {"timestamp": True}) == 12
+    assert live_service._newest_provider_timestamp(12, {"timestamp": 10}) == 12
+    assert live_service._newest_provider_timestamp(None, {"timestamp": 15}) == 15
+    assert live_service._timestamp_sort_key({}) == -1
+    assert live_service._timestamp_sort_key({"timestamp": True}) == -1
+    assert live_service._timestamp_sort_key({"timestamp": 15}) == 15
+
+
+def test_reconnect_backfill_time_filters_preloaded_fallback_and_keeps_pin() -> None:
+    client = MagicMock()
+    client.fetch_message_page.side_effect = KickForwardHistoryRejected("unsupported")
+    pinned_payload = load_fixture("preloaded_messages_with_pin.json")["data"]
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
+        messages=[
+            {
+                "id": "after",
+                "content": "too new",
+                "created_at": "2026-01-01T00:00:21Z",
+                "type": "message",
+            },
+            {
+                "id": "inside",
+                "content": "recover",
+                "created_at": "2026-01-01T00:00:15Z",
+                "type": "message",
+            },
+            {
+                "id": "before",
+                "content": "too old",
+                "created_at": "2026-01-01T00:00:09Z",
+                "type": "message",
+            },
+        ],
+        pinned_message=pinned_payload["pinned_message"],
+    )
+    downloader = MagicMock()
+    downloader._kick_client = client
+
+    messages = list(
+        live_service._iter_reconnect_backfill(
+            downloader,
+            "123",
+            "creator",
+            None,
+            1_767_225_620_000_000,
+            _request(max_attempts=1),
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == [
+        "inside",
+        "kick-pin:startup-pinned-message",
+    ]
+
+
+def test_reconnect_backfill_keeps_history_when_pin_refresh_fails() -> None:
+    client = MagicMock()
+    client.fetch_message_page.return_value = {
+        "data": {
+            "messages": [
+                {
+                    "id": "inside",
+                    "content": "recover",
+                    "created_at": "2026-01-01T00:00:15Z",
+                    "type": "message",
+                }
+            ],
+            "cursor": None,
+        }
+    }
+    client.fetch_preloaded_chat_state.side_effect = OSError("pin unavailable")
+    downloader = MagicMock()
+    downloader._kick_client = client
+
+    messages = list(
+        live_service._iter_reconnect_backfill(
+            downloader,
+            "123",
+            "creator",
+            None,
+            1_767_225_620_000_000,
+            _request(max_attempts=1),
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == ["inside"]
+
+
+def test_reconnect_backfill_keeps_earlier_pages_after_later_failure() -> None:
+    client = MagicMock()
+    client.fetch_message_page.side_effect = [
+        {
+            "data": {
+                "messages": [
+                    {
+                        "id": "page-one",
+                        "content": "preferred forward copy",
+                        "created_at": "2026-01-01T00:00:12Z",
+                        "type": "message",
+                    }
+                ],
+                "cursor": "1767225612000000",
+            }
+        },
+        KickServerError("later page failed"),
+    ]
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
+        messages=[
+            {
+                "id": "fallback-new",
+                "content": "fallback recovery",
+                "created_at": "2026-01-01T00:00:14Z",
+                "type": "message",
+            },
+            {
+                "id": "page-one",
+                "content": "overlapping fallback copy",
+                "created_at": "2026-01-01T00:00:12Z",
+                "type": "message",
+            },
+        ],
+        pinned_message=None,
+    )
+    downloader = MagicMock()
+    downloader._kick_client = client
+
+    messages = list(
+        live_service._iter_reconnect_backfill(
+            downloader,
+            "123",
+            "creator",
+            None,
+            1_767_225_620_000_000,
+            _request(max_attempts=1),
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == [
+        "page-one",
+        "fallback-new",
+    ]
+    assert messages[0]["message"] == "preferred forward copy"
+    assert client.fetch_message_page.call_count == 2
+
+
+def test_reconnect_backfill_reconciles_preload_after_empty_forward_page() -> None:
+    client = MagicMock()
+    client.fetch_message_page.return_value = {"data": {"messages": [], "cursor": None}}
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
+        messages=[
+            {
+                "id": "preload-only",
+                "content": "late preload copy",
+                "created_at": "2026-01-01T00:00:15Z",
+                "type": "message",
+            }
+        ],
+        pinned_message=None,
+    )
+    downloader = MagicMock()
+    downloader._kick_client = client
+
+    messages = list(
+        live_service._iter_reconnect_backfill(
+            downloader,
+            "123",
+            "creator",
+            None,
+            1_767_225_620_000_000,
+            _request(max_attempts=1),
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == ["preload-only"]
+
+
+def test_reconnect_backfill_closes_history_at_record_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator_closed = False
+
+    def iter_history(*_args: Any, **_kwargs: Any) -> Any:
+        nonlocal generator_closed
+        try:
+            for index in range(5):
+                yield {
+                    "id": f"message-{index}",
+                    "content": "bounded",
+                    "created_at": f"2026-01-01T00:00:1{index}Z",
+                    "type": "message",
+                }
+        finally:
+            generator_closed = True
+
+    monkeypatch.setattr(live_service, "_RECONNECT_BACKFILL_RECORD_LIMIT", 3)
+    monkeypatch.setattr(live_service, "iter_forward_history", iter_history)
+    client = MagicMock()
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
+        messages=[],
+        pinned_message=None,
+    )
+    downloader = MagicMock()
+    downloader._kick_client = client
+
+    messages = list(
+        live_service._iter_reconnect_backfill(
+            downloader,
+            "123",
+            "creator",
+            None,
+            1_767_225_620_000_000,
+            _request(max_attempts=1),
+        )
+    )
+
+    assert [message["message_id"] for message in messages] == [
+        "message-0",
+        "message-1",
+        "message-2",
+    ]
+    assert generator_closed is True
+
+
+def test_reconnect_backfill_caps_pages_without_usable_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(live_service, "_RECONNECT_BACKFILL_PAGE_LIMIT", 2)
+    client = MagicMock()
+    client.fetch_message_page.side_effect = [
+        {
+            "data": {
+                "messages": [
+                    {
+                        "id": "too-old-one",
+                        "content": "ignored",
+                        "created_at": "2000-01-01T00:00:00Z",
+                        "type": "message",
+                    }
+                ],
+                "cursor": "1767225611000000",
+            }
+        },
+        {
+            "data": {
+                "messages": [
+                    {
+                        "id": "too-old-two",
+                        "content": "ignored",
+                        "created_at": "2000-01-01T00:00:01Z",
+                        "type": "message",
+                    }
+                ],
+                "cursor": "1767225612000000",
+            }
+        },
+        AssertionError("reconnect page limit was not enforced"),
+    ]
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
+        messages=[],
+        pinned_message=None,
+    )
+    downloader = MagicMock()
+    downloader._kick_client = client
+
+    assert (
+        list(
+            live_service._iter_reconnect_backfill(
+                downloader,
+                "123",
+                "creator",
+                None,
+                1_767_225_620_000_000,
+                _request(max_attempts=1),
+            )
+        )
+        == []
+    )
+    assert client.fetch_message_page.call_count == 2
+
+
+def test_reconnect_backfill_caps_raw_records_before_history_filtering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(live_service, "_RECONNECT_BACKFILL_RECORD_LIMIT", 3)
+    client = MagicMock()
+    client.fetch_message_page.side_effect = [
+        {
+            "data": {
+                "messages": [
+                    {
+                        "id": f"too-old-{index}",
+                        "content": "ignored",
+                        "created_at": f"2000-01-01T00:00:0{index}Z",
+                        "type": "message",
+                    }
+                    for index in range(5)
+                ],
+                "cursor": "1767225611000000",
+            }
+        },
+        AssertionError("reconnect raw-record limit was not enforced"),
+    ]
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
+        messages=[],
+        pinned_message=None,
+    )
+    downloader = MagicMock()
+    downloader._kick_client = client
+
+    assert (
+        list(
+            live_service._iter_reconnect_backfill(
+                downloader,
+                "123",
+                "creator",
+                None,
+                1_767_225_620_000_000,
+                _request(max_attempts=1),
+            )
+        )
+        == []
+    )
+    assert client.fetch_message_page.call_count == 1
+
+
 # ── end-to-end via get_chat_by_channel ────────────────────────────────────────
 
 
@@ -416,6 +765,7 @@ def test_successful_frame_capture_is_bounded_across_reconnects(
     session = FakeKickSession(
         [
             FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
         ]
@@ -685,6 +1035,7 @@ def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
             FakeResponse(200, load_fixture("channel_live.json")),
             FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": []}}),
         ]
     )
     created: list[FakeTransport] = []
@@ -719,6 +1070,7 @@ def test_get_chat_by_channel_reports_live_diagnostics() -> None:
     session = FakeKickSession(
         [
             FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
         ]
@@ -827,6 +1179,22 @@ def test_get_chat_by_channel_rediscovers_key_after_pusher_error() -> None:
         [
             FakeResponse(200, load_fixture("channel_live.json")),
             FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "during-refresh",
+                                "content": "recovered",
+                                "created_at": "2026-01-01T00:00:08Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
             FakeResponse(200, {"data": {"messages": []}}),
         ]
     )
@@ -841,9 +1209,20 @@ def test_get_chat_by_channel_rediscovers_key_after_pusher_error() -> None:
         CHAT_MESSAGE_EVENT,
         {"id": "after-refresh", "content": "restored"},
     )
-    with patch(
-        "chat_downloader.sites.kick.api_client.create_kick_session",
-        return_value=session,
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_605_500_000_000,
+                1_767_225_612_000_000_000,
+                1_767_225_613_500_000_000,
+            ],
+        ),
     ):
         chat = _build_chat(
             downloader,
@@ -855,7 +1234,10 @@ def test_get_chat_by_channel_rediscovers_key_after_pusher_error() -> None:
                 ]
             ),
         )
-        assert [message["message_id"] for message in chat.chat] == ["after-refresh"]
+        assert [message["message_id"] for message in chat.chat] == [
+            "during-refresh",
+            "after-refresh",
+        ]
 
     assert len(created) == 2
     assert created[0].force_discover is False
@@ -867,6 +1249,7 @@ def test_get_chat_by_channel_repeated_pusher_error_is_terminal() -> None:
     session = FakeKickSession(
         [
             FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
         ]
@@ -888,31 +1271,661 @@ def test_get_chat_by_channel_repeated_pusher_error_is_terminal() -> None:
         list(chat.chat)
 
 
-def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> None:
-    downloader = FakeDownloader()
+@pytest.mark.parametrize(
+    "recovery_frame",
+    [
+        ConnectionError("drop"),
+        pusher_frame(PUSHER_ERROR, {"message": "stale key"}),
+    ],
+    ids=["disconnect", "pusher-error"],
+)
+def test_reconnect_backfill_waits_for_subscription_confirmation(
+    recovery_frame: object,
+) -> None:
     session = FakeKickSession(
         [
             FakeResponse(200, load_fixture("channel_live.json")),
             FakeResponse(200, {"data": {"messages": []}}),
-            FakeResponse(200, load_fixture("preloaded_messages.json")),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "missed",
+                                "content": "confirmed recovery",
+                                "created_at": "2026-01-01T00:00:15Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
+            FakeResponse(200, {"data": {"messages": []}}),
         ]
     )
+    iterator_call = 0
 
-    with patch(
-        "chat_downloader.sites.kick.api_client.create_kick_session",
-        return_value=session,
+    def frame_iterator(_transport: FakeTransport) -> Any:
+        nonlocal iterator_call
+        iterator_call += 1
+        if iterator_call == 1:
+            if isinstance(recovery_frame, Exception):
+                raise recovery_frame
+            yield recovery_frame
+            return
+        assert len(session.calls) == 2
+        yield {"event": "pusher:connection_established", "data": "{}"}
+        assert len(session.calls) == 2
+        yield pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})
+        assert len(session.calls) == 4
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            return_value=1_767_225_620_000_000_000,
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=frame_iterator,
+        )
+        assert [message["message_id"] for message in chat.chat] == ["missed"]
+
+
+def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> None:
+    downloader = FakeDownloader()
+    forward_page = {
+        "data": {
+            "messages": [
+                {
+                    "id": "a",
+                    "content": "duplicate",
+                    "created_at": "2026-01-01T00:00:05Z",
+                    "type": "message",
+                },
+                {
+                    "id": "missed",
+                    "content": "recovered",
+                    "created_at": "2026-01-01T00:00:08Z",
+                    "type": "message",
+                },
+            ],
+            "cursor": None,
+        }
+    }
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, forward_page),
+            FakeResponse(200, load_fixture("preloaded_messages_with_pin.json")),
+        ]
+    )
+    frame_one = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "a",
+            "content": "before outage",
+            "created_at": "2026-01-01T00:00:05Z",
+            "type": "message",
+        },
+    )
+    frame_two = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "b",
+            "content": "after outage",
+            "created_at": "2026-01-01T00:00:13Z",
+            "type": "message",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_605_500_000_000,
+                1_767_225_612_000_000_000,
+                1_767_225_613_500_000_000,
+            ],
+        ),
     ):
         chat = _build_chat(
             downloader,
-            request_kwargs={"message_groups": ["messages"]},
+            request_kwargs={"message_groups": ["messages", "pins"]},
             transport_factory=FakeTransport,
-            frame_iterator=make_frame_iterator([[ConnectionError("drop")], []]),
+            frame_iterator=make_frame_iterator(
+                [[frame_one, ConnectionError("drop")], [frame_two]]
+            ),
         )
 
         assert [message["message_id"] for message in chat.chat] == [
-            "preloaded-1",
-            "preloaded-2",
+            "a",
+            "missed",
+            "kick-pin:startup-pinned-message",
+            "b",
         ]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:05.000000Z"
+    }
+    assert session.calls[3][1]["params"] is None
+
+
+def test_get_chat_by_channel_aligns_bounded_backfill_to_modest_provider_skew() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "late-lower-timestamp",
+                                "content": "preserved despite skew",
+                                "created_at": "2026-01-01T00:00:20.500000Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    skewed_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "before-outage",
+            "content": "provider clock is ahead",
+            "created_at": "2026-01-01T00:00:21Z",
+            "type": "message",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_619_000_000_000,
+                1_767_225_620_000_000_000,
+            ],
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [skewed_frame, ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == [
+            "before-outage",
+            "late-lower-timestamp",
+        ]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:10.000000Z"
+    }
+
+
+def test_get_chat_by_channel_aligns_backfill_to_negative_provider_skew() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "missed",
+                                "content": "provider clock trails client",
+                                "created_at": "2026-01-01T00:00:10Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    lagging_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "before-outage",
+            "content": "provider clock trails client",
+            "created_at": "2026-01-01T00:00:05Z",
+            "type": "message",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_610_000_000_000,
+                1_767_225_620_000_000_000,
+            ],
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [lagging_frame, ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == [
+            "before-outage",
+            "missed",
+        ]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:05.000000Z"
+    }
+
+
+def test_negative_timestamp_delta_cannot_cut_off_near_confirmation_message() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "near-confirmation",
+                                "content": "must survive delivery latency",
+                                "created_at": "2026-01-01T00:00:11.800000Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    delayed_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "before-outage",
+            "content": "ordinary delivery delay",
+            "created_at": "2026-01-01T00:00:05Z",
+            "type": "message",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_605_500_000_000,
+                1_767_225_612_000_000_000,
+            ],
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [delayed_frame, ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == [
+            "before-outage",
+            "near-confirmation",
+        ]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:05.000000Z"
+    }
+
+
+def test_current_provider_clock_sample_replaces_stale_positive_skew() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "missed",
+                                "content": "inside the current clock window",
+                                "created_at": "2026-01-01T00:00:18.500000Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    formerly_skewed_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "skewed",
+            "content": "old positive skew",
+            "created_at": "2026-01-01T00:00:18Z",
+            "type": "message",
+        },
+    )
+    aligned_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "aligned",
+            "content": "current clocks align",
+            "created_at": "2026-01-01T00:00:18Z",
+            "type": "message",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_609_000_000_000,
+                1_767_225_618_000_000_000,
+                1_767_225_620_000_000_000,
+            ],
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [formerly_skewed_frame, aligned_frame, ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == [
+            "skewed",
+            "aligned",
+            "missed",
+        ]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:18.000000Z"
+    }
+
+
+def test_extreme_provider_timestamp_cannot_poison_reconnect_window() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "missed",
+                                "content": "still in local window",
+                                "created_at": "2026-01-01T00:00:15Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    poisoned_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "bad-clock",
+            "content": "invalid future provider time",
+            "created_at": "2036-01-01T00:00:00Z",
+            "type": "message",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_619_000_000_000,
+                1_767_225_620_000_000_000,
+            ],
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [poisoned_frame, ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+        assert [message["message_id"] for message in chat.chat] == [
+            "bad-clock",
+            "missed",
+        ]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:10.000000Z"
+    }
+
+
+def test_get_chat_by_channel_caps_reconnect_backfill_at_ten_seconds() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(
+                200,
+                {
+                    "data": {
+                        "messages": [
+                            {
+                                "id": "missed",
+                                "content": "bounded recovery",
+                                "created_at": "2026-01-01T00:00:11Z",
+                                "type": "message",
+                            }
+                        ],
+                        "cursor": None,
+                    }
+                },
+            ),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            return_value=1_767_225_620_000_000_000,
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            request_kwargs={"message_groups": ["messages"]},
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+
+        assert [message["message_id"] for message in chat.chat] == ["missed"]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:10.000000Z"
+    }
+
+
+def test_get_chat_by_channel_uses_receive_time_without_provider_timestamp() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": [], "cursor": None}}),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {"id": "no-provider-time", "content": "checkpoint from receive time"},
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_605_500_000_000,
+                1_767_225_612_000_000_000,
+            ],
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [frame, ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+
+        assert [message["message_id"] for message in chat.chat] == ["no-provider-time"]
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:05.500000Z"
+    }
+
+
+def test_filtered_message_still_advances_reconnect_checkpoint() -> None:
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+            FakeResponse(200, {"data": {"messages": [], "cursor": None}}),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    filtered_frame = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "filtered",
+            "content": "checkpoint only",
+            "created_at": "2026-01-01T00:00:05Z",
+            "type": "message",
+        },
+    )
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(
+            live_service.time,
+            "time_ns",
+            side_effect=[
+                1_767_225_605_500_000_000,
+                1_767_225_612_000_000_000,
+            ],
+        ),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            request_kwargs={"message_types": ["subscription"]},
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [filtered_frame, ConnectionError("drop")],
+                    [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+                ]
+            ),
+        )
+        assert list(chat.chat) == []
+
+    assert session.calls[2][1]["params"] == {
+        "start_time": "2026-01-01T00:00:05.000000Z"
+    }
 
 
 def test_get_chat_by_channel_repeated_disconnects_exhaust_budget() -> None:
@@ -920,6 +1933,7 @@ def test_get_chat_by_channel_repeated_disconnects_exhaust_budget() -> None:
     session = FakeKickSession(
         [
             FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
             FakeResponse(200, {"data": {"messages": []}}),
         ]
@@ -1066,7 +2080,7 @@ def test_preloaded_chat_captures_and_skips_malformed_current_pin(
     )
 
     assert messages == []
-    assert "Skipping malformed Kick startup pin" in caplog.text
+    assert "Skipping malformed Kick current pin" in caplog.text
     assert captured[0][0][0] == "kick-malformed-preloaded-pin"
     assert captured[0][0][1]["raw"] == {"duration": 1}
     assert captured[0][1]["sample_limit"] == 10

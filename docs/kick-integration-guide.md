@@ -28,8 +28,9 @@ The Kick implementation is responsible for:
   the chatroom stays active when the stream is down)
 - emitting preloaded recent history and current pin state on connect, then
   deduplicating them against the live feed
-- backfilling recent history after reconnects and Pusher-key recovery so
-  messages received during an outage are not silently lost
+- backfilling a ten-second timestamp baseline, widened conservatively for
+  bounded clock or delivery skew, after reconnects and Pusher-key recovery so
+  short outage gaps are not silently lost
 - reading historical chat for VODs and clips by paginating the channel message
   API and filtering to the selected replay window
 - parsing Kick-specific message, badge, emote, subscription, moderation, pin,
@@ -82,8 +83,11 @@ The Kick flow depends on the target type.
    recent message IDs, filter by message groups/types, and yield.
 7. On disconnect, reconnect and resubscribe. If Pusher rejects the application
    key, force one fresh discovery before treating a repeated rejection as
-   terminal. After either recovery path, refetch recent history and emit only
-   records not already present in the bounded deduplication cache.
+   terminal. After either recovered subscription is confirmed, fetch a
+   ten-second timestamp baseline from the last provider message time through a
+   clock/latency-safe confirmation envelope, and emit only records absent from
+   the bounded deduplication cache. Refresh the current pin after the bounded
+   message backfill.
 
 ### VODs
 
@@ -129,7 +133,8 @@ source-VOD interval, rather than the playlist's padded wall-clock start.
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
 - `clip_service.py`: clip metadata validation and source-VOD replay assembly
 - `history.py`: chronological timestamp pagination, exact cursor advancement,
-  bounded ID deduplication, and cursor/page guards for replay history
+  bounded ID deduplication, and cursor/page guards for replay and reconnect
+  history
 - `request_retry.py`: shared retry policy for transient Kick service requests
 
 ### Transport and API access
@@ -304,9 +309,22 @@ Before yielding, the live service:
 The receive loop runs under a reconnect wrapper: a `ConnectionError` closes the
 transport, reopens it, and resubscribes, retrying per the request's retry
 policy. A Pusher error gets the separate one-shot forced-discovery recovery
-described above. Both recovery paths refetch recent messages and current pin
-state, then use the shared ID cache to backfill only records missed during the
-outage. The loop carries `# noqa: C901` for its intrinsic branchiness.
+described above. Both recovery paths wait until a Pusher subscription-success
+frame or an application message confirms that the replacement connection is
+active. They then query forward timestamp history from the newest provider
+timestamp already observed, or from the last parsed message's receive timestamp
+when no provider time exists. When the latest provider/client clock delta is
+within the ten-second recovery window, the envelope uses the earlier of local
+confirmation and the provider-time estimate for its ten-second floor, and the
+later value for its query end. This treats a negative timestamp delta as either
+clock skew or ordinary delivery latency without opening a gap; larger or
+malformed offsets are ignored. A future or absent checkpoint uses the full
+baseline window. The reconnect fetch is additionally capped at 100 pages and
+10,000 raw records so a degraded endpoint cannot indefinitely block the
+confirmed socket. A fresh call to the preload endpoint is always reconciled as
+a best-effort, time-filtered secondary source, with forward history preferred
+for overlapping message IDs. Its current pin state is emitted after recovered
+messages. The loop carries `# noqa: C901` for its intrinsic branchiness.
 
 ## Replay Capture Details
 

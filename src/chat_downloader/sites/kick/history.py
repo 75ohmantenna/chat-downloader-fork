@@ -119,6 +119,9 @@ def iter_forward_history(  # noqa: C901 — pagination guards are one protocol b
     start_dt: datetime,
     end_dt: datetime,
     request: ChatRequest,
+    *,
+    max_pages: int | None = None,
+    max_records: int | None = None,
 ) -> Generator[JSONDict, None, None]:
     """Yield raw Kick history records chronologically within an inclusive window.
 
@@ -139,8 +142,23 @@ def iter_forward_history(  # noqa: C901 — pagination guards are one protocol b
     seen_messages = _SeenMessageCache(limit=_HISTORY_SEEN_MESSAGE_LIMIT)
     last_yielded_timestamp: datetime | None = None
     first_page = True
+    page_count = 0
+    raw_record_count = 0
 
     while True:
+        if max_pages is not None and page_count >= max_pages:
+            log(
+                "warning",
+                "Kick forward history reached its bounded page limit; stopping.",
+            )
+            return
+        if max_records is not None and raw_record_count >= max_records:
+            log(
+                "warning",
+                "Kick forward history reached its raw-record limit; stopping.",
+            )
+            return
+        page_count += 1
         try:
             raw_messages, cursor = fetch_with_retry(
                 partial(
@@ -159,6 +177,13 @@ def iter_forward_history(  # noqa: C901 — pagination guards are one protocol b
         first_page = False
         if not raw_messages:
             return
+        record_limit_exhausted = False
+        if max_records is not None:
+            remaining_records = max_records - raw_record_count
+            if len(raw_messages) > remaining_records:
+                raw_messages = raw_messages[:remaining_records]
+                record_limit_exhausted = True
+        raw_record_count += len(raw_messages)
 
         page_digest = hashlib.sha256(
             json.dumps(raw_messages, sort_keys=True).encode("utf-8")
@@ -191,6 +216,12 @@ def iter_forward_history(  # noqa: C901 — pagination guards are one protocol b
             yield raw
             last_yielded_timestamp = timestamp
         if reached_end:
+            return
+        if record_limit_exhausted:
+            log(
+                "warning",
+                "Kick forward history reached its raw-record limit; stopping.",
+            )
             return
 
         next_start = _start_after_cursor(cursor) if cursor is not None else None

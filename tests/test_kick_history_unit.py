@@ -105,6 +105,30 @@ def test_forward_history_skips_unusable_records_and_preserves_timestamp_ties() -
     assert [message["id"] for message in messages] == ["tie-1", "tie-2"]
 
 
+def test_forward_history_stops_before_fetch_after_exact_raw_record_limit() -> None:
+    client = Mock()
+    client.fetch_message_page.return_value = {
+        "data": {
+            "messages": [{"id": "bounded", "created_at": "2026-01-01T00:00:00Z"}],
+            "cursor": "1767225600000000",
+        }
+    }
+
+    messages = list(
+        history.iter_forward_history(
+            client,
+            "123",
+            datetime(2026, 1, 1, tzinfo=UTC),
+            datetime(2026, 1, 2, tzinfo=UTC),
+            _request(),
+            max_records=1,
+        )
+    )
+
+    assert [message["id"] for message in messages] == ["bounded"]
+    assert client.fetch_message_page.call_count == 1
+
+
 def test_forward_history_does_not_fetch_empty_or_reversed_window() -> None:
     client = Mock()
 

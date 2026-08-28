@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import UTC, datetime, timedelta
 from functools import partial
+from itertools import islice
 from typing import TYPE_CHECKING, Any
 
 from requests.exceptions import RequestException
@@ -35,8 +37,14 @@ from chat_downloader.sites.models import Chat
 from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 
-from .constants import KICK_DEBUG_SAMPLE_LIMIT, MESSAGE_GROUPS, is_numeric_id
+from .constants import (
+    KICK_DEBUG_SAMPLE_LIMIT,
+    MESSAGE_GROUPS,
+    PUSHER_SUBSCRIPTION_SUCCEEDED,
+    is_numeric_id,
+)
 from .errors import KickError, KickServerError
+from .history import iter_forward_history
 from .parsing.events import dispatch_event
 from .parsing.messages import parse_preloaded_messages
 from .parsing.pins import parse_pinned_message_created_event
@@ -53,12 +61,17 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict
 
+    from .api_client import PreloadedChatState
     from .extractor import KickChatDownloader
 
 _KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
 _SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES"
 _SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+_RECONNECT_BACKFILL_MICROSECONDS = 10_000_000
+_RECONNECT_BACKFILL_RECORD_LIMIT = _KICK_LIVE_SEEN_MESSAGE_LIMIT
+_RECONNECT_BACKFILL_PAGE_LIMIT = 100
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
 class _KickLiveDiagnostics:
@@ -338,15 +351,14 @@ def _recover_pusher_transport(
     return refreshed
 
 
-def _iter_preloaded_chat(
+def _fetch_preloaded_state(
     downloader: KickChatDownloader,
     channel_id: str,
     username: str,
-    emit: Callable[[JSONDict], bool],
-) -> Generator[JSONDict, None, None]:
-    """Yield recent HTTP history and current pin state without duplicates."""
+) -> PreloadedChatState | None:
+    """Fetch recent live state without making a failed refresh fatal."""
     try:
-        preloaded = downloader._kick_client.fetch_preloaded_chat_state(
+        return downloader._kick_client.fetch_preloaded_chat_state(
             channel_id,
             username,
         )
@@ -356,26 +368,177 @@ def _iter_preloaded_chat(
         RequestException,
         OSError,
     ) as error:
-        logger.debug("Kick preloaded-message fetch failed (non-fatal): %s", error)
+        logger.debug("Kick preloaded-state fetch failed (non-fatal): %s", error)
+        return None
+
+
+def _parse_current_pin(pinned_message: JSONDict | None) -> JSONDict | None:
+    """Parse current pin state while preserving best-effort diagnostics."""
+    if pinned_message is None:
+        return None
+    try:
+        return parse_pinned_message_created_event(pinned_message)
+    except (ParsingError, ValueError, TypeError, KeyError, IndexError) as error:
+        capture_debug_sample(
+            "kick-malformed-preloaded-pin",
+            {"raw": pinned_message, "error": str(error)},
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
+        logger.debug("Skipping malformed Kick current pin: %s", error)
+        return None
+
+
+def _iter_preloaded_chat(
+    downloader: KickChatDownloader,
+    channel_id: str,
+    username: str,
+    emit: Callable[[JSONDict], bool],
+) -> Generator[JSONDict, None, None]:
+    """Yield recent HTTP history and current pin state without duplicates."""
+    preloaded = _fetch_preloaded_state(downloader, channel_id, username)
+    if preloaded is None:
         return
     for message in reversed(parse_preloaded_messages(preloaded.messages)):
         if emit(message):
             yield message
-    if preloaded.pinned_message is not None:
+    pinned_message = _parse_current_pin(preloaded.pinned_message)
+    if pinned_message is not None and emit(pinned_message):
+        yield pinned_message
+
+
+def _bounded_reconnect_start(
+    checkpoint_timestamp: int | None,
+    reconnected_timestamp: int,
+) -> int:
+    """Return a reconnect-history start no more than ten seconds in the past."""
+    oldest_timestamp = reconnected_timestamp - _RECONNECT_BACKFILL_MICROSECONDS
+    if checkpoint_timestamp is None or checkpoint_timestamp >= reconnected_timestamp:
+        return oldest_timestamp
+    return max(checkpoint_timestamp, oldest_timestamp)
+
+
+def _datetime_from_microseconds(timestamp: int) -> datetime:
+    """Convert an integer Unix-microsecond timestamp without float loss."""
+    return _EPOCH + timedelta(microseconds=timestamp)
+
+
+def _newest_provider_timestamp(
+    current: int | None,
+    message: JSONDict,
+) -> int | None:
+    """Retain the newest normalized provider timestamp seen so far."""
+    timestamp = _provider_timestamp(message)
+    if timestamp is None:
+        return current
+    return timestamp if current is None else max(current, timestamp)
+
+
+def _provider_timestamp(message: JSONDict) -> int | None:
+    """Return one normalized integer provider timestamp when present."""
+    timestamp = message.get("timestamp")
+    if not isinstance(timestamp, int) or isinstance(timestamp, bool):
+        return None
+    return timestamp
+
+
+def _is_in_timestamp_window(
+    message: JSONDict,
+    start_timestamp: int,
+    end_timestamp: int,
+) -> bool:
+    """Return whether a parsed fallback record is inside the inclusive window."""
+    timestamp = _provider_timestamp(message)
+    return timestamp is not None and start_timestamp <= timestamp <= end_timestamp
+
+
+def _timestamp_sort_key(message: JSONDict) -> int:
+    """Return a sortable timestamp for an already normalized history record."""
+    timestamp = _provider_timestamp(message)
+    return timestamp if timestamp is not None else -1
+
+
+def _iter_reconnect_backfill(
+    downloader: KickChatDownloader,
+    channel_id: str,
+    username: str,
+    checkpoint_timestamp: int | None,
+    reconnected_timestamp: int,
+    request: ChatRequest,
+    *,
+    provider_clock_offset: int = 0,
+) -> Generator[JSONDict, None, None]:
+    """Yield a bounded, latency-safe backfill followed by refreshed pin state."""
+    provider_timestamp = reconnected_timestamp + provider_clock_offset
+    recovery_window_end = min(reconnected_timestamp, provider_timestamp)
+    history_query_end = max(reconnected_timestamp, provider_timestamp)
+    start_timestamp = _bounded_reconnect_start(
+        checkpoint_timestamp,
+        recovery_window_end,
+    )
+    start_dt = _datetime_from_microseconds(start_timestamp)
+    end_dt = _datetime_from_microseconds(history_query_end)
+    forward_messages: list[JSONDict] = []
+    raw_history = iter_forward_history(
+        downloader._kick_client,
+        channel_id,
+        start_dt,
+        end_dt,
+        request,
+        max_pages=_RECONNECT_BACKFILL_PAGE_LIMIT,
+        max_records=_RECONNECT_BACKFILL_RECORD_LIMIT,
+    )
+    try:
         try:
-            pinned_message = parse_pinned_message_created_event(
-                preloaded.pinned_message
+            for record_count, raw_message in enumerate(raw_history, start=1):
+                forward_messages.extend(parse_preloaded_messages([raw_message]))
+                if record_count >= _RECONNECT_BACKFILL_RECORD_LIMIT:
+                    log(
+                        "warning",
+                        "Kick reconnect history reached its bounded record limit; "
+                        "stopping the HTTP backfill.",
+                    )
+                    break
+        finally:
+            raw_history.close()
+    except (
+        CaptchaChallengeRequired,
+        KickError,
+        RequestException,
+        OSError,
+        RetriesExceeded,
+    ) as error:
+        logger.debug("Kick reconnect history fetch failed (non-fatal): %s", error)
+
+    preloaded = _fetch_preloaded_state(downloader, channel_id, username)
+    if preloaded is not None:
+        forward_ids = {
+            message_id
+            for message in forward_messages
+            if isinstance((message_id := message.get("message_id")), str) and message_id
+        }
+        fallback_messages = (
+            message
+            for message in reversed(parse_preloaded_messages(preloaded.messages))
+            if _is_in_timestamp_window(
+                message,
+                start_timestamp,
+                history_query_end,
             )
-        except (ParsingError, ValueError, TypeError, KeyError, IndexError) as error:
-            capture_debug_sample(
-                "kick-malformed-preloaded-pin",
-                {"raw": preloaded.pinned_message, "error": str(error)},
-                sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
-            )
-            logger.debug("Skipping malformed Kick startup pin: %s", error)
-        else:
-            if emit(pinned_message):
-                yield pinned_message
+            and message.get("message_id") not in forward_ids
+        )
+        remaining_capacity = max(
+            0,
+            _RECONNECT_BACKFILL_RECORD_LIMIT - len(forward_messages),
+        )
+        forward_messages.extend(islice(fallback_messages, remaining_capacity))
+        forward_messages.sort(key=_timestamp_sort_key)
+    yield from forward_messages
+
+    pinned_message = (
+        _parse_current_pin(preloaded.pinned_message) if preloaded is not None else None
+    )
+    if pinned_message is not None:
+        yield pinned_message
 
 
 def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths are intrinsic to the stream loop
@@ -443,6 +606,10 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     )
     consecutive_connection_failures = 0
     pusher_error_recoveries = 0
+    last_provider_timestamp: int | None = None
+    last_message_received_timestamp: int | None = None
+    provider_clock_offset = 0
+    pending_reconnect_backfill = False
     try:
         while True:
             try:
@@ -455,7 +622,66 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                         frame,
                         record_diagnostic=diagnostics.increment,
                     )
+                    provider_timestamp = (
+                        _provider_timestamp(live_message)
+                        if live_message is not None
+                        else None
+                    )
+                    if provider_timestamp is not None:
+                        observed_clock_offset = provider_timestamp - received_timestamp
+                        if (
+                            abs(observed_clock_offset)
+                            <= _RECONNECT_BACKFILL_MICROSECONDS
+                        ):
+                            provider_clock_offset = observed_clock_offset
+                        else:
+                            provider_clock_offset = 0
+                    subscription_confirmed = (
+                        frame.get("event") == PUSHER_SUBSCRIPTION_SUCCEEDED
+                        or live_message is not None
+                    )
+                    if pending_reconnect_backfill and subscription_confirmed:
+                        checkpoint_timestamp = (
+                            last_provider_timestamp
+                            if last_provider_timestamp is not None
+                            else last_message_received_timestamp
+                        )
+                        if (
+                            checkpoint_timestamp is not None
+                            and checkpoint_timestamp >= received_timestamp
+                        ):
+                            # A provider clock ahead of the client makes its
+                            # checkpoint unsafe to compare with local receive
+                            # time. Use the full bounded provider-time window.
+                            checkpoint_timestamp = None
+                        pending_reconnect_backfill = False
+                        log(
+                            "debug",
+                            "Kick WebSocket subscription confirmed; checking a "
+                            "ten-second timestamp baseline widened for bounded "
+                            "clock or delivery skew.",
+                        )
+                        for backfilled_message in _iter_reconnect_backfill(
+                            downloader,
+                            channel_id,
+                            username,
+                            checkpoint_timestamp,
+                            received_timestamp,
+                            request,
+                            provider_clock_offset=provider_clock_offset,
+                        ):
+                            last_provider_timestamp = _newest_provider_timestamp(
+                                last_provider_timestamp,
+                                backfilled_message,
+                            )
+                            if emit(backfilled_message):
+                                yield backfilled_message
                     if live_message is not None:
+                        last_provider_timestamp = _newest_provider_timestamp(
+                            last_provider_timestamp,
+                            live_message,
+                        )
+                        last_message_received_timestamp = received_timestamp
                         if "timestamp" not in live_message:
                             live_message.setdefault(
                                 "received_timestamp",
@@ -503,17 +729,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     pusher_http_client=pusher_http_client,
                 )
                 diagnostics.increment("websocket_reconnect_count")
-                log(
-                    "debug",
-                    "Kick WebSocket reconnected; checking recent history for "
-                    "messages missed during the outage.",
-                )
-                yield from _iter_preloaded_chat(
-                    downloader,
-                    channel_id,
-                    username,
-                    emit,
-                )
+                pending_reconnect_backfill = True
             except KickError as error:
                 pusher_error_recoveries += 1
                 transport = _recover_pusher_transport(
@@ -528,12 +744,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     pusher_http_client=pusher_http_client,
                 )
                 diagnostics.increment("pusher_key_recovery_count")
-                yield from _iter_preloaded_chat(
-                    downloader,
-                    channel_id,
-                    username,
-                    emit,
-                )
+                pending_reconnect_backfill = True
             else:
                 break
     finally:

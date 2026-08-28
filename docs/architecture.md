@@ -67,8 +67,8 @@ same interfaces as production callers.
 |-----------|----------------|-----------------------|------------|
 | Shared HTTP (YouTube and Twitch) | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, and a 180-second idle watchdog | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
-| Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` and preserves explicit/environment proxy policy | Kick live, VOD, and clip metadata plus replay pagination retry transient network, malformed-response, 429, and 5xx failures; the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
-| Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures; the first `pusher:error` forces key discovery and one reconnect, while a repeated error is terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
+| Kick API HTTP | `kick/http_session.py` creates the isolated Cloudflare-capable transport owned by `KickApiClient` and preserves explicit/environment proxy policy | Kick channel metadata plus reconnect/VOD/clip history and metadata retry transient network, malformed-response, 429, and 5xx failures; startup/reconnect preload state remains one-shot best-effort, and the client classifies endpoint responses consistently | `KickChatDownloader.close()` closes the client and base sessions exactly once |
+| Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits, and permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
 
 `Chat.close()` requests closure through message-limit and timeout wrappers before
 output writers are finalized. When the timeout worker is actively advancing the
@@ -244,10 +244,10 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
-| `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, reconnect backfill, bounded diagnostics, and rejected-key recovery |
+| `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, clock/latency-safe reconnect backfill, bounded diagnostics, and rejected-key recovery |
 | `replay_service.py` | VOD metadata, replay-window and message filtering, chronological parsing, and reverse compatibility output |
 | `clip_service.py` | Clip metadata validation, clip-relative bounds, and source-VOD replay assembly |
-| `history.py` | Timestamp-forward message pagination, exact microsecond cursor advancement, bounded ID deduplication, and loop guards |
+| `history.py` | Timestamp-forward replay and reconnect pagination, exact microsecond cursor advancement, bounded ID deduplication, and loop guards |
 | `request_retry.py` | Shared transient-request retry policy for Kick services |
 | `api_client.py` | Downloader-owned client and unified status/challenge/JSON policy for Kick channel, history, VOD, and clip endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |

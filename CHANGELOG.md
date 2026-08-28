@@ -13,6 +13,10 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Stream Kick VOD and clip replay chronologically from the requested start
   timestamp, allowing bounded and `max_messages` requests to stop without
   downloading later pages from the selected window.
+- Backfill Kick WebSocket and Pusher-key reconnect gaps through timestamped
+  history after confirmed resubscription, using a clock/latency-safe ten-second
+  baseline and bounded page/record work while reconciling a time-filtered
+  preload fallback and refreshed current pin state.
 - Preserve Kick's image-backed modern sender badges in structured output
   alongside legacy role and subscription badges, including selection state and
   provider metadata.
