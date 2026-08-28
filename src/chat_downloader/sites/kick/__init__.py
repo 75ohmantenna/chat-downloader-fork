@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from .errors import KickError
+from .errors import KickCountryBlocked, KickError
 from .extractor import KickChatDownloader
 
-__all__ = ["KickChatDownloader", "KickError"]
+__all__ = ["KickChatDownloader", "KickCountryBlocked", "KickError"]

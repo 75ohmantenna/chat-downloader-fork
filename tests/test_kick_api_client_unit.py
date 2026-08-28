@@ -9,7 +9,11 @@ import pytest
 from chat_downloader.errors import CaptchaChallengeRequired, UserNotFound
 from chat_downloader.sites.kick import api_client
 from chat_downloader.sites.kick.api_client import KickApiClient
-from chat_downloader.sites.kick.errors import KickError, KickServerError
+from chat_downloader.sites.kick.errors import (
+    KickCountryBlocked,
+    KickError,
+    KickServerError,
+)
 from tests.kick_helpers import (
     FakeKickSession,
     FakeResponse,
@@ -212,6 +216,34 @@ def test_plain_forbidden_is_challenge() -> None:
     client, _ = _client([FakeResponse(403, None, text="denied")])
 
     with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_channel("blocked")
+
+
+def test_country_blocked_status_is_actionable_and_terminal() -> None:
+    client, session = _client([FakeResponse(423, {"message": "denied"})])
+
+    with pytest.raises(
+        KickCountryBlocked,
+        match=r"country or region \(HTTP 423\)",
+    ):
+        client.fetch_channel("blocked")
+
+    assert len(session.calls) == 1
+
+
+def test_country_blocked_status_outranks_html_challenge_heuristic() -> None:
+    client, _ = _client(
+        [
+            FakeResponse(
+                423,
+                malformed=True,
+                text="<html><body>country blocked</body></html>",
+                content_type="text/html",
+            )
+        ]
+    )
+
+    with pytest.raises(KickCountryBlocked, match="HTTP 423"):
         client.fetch_channel("blocked")
 
 

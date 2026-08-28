@@ -29,13 +29,19 @@ from .constants import (
     MOBILE_CLIP_API_TEMPLATE,
     VIDEO_API_TEMPLATE,
 )
-from .errors import KickError, KickForwardHistoryRejected, KickServerError
+from .errors import (
+    KickCountryBlocked,
+    KickError,
+    KickForwardHistoryRejected,
+    KickServerError,
+)
 from .http_session import _KickSession, create_kick_session
 
 if TYPE_CHECKING:
     import requests
 
 _DEFAULT_TIMEOUT = (10.0, 30.0)
+_KICK_COUNTRY_BLOCKED_STATUS = 423
 _ResourceKind = Literal["channel", "video", "clip", "messages"]
 
 
@@ -179,6 +185,9 @@ class KickApiClient:
         if mobile and self._mobile_header_overrides:
             request_kwargs["headers"] = dict(self._mobile_header_overrides)
         response = session.get(url, **request_kwargs)
+        if response.status_code == _KICK_COUNTRY_BLOCKED_STATUS:
+            # Kick's explicit country-block status outranks body heuristics.
+            _check_status(response, context=context, resource=resource)
         if _body_looks_like_challenge(response):
             _raise_for_challenge(response, context)
         if forward_history and _response_rejects_start_time(response):
@@ -277,6 +286,12 @@ def _check_status(
 ) -> None:
     """Classify endpoint status codes consistently."""
     status = response.status_code
+    if status == _KICK_COUNTRY_BLOCKED_STATUS:
+        msg = (
+            f"Kick reported that access to its {resource} API for {context!r} is "
+            "blocked in the request's country or region (HTTP 423)."
+        )
+        raise KickCountryBlocked(msg)
     if status == HTTPStatus.NOT_FOUND:
         if resource == "channel":
             msg = f'Unable to find Kick channel: "{context}"'

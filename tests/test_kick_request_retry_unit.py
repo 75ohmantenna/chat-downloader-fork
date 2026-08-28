@@ -10,8 +10,8 @@ import pytest
 
 from chat_downloader.errors import RetriesExceeded
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.kick import KickError, request_retry
-from chat_downloader.sites.kick.errors import KickServerError
+from chat_downloader.sites.kick import request_retry
+from chat_downloader.sites.kick.errors import KickCountryBlocked, KickServerError
 
 
 def test_fetch_with_retry_recovers_from_temporary_failure() -> None:
@@ -41,10 +41,10 @@ def test_fetch_with_retry_exhausts_transient_failures() -> None:
 
 
 def test_fetch_with_retry_does_not_retry_terminal_failure() -> None:
-    fetch = Mock(side_effect=KickError("not found"))
+    fetch = Mock(side_effect=KickCountryBlocked("country blocked"))
     request = ChatRequest(max_attempts=3, retry_timeout=0)
 
-    with pytest.raises(KickError, match="not found"):
+    with pytest.raises(KickCountryBlocked, match="country blocked"):
         request_retry.fetch_with_retry(fetch, request)
 
     fetch.assert_called_once()

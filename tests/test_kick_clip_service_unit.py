@@ -14,7 +14,7 @@ from chat_downloader.errors import CaptchaChallengeRequired, NoChatReplay
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import clip_service
 from chat_downloader.sites.kick.api_client import KickApiClient
-from chat_downloader.sites.kick.errors import KickError
+from chat_downloader.sites.kick.errors import KickCountryBlocked, KickError
 from tests.kick_helpers import FakeKickSession, FakeResponse, load_fixture
 
 CLIP_ID = "clip_01M0BHEHDAX2NEAGXG0DA8V9S5"
@@ -657,6 +657,22 @@ def test_source_vod_challenge_does_not_fall_back_to_mobile_endpoint() -> None:
     client.fetch_mobile_clip_metadata.assert_not_called()
 
 
+def test_source_vod_country_block_does_not_fall_back_to_mobile_endpoint() -> None:
+    client = Mock()
+    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
+    client.fetch_video_metadata.side_effect = KickCountryBlocked("country blocked")
+
+    with pytest.raises(KickCountryBlocked, match="country blocked"):
+        clip_service.get_clip_chat(
+            "n3on",
+            CLIP_ID,
+            ChatRequest(max_attempts=1, interruptible_retry=False),
+            api_client=client,
+        )
+
+    client.fetch_mobile_clip_metadata.assert_not_called()
+
+
 def test_dual_metadata_failure_retains_primary_error_as_cause() -> None:
     client = Mock()
     client.fetch_clip_metadata.side_effect = KickError("web unavailable")
@@ -728,6 +744,21 @@ def test_clip_challenge_does_not_fall_back_to_mobile_endpoint() -> None:
     client.fetch_clip_metadata.side_effect = CaptchaChallengeRequired("blocked")
 
     with pytest.raises(CaptchaChallengeRequired, match="blocked"):
+        clip_service.get_clip_chat(
+            "n3on",
+            CLIP_ID,
+            ChatRequest(max_attempts=1, interruptible_retry=False),
+            api_client=client,
+        )
+
+    client.fetch_mobile_clip_metadata.assert_not_called()
+
+
+def test_clip_country_block_does_not_fall_back_to_mobile_endpoint() -> None:
+    client = Mock()
+    client.fetch_clip_metadata.side_effect = KickCountryBlocked("country blocked")
+
+    with pytest.raises(KickCountryBlocked, match="country blocked"):
         clip_service.get_clip_chat(
             "n3on",
             CLIP_ID,

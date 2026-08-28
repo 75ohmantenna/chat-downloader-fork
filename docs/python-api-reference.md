@@ -373,6 +373,7 @@ Common exceptions:
 - `VideoUnavailable`
 - `LoginRequired`
 - `CaptchaChallengeRequired`
+- `KickCountryBlocked`
 - `NoChatReplay`
 - `SiteNotSupported`
 - `RetriesExceeded`
@@ -415,6 +416,7 @@ from chat_downloader import (
     InvalidParameter,
     InvalidURL,
     KickChatDownloader,
+    KickCountryBlocked,
     KickError,
     LoginRequired,
     NoChatReplay,
@@ -450,10 +452,10 @@ the default constants used by the facade.
 In normal usage you do not touch site classes directly — `get_chat()` resolves
 the site from the URL. When you need a concrete class (custom dispatch, type
 checks), `TwitchChatDownloader`, `YouTubeChatDownloader`, `KickChatDownloader`,
-and `KickError` are all re-exported at the top level:
+`KickCountryBlocked`, and `KickError` are all re-exported at the top level:
 
 ```python
-from chat_downloader import KickChatDownloader, KickError
+from chat_downloader import KickChatDownloader, KickCountryBlocked, KickError
 ```
 
 `get_all_sites()` returns every registered site class, including

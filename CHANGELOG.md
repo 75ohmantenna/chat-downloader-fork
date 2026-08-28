@@ -28,6 +28,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   alongside legacy role and subscription badges, including selection state and
   provider metadata.
 
+### Fixes
+
+- Classify Kick's provider-specific HTTP 423 response as a terminal
+  country/region block, expose a typed error for integrations, and preserve it
+  through clip metadata fallback decisions without retrying.
+
 ## 2.1.0 — 2026-08-25
 
 ### Features

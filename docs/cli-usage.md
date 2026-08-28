@@ -229,6 +229,8 @@ Debug and automation:
 
 - `403` or `LoginRequired` often means the platform requires cookies; `429`
   means the client is rate-limited and should retry more slowly.
+- `KickCountryBlocked` means Kick returned its provider-specific HTTP 423 for
+  the request's country or region. It is terminal and is not retried.
 - A cookie/proxy safety error can come from `HTTP_PROXY`, `HTTPS_PROXY`, or
   `ALL_PROXY` even when `--proxy` was not supplied. Remove the remote proxy or
   pass `--proxy ""` if direct connections are intended.

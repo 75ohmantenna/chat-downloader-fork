@@ -16,6 +16,10 @@ class KickError(SiteError):
     """Raised when an error occurs with a Kick channel or its chat."""
 
 
+class KickCountryBlocked(KickError):
+    """Raised when Kick reports that the request's country is blocked."""
+
+
 class KickServerError(KickError):
     """Raised for transient Kick server problems (HTTP 429/5xx).
 

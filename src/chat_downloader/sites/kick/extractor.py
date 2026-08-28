@@ -19,7 +19,7 @@ from chat_downloader.sites.base import BaseChatDownloader
 from .api_client import KickApiClient
 from .clip_service import get_clip_chat as build_clip_chat
 from .constants import VALID_URLS
-from .errors import KickError
+from .errors import KickCountryBlocked, KickError
 from .live_service import get_chat_by_channel as build_channel_chat
 from .replay_service import get_vod_chat as build_vod_chat
 
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
 
-__all__ = ["KickChatDownloader", "KickError"]
+__all__ = ["KickChatDownloader", "KickCountryBlocked", "KickError"]
 
 
 class KickChatDownloader(BaseChatDownloader):
@@ -146,6 +146,7 @@ class KickChatDownloader(BaseChatDownloader):
         Raises:
             UserNotFound: If the channel does not exist.
             CaptchaChallengeRequired: If Kick returns a challenge page.
+            KickCountryBlocked: If Kick blocks the request's country or region.
             KickError: If metadata is incomplete or the channel is offline.
         """
         request = self._coerce_chat_request(params)
@@ -168,6 +169,7 @@ class KickChatDownloader(BaseChatDownloader):
             A :class:`Chat` that yields historical chat messages.
 
         Raises:
+            KickCountryBlocked: If Kick blocks the request's country or region.
             KickError: If the video is not found or metadata is incomplete.
         """
         request = self._coerce_chat_request(params)
@@ -188,6 +190,10 @@ class KickChatDownloader(BaseChatDownloader):
 
         ``start_time`` and ``end_time`` remain relative to the clip and are
         clamped to its duration before being mapped onto the source VOD.
+
+        Raises:
+            KickCountryBlocked: If Kick blocks the request's country or region.
+            KickError: If clip or source-video metadata is unavailable.
         """
         request = self._coerce_chat_request(params)
         return build_clip_chat(

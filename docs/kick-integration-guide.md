@@ -196,7 +196,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   message-type-to-group maps, emote patterns, and Cloudflare markers.
 - `pusher_discovery.py`: default-first Pusher application-key selection,
   best-effort refresh, cache ownership, and WebSocket URL construction.
-- `errors.py`: `KickError` and the retryable `KickServerError` subclass.
+- `errors.py`: `KickError`, the terminal `KickCountryBlocked` subtype, and the
+  retryable `KickServerError` subclass.
 
 There is no `client.py` facade in the Kick package. Import focused modules
 directly for patch points: `api_client.py` for REST, `websocket_transport.py`
@@ -419,6 +420,7 @@ Status mapping in `api_client.py::_check_status`:
 
 - channel `404` → `UserNotFound`; VOD/clip/history `404` → terminal `KickError`
 - `403` / challenge body → `CaptchaChallengeRequired`
+- provider-specific `423` → `KickCountryBlocked` (terminal; no fallback/retry)
 - `429` / `5xx` → `KickServerError` (transient, retried)
 - other non-`200` → `KickError`
 

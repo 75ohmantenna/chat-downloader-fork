@@ -25,7 +25,7 @@ from .constants import (
     is_numeric_id,
     is_video_id,
 )
-from .errors import KickError
+from .errors import KickCountryBlocked, KickError
 from .replay_service import (
     _apply_request_window,
     _iter_vod_messages,
@@ -297,6 +297,8 @@ def _fetch_clip_metadata(
             lambda: api_client.fetch_clip_metadata(clip_id),
             request,
         )
+    except KickCountryBlocked:
+        raise
     except (KickError, RetriesExceeded) as error:
         return _fetch_mobile_clip_metadata(
             api_client,
@@ -385,6 +387,8 @@ def get_clip_chat(
                 request,
             )
             vod_window = _resolve_clip_source_vod_window(video_data, username)
+        except KickCountryBlocked:
+            raise
         except (KickError, RetriesExceeded) as error:
             metadata = _fetch_mobile_clip_metadata(
                 api_client,
