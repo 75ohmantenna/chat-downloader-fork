@@ -45,7 +45,10 @@ from .constants import (
 )
 from .errors import KickError, KickServerError
 from .history import iter_forward_history
-from .parsing.events import dispatch_event
+from .parsing.events import (
+    MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX,
+    dispatch_event,
+)
 from .parsing.messages import parse_preloaded_messages
 from .parsing.pins import parse_pinned_message_created_event
 from .pusher_discovery import _HttpClient, _RequestsHttpClient
@@ -85,6 +88,7 @@ class _KickLiveDiagnostics:
             "unsupported_event_count": 0,
             "unknown_message_type_count": 0,
             "malformed_event_count": 0,
+            "malformed_event_type_counts": {},
             "invalid_websocket_frame_count": 0,
             "websocket_reconnect_count": 0,
             "pusher_error_count": 0,
@@ -94,6 +98,13 @@ class _KickLiveDiagnostics:
 
     def increment(self, name: str) -> None:
         """Increment one integer counter by name."""
+        if name.startswith(MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX):
+            message_type = name.removeprefix(MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX)
+            counts = self.summary["malformed_event_type_counts"]
+            if isinstance(counts, dict):
+                count = counts.get(message_type, 0)
+                counts[message_type] = count + 1 if isinstance(count, int) else 1
+            return
         value = self.summary.get(name)
         if isinstance(value, int):
             self.summary[name] = value + 1
@@ -101,6 +112,12 @@ class _KickLiveDiagnostics:
     def record_frame(self) -> int:
         """Record and return a decoded frame's UTC receive timestamp."""
         received_timestamp = time.time_ns() // 1_000
+        previous_timestamp = self.summary["last_websocket_frame_timestamp"]
+        if (
+            isinstance(previous_timestamp, int)
+            and received_timestamp <= previous_timestamp
+        ):
+            received_timestamp = previous_timestamp + 1
         self.increment("websocket_frame_count")
         self.summary["last_websocket_frame_timestamp"] = received_timestamp
         return received_timestamp
@@ -621,6 +638,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     live_message = dispatch_event(
                         frame,
                         record_diagnostic=diagnostics.increment,
+                        received_timestamp=received_timestamp,
                     )
                     provider_timestamp = (
                         _provider_timestamp(live_message)

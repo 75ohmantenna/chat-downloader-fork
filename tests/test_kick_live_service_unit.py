@@ -20,6 +20,7 @@ from chat_downloader.sites.kick.constants import (
     CHAT_MESSAGE_EVENT,
     MESSAGE_DELETED_EVENT,
     PINNED_MESSAGE_CREATED_EVENT,
+    PINNED_MESSAGE_DELETED_EVENT,
     PUSHER_ERROR,
     PUSHER_SUBSCRIPTION_SUCCEEDED,
     SUBSCRIPTION_EVENT,
@@ -1114,12 +1115,92 @@ def test_get_chat_by_channel_reports_live_diagnostics() -> None:
         "unsupported_event_count": 1,
         "unknown_message_type_count": 0,
         "malformed_event_count": 1,
+        "malformed_event_type_counts": {"text_message": 1},
         "invalid_websocket_frame_count": 0,
         "websocket_reconnect_count": 1,
         "pusher_error_count": 0,
         "pusher_key_recovery_count": 0,
         "last_websocket_frame_timestamp": None,
     }
+
+
+def test_get_chat_by_channel_emits_compact_live_events() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frames = [
+        pusher_frame(
+            SUBSCRIPTION_EVENT,
+            load_fixture("subscription_event_compact.json"),
+        ),
+        pusher_frame(
+            PINNED_MESSAGE_DELETED_EVENT,
+            load_fixture("pinned_message_deleted_event_empty.json"),
+        ),
+    ]
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(live_service.time, "time_ns", side_effect=[11_000, 11_000]),
+    ):
+        chat = _build_chat(
+            downloader,
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([frames]),
+        )
+        messages = list(chat.chat)
+
+    assert messages == [
+        {
+            "message_id": "kick-subscription:11",
+            "message_type": "subscription",
+            "message": "",
+            "received_timestamp": 11,
+            "author": {
+                "display_name": "compactsubscriber",
+                "name": "compactsubscriber",
+            },
+            "metadata": {"months": 1},
+        },
+        {
+            "message_id": "kick-unpin:12",
+            "message_type": "pinned_message_deleted",
+            "message": "",
+            "received_timestamp": 12,
+        },
+    ]
+    formatter = ItemFormatter()
+    assert formatter.format(messages[0], format_name="kick") == (
+        "1970-01-01 00:00:00 [received] | [Subscription] compactsubscriber"
+    )
+    assert formatter.format(messages[1], format_name="kick") == (
+        "1970-01-01 00:00:00 [received] | [Pinned message removed]"
+    )
+    assert chat.diagnostics["parsed_event_count"] == 2
+    assert chat.diagnostics["malformed_event_count"] == 0
+    assert chat.diagnostics["malformed_event_type_counts"] == {}
+
+
+def test_live_diagnostics_make_receive_timestamps_strictly_monotonic() -> None:
+    diagnostics = live_service._KickLiveDiagnostics()
+
+    with patch.object(
+        live_service.time,
+        "time_ns",
+        side_effect=[11_000, 11_000, 10_000],
+    ):
+        timestamps = [diagnostics.record_frame() for _ in range(3)]
+
+    assert timestamps == [11, 12, 13]
+    assert diagnostics.summary["websocket_frame_count"] == 3
+    assert diagnostics.summary["last_websocket_frame_timestamp"] == 13
 
 
 def test_get_chat_by_channel_adds_distinct_receive_timestamp_fallback() -> None:

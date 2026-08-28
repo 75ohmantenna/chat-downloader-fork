@@ -173,7 +173,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   `_PARSER_DISPATCH`. Decodes Kick's double-encoded `data` field. Control
   frames are omitted from output; unknown events are captured when explicitly
   enabled, debug-logged by name, and skipped; a `pusher:error` frame raises
-  `KickError`.
+  `KickError`. Live-only compact subscription and empty-array pin-clear shapes
+  are expanded with namespaced receive-time IDs before normal parsing.
 - `parsing/messages.py`: chat-message normalization for both live
   `ChatMessageEvent` payloads and preloaded history (same shape); badge and
   timestamp handling, including reply context from object- or string-encoded
@@ -286,8 +287,9 @@ The transport:
 
 Successful debug runs include live-connection diagnostics in the final run
 summary: decoded, control, parsed, unsupported, unknown-message-type,
-malformed, and invalid-frame counts; successful reconnect and Pusher-key
-recovery counts; and the last decoded-frame timestamp in UTC microseconds.
+malformed, malformed-event counts grouped by normalized type, and invalid-frame
+counts; successful reconnect and Pusher-key recovery counts; and the last
+decoded-frame timestamp in UTC microseconds.
 Per-type output counts remain separate because filtering and preloaded history
 can make them differ from raw Pusher counts.
 
@@ -391,6 +393,10 @@ events. Empty-message events such as deletions and chat clears render bracketed
 notices rather than blank lines. Live WebSocket events without a valid provider
 `timestamp` retain a distinct UTC-microsecond `received_timestamp`; the Kick
 formatter uses it only as a fallback and marks it `[received]` in TXT.
+Compact subscriptions containing only `chatroom_id`, `username`, and `months`
+retain the username and month count; empty-array pin deletions emit an ID-less
+provider state change as `[Pinned message removed]`. Both receive namespaced
+IDs derived from their live receive timestamp so JSONL records remain complete.
 Preloaded history plus VOD and clip replay do not receive this live-arrival
 field.
 AI-moderated deletion notices append `[AI moderated]` and any violated-rule

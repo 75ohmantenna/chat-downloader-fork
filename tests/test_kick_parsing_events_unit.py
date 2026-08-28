@@ -11,10 +11,12 @@ import pytest
 from chat_downloader.sites.kick.constants import (
     CHAT_MESSAGE_EVENT,
     MESSAGE_DELETED_EVENT,
+    PINNED_MESSAGE_DELETED_EVENT,
     PUSHER_CONNECTION_ESTABLISHED,
     PUSHER_ERROR,
     PUSHER_PING,
     PUSHER_SUBSCRIPTION_SUCCEEDED,
+    SUBSCRIPTION_EVENT,
 )
 from chat_downloader.sites.kick.errors import KickError
 from chat_downloader.sites.kick.parsing import events
@@ -73,6 +75,125 @@ def test_ai_moderation_context_survives_event_dispatch() -> None:
     assert message is not None
     assert message["metadata"]["ai_moderated"] is True
     assert message["metadata"]["violated_rules"] == ["hate", "harassment"]
+
+
+def test_compact_subscription_uses_receive_time_fallback_id() -> None:
+    data = load_fixture("subscription_event_compact.json")
+    diagnostics: list[str] = []
+
+    message = dispatch_event(
+        pusher_frame(SUBSCRIPTION_EVENT, data),
+        record_diagnostic=diagnostics.append,
+        received_timestamp=1_789_000_000_000_001,
+    )
+
+    assert message == {
+        "message_id": "kick-subscription:1789000000000001",
+        "message_type": "subscription",
+        "message": "",
+        "author": {
+            "display_name": "compactsubscriber",
+            "name": "compactsubscriber",
+        },
+        "metadata": {"months": 1},
+    }
+    assert diagnostics == ["parsed_event_count"]
+
+
+def test_empty_pin_deletion_uses_receive_time_fallback_id() -> None:
+    data = load_fixture("pinned_message_deleted_event_empty.json")
+    diagnostics: list[str] = []
+
+    message = dispatch_event(
+        pusher_frame(PINNED_MESSAGE_DELETED_EVENT, data),
+        record_diagnostic=diagnostics.append,
+        received_timestamp=1_789_000_000_000_002,
+    )
+
+    assert message == {
+        "message_id": "kick-unpin:1789000000000002",
+        "message_type": "pinned_message_deleted",
+        "message": "",
+    }
+    assert diagnostics == ["parsed_event_count"]
+
+
+@pytest.mark.parametrize("received_timestamp", [None, True, -1])
+def test_compact_variants_require_valid_receive_timestamp(
+    received_timestamp: int | None,
+) -> None:
+    subscription = pusher_frame(
+        SUBSCRIPTION_EVENT,
+        load_fixture("subscription_event_compact.json"),
+    )
+    pin_deleted = pusher_frame(
+        PINNED_MESSAGE_DELETED_EVENT,
+        load_fixture("pinned_message_deleted_event_empty.json"),
+    )
+
+    assert (
+        dispatch_event(
+            subscription,
+            received_timestamp=received_timestamp,
+        )
+        is None
+    )
+    assert (
+        dispatch_event(
+            pin_deleted,
+            received_timestamp=received_timestamp,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"chatroom_id": 1, "username": "subscriber", "months": 0},
+        {"chatroom_id": 1, "username": "subscriber", "months": True},
+        {"chatroom_id": 1, "username": "", "months": 1},
+        {"username": "subscriber", "months": 1},
+        {
+            "chatroom_id": 1,
+            "username": "subscriber",
+            "months": 1,
+            "sender": {},
+        },
+    ],
+)
+def test_invalid_compact_subscription_shape_remains_malformed(
+    payload: dict[str, object],
+) -> None:
+    diagnostics: list[str] = []
+
+    message = dispatch_event(
+        pusher_frame(SUBSCRIPTION_EVENT, payload),
+        record_diagnostic=diagnostics.append,
+        received_timestamp=1_789_000_000_000_003,
+    )
+
+    assert message is None
+    assert diagnostics == [
+        "malformed_event_count",
+        "malformed_event_type:subscription",
+    ]
+
+
+def test_nonempty_pin_deletion_array_remains_malformed() -> None:
+    diagnostics: list[str] = []
+
+    message = dispatch_event(
+        pusher_frame(PINNED_MESSAGE_DELETED_EVENT, [{"id": "unexpected"}]),
+        record_diagnostic=diagnostics.append,
+        received_timestamp=1_789_000_000_000_004,
+    )
+
+    assert message is None
+    assert diagnostics == [
+        "malformed_event_count",
+        "malformed_event_type:pinned_message_deleted",
+    ]
 
 
 def test_malformed_nested_json_is_skipped() -> None:
@@ -144,6 +265,23 @@ def test_malformed_known_event_is_captured(
     assert captured[0][0][0] == "kick-malformed-event"
     assert captured[0][0][1]["raw"] == frame
     assert captured[0][0][1]["message_type"] == "subscription"
+
+
+def test_malformed_known_event_records_its_normalized_type() -> None:
+    diagnostics: list[str] = []
+
+    assert (
+        dispatch_event(
+            pusher_frame(SUBSCRIPTION_EVENT, {}),
+            record_diagnostic=diagnostics.append,
+        )
+        is None
+    )
+
+    assert diagnostics == [
+        "malformed_event_count",
+        "malformed_event_type:subscription",
+    ]
 
 
 def test_frame_without_event_is_captured_and_skipped(

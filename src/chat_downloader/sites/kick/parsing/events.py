@@ -44,6 +44,7 @@ from chat_downloader.sites.kick.parsing.subscriptions import (
     parse_gifted_subscriptions_event,
     parse_subscription_event,
 )
+from chat_downloader.utils.json_types import get_int, get_str
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -57,6 +58,8 @@ _KNOWN_CONTROL_EVENTS = frozenset(
         PUSHER_PONG,
     }
 )
+
+MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX = "malformed_event_type:"
 
 #: Maps normalized message types to their parser functions.
 _PARSER_DISPATCH: dict[str, Callable[[object], dict[str, Any] | None]] = {
@@ -106,10 +109,53 @@ def _record_diagnostic(
         callback(name)
 
 
+def _normalize_compact_live_payload(
+    message_type: str,
+    payload: object,
+    received_timestamp: int | None,
+) -> object:
+    """Expand observed compact live shapes into canonical parser inputs."""
+    if (
+        not isinstance(received_timestamp, int)
+        or isinstance(received_timestamp, bool)
+        or received_timestamp < 0
+    ):
+        return payload
+
+    if message_type == "pinned_message_deleted" and payload == []:
+        return {"id": f"kick-unpin:{received_timestamp}"}
+
+    if (
+        message_type != "subscription"
+        or not isinstance(payload, dict)
+        or payload.get("id") is not None
+        or "sender" in payload
+        or "metadata" in payload
+    ):
+        return payload
+
+    username = get_str(payload, "username").strip()
+    months = get_int(payload, "months")
+    chatroom_id = get_int(payload, "chatroom_id")
+    if not username or months < 1 or chatroom_id < 1:
+        return payload
+
+    normalized = dict(payload)
+    normalized.update(
+        {
+            "id": f"kick-subscription:{received_timestamp}",
+            "sender": {"username": username},
+            "metadata": {"subscription": {"months": months}},
+        }
+    )
+    return normalized
+
+
 def dispatch_event(
     frame: Mapping[str, object],
     *,
     record_diagnostic: Callable[[str], None] | None = None,
+    received_timestamp: int | None = None,
 ) -> dict[str, Any] | None:
     """Dispatch one decoded Pusher frame to its handler.
 
@@ -118,6 +164,8 @@ def dispatch_event(
             and a ``data`` payload.
         record_diagnostic: Optional callback that increments a named live-run
             diagnostic counter.
+        received_timestamp: UTC receive time in microseconds. Live-only compact
+            payloads use it to construct namespaced fallback event IDs.
 
     Returns:
         A normalized chat message dictionary for a recognized event, or
@@ -172,6 +220,10 @@ def dispatch_event(
     parser = _PARSER_DISPATCH.get(message_type)
     if parser is None:  # pragma: no cover — programming error guard
         _record_diagnostic(record_diagnostic, "malformed_event_count")
+        _record_diagnostic(
+            record_diagnostic,
+            MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX + message_type,
+        )
         capture_debug_sample(
             "kick-malformed-event",
             {
@@ -186,6 +238,11 @@ def dispatch_event(
 
     try:
         payload = _decode_event_data(frame.get("data"))
+        payload = _normalize_compact_live_payload(
+            message_type,
+            payload,
+            received_timestamp,
+        )
         if (
             message_type == "text_message"
             and isinstance(payload, dict)
@@ -201,6 +258,10 @@ def dispatch_event(
         IndexError,
     ) as error:
         _record_diagnostic(record_diagnostic, "malformed_event_count")
+        _record_diagnostic(
+            record_diagnostic,
+            MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX + message_type,
+        )
         # A single malformed frame must never tear down the live download
         # loop (which only retries on ConnectionError); skip it instead.
         capture_debug_sample(
