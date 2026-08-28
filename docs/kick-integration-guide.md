@@ -151,7 +151,10 @@ source-VOD interval, rather than the playlist's padded wall-clock start.
   `ChatMessageEvent` payloads and preloaded history (same shape); badge and
   timestamp handling, including reply context from object- or string-encoded
   metadata. Entry points `parse_chat_message` /
-  `parse_preloaded_messages`.
+  `parse_preloaded_messages`. Sender badges merge Kick's legacy `badges` and
+  image-backed `badges_v2` arrays in stable provider order. Structured output
+  retains v2 image URLs, selection state, badge type, provider metadata, and
+  sort order without applying the mobile client's display-count limit.
 - `parsing/emotes.py`: inline emote-marker parsing (`[emote:ID:NAME]` →
   `:NAME:` in plain text, or `:emote_ID:` when no name is present) and
   structured emote metadata/image URLs.

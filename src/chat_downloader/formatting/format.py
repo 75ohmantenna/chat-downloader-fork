@@ -251,6 +251,12 @@ class ItemFormatter:
 
         template = self._select_field_template(field_config, value)
         formatted_value = self._apply_field_formatting(field_path, value, field_config)
+        if (
+            isinstance(field_config, dict)
+            and field_config.get(self.KEY_OMIT_IF_FALSE) is True
+            and not formatted_value
+        ):
+            return ""
 
         return _SAFE_FORMATTER.format(template, formatted_value)
 

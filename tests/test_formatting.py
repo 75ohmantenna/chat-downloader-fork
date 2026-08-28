@@ -635,6 +635,22 @@ def test_apply_separator_author_badges(formatter: ItemFormatter) -> None:
     assert result == "Moderator, Member"
 
 
+def test_omit_if_false_after_badge_separator(formatter: ItemFormatter) -> None:
+    result = formatter._format_field_value(
+        "author.badges",
+        [{"name": "level"}],
+        {
+            "author.badges": {
+                "separator": ", ",
+                "template": "({})",
+                "omit_if_false": True,
+            }
+        },
+    )
+
+    assert result == ""
+
+
 def test_apply_separator_no_separator(formatter: ItemFormatter) -> None:
     """_apply_separator returns the value unchanged when no separator is set."""
     field_config = {}

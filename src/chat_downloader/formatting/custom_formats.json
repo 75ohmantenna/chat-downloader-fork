@@ -13,7 +13,8 @@
             },
             "author.badges": {
                 "template": "({}) ",
-                "separator": ", "
+                "separator": ", ",
+                "omit_if_false": true
             },
             "money.text": "*{}* ",
             "message": ": {}"

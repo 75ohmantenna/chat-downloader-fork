@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from chat_downloader.formatting.format import ItemFormatter
+from chat_downloader.sites.kick.parsing.messages import parse_chat_message
 from chat_downloader.sites.kick.parsing.moderation import (
     parse_message_deleted_event,
 )
@@ -140,6 +141,28 @@ def test_kick_text_messages_keep_default_rendering(formatter: ItemFormatter) -> 
 
     assert formatter.format(item, format_name="kick") == (
         "2020-01-01 00:00:00 | Author: Hello"
+    )
+
+
+def test_kick_modern_badge_without_title_does_not_render_empty_marker(
+    formatter: ItemFormatter,
+) -> None:
+    item = parse_chat_message(
+        {
+            "id": "v2-only",
+            "content": "modern badges",
+            "type": "message",
+            "created_at": "2026-08-18T22:54:20Z",
+            "sender": {
+                "id": 101,
+                "username": "BadgeUser",
+                "identity": {"badges_v2": [{"name": "level", "selected": True}]},
+            },
+        }
+    )
+
+    assert formatter.format(item, format_name="kick") == (
+        "2026-08-18 22:54:20 | BadgeUser: modern badges"
     )
 
 

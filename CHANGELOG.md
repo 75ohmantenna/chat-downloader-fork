@@ -8,6 +8,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Features
+
+- Preserve Kick's image-backed modern sender badges in structured output
+  alongside legacy role and subscription badges, including selection state and
+  provider metadata.
+
 ## 2.1.0 — 2026-08-25
 
 ### Features
