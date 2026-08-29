@@ -1,0 +1,20 @@
+{
+  "poll": {
+    "duration": 120,
+    "options": [
+      {
+        "id": 0,
+        "label": "Option A",
+        "votes": 0
+      },
+      {
+        "id": 1,
+        "label": "Option B",
+        "votes": 1
+      }
+    ],
+    "remaining": 119,
+    "result_display_duration": 120,
+    "title": "Example poll"
+  }
+}

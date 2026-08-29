@@ -24,6 +24,10 @@ from chat_downloader.sites.kick.parsing.pins import (
     parse_pinned_message_created_event,
     parse_pinned_message_deleted_event,
 )
+from chat_downloader.sites.kick.parsing.polls import (
+    parse_poll_deleted_event,
+    parse_poll_update_event,
+)
 from chat_downloader.sites.kick.parsing.subscriptions import (
     parse_gifted_subscriptions_event,
     parse_subscription_event,
@@ -38,6 +42,8 @@ __all__ = [
     "parse_message_deleted_event",
     "parse_pinned_message_created_event",
     "parse_pinned_message_deleted_event",
+    "parse_poll_deleted_event",
+    "parse_poll_update_event",
     "parse_preloaded_messages",
     "parse_stream_host_event",
     "parse_subscription_event",

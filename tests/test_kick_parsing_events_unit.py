@@ -12,6 +12,8 @@ from chat_downloader.sites.kick.constants import (
     CHAT_MESSAGE_EVENT,
     MESSAGE_DELETED_EVENT,
     PINNED_MESSAGE_DELETED_EVENT,
+    POLL_DELETE_EVENT,
+    POLL_UPDATE_EVENT,
     PUSHER_CONNECTION_ESTABLISHED,
     PUSHER_ERROR,
     PUSHER_PING,
@@ -133,6 +135,45 @@ def test_empty_pin_deletion_uses_receive_time_fallback_id() -> None:
     assert diagnostics == ["parsed_event_count"]
 
 
+@pytest.mark.parametrize("provider_id", [pytest.param(None, id="null"), "provider-id"])
+def test_poll_update_uses_receive_time_fallback_id(provider_id: str | None) -> None:
+    diagnostics: list[str] = []
+    payload = load_fixture("poll_update_event.json")
+    payload["id"] = provider_id
+
+    message = dispatch_event(
+        pusher_frame(POLL_UPDATE_EVENT, payload),
+        record_diagnostic=diagnostics.append,
+        received_timestamp=1_789_000_000_000_003,
+    )
+
+    assert message is not None
+    expected_id = provider_id or "kick-poll-update:1789000000000003"
+    assert message["message_id"] == expected_id
+    assert message["message_type"] == "poll_update"
+    assert message["message"] == "Example poll"
+    assert message["metadata"]["options"][1]["votes"] == 1
+    assert diagnostics == ["parsed_event_count"]
+
+
+@pytest.mark.parametrize("payload", [None, {}, [], {"id": None}])
+def test_poll_deleted_ignores_payload_shape(payload: object) -> None:
+    diagnostics: list[str] = []
+
+    message = dispatch_event(
+        pusher_frame(POLL_DELETE_EVENT, payload),
+        record_diagnostic=diagnostics.append,
+        received_timestamp=1_789_000_000_000_004,
+    )
+
+    assert message == {
+        "message_id": "kick-poll-deleted:1789000000000004",
+        "message_type": "poll_deleted",
+        "message": "",
+    }
+    assert diagnostics == ["parsed_event_count"]
+
+
 @pytest.mark.parametrize("received_timestamp", [None, True, -1])
 def test_compact_variants_require_valid_receive_timestamp(
     received_timestamp: int | None,
@@ -160,6 +201,36 @@ def test_compact_variants_require_valid_receive_timestamp(
         )
         is None
     )
+
+
+@pytest.mark.parametrize("received_timestamp", [None, True, -1])
+@pytest.mark.parametrize(
+    ("event", "payload"),
+    [
+        (POLL_UPDATE_EVENT, {"poll": {"title": "Poll"}}),
+        (POLL_DELETE_EVENT, None),
+    ],
+)
+def test_poll_events_require_valid_receive_timestamp(
+    event: str,
+    payload: object,
+    received_timestamp: int | None,
+) -> None:
+    diagnostics: list[str] = []
+
+    assert (
+        dispatch_event(
+            pusher_frame(event, payload),
+            record_diagnostic=diagnostics.append,
+            received_timestamp=received_timestamp,
+        )
+        is None
+    )
+    expected_type = "poll_update" if event == POLL_UPDATE_EVENT else "poll_deleted"
+    assert diagnostics == [
+        "malformed_event_count",
+        f"malformed_event_type:{expected_type}",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -258,10 +329,14 @@ def test_unknown_event_is_captured_and_skipped(
     assert dispatch_event(frame) is None
 
     assert captured[0][0] == (
-        "kick-unknown-event",
+        "kick-unknown-event-FutureEvent",
         {"raw": frame, "event_name": "App\\Events\\FutureEvent"},
     )
-    assert captured[0][1]["sample_limit"] == 10
+    assert captured[0][1] == {
+        "sample_limit": 3,
+        "sample_group": "kick-unknown-event",
+        "group_limit": 10,
+    }
 
 
 def test_malformed_known_event_is_captured(
@@ -365,3 +440,21 @@ def test_unknown_event_capture_is_bounded(
 
     assert len(list(sample_dir.glob("kick-unknown-event-*.json"))) == 10
     assert "Debug sample limit reached" in caplog.text
+
+
+def test_unknown_event_capture_isolated_by_event_name(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    caplog.set_level("DEBUG", logger=events.logger.name)
+
+    for index in range(5):
+        dispatch_event(pusher_frame("App\\Events\\NoisyEvent", {"index": index}))
+    dispatch_event(pusher_frame("App\\Events\\DifferentEvent", {"value": 1}))
+
+    assert len(list(sample_dir.glob("kick-unknown-event-noisyevent-*.json"))) == 3
+    assert len(list(sample_dir.glob("kick-unknown-event-differentevent-*.json"))) == 1

@@ -27,6 +27,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Preserve Kick's image-backed modern sender badges in structured output
   alongside legacy role and subscription badges, including selection state and
   provider metadata.
+- Preserve Kick subscription-renewal celebration metadata and expose live poll
+  updates and deletions through an opt-in `polls` message group, with bounded
+  receive-time identifiers for provider events that omit IDs.
 
 ### Fixes
 

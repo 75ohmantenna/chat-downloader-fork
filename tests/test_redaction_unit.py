@@ -413,6 +413,119 @@ def test_capture_debug_sample_limits_unique_payloads_per_label() -> None:
         assert len(list(Path(temp_dir).glob("*.json"))) == 2
 
 
+def test_capture_debug_sample_limits_unique_payloads_across_group() -> None:
+    with (
+        tempfile.TemporaryDirectory() as temp_dir,
+        patch.dict(
+            os.environ,
+            {
+                "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES": "1",
+                "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR": temp_dir,
+            },
+            clear=False,
+        ),
+    ):
+        dbg.set_log_level("debug")
+        first = red.capture_debug_sample(
+            "event-one",
+            {"value": 1},
+            sample_limit=2,
+            sample_group="events",
+            group_limit=2,
+        )
+        second = red.capture_debug_sample(
+            "event-two",
+            {"value": 2},
+            sample_limit=2,
+            sample_group="events",
+            group_limit=2,
+        )
+        dropped = red.capture_debug_sample(
+            "event-three",
+            {"value": 3},
+            sample_limit=2,
+            sample_group="events",
+            group_limit=2,
+        )
+        duplicate = red.capture_debug_sample(
+            "event-one",
+            {"value": 1},
+            sample_limit=2,
+            sample_group="events",
+            group_limit=2,
+        )
+
+        assert first is not None
+        assert second is not None
+        assert dropped is None
+        assert duplicate == first
+        assert len(list(Path(temp_dir).glob("*.json"))) == 2
+
+
+def test_capture_debug_sample_releases_group_slot_when_label_is_full() -> None:
+    with (
+        tempfile.TemporaryDirectory() as temp_dir,
+        patch.dict(
+            os.environ,
+            {
+                "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES": "1",
+                "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR": temp_dir,
+            },
+            clear=False,
+        ),
+    ):
+        dbg.set_log_level("debug")
+        rejected = red.capture_debug_sample(
+            "blocked-label",
+            {"value": 1},
+            sample_limit=0,
+            sample_group="events",
+            group_limit=1,
+        )
+        accepted = red.capture_debug_sample(
+            "open-label",
+            {"value": 2},
+            sample_limit=1,
+            sample_group="events",
+            group_limit=1,
+        )
+
+        assert rejected is None
+        assert accepted is not None
+
+
+@pytest.mark.parametrize(
+    ("sample_group", "group_limit"),
+    [("events", None), (None, 2)],
+)
+def test_capture_debug_sample_requires_complete_group_limit(
+    sample_group: str | None,
+    group_limit: int | None,
+) -> None:
+    with (
+        tempfile.TemporaryDirectory() as temp_dir,
+        patch.dict(
+            os.environ,
+            {
+                "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES": "1",
+                "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR": temp_dir,
+            },
+            clear=False,
+        ),
+    ):
+        dbg.set_log_level("debug")
+
+        result = red.capture_debug_sample(
+            "invalid-group",
+            {"value": 1},
+            sample_group=sample_group,
+            group_limit=group_limit,
+        )
+
+        assert result is None
+        assert list(Path(temp_dir).iterdir()) == []
+
+
 def test_capture_debug_sample_rejects_negative_limit() -> None:
     with (
         tempfile.TemporaryDirectory() as temp_dir,
@@ -759,6 +872,8 @@ def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
             "write-failure",
             {"value": "sample"},
             sample_limit=1,
+            sample_group="write-failures",
+            group_limit=1,
         )
 
     assert failed_path is None
@@ -768,6 +883,8 @@ def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
         "write-failure",
         {"value": "sample"},
         sample_limit=1,
+        sample_group="write-failures",
+        group_limit=1,
     )
 
     assert retry_path is not None

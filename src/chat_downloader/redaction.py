@@ -412,11 +412,23 @@ def _release_debug_sample(sample_dir: Path, label: str, digest: str) -> None:
             digests.discard(digest)
 
 
+def _validate_debug_sample_group(
+    sample_group: str | None,
+    group_limit: int | None,
+) -> None:
+    """Require aggregate capture bounds to be configured as a pair."""
+    if (sample_group is None) != (group_limit is None):
+        msg = "sample_group and group_limit must be provided together"
+        raise ValueError(msg)
+
+
 def capture_debug_sample(
     label: str,
     payload: Any,
     *,
     sample_limit: int | None = None,
+    sample_group: str | None = None,
+    group_limit: int | None = None,
 ) -> str | None:
     """Write a sanitized debug payload to a deterministic JSON file.
 
@@ -427,14 +439,19 @@ def capture_debug_sample(
 
     When *sample_limit* is provided, at most that many unique payloads are
     captured for the label and output directory during the current process.
+    *sample_group* and *group_limit* can additionally bound unique samples
+    across several labels without making those labels compete for their
+    individual limits.
     """
     if not _debug_sample_capture_enabled():
         return None
 
     logger = _get_logger()
     reserved = False
+    group_reserved = False
     sample_dir: Path | None = None
     try:
+        _validate_debug_sample_group(sample_group, group_limit)
         sanitized = sanitize_for_log(payload)
         serialized = json.dumps(
             sanitized,
@@ -457,6 +474,19 @@ def capture_debug_sample(
         sample_dir = Path(
             os.environ.get(_DEBUG_SAMPLE_DIR_ENV, default_sample_dir),
         )
+        if sample_group is not None and group_limit is not None:
+            group_digest = hashlib.sha1(
+                f"{slugify_debug_label(label)}:{digest}".encode(),
+                usedforsecurity=False,
+            ).hexdigest()[:12]
+            group_allowed, group_reserved = _reserve_debug_sample(
+                sample_dir,
+                sample_group,
+                group_digest,
+                group_limit,
+            )
+            if not group_allowed:
+                return None
         allowed, reserved = _reserve_debug_sample(
             sample_dir,
             label,
@@ -464,6 +494,8 @@ def capture_debug_sample(
             sample_limit,
         )
         if not allowed:
+            if group_reserved and sample_group is not None:
+                _release_debug_sample(sample_dir, sample_group, group_digest)
             return None
         directory_fd = _prepare_sample_directory(sample_dir)
         try:
@@ -484,6 +516,8 @@ def capture_debug_sample(
     except (OSError, TypeError, ValueError) as exc:
         if reserved and sample_dir is not None:
             _release_debug_sample(sample_dir, label, digest)
+        if group_reserved and sample_dir is not None and sample_group is not None:
+            _release_debug_sample(sample_dir, sample_group, group_digest)
         logger.warning("Unable to capture debug sample for %r: %s", label, exc)
         return None
 

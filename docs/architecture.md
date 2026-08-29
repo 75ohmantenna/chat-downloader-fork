@@ -262,6 +262,7 @@ module names.
 | `parsing/subscriptions.py` | Subscription and gifted-subscription event normalization |
 | `parsing/moderation.py` | Ban, unban, message-delete, and chat-clear event normalization |
 | `parsing/pins.py` | Pinned-message created/deleted event normalization |
+| `parsing/polls.py` | Poll-update and poll-deleted state normalization |
 | `parsing/hosts.py` | Stream-host event normalization |
 
 ---

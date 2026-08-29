@@ -70,6 +70,31 @@ def test_kick_moderation_and_unpin_notices_are_not_blank(
 
 
 @pytest.mark.parametrize(
+    ("item", "expected"),
+    [
+        (
+            {"message_type": "poll_update", "message": "Example poll"},
+            "[Poll update] Example poll",
+        ),
+        (
+            {"message_type": "poll_update", "message": ""},
+            "[Poll update]",
+        ),
+        (
+            {"message_type": "poll_deleted", "message": ""},
+            "[Poll deleted]",
+        ),
+    ],
+)
+def test_kick_poll_notices_are_not_blank(
+    formatter: ItemFormatter,
+    item: dict[str, object],
+    expected: str,
+) -> None:
+    assert formatter.format(item, format_name="kick") == expected
+
+
+@pytest.mark.parametrize(
     ("message_type", "label"),
     [
         ("pinned_message", "Pinned message"),

@@ -81,6 +81,9 @@ PUSHER_ERROR = "pusher:error"
 #: Maximum unique diagnostic payloads captured for one Kick anomaly label.
 KICK_DEBUG_SAMPLE_LIMIT = 10
 
+#: Maximum unique payloads captured for one unsupported Kick event name.
+KICK_UNKNOWN_EVENT_SAMPLE_LIMIT = 3
+
 #: Kick chat-message event name carried inside a Pusher frame's ``event`` field.
 CHAT_MESSAGE_EVENT = "App\\Events\\ChatMessageEvent"
 
@@ -111,6 +114,12 @@ STREAM_HOST_EVENT = "App\\Events\\StreamHostEvent"
 #: Pusher event name for a chat clear event.
 CHAT_CLEAR_EVENT = "App\\Events\\ChatClearMessagesEvent"
 
+#: Pusher event name for poll state updates.
+POLL_UPDATE_EVENT = "App\\Events\\PollUpdateEvent"
+
+#: Pusher event name for a poll being removed.
+POLL_DELETE_EVENT = "App\\Events\\PollDeleteEvent"
+
 # ── Event-to-message-type mapping ─────────────────────────────────────────────
 
 #: Maps raw Pusher event names to normalized message types.
@@ -125,6 +134,8 @@ EVENT_NAME_MAP: dict[str, str] = {
     GIFTED_SUBSCRIPTIONS_EVENT: "gifted_subscriptions",
     STREAM_HOST_EVENT: "stream_host",
     CHAT_CLEAR_EVENT: "chat_clear",
+    POLL_UPDATE_EVENT: "poll_update",
+    POLL_DELETE_EVENT: "poll_deleted",
 }
 
 # ── Message types and groups ──────────────────────────────────────────────────
@@ -155,6 +166,7 @@ MESSAGE_GROUPS = {
     "moderation": ["user_banned", "user_unbanned", "message_deleted", "chat_clear"],
     "pins": ["pinned_message", "pinned_message_deleted"],
     "hosts": ["stream_host"],
+    "polls": ["poll_update", "poll_deleted"],
 }
 
 # ── Emotes ────────────────────────────────────────────────────────────────────

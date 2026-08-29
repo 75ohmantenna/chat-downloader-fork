@@ -20,6 +20,7 @@ from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.kick.constants import (
     EVENT_NAME_MAP,
     KICK_DEBUG_SAMPLE_LIMIT,
+    KICK_UNKNOWN_EVENT_SAMPLE_LIMIT,
     MESSAGE_TYPE_REMAPPING,
     PUSHER_CONNECTION_ESTABLISHED,
     PUSHER_ERROR,
@@ -39,6 +40,10 @@ from chat_downloader.sites.kick.parsing.moderation import (
 from chat_downloader.sites.kick.parsing.pins import (
     parse_pinned_message_created_event,
     parse_pinned_message_deleted_event,
+)
+from chat_downloader.sites.kick.parsing.polls import (
+    parse_poll_deleted_event,
+    parse_poll_update_event,
 )
 from chat_downloader.sites.kick.parsing.subscriptions import (
     parse_gifted_subscriptions_event,
@@ -73,6 +78,8 @@ _PARSER_DISPATCH: dict[str, Callable[[object], dict[str, Any] | None]] = {
     "pinned_message_deleted": parse_pinned_message_deleted_event,
     "stream_host": parse_stream_host_event,
     "chat_clear": parse_chat_clear_event,
+    "poll_update": parse_poll_update_event,
+    "poll_deleted": parse_poll_deleted_event,
 }
 
 
@@ -124,6 +131,18 @@ def _normalize_compact_live_payload(
 
     if message_type == "pinned_message_deleted" and payload == []:
         return {"id": f"kick-unpin:{received_timestamp}"}
+
+    if message_type == "poll_deleted":
+        normalized = dict(payload) if isinstance(payload, dict) else {}
+        if normalized.get("id") is None:
+            normalized["id"] = f"kick-poll-deleted:{received_timestamp}"
+        return normalized
+
+    if message_type == "poll_update" and isinstance(payload, dict):
+        normalized = dict(payload)
+        if normalized.get("id") is None:
+            normalized["id"] = f"kick-poll-update:{received_timestamp}"
+        return normalized
 
     if (
         message_type != "subscription"
@@ -208,10 +227,13 @@ def dispatch_event(
     message_type = EVENT_NAME_MAP.get(event_name)
     if message_type is None:
         _record_diagnostic(record_diagnostic, "unsupported_event_count")
+        event_label = "kick-unknown-event-" + event_name.rsplit("\\", 1)[-1]
         capture_debug_sample(
-            "kick-unknown-event",
+            event_label,
             {"raw": frame, "event_name": event_name},
-            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+            sample_limit=KICK_UNKNOWN_EVENT_SAMPLE_LIMIT,
+            sample_group="kick-unknown-event",
+            group_limit=KICK_DEBUG_SAMPLE_LIMIT,
         )
         logger.debug("Skipping unsupported Kick event: %s", event_name)
         return None

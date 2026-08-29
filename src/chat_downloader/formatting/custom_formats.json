@@ -231,6 +231,23 @@
             }
         },
         {
+            "matching": "poll_update",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{message}",
+            "inherit": "default",
+            "keys": {
+                "message_type": "[Poll update]",
+                "message": " {}"
+            }
+        },
+        {
+            "matching": "poll_deleted",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}",
+            "inherit": "default",
+            "keys": {
+                "message_type": "[Poll deleted]"
+            }
+        },
+        {
             "matching": "pinned_message_deleted",
             "template": "{timestamp|received_timestamp|time_text}{metadata.unpinned_message_id|message_type}",
             "inherit": "default",

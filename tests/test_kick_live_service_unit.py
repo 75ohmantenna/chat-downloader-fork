@@ -21,6 +21,8 @@ from chat_downloader.sites.kick.constants import (
     MESSAGE_DELETED_EVENT,
     PINNED_MESSAGE_CREATED_EVENT,
     PINNED_MESSAGE_DELETED_EVENT,
+    POLL_DELETE_EVENT,
+    POLL_UPDATE_EVENT,
     PUSHER_ERROR,
     PUSHER_SUBSCRIPTION_SUCCEEDED,
     SUBSCRIPTION_EVENT,
@@ -1231,6 +1233,92 @@ def test_get_chat_by_channel_emits_compact_live_events() -> None:
     assert formatter.format(messages[1], format_name="kick") == (
         "1970-01-01 00:00:00 [received] | [Pinned message removed]"
     )
+
+
+def test_get_chat_by_channel_emits_poll_state_events() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frames = [
+        pusher_frame(POLL_UPDATE_EVENT, load_fixture("poll_update_event.json")),
+        pusher_frame(POLL_DELETE_EVENT, load_fixture("poll_deleted_event.json")),
+    ]
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(live_service.time, "time_ns", side_effect=[11_000, 12_000]),
+    ):
+        chat = _build_chat(
+            downloader,
+            request_kwargs={"message_groups": ["polls"]},
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([frames]),
+        )
+        messages = list(chat.chat)
+
+    assert [message["message_type"] for message in messages] == [
+        "poll_update",
+        "poll_deleted",
+    ]
+    assert messages[0]["message_id"] == "kick-poll-update:11"
+    assert messages[0]["received_timestamp"] == 11
+    assert messages[0]["metadata"]["options"][1]["label"] == "Option B"
+    assert messages[1] == {
+        "message_id": "kick-poll-deleted:12",
+        "message_type": "poll_deleted",
+        "message": "",
+        "received_timestamp": 12,
+    }
+    formatter = ItemFormatter()
+    assert formatter.format(messages[0], format_name="kick") == (
+        "1970-01-01 00:00:00 [received] | [Poll update] Example poll"
+    )
+    assert formatter.format(messages[1], format_name="kick") == (
+        "1970-01-01 00:00:00 [received] | [Poll deleted]"
+    )
+    assert chat.diagnostics["unsupported_event_count"] == 0
+
+
+def test_get_chat_by_channel_messages_filter_excludes_poll_events() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frames = [
+        pusher_frame(POLL_UPDATE_EVENT, load_fixture("poll_update_event.json")),
+        pusher_frame(
+            CHAT_MESSAGE_EVENT,
+            {"id": "visible", "type": "message", "content": "Visible"},
+        ),
+    ]
+
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(live_service.time, "time_ns", side_effect=[11_000, 12_000]),
+    ):
+        chat = _build_chat(
+            downloader,
+            request_kwargs={"message_groups": ["messages"]},
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([frames]),
+        )
+        messages = list(chat.chat)
+
+    assert [message["message_id"] for message in messages] == ["visible"]
+    assert chat.diagnostics["parsed_event_count"] == 2
     assert chat.diagnostics["parsed_event_count"] == 2
     assert chat.diagnostics["malformed_event_count"] == 0
     assert chat.diagnostics["malformed_event_type_counts"] == {}

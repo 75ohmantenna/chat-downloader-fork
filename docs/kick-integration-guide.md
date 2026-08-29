@@ -174,7 +174,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   frames are omitted from output; unknown events are captured when explicitly
   enabled, debug-logged by name, and skipped; a `pusher:error` frame raises
   `KickError`. Live-only compact subscription and empty-array pin-clear shapes
-  are expanded with namespaced receive-time IDs before normal parsing.
+  plus ID-less poll state events are expanded with namespaced receive-time IDs
+  before normal parsing.
 - `parsing/messages.py`: chat-message normalization for both live
   `ChatMessageEvent` payloads and preloaded history (same shape); badge and
   timestamp handling, including reply context from object- or string-encoded
@@ -193,6 +194,10 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `parsing/moderation.py`: ban, unban, message-delete, and chat-clear
   normalization, including Kick's AI-moderation flag and violated-rule labels.
 - `parsing/pins.py`: pinned-message created/deleted normalization.
+- `parsing/polls.py`: poll update/delete normalization. Updates retain the poll
+  title, countdown, result-display duration, options, vote counts, and optional
+  viewer state. Delete payload contents are intentionally ignored because the
+  provider frontend treats the event itself as the complete state signal.
 - `parsing/hosts.py`: stream-host normalization.
 - `constants.py`: URL patterns, REST endpoints, Pusher/event name constants,
   event-to-message-type and
@@ -383,6 +388,7 @@ message types:
 | `moderation` | `user_banned`, `user_unbanned`, `message_deleted`, `chat_clear` |
 | `pins` | `pinned_message`, `pinned_message_deleted` |
 | `hosts` | `stream_host` |
+| `polls` | `poll_update`, `poll_deleted` |
 
 The default message group surfaces only `messages`. Use `--message_groups all`
 for full-spectrum diagnostics, or pass a comma-separated subset such as
@@ -405,6 +411,12 @@ Preloaded history plus VOD and clip replay do not receive this live-arrival
 field.
 AI-moderated deletion notices append `[AI moderated]` and any violated-rule
 labels, while ordinary deletion notices stay compact.
+Poll events are live-only and opt-in through `polls` or `all`. Kick does not
+supply IDs or provider timestamps for the observed poll frames, so both event
+types receive monotonic, namespaced receive-time IDs and
+`received_timestamp`. Poll updates preserve each changing state rather than
+deduplicating by title; TXT labels the update or deletion while JSONL retains
+the structured option and vote data.
 
 ## Cloudflare Dependency
 
@@ -489,10 +501,12 @@ chat_downloader "https://kick.com/xqc" --logging debug
 ```
 
 Set `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR` to retain samples in a chosen private
-directory. Each anomaly label captures at most ten unique payloads per process
-and directory; successful frame capture attempts at most three payloads per
-normalized event type and retrieval run. Type-specific labels make the sampled
-surface visible without opening every file. The shared sanitizer redacts
+directory. Most anomaly labels capture at most ten unique payloads per process
+and directory. Unsupported event names use isolated three-sample labels plus a
+ten-sample aggregate cap, so a noisy event cannot hide a different event name.
+Successful frame capture attempts at most three payloads per normalized event
+type and retrieval run. Type-specific labels make the sampled surface visible
+without opening every file. The shared sanitizer redacts
 credential-bearing fields and sensitive URL or labeled values before secure
 `0600` files are written. Samples can still contain public chat content, so
 review them before sharing or promoting one into `tests/fixtures/kick/`.

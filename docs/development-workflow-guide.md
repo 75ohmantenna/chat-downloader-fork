@@ -197,6 +197,12 @@ successful-response files in one process and output directory. API-error and
 structurally incomplete response bodies are not classified or captured as
 successful responses.
 
+Callers with several related anomaly labels can also provide `sample_group`
+and `group_limit` to enforce a second aggregate bound. Kick uses this for
+unsupported Pusher event names: each event name can retain up to three unique
+samples while the entire unknown-event group remains capped at ten. A noisy
+event therefore cannot consume another event name's individual quota.
+
 Snapshots default to a temporary directory. Set
 `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR` to choose a stable location. Review captures
 before promoting them into `tests/fixtures/`; captured data is evidence, not an

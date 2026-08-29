@@ -117,6 +117,10 @@ a user sends a Kick subscription-renewal celebration, it remains an ordinary
 `text_message` so message-only captures preserve the chat text. JSONL also
 retains its provider ID, renewal type, total-month count, and normalized event
 time under `metadata.celebration`; TXT keeps the ordinary chat rendering. When
+a Kick live poll is active, the opt-in `polls` message group emits each poll
+state update with its title, countdown, options, and vote counts, followed by a
+`poll_deleted` state event when Kick removes it. TXT labels both event types;
+JSONL is the lossless representation for changing poll state. When
 a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
 display fallback. AI deletion notices retain their AI-moderated marker and

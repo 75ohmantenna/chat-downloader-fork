@@ -315,6 +315,10 @@ is available as `metadata.original_message_created_at`, with
 Kick subscription-renewal celebrations remain `text_message` records and expose
 their provider ID, kind, total-month count, and normalized event timestamp under
 `metadata.celebration`.
+Kick live poll updates and deletions use the `poll_update` and `poll_deleted`
+message types in the opt-in `polls` group. Because the provider omits IDs and
+timestamps, these records receive monotonic namespaced IDs and
+`received_timestamp`; update metadata retains countdown, option, and vote state.
 
 ## Debugging Helpers
 
@@ -327,8 +331,8 @@ their provider ID, kind, total-month count, and normalized event timestamp under
 - `sanitize_for_log(...)` for redacting cookies, proxies, known secret fields,
   custom header names containing auth/token/secret/credential markers, API-key
   headers, and Basic/Bearer/OAuth/SAPISIDHASH values before logging or capture
-- `capture_debug_sample(label, payload, *, sample_limit=None)` for opt-in
-  sanitized sample capture
+- `capture_debug_sample(label, payload, *, sample_limit=None,
+  sample_group=None, group_limit=None)` for opt-in sanitized sample capture
 
 Project log handlers sanitize structured values, exception text, stack
 information, URL credentials, sensitive query parameters, and terminal control
@@ -345,6 +349,8 @@ directory-relative no-follow creation refuse capture rather than use a
 path-based fallback. Set `sample_limit` to bound the number of unique payloads
 written for one label and output directory during the current process;
 duplicate payloads continue to resolve to their deterministic existing path.
+Set `sample_group` and `group_limit` together to apply a second aggregate bound
+across related labels.
 
 Clean-run provider captures require a second explicit opt-in because they
 contain ordinary public chat data. Set
