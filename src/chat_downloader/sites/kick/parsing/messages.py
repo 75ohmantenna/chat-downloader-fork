@@ -24,7 +24,7 @@ from chat_downloader.sites.kick.parsing.common_fields import (
     _parse_timestamp,
 )
 from chat_downloader.sites.kick.parsing.emotes import parse_emotes
-from chat_downloader.utils.json_types import get_dict
+from chat_downloader.utils.json_types import get_dict, get_int, get_str
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -83,6 +83,34 @@ def _parse_reply_context(raw: JSONDict) -> dict[str, object]:
     return reply
 
 
+def _parse_celebration_context(raw: JSONDict) -> dict[str, object]:
+    """Preserve structured metadata for Kick chat celebrations."""
+    if raw.get("type") != "celebration":
+        return {}
+
+    metadata = _decode_metadata(raw.get("metadata"))
+    raw_celebration = get_dict(metadata, "celebration")
+    celebration: dict[str, object] = {}
+
+    celebration_id = get_str(raw_celebration, "id").strip()
+    if celebration_id:
+        celebration["id"] = celebration_id
+
+    celebration_type = get_str(raw_celebration, "type").strip()
+    if celebration_type:
+        celebration["type"] = celebration_type
+
+    total_months = get_int(raw_celebration, "total_months")
+    if total_months > 0:
+        celebration["total_months"] = total_months
+
+    created_at = _parse_timestamp(raw_celebration.get("created_at"))
+    if created_at is not None:
+        celebration["created_at"] = created_at
+
+    return {"celebration": celebration} if celebration else {}
+
+
 def parse_chat_message(raw: object) -> dict[str, Any]:
     """Normalize one Kick chat message object.
 
@@ -139,6 +167,10 @@ def parse_chat_message(raw: object) -> dict[str, Any]:
     in_reply_to = _parse_reply_context(raw)
     if in_reply_to:
         info["in_reply_to"] = in_reply_to
+
+    metadata = _parse_celebration_context(raw)
+    if metadata:
+        info["metadata"] = metadata
 
     return info
 

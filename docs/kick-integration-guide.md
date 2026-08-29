@@ -178,7 +178,9 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `parsing/messages.py`: chat-message normalization for both live
   `ChatMessageEvent` payloads and preloaded history (same shape); badge and
   timestamp handling, including reply context from object- or string-encoded
-  metadata. Entry points `parse_chat_message` /
+  metadata. Subscription-renewal `celebration` payloads remain text messages
+  while retaining their provider ID, kind, total-month count, and normalized
+  event timestamp under `metadata.celebration`. Entry points `parse_chat_message` /
   `parse_preloaded_messages`. Sender badges merge Kick's legacy `badges` and
   image-backed `badges_v2` arrays in stable provider order. Structured output
   retains v2 image URLs, selection state, badge type, provider metadata, and
@@ -386,7 +388,9 @@ The default message group surfaces only `messages`. Use `--message_groups all`
 for full-spectrum diagnostics, or pass a comma-separated subset such as
 `messages,subscriptions,moderation` when only selected non-text events are
 needed. `all` is the shared unfiltered selector rather than an entry in the
-site-specific group map.
+site-specific group map. Kick `celebration` chat payloads remain in `messages`
+because they carry user-authored chat text; their subscription-renewal details
+remain available as structured JSONL metadata.
 
 Kick's default text formatter labels subscription, pin, host, and moderation
 events. Empty-message events such as deletions and chat clears render bracketed

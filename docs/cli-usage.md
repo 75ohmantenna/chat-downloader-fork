@@ -113,6 +113,10 @@ field's complete rendered fragment for false, zero, empty, or null values.
 Kick's default text format labels subscription, pin, host, and moderation
 events. Events without ordinary message text render a bracketed notice instead
 of a blank line; JSONL retains their structured identifiers and metadata. When
+a user sends a Kick subscription-renewal celebration, it remains an ordinary
+`text_message` so message-only captures preserve the chat text. JSONL also
+retains its provider ID, renewal type, total-month count, and normalized event
+time under `metadata.celebration`; TXT keeps the ordinary chat rendering. When
 a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
 display fallback. AI deletion notices retain their AI-moderated marker and

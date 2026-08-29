@@ -1,0 +1,32 @@
+{
+  "chatroom_id": 54321,
+  "content": "Celebrating 20 months!",
+  "created_at": "2026-08-29T01:47:39+00:00",
+  "id": "celebration-live-1",
+  "metadata": {
+    "celebration": {
+      "created_at": "2026-08-28T01:29:58.835777Z",
+      "id": "celebration-renewal-1",
+      "total_months": 20,
+      "type": "subscription_renewed"
+    }
+  },
+  "sender": {
+    "id": 88,
+    "identity": {
+      "badges": [
+        {
+          "count": 20,
+          "sort_order": 2,
+          "text": "Subscriber",
+          "type": "subscriber"
+        }
+      ],
+      "badges_v2": [],
+      "color": "#72ACED"
+    },
+    "slug": "renewal-user",
+    "username": "RenewalUser"
+  },
+  "type": "celebration"
+}

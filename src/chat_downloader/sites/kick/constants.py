@@ -131,6 +131,7 @@ EVENT_NAME_MAP: dict[str, str] = {
 
 #: Maps Kick chat ``type`` values to normalized ``message_type`` values.
 MESSAGE_TYPE_REMAPPING = {
+    "celebration": "text_message",
     "message": "text_message",
     "reply": "text_message",
     "subscription": "subscription",

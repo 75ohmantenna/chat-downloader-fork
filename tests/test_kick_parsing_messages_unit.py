@@ -109,6 +109,69 @@ def test_reply_type_maps_to_text_message() -> None:
     assert msg["message_type"] == "text_message"
 
 
+def test_celebration_preserves_subscription_renewal_metadata() -> None:
+    raw = load_fixture("celebration_message_event_data.json")
+
+    msg = parse_chat_message(raw)
+
+    assert msg["message_type"] == "text_message"
+    assert msg["message"] == "Celebrating 20 months!"
+    assert msg["metadata"] == {
+        "celebration": {
+            "id": "celebration-renewal-1",
+            "type": "subscription_renewed",
+            "total_months": 20,
+            "created_at": 1787880598835777,
+        }
+    }
+
+
+def test_celebration_decodes_string_metadata() -> None:
+    raw = load_fixture("celebration_message_event_data.json")
+    raw["metadata"] = json.dumps(raw["metadata"])
+
+    msg = parse_chat_message(raw)
+
+    assert msg["metadata"]["celebration"]["total_months"] == 20
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [None, [], "{bad json", {"celebration": []}, {"celebration": {}}],
+)
+def test_celebration_ignores_malformed_metadata(metadata: object) -> None:
+    msg = parse_chat_message(
+        {
+            "id": "celebration",
+            "type": "celebration",
+            "content": "Visible message",
+            "metadata": metadata,
+        }
+    )
+
+    assert msg["message_type"] == "text_message"
+    assert "metadata" not in msg
+
+
+def test_celebration_ignores_invalid_optional_fields() -> None:
+    msg = parse_chat_message(
+        {
+            "id": "celebration",
+            "type": "celebration",
+            "metadata": {
+                "celebration": {
+                    "id": " ",
+                    "type": 7,
+                    "total_months": True,
+                    "created_at": "not-a-date",
+                }
+            },
+        }
+    )
+
+    assert "metadata" not in msg
+
+
 def test_reply_preserves_original_message_context() -> None:
     raw = load_fixture("reply_message_event_data.json")
 

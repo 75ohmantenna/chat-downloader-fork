@@ -312,6 +312,9 @@ Kick pin records reserve the top-level `timestamp` for the pin event time.
 Startup pin state has no event time and omits it; the original chat message time
 is available as `metadata.original_message_created_at`, with
 `metadata.pinned_message_created_at` retained as a compatibility alias.
+Kick subscription-renewal celebrations remain `text_message` records and expose
+their provider ID, kind, total-month count, and normalized event timestamp under
+`metadata.celebration`.
 
 ## Debugging Helpers
 

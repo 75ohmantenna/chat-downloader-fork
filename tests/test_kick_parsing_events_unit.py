@@ -67,6 +67,21 @@ def test_reply_context_survives_event_dispatch() -> None:
     assert message["in_reply_to"]["author"]["display_name"] == "OriginalAuthor"
 
 
+def test_celebration_context_survives_event_dispatch() -> None:
+    diagnostics: list[str] = []
+    data = load_fixture("celebration_message_event_data.json")
+
+    message = dispatch_event(
+        pusher_frame(CHAT_MESSAGE_EVENT, data),
+        record_diagnostic=diagnostics.append,
+    )
+
+    assert message is not None
+    assert message["message_type"] == "text_message"
+    assert message["metadata"]["celebration"]["total_months"] == 20
+    assert diagnostics == ["parsed_event_count"]
+
+
 def test_ai_moderation_context_survives_event_dispatch() -> None:
     data = load_fixture("message_deleted_event_ai.json")
 

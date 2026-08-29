@@ -674,6 +674,54 @@ def test_get_chat_by_channel_emits_preloaded_then_live() -> None:
         assert ids == ["preloaded-1", "preloaded-2", "live-1"]
 
 
+def test_get_chat_by_channel_preserves_live_celebration() -> None:
+    downloader = FakeDownloader()
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    celebration = load_fixture("celebration_message_event_data.json")
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            downloader,
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [[pusher_frame(CHAT_MESSAGE_EVENT, celebration)]]
+            ),
+        )
+        messages = list(chat.chat)
+
+    assert messages == [
+        {
+            "message_id": "celebration-live-1",
+            "message_type": "text_message",
+            "message": "Celebrating 20 months!",
+            "timestamp": 1787968059000000,
+            "author": {
+                "id": "88",
+                "display_name": "RenewalUser",
+                "name": "renewal-user",
+                "colour": "#72ACED",
+                "badges": [{"name": "subscriber", "title": "Subscriber", "count": 20}],
+            },
+            "metadata": {
+                "celebration": {
+                    "id": "celebration-renewal-1",
+                    "type": "subscription_renewed",
+                    "total_months": 20,
+                    "created_at": 1787880598835777,
+                }
+            },
+        }
+    ]
+    assert chat.diagnostics["unknown_message_type_count"] == 0
+
+
 def test_get_chat_by_channel_default_transport_binds_diagnostics() -> None:
     session = FakeKickSession(
         [
