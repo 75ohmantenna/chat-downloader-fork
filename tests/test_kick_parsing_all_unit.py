@@ -193,6 +193,20 @@ def test_parse_user_banned_event() -> None:
     assert "expires_at" not in msg["metadata"]
 
 
+def test_parse_current_temporary_user_ban_metadata() -> None:
+    raw = load_fixture("user_banned_event_temporary.json")
+
+    msg = parse_user_banned_event(raw)
+
+    assert msg["metadata"] == {
+        "user": {"id": "2002", "username": "ExampleUser"},
+        "banned_by": {"id": "1001", "username": "ExampleModerator"},
+        "expires_at": 1788131797000000,
+        "duration": 5,
+        "permanent": False,
+    }
+
+
 def test_user_banned_none_raises() -> None:
     with pytest.raises(ParsingError):
         parse_user_banned_event(None)
@@ -493,6 +507,19 @@ def test_user_banned_omits_invalid_string_expiry() -> None:
 def test_user_banned_preserves_empty_string_expiry() -> None:
     msg = parse_user_banned_event({"id": "x", "expires_at": ""})
     assert msg["metadata"]["expires_at"] == ""
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("duration", True), ("duration", -1), ("permanent", 1)],
+)
+def test_user_banned_omits_invalid_timeout_metadata(
+    field: str,
+    value: object,
+) -> None:
+    msg = parse_user_banned_event({"id": "x", field: value})
+
+    assert "metadata" not in msg
 
 
 def test_pinned_message_omits_invalid_nested_timestamp() -> None:

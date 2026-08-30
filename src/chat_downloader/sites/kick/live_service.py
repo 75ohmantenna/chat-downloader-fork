@@ -93,6 +93,9 @@ class _KickLiveDiagnostics:
             "websocket_reconnect_count": 0,
             "pusher_error_count": 0,
             "pusher_key_recovery_count": 0,
+            "preloaded_emitted_count": 0,
+            "live_emitted_count": 0,
+            "reconnect_backfill_emitted_count": 0,
             "last_websocket_frame_timestamp": None,
         }
 
@@ -410,6 +413,8 @@ def _iter_preloaded_chat(
     channel_id: str,
     username: str,
     emit: Callable[[JSONDict], bool],
+    *,
+    record_diagnostic: Callable[[str], None] | None = None,
 ) -> Generator[JSONDict, None, None]:
     """Yield recent HTTP history and current pin state without duplicates."""
     preloaded = _fetch_preloaded_state(downloader, channel_id, username)
@@ -417,9 +422,13 @@ def _iter_preloaded_chat(
         return
     for message in reversed(parse_preloaded_messages(preloaded.messages)):
         if emit(message):
+            if record_diagnostic is not None:
+                record_diagnostic("preloaded_emitted_count")
             yield message
     pinned_message = _parse_current_pin(preloaded.pinned_message)
     if pinned_message is not None and emit(pinned_message):
+        if record_diagnostic is not None:
+            record_diagnostic("preloaded_emitted_count")
         yield pinned_message
 
 
@@ -600,6 +609,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         channel_id,
         username,
         emit,
+        record_diagnostic=diagnostics.increment,
     )
 
     # 2. Live WebSocket feed with reconnect.
@@ -693,6 +703,9 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                                 backfilled_message,
                             )
                             if emit(backfilled_message):
+                                diagnostics.increment(
+                                    "reconnect_backfill_emitted_count"
+                                )
                                 yield backfilled_message
                     if live_message is not None:
                         last_provider_timestamp = _newest_provider_timestamp(
@@ -727,6 +740,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                             )
                         pusher_error_recoveries = 0
                         if emit(live_message):
+                            diagnostics.increment("live_emitted_count")
                             yield live_message
             except ConnectionError as error:
                 logger.debug("Kick WebSocket disconnected; reconnecting: %s", error)

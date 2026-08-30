@@ -1,0 +1,16 @@
+{
+  "banned_by": {
+    "id": 1001,
+    "slug": "example-moderator",
+    "username": "ExampleModerator"
+  },
+  "duration": 5,
+  "expires_at": "2026-08-30T23:16:37+00:00",
+  "id": "temporary-ban-event",
+  "permanent": false,
+  "user": {
+    "id": 2002,
+    "slug": "example-user",
+    "username": "ExampleUser"
+  }
+}

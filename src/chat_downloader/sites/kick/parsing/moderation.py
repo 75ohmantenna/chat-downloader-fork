@@ -9,14 +9,17 @@ Handles ``App\Events\UserBannedEvent``, ``App\Events\UserUnbannedEvent``,
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import ParsingError
 from chat_downloader.sites.kick.parsing.common_fields import (
     _opt_str,
     _parse_timestamp,
 )
-from chat_downloader.utils.json_types import get_list
+from chat_downloader.utils.json_types import get_bool, get_int, get_list
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 def _parse_moderator(raw_mod: object) -> dict[str, Any]:
@@ -41,6 +44,27 @@ def _parse_moderator(raw_mod: object) -> dict[str, Any]:
         result["username"] = username
 
     return result
+
+
+def _parse_ban_timing(raw: Mapping[str, object]) -> dict[str, object]:
+    """Normalize optional temporary/permanent ban timing metadata."""
+    metadata: dict[str, object] = {}
+    expires_at = raw.get("expires_at")
+    if expires_at is not None:
+        if isinstance(expires_at, str) and expires_at:
+            parsed_expires_at = _parse_timestamp(expires_at)
+            if parsed_expires_at is not None:
+                metadata["expires_at"] = parsed_expires_at
+        else:
+            metadata["expires_at"] = expires_at
+
+    duration = get_int(raw, "duration", -1)
+    if duration >= 0:
+        metadata["duration"] = duration
+
+    if isinstance(raw.get("permanent"), bool):
+        metadata["permanent"] = get_bool(raw, "permanent")
+    return metadata
 
 
 def parse_user_banned_event(raw: object) -> dict[str, Any]:
@@ -85,14 +109,7 @@ def parse_user_banned_event(raw: object) -> dict[str, Any]:
     if banned_by:
         metadata["banned_by"] = banned_by
 
-    expires_at = raw.get("expires_at")
-    if expires_at is not None:
-        if isinstance(expires_at, str) and expires_at:
-            parsed_expires_at = _parse_timestamp(expires_at)
-            if parsed_expires_at is not None:
-                metadata["expires_at"] = parsed_expires_at
-        else:
-            metadata["expires_at"] = expires_at
+    metadata.update(_parse_ban_timing(raw))
 
     if metadata:
         info["metadata"] = metadata

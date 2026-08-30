@@ -192,7 +192,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `parsing/subscriptions.py`: `SubscriptionEvent` and
   `GiftedSubscriptionsEvent` normalization.
 - `parsing/moderation.py`: ban, unban, message-delete, and chat-clear
-  normalization, including Kick's AI-moderation flag and violated-rule labels.
+  normalization, including temporary-ban duration/permanence, Kick's
+  AI-moderation flag, and violated-rule labels.
 - `parsing/pins.py`: pinned-message created/deleted normalization.
 - `parsing/polls.py`: poll update/delete normalization. Updates retain the poll
   title, countdown, result-display duration, options, vote counts, and optional
@@ -296,7 +297,9 @@ Successful debug runs include live-connection diagnostics in the final run
 summary: decoded, control, parsed, unsupported, unknown-message-type,
 malformed, malformed-event counts grouped by normalized type, and invalid-frame
 counts; successful reconnect and Pusher-key recovery counts; and the last
-decoded-frame timestamp in UTC microseconds.
+decoded-frame timestamp in UTC microseconds. Emitted-source counts distinguish
+initial preloaded history/current-pin records, live WebSocket records, and
+records recovered through reconnect backfill.
 Per-type output counts remain separate because filtering and preloaded history
 can make them differ from raw Pusher counts.
 

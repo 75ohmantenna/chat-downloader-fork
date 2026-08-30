@@ -30,6 +30,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Preserve Kick subscription-renewal celebration metadata and expose live poll
   updates and deletions through an opt-in `polls` message group, with bounded
   receive-time identifiers for provider events that omit IDs.
+- Preserve Kick temporary-ban duration and permanence metadata, and distinguish
+  preloaded, live-socket, and reconnect-backfill records in live diagnostics.
 
 ### Fixes
 

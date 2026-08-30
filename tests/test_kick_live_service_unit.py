@@ -674,6 +674,9 @@ def test_get_chat_by_channel_emits_preloaded_then_live() -> None:
         messages = list(chat.chat)
         ids = [m["message_id"] for m in messages]
         assert ids == ["preloaded-1", "preloaded-2", "live-1"]
+        assert chat.diagnostics["preloaded_emitted_count"] == 2
+        assert chat.diagnostics["live_emitted_count"] == 1
+        assert chat.diagnostics["reconnect_backfill_emitted_count"] == 0
 
 
 def test_get_chat_by_channel_preserves_live_celebration() -> None:
@@ -976,6 +979,8 @@ def test_get_chat_by_channel_emits_current_pin_after_preloaded_history() -> None
         "text_message",
         "pinned_message",
     ]
+    assert chat.diagnostics["preloaded_emitted_count"] == 2
+    assert chat.diagnostics["live_emitted_count"] == 0
     assert messages[1]["message_id"] == "kick-pin:startup-pinned-message"
     assert messages[1]["metadata"]["pinned_by"]["display_name"] == ("StartupModerator")
     assert isinstance(
@@ -1052,6 +1057,8 @@ def test_get_chat_by_channel_dedups_live_against_preloaded() -> None:
         )
         ids = [m["message_id"] for m in chat.chat]
         assert ids == ["preloaded-1", "preloaded-2", "fresh"]
+        assert chat.diagnostics["preloaded_emitted_count"] == 2
+        assert chat.diagnostics["live_emitted_count"] == 1
 
 
 def test_get_chat_by_channel_filters_by_message_type() -> None:
@@ -1077,6 +1084,8 @@ def test_get_chat_by_channel_filters_by_message_type() -> None:
         )
         # text_message is filtered out; nothing should be emitted.
         assert list(chat.chat) == []
+        assert chat.diagnostics["preloaded_emitted_count"] == 0
+        assert chat.diagnostics["live_emitted_count"] == 0
 
 
 def test_get_chat_by_channel_reconnects_on_disconnect() -> None:
@@ -1170,6 +1179,9 @@ def test_get_chat_by_channel_reports_live_diagnostics() -> None:
         "websocket_reconnect_count": 1,
         "pusher_error_count": 0,
         "pusher_key_recovery_count": 0,
+        "preloaded_emitted_count": 0,
+        "live_emitted_count": 2,
+        "reconnect_backfill_emitted_count": 0,
         "last_websocket_frame_timestamp": None,
     }
 
@@ -1574,6 +1586,12 @@ def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> Non
                     "created_at": "2026-01-01T00:00:08Z",
                     "type": "message",
                 },
+                {
+                    "id": "b",
+                    "content": "also received live",
+                    "created_at": "2026-01-01T00:00:13Z",
+                    "type": "message",
+                },
             ],
             "cursor": None,
         }
@@ -1632,14 +1650,17 @@ def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> Non
         assert [message["message_id"] for message in chat.chat] == [
             "a",
             "missed",
-            "kick-pin:startup-pinned-message",
             "b",
+            "kick-pin:startup-pinned-message",
         ]
 
     assert session.calls[2][1]["params"] == {
         "start_time": "2026-01-01T00:00:05.000000Z"
     }
     assert session.calls[3][1]["params"] is None
+    assert chat.diagnostics["preloaded_emitted_count"] == 0
+    assert chat.diagnostics["live_emitted_count"] == 1
+    assert chat.diagnostics["reconnect_backfill_emitted_count"] == 3
 
 
 def test_get_chat_by_channel_aligns_bounded_backfill_to_modest_provider_skew() -> None:
