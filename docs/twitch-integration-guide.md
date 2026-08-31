@@ -145,6 +145,7 @@ successful debug run summary.
 
 | Field | Meaning |
 | --- | --- |
+| `optional_metadata_degradation_count` | Non-fatal result items with a recognized optional metadata service error |
 | `connection_attempt_count` | IRC setup attempts |
 | `connection_success_count` | Completed socket, timeout, and channel-join setup |
 | `connection_setup_failure_count` | Setup attempts that failed before use |
@@ -166,6 +167,16 @@ successful debug run summary.
 The mapping contains only counters: it does not retain the channel, endpoint,
 raw IRC frames, or chat content. Its keys are fixed so unexpected counter names
 cannot grow retained state during a long capture.
+
+The metadata-degradation counter increments once per GraphQL result item that
+contains one or more explicitly recognized optional service errors, but only
+after every item in that response has completed error handling without a fatal,
+authentication, or persisted-hash failure. Repeated errors for the same optional
+field in one result item count once. Separate non-fatal response items across
+metadata retries count separately, including an item whose usable-data shape
+later causes the caller to retry. A rejected persisted-query response contributes
+nothing; an accepted degraded fallback response contributes normally. The
+callback carries no path, message, channel, or response content.
 
 ### Filtering and deduplication
 
@@ -256,9 +267,11 @@ downloader exceptions such as:
 - `ParsingError`
 
 A Twitch `service error` for the optional `user.primaryTeam` field retains the
-usable response data and logs at debug level. The same error on an unfamiliar
-GraphQL path remains a warning so new partial-response failures stay visible,
-including when Twitch returns multiple errors together.
+usable response data, logs at debug level, and contributes to the content-free
+live metadata-degradation counter. The same error on an unfamiliar GraphQL path
+remains a warning and does not increment the counter, so new partial-response
+failures stay visible without being misclassified, including when Twitch returns
+multiple errors together.
 
 The default public Client-ID is defined in `constants.py`; callers can override
 it with `DownloaderConfig(twitch_client_id=...)` or `--twitch_client_id`.

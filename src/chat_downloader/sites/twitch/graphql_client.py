@@ -27,6 +27,8 @@ from .constants import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from chat_downloader.utils.json_types import JSONAny, JSONDict, JSONList
 
     from ._protocols import _SessionPost
@@ -127,12 +129,13 @@ def _describe_operation_names(operation_names: list[str] | None) -> str:
 def _handle_gql_errors(
     errors: JSONList,
     operation_names: list[str] | None = None,
-) -> None:
+) -> bool:
     """Handle GraphQL errors by mapping them to downloader exceptions."""
     if not errors:
-        return
+        return False
 
     operation_text = _describe_operation_names(operation_names)
+    optional_degradation_found = False
     for error in errors:
         if not isinstance(error, dict):
             continue
@@ -165,23 +168,29 @@ def _handle_gql_errors(
         if "unavailable" in message_lower or "deleted" in message_lower:
             raise VideoUnavailable(error_message)
         if "service error" in message_lower:
-            _log_service_error(error_message, error_path)
+            optional_degradation_found |= _log_service_error(
+                error_message,
+                error_path,
+            )
             continue
         path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
         msg = f"GraphQL error at {path_str} during {operation_text}: {error_message}"
         raise ParsingError(
             msg,
         )
+    return optional_degradation_found
 
 
-def _log_service_error(error_message: str, error_path: JSONList) -> None:
-    """Log one non-fatal GraphQL service error at its path-aware severity."""
+def _log_service_error(error_message: str, error_path: JSONList) -> bool:
+    """Log one service error and return whether its path is optional."""
     path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
-    level = "debug" if tuple(error_path) in _OPTIONAL_SERVICE_ERROR_PATHS else "warning"
+    is_optional = tuple(error_path) in _OPTIONAL_SERVICE_ERROR_PATHS
+    level = "debug" if is_optional else "warning"
     log(
         level,
         f"Transient GraphQL field error at {path_str}: {error_message} (skipping)",
     )
+    return is_optional
 
 
 def _download_gql(
@@ -189,6 +198,8 @@ def _download_gql(
     ops: JSONList,
     auth_token: str | None = None,
     client_id: str | None = None,
+    *,
+    record_optional_degradation: Callable[[], None] | None = None,
 ) -> JSONList:
     """Download GraphQL data using persisted query hashes."""
     operation_names = [
@@ -237,7 +248,11 @@ def _download_gql(
     )
 
     try:
-        _handle_result_errors(result, operation_names)
+        _handle_result_errors(
+            result,
+            operation_names,
+            record_optional_degradation=record_optional_degradation,
+        )
     except _PersistedQueryUnavailable:
         fallback_ops = _build_full_query_ops(ops)
         if fallback_ops is None:
@@ -248,7 +263,11 @@ def _download_gql(
             auth_token,
             client_id,
         )
-        _handle_result_errors(result, operation_names)
+        _handle_result_errors(
+            result,
+            operation_names,
+            record_optional_degradation=record_optional_degradation,
+        )
 
     return cast("JSONList", result)
 
@@ -256,14 +275,26 @@ def _download_gql(
 def _handle_result_errors(
     result: JSONAny,
     operation_names: list[str],
+    *,
+    record_optional_degradation: Callable[[], None] | None = None,
 ) -> None:
     """Raise mapped errors found in a GraphQL response."""
+    optional_degradation_count = 0
     if isinstance(result, list):
         for item in result:
             if isinstance(item, dict) and "errors" in item:
-                _handle_gql_errors(cast("JSONList", item["errors"]), operation_names)
+                optional_degradation_count += _handle_gql_errors(
+                    cast("JSONList", item["errors"]),
+                    operation_names,
+                )
     elif isinstance(result, dict) and "errors" in result:
-        _handle_gql_errors(cast("JSONList", result["errors"]), operation_names)
+        optional_degradation_count += _handle_gql_errors(
+            cast("JSONList", result["errors"]),
+            operation_names,
+        )
+    if record_optional_degradation is not None:
+        for _ in range(optional_degradation_count):
+            record_optional_degradation()
 
 
 def _build_full_query_ops(ops: JSONList) -> JSONList | None:

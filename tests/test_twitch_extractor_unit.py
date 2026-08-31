@@ -364,6 +364,51 @@ def test_twitch_extractor_wrappers_pass_configured_client_id(
     )
 
 
+def test_twitch_gql_wrapper_passes_live_callback_and_client_id_by_keyword(
+    monkeypatch,
+) -> None:
+    downloader = TwitchChatDownloader(twitch_client_id="client-123")
+    downloader._session_post = object()
+    callback = Mock()
+    captured = {}
+
+    def fake_download_gql(
+        session_post,
+        ops,
+        auth_token,
+        *,
+        client_id,
+        record_optional_degradation,
+    ):
+        captured.update(
+            session_post=session_post,
+            ops=ops,
+            auth_token=auth_token,
+            client_id=client_id,
+            record_optional_degradation=record_optional_degradation,
+        )
+        return [{"data": {}}]
+
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.extractor._download_gql",
+        fake_download_gql,
+    )
+
+    result = downloader._download_gql(
+        [{"op": 2}],
+        record_optional_degradation=callback,
+    )
+
+    assert result == [{"data": {}}]
+    assert captured == {
+        "session_post": downloader._session_post,
+        "ops": [{"op": 2}],
+        "auth_token": None,
+        "client_id": "client-123",
+        "record_optional_degradation": callback,
+    }
+
+
 def test_twitch_update_badge_info_passes_configured_client_id(
     monkeypatch,
 ) -> None:

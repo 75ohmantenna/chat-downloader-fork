@@ -238,7 +238,7 @@ module names.
 | `extractor.py` | Twitch site extractor class |
 | `graphql_client.py` | Persisted-query GraphQL client and error handling |
 | `badge_client.py` | Badge retrieval, operation fallback, and normalization |
-| `irc_diagnostics.py` | Fixed-schema live IRC counters, control-traffic classification, and bounded clean-run capture |
+| `irc_diagnostics.py` | Fixed-schema startup GraphQL optional-metadata-degradation and live IRC counters, control-traffic classification, and bounded clean-run capture |
 | `irc_transport.py` | Low-level IRC socket connection and message stream |
 | `live_service.py` | Live IRC chat orchestration |
 | `parsing/` | IRC message, tag, badge, and emote parsing |

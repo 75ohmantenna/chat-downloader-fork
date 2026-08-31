@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Twitch IRC traffic classification and clean-run sample capture."""
+"""Twitch live startup/IRC diagnostics and clean-run sample capture."""
 
 from __future__ import annotations
 
@@ -54,6 +54,7 @@ class _TwitchLiveDiagnostics:
 
     def __init__(self) -> None:
         self.summary: dict[str, object] = {
+            "optional_metadata_degradation_count": 0,
             "connection_attempt_count": 0,
             "connection_success_count": 0,
             "connection_setup_failure_count": 0,
@@ -84,6 +85,10 @@ class _TwitchLiveDiagnostics:
         value = self.summary.get(name)
         if isinstance(value, int):
             self.summary[name] = value + 1
+
+    def record_optional_metadata_degradation(self) -> None:
+        """Record one content-free recognized metadata degradation."""
+        self.increment("optional_metadata_degradation_count")
 
     def record_received_data(self, data: str) -> int:
         """Count frames and return newly completed server PING commands."""

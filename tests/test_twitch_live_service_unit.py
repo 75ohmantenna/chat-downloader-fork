@@ -13,6 +13,7 @@ from requests.exceptions import RequestException
 from chat_downloader.errors import RetriesExceeded
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch import live_service
+from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 
 
 def _privmsg(message_id: str, text: str) -> str:
@@ -31,6 +32,36 @@ def _usernotice(message_id: str, message_type: str, text: str) -> str:
         "system-msg=Event;tmi-sent-ts=1;turbo=0;user-id=1;user-type= "
         f":tmi.twitch.tv USERNOTICE #example :{text}"
     )
+
+
+class _GraphQLResponse:
+    def __init__(self, payload: object) -> None:
+        self._payload = payload
+
+    def json(self) -> object:
+        return self._payload
+
+
+def _stream_metadata_payload(
+    *,
+    errors: list[dict[str, object]] | None = None,
+) -> list[dict[str, object]]:
+    result: dict[str, object] = {
+        "data": {
+            "user": {
+                "id": "channel-123",
+                "stream": {"type": "live"},
+                "lastBroadcast": {"title": "Live Title"},
+            }
+        }
+    }
+    if errors is not None:
+        result["errors"] = errors
+    return [result]
+
+
+def _optional_metadata_error() -> dict[str, object]:
+    return {"message": "service error", "path": ["user", "primaryTeam"]}
 
 
 def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (
@@ -582,6 +613,83 @@ def test_live_service_iter_stream_chat_messages_rejects_zero_attempts() -> None:
             max_attempts=0,
             message_groups=["messages"],
         )
+
+
+def test_real_live_get_chat_reports_clean_metadata_diagnostics() -> None:
+    downloader = TwitchChatDownloader()
+    downloader._session_post = lambda *_args, **_kwargs: _GraphQLResponse(
+        _stream_metadata_payload()
+    )
+    downloader._update_badge_info = Mock()
+
+    chat = downloader.get_chat_by_stream_id(
+        "northernlion",
+        ChatRequest(url="https://www.twitch.tv/northernlion", max_attempts=1),
+    )
+
+    assert chat.diagnostics["optional_metadata_degradation_count"] == 0
+    chat.close()
+    downloader.close()
+
+
+def test_real_live_get_chat_reports_content_free_metadata_degradation() -> None:
+    downloader = TwitchChatDownloader()
+    downloader._session_post = lambda *_args, **_kwargs: _GraphQLResponse(
+        _stream_metadata_payload(errors=[_optional_metadata_error()])
+    )
+    downloader._update_badge_info = Mock()
+
+    chat = downloader.get_chat_by_stream_id(
+        "northernlion",
+        ChatRequest(url="https://www.twitch.tv/northernlion", max_attempts=1),
+    )
+
+    assert chat.diagnostics["optional_metadata_degradation_count"] == 1
+    assert all(isinstance(value, int) for value in chat.diagnostics.values())
+    rendered_diagnostics = repr(chat.diagnostics).casefold()
+    assert "primaryteam" not in rendered_diagnostics
+    assert "service error" not in rendered_diagnostics
+    assert "northernlion" not in rendered_diagnostics
+    chat.close()
+    downloader.close()
+
+
+def test_real_live_get_chat_counts_degraded_metadata_retry_responses() -> None:
+    first_result = {
+        "data": {},
+        "errors": [_optional_metadata_error()],
+    }
+    payloads = iter(
+        [
+            [first_result],
+            _stream_metadata_payload(errors=[_optional_metadata_error()]),
+        ]
+    )
+    request_count = 0
+
+    def session_post(*_args: object, **_kwargs: object) -> _GraphQLResponse:
+        nonlocal request_count
+        request_count += 1
+        return _GraphQLResponse(next(payloads))
+
+    downloader = TwitchChatDownloader()
+    downloader._session_post = session_post
+    downloader._update_badge_info = Mock()
+
+    chat = downloader.get_chat_by_stream_id(
+        "northernlion",
+        ChatRequest(
+            url="https://www.twitch.tv/northernlion",
+            max_attempts=2,
+            retry_timeout=0,
+            interruptible_retry=False,
+        ),
+    )
+
+    assert request_count == 2
+    assert chat.diagnostics["optional_metadata_degradation_count"] == 2
+    chat.close()
+    downloader.close()
 
 
 def test_live_service_get_chat_by_stream_id_handles_rerun_and_updates_badges(

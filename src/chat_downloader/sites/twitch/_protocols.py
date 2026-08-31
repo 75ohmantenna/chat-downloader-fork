@@ -59,3 +59,15 @@ class _DownloadGQL(Protocol):
         auth_token: str | None = None,
         client_id: str | None = None,
     ) -> JSONList: ...
+
+
+if TYPE_CHECKING:
+
+    def _legacy_download_gql_shape(
+        session_post: _SessionPost,
+        ops: JSONList,
+        auth_token: str | None = None,
+        client_id: str | None = None,
+    ) -> JSONList: ...
+
+    _legacy_download_gql_contract: _DownloadGQL = _legacy_download_gql_shape

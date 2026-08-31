@@ -13,6 +13,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Report fixed-schema Twitch live IRC connection, reconnect, frame, keepalive,
   timeout, deduplication, filtering, and emission diagnostics in run summaries
   without retaining endpoints or chat content.
+- Report recognized optional Twitch live metadata degradations through a
+  fixed-schema counter without retaining GraphQL paths, messages, channel data,
+  or response content.
 - Add explicitly opted-in, bounded Twitch IRC raw-frame capture across known
   normalized event types, with reconnect-stable quotas, sanitized payloads, and
   opaque identities for unknown provider actions.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 from typing import NoReturn
+from unittest.mock import Mock
 
 import pytest
 from requests.exceptions import RequestException
@@ -20,6 +21,7 @@ from chat_downloader.sites.twitch.discovery import get_user_videos
 from chat_downloader.sites.twitch.graphql_client import (
     _FULL_QUERY_DOCUMENTS,
     _download_gql,
+    _handle_result_errors,
 )
 from chat_downloader.sites.twitch.irc_transport import (
     _is_benign_unmatched_irc_buffer,
@@ -35,6 +37,118 @@ class _Resp:
 
     def json(self):
         return self._payload
+
+
+def _optional_metadata_error() -> dict[str, object]:
+    return {"message": "service error", "path": ["user", "primaryTeam"]}
+
+
+def test_handle_result_errors_clean_response_does_not_record_degradation() -> None:
+    record_degradation = Mock()
+
+    _handle_result_errors(
+        [{"data": {"user": {}}}],
+        ["StreamMetadata"],
+        record_optional_degradation=record_degradation,
+    )
+
+    record_degradation.assert_not_called()
+
+
+def test_handle_result_errors_counts_once_per_degraded_result_item() -> None:
+    record_degradation = Mock()
+
+    _handle_result_errors(
+        [
+            {
+                "errors": [
+                    _optional_metadata_error(),
+                    _optional_metadata_error(),
+                    {"message": "service error", "path": ["video", "comments"]},
+                ]
+            },
+            {"errors": [_optional_metadata_error()]},
+        ],
+        ["StreamMetadata"],
+        record_optional_degradation=record_degradation,
+    )
+
+    assert record_degradation.call_count == 2
+    assert all(
+        call.args == () and call.kwargs == {} for call in record_degradation.mock_calls
+    )
+
+
+def test_handle_result_errors_does_not_count_warning_service_error() -> None:
+    record_degradation = Mock()
+
+    _handle_result_errors(
+        [{"errors": [{"message": "service error", "path": ["video", "comments"]}]}],
+        ["StreamMetadata"],
+        record_optional_degradation=record_degradation,
+    )
+
+    record_degradation.assert_not_called()
+
+
+def test_handle_result_errors_ignores_malformed_errors_dict_without_counting() -> None:
+    record_degradation = Mock()
+
+    _handle_result_errors(
+        [
+            {
+                "errors": {
+                    "message": "service error",
+                    "path": ["user", "primaryTeam"],
+                }
+            }
+        ],
+        ["StreamMetadata"],
+        record_optional_degradation=record_degradation,
+    )
+
+    record_degradation.assert_not_called()
+
+
+@pytest.mark.parametrize("fatal_message", ["Unauthorized", "PersistedQueryNotFound"])
+def test_handle_result_errors_does_not_count_before_later_fatal_item(
+    fatal_message: str,
+) -> None:
+    record_degradation = Mock()
+
+    with pytest.raises((LoginRequired, ParsingError)):
+        _handle_result_errors(
+            [
+                {"errors": [_optional_metadata_error()]},
+                {"errors": [{"message": fatal_message}]},
+            ],
+            ["StreamMetadata"],
+            record_optional_degradation=record_degradation,
+        )
+
+    record_degradation.assert_not_called()
+
+
+def test_download_gql_does_not_count_degradation_from_rejected_hash_response() -> None:
+    payloads = iter(
+        [
+            [
+                {"errors": [_optional_metadata_error()]},
+                {"errors": [{"message": "PersistedQueryNotFound"}]},
+            ],
+            [{"data": {"user": {}}}],
+        ]
+    )
+    record_degradation = Mock()
+
+    result = _download_gql(
+        lambda *_args, **_kwargs: _Resp(next(payloads)),
+        [{"operationName": "StreamMetadata", "variables": {}}],
+        record_optional_degradation=record_degradation,
+    )
+
+    assert result == [{"data": {"user": {}}}]
+    record_degradation.assert_not_called()
 
 
 def test_download_gql_adds_persisted_query_hash_and_calls_base(

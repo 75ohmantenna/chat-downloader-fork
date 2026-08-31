@@ -29,7 +29,7 @@ from .url_generation import generate_urls as generate_twitch_urls
 
 if TYPE_CHECKING:
     import re
-    from collections.abc import Generator, Iterable
+    from collections.abc import Callable, Generator, Iterable
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
@@ -114,18 +114,49 @@ class TwitchChatDownloader(BaseChatDownloader):
             self._session_post, ops, auth_token, **self._client_id_kwargs()
         )
 
-    def _download_gql(self, ops: Any) -> Any:
+    def _download_gql(
+        self,
+        ops: Any,
+        *,
+        record_optional_degradation: Callable[[], None] | None = None,
+    ) -> Any:
         """Download GraphQL data using persisted query hashes.
 
         Args:
             ops: List of GraphQL operations to execute
+            record_optional_degradation: Content-free live diagnostic callback.
 
         Returns:
             JSON response from GraphQL API
         """
         auth_token: str | None = self.get_cookie_value(GQL_AUTH_COOKIE_NAME)
+        client_id: str | None = getattr(self, "_twitch_client_id", None)
+        if record_optional_degradation is None:
+            if client_id is None:
+                return _download_gql(
+                    self._session_post,
+                    ops,
+                    auth_token,
+                )
+            return _download_gql(
+                self._session_post,
+                ops,
+                auth_token,
+                client_id=client_id,
+            )
+        if client_id is None:
+            return _download_gql(
+                self._session_post,
+                ops,
+                auth_token,
+                record_optional_degradation=record_optional_degradation,
+            )
         return _download_gql(
-            self._session_post, ops, auth_token, **self._client_id_kwargs()
+            self._session_post,
+            ops,
+            auth_token,
+            client_id=client_id,
+            record_optional_degradation=record_optional_degradation,
         )
 
     def generate_urls(  # type: ignore[override]  # test helper: signature intentionally diverges from base

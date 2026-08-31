@@ -229,6 +229,7 @@ def get_chat_by_stream_id(
     request: ChatRequest,
 ) -> Chat:
     """Build a live chat object for a stream."""
+    diagnostics = _TwitchLiveDiagnostics()
     query = [
         {
             "operationName": "StreamMetadata",
@@ -242,7 +243,12 @@ def get_chat_by_stream_id(
     stream_info: JSONDict | None = None
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            stream_info = downloader._download_gql(query)[0]["data"]["user"]
+            stream_info = downloader._download_gql(
+                query,
+                record_optional_degradation=(
+                    diagnostics.record_optional_metadata_degradation
+                ),
+            )[0]["data"]["user"]
             break
         except (
             JSONDecodeError,
@@ -279,7 +285,6 @@ def get_chat_by_stream_id(
     else:
         downloader._update_badge_info(stream_id)
 
-    diagnostics = _TwitchLiveDiagnostics()
     return Chat(
         downloader._get_chat_messages_by_stream_id(
             stream_id,

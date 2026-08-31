@@ -250,11 +250,12 @@ Debug and automation:
   live diagnostics include
   decoded, control, parsed, unsupported, unknown-message-type, malformed, and
   invalid-frame counts; reconnect and Pusher-key recovery counts; and the last
-  decoded-frame timestamp. Twitch live diagnostics include connection attempts,
-  successes, setup failures, and reconnects; received IRC frames and parsed
-  messages; receive timeouts and idle-watchdog expirations; distinct sent and
-  received `PING`/`PONG` counts; and duplicate, filtered, and emitted-message
-  counts. Provider summaries contain no endpoints, raw frames, or chat content.
+  decoded-frame timestamp. Twitch live diagnostics include recognized optional
+  metadata degradations; connection attempts, successes, setup failures, and
+  reconnects; received IRC frames and parsed messages; receive timeouts and
+  idle-watchdog expirations; distinct sent and received `PING`/`PONG` counts;
+  and duplicate, filtered, and emitted-message counts. Provider summaries
+  contain no endpoints, raw frames, error paths/messages, or chat content.
   A duplicate is counted once even when multiple
   formatted writers are attached; raw-only outputs do not increase the
   suppression count. Zero-record lazy outputs are named explicitly as files
