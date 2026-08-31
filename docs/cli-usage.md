@@ -216,6 +216,16 @@ Debug and automation:
 - With both that setting and
   `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1`, Twitch captures the first
   three successfully parsed raw IRC frames for clean-run schema review.
+- With both that setting and
+  `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES=1`, Twitch captures one
+  successfully parsed raw IRC frame per known normalized message type, with an
+  unknown-type raw-action fallback, up to 12 event keys across reconnects. Raw
+  `msg-id` recognition prevents normalized-looking unknowns from aliasing known
+  events. Backend group and per-label quotas are shared per process and output
+  directory, so later runs can retain fewer or reuse only an exact prior
+  payload. If both Twitch modes are enabled, the maximum is 15 raw-frame samples
+  and the same frame can appear once in each mode. Capture precedes live
+  deduplication and output filtering; drift samples can be additional.
 - With both that setting and `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`, Kick also
   captures the first three successfully parsed raw frames per normalized event
   type for clean-run schema review.

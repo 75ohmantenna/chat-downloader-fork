@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
 
+import chat_downloader.redaction as red
 from chat_downloader.errors import (
     CaptchaChallengeRequired,
     LoginRequired,
@@ -23,12 +24,24 @@ from chat_downloader.sites.twitch import (
     irc_transport,
 )
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 def _privmsg(message_id: str, text: str) -> str:
     return (
         "@badge-info=;badges=;color=;display-name=User;emotes=;id="
         f"{message_id};mod=0;room-id=1;subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;"
         f"user-type= :user!user@user.tmi.twitch.tv PRIVMSG #example :{text}"
+    )
+
+
+def _usernotice(message_id: str, message_type: str, text: str) -> str:
+    return (
+        "@badge-info=;badges=;color=;display-name=User;emotes=;flags=;id="
+        f"{message_id};mod=0;msg-id={message_type};room-id=1;subscriber=1;"
+        "system-msg=Event;tmi-sent-ts=1;turbo=0;user-id=1;user-type= "
+        f":tmi.twitch.tv USERNOTICE #example :{text}"
     )
 
 
@@ -49,6 +62,511 @@ def test_successful_irc_frame_capture_requires_explicit_scope_opt_in(
     irc_diagnostics._SuccessfulIrcFrameCapture().capture("valid frame\r\n")
 
     assert captured == []
+
+
+def test_event_frame_capture_requires_explicit_scope_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv(
+        "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES",
+        raising=False,
+    )
+    captured = []
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+
+    irc_diagnostics._EventDiverseIrcFrameCapture().capture(
+        "valid frame\r\n",
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub",
+    )
+
+    assert captured == []
+
+
+def test_event_frame_capture_prefers_message_type_and_falls_back_to_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "yes")
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        record_capture,
+    )
+    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+
+    frame_capture.capture(
+        "resub one\r\n",
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub",
+    )
+    frame_capture.capture(
+        "resub two\r\n",
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub",
+    )
+    frame_capture.capture(
+        "milestone\r\n",
+        {"message_type": "viewermilestone"},
+        "USERNOTICE",
+        "msg-id=viewermilestone",
+    )
+    frame_capture.capture("notice\r\n", {}, "NOTICE", "")
+
+    assert captured == [
+        (
+            (
+                "twitch-irc-event-message-resubscription-7dce7b9831c9",
+                {"raw": "resub one\r\n"},
+            ),
+            {
+                "sample_limit": 1,
+                "sample_group": "twitch-irc-event-frames",
+                "group_limit": 12,
+            },
+        ),
+        (
+            (
+                "twitch-irc-event-message-viewermilestone-71b63634a922",
+                {"raw": "milestone\r\n"},
+            ),
+            {
+                "sample_limit": 1,
+                "sample_group": "twitch-irc-event-frames",
+                "group_limit": 12,
+            },
+        ),
+        (
+            (
+                "twitch-irc-event-action-notice-dfb14fbb9e7d",
+                {"raw": "notice\r\n"},
+            ),
+            {
+                "sample_limit": 1,
+                "sample_group": "twitch-irc-event-frames",
+                "group_limit": 12,
+            },
+        ),
+    ]
+
+
+def test_event_frame_capture_bounds_provider_controlled_keys_and_labels(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        record_capture,
+    )
+    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+
+    for index in range(20):
+        attacker_value = f"../Provider\\Type-{index}-" + "x" * 500
+        frame_capture.capture(
+            f"frame {index}\r\n",
+            {},
+            attacker_value,
+            "",
+        )
+
+    labels = [args[0] for args, _kwargs in captured]
+    assert len(labels) == 12
+    assert len(frame_capture._captured_event_keys) == 12
+    assert len(frame_capture._event_key_attempts) == 12
+    assert all(len(label) <= 72 for label in labels)
+    assert all(
+        "/" not in label and "\\" not in label and ".." not in label for label in labels
+    )
+
+
+def test_event_components_are_stable_case_sensitive_and_collision_resistant() -> None:
+    provider_values = [
+        "foo-bar",
+        "foo_bar",
+        "A B",
+        "a/b",
+        "../???",
+        "CaseSensitive",
+        "casesensitive",
+    ]
+
+    components = [
+        irc_diagnostics._bounded_event_component(value) for value in provider_values
+    ]
+
+    assert len(components) == len(set(components))
+    assert components == [
+        irc_diagnostics._bounded_event_component(value) for value in provider_values
+    ]
+    assert all(len(component) <= 48 for component in components)
+    assert all(
+        "/" not in component and "_" not in component for component in components
+    )
+
+
+def test_event_keys_require_recognized_case_sensitive_raw_provenance() -> None:
+    keys_by_normalized_type: dict[str, str] = {}
+    for raw_msg_id, normalized_type in irc_diagnostics.MESSAGE_TYPE_REMAPPING.items():
+        key = irc_diagnostics._event_capture_key(
+            {"message_type": normalized_type},
+            "USERNOTICE",
+            f"room-id=1;msg-id={raw_msg_id};user-id=2",
+        )
+        assert key.startswith("message-")
+        assert keys_by_normalized_type.setdefault(normalized_type, key) == key
+
+    assert len(set(keys_by_normalized_type.values())) == len(keys_by_normalized_type)
+    for raw_action, normalized_type in irc_diagnostics.ACTION_TYPE_REMAPPING.items():
+        key = irc_diagnostics._event_capture_key(
+            {"message_type": normalized_type},
+            raw_action,
+            "room-id=1;user-id=2",
+        )
+        assert key.startswith("message-")
+
+    assert irc_diagnostics._event_capture_key(
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub",
+    ).startswith("message-resubscription-")
+    assert irc_diagnostics._event_capture_key(
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resubscription",
+    ).startswith("action-usernotice-")
+    assert irc_diagnostics._event_capture_key(
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=RESUB",
+    ).startswith("action-usernotice-")
+    assert irc_diagnostics._event_capture_key(
+        {"message_type": "text_message"},
+        "USERNOTICE",
+        "msg-id=text_message",
+    ).startswith("action-usernotice-")
+    assert irc_diagnostics._event_capture_key(
+        {"message_type": "text_message"},
+        "text_message",
+        "room-id=1",
+    ).startswith("action-text-message-")
+    assert irc_diagnostics._event_capture_key(
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub;msg-id=resubscription",
+    ).startswith("action-usernotice-")
+
+
+def test_event_capture_retries_transient_failure_before_marking_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    results = iter([None, "/samples/success.json"])
+    capture_calls = []
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+
+    def capture_with_transient_failure(*args, **kwargs):
+        capture_calls.append((args, kwargs))
+        return next(results)
+
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        capture_with_transient_failure,
+    )
+    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+
+    for index in range(3):
+        frame_capture.capture(
+            f"resub {index}\r\n",
+            {"message_type": "resubscription"},
+            "USERNOTICE",
+            "msg-id=resub",
+        )
+
+    event_key = irc_diagnostics._event_capture_key(
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub",
+    )
+    assert len(capture_calls) == 2
+    assert frame_capture._event_key_attempts == {event_key: 2}
+    assert frame_capture._captured_event_keys == {event_key}
+
+
+def test_event_capture_permanent_failures_have_bounded_attempts_and_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capture_calls = []
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        lambda *args, **kwargs: capture_calls.append((args, kwargs)),
+    )
+    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+
+    for index in range(20):
+        for attempt in range(4):
+            frame_capture.capture(
+                f"frame {index}-{attempt}\r\n",
+                {},
+                f"ACTION-{index}",
+                "",
+            )
+
+    assert len(capture_calls) == 24
+    assert len(frame_capture._event_key_attempts) == 12
+    assert set(frame_capture._event_key_attempts.values()) == {2}
+    assert frame_capture._captured_event_keys == set()
+
+
+def test_event_capture_backend_group_is_shared_by_directory_across_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sample_dir = tmp_path / "samples"
+    known_types = sorted(irc_diagnostics._KNOWN_NORMALIZED_MESSAGE_TYPES)
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    monkeypatch.setattr(red, "_debug_sample_capture_enabled", lambda: True)
+
+    first_run_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    for index, message_type in enumerate(known_types[:12]):
+        first_run_capture.capture(
+            f"first run {index}\r\n",
+            {"message_type": message_type},
+            "USERNOTICE",
+            "",
+        )
+
+    later_run_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    for index in range(3):
+        later_run_capture.capture(
+            f"later run {index}\r\n",
+            {"message_type": known_types[12]},
+            "USERNOTICE",
+            "",
+        )
+
+    assert len(list(sample_dir.glob("*.json"))) == 12
+    assert len(first_run_capture._captured_event_keys) == 12
+    assert later_run_capture._captured_event_keys == set()
+    assert set(later_run_capture._event_key_attempts.values()) == {2}
+
+
+def test_event_capture_backend_label_persists_across_runs_with_group_slots(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sample_dir = tmp_path / "samples"
+    backend_paths: list[str | None] = []
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    monkeypatch.setattr(red, "_debug_sample_capture_enabled", lambda: True)
+
+    def record_backend_path(*args, **kwargs):
+        path = red.capture_debug_sample(*args, **kwargs)
+        backend_paths.append(path)
+        return path
+
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        record_backend_path,
+    )
+
+    first_run_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    first_run_capture.capture(
+        "same payload\r\n",
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub",
+    )
+
+    exact_repeat_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    exact_repeat_capture.capture(
+        "same payload\r\n",
+        {"message_type": "resubscription"},
+        "USERNOTICE",
+        "msg-id=resub",
+    )
+
+    changed_payload_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    for index in range(3):
+        changed_payload_capture.capture(
+            f"different payload {index}\r\n",
+            {"message_type": "resubscription"},
+            "USERNOTICE",
+            "msg-id=resub",
+        )
+
+    available_group_slot_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    available_group_slot_capture.capture(
+        "different event\r\n",
+        {"message_type": "viewermilestone"},
+        "USERNOTICE",
+        "msg-id=viewermilestone",
+    )
+
+    assert backend_paths[0] is not None
+    assert backend_paths[1] == backend_paths[0]
+    assert backend_paths[2:4] == [None, None]
+    assert backend_paths[4] is not None
+    assert len(list(sample_dir.glob("*.json"))) == 2
+    assert changed_payload_capture._captured_event_keys == set()
+    assert set(changed_payload_capture._event_key_attempts.values()) == {2}
+
+
+def test_real_parser_raw_msg_id_provenance_prevents_normalized_masquerades(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setattr(irc_diagnostics, "capture_debug_sample", record_capture)
+
+    resub_frames = [
+        _usernotice("genuine-resub", "resub", "Genuine resub"),
+        _usernotice("masquerade-resub", "resubscription", "Unknown raw type"),
+    ]
+    resub_matches = list(
+        irc_transport.MESSAGE_REGEX.finditer("\r\n".join(resub_frames) + "\r\n")
+    )
+    resub_items, _message_count = irc_transport._parse_irc_matches(
+        resub_matches,
+        None,
+        0,
+        event_frame_capture=irc_diagnostics._EventDiverseIrcFrameCapture(),
+    )
+
+    text_frames = [
+        _privmsg("genuine-text", "Genuine text"),
+        _usernotice("masquerade-text", "text_message", "Unknown raw type"),
+    ]
+    text_matches = list(
+        irc_transport.MESSAGE_REGEX.finditer("\r\n".join(text_frames) + "\r\n")
+    )
+    text_items, _message_count = irc_transport._parse_irc_matches(
+        text_matches,
+        None,
+        0,
+        event_frame_capture=irc_diagnostics._EventDiverseIrcFrameCapture(),
+    )
+
+    assert [item["message_type"] for item in resub_items] == [
+        "resubscription",
+        "resubscription",
+    ]
+    assert [item["message_type"] for item in text_items] == [
+        "text_message",
+        "text_message",
+    ]
+    assert [args[0] for args, _kwargs in captured] == [
+        "twitch-irc-event-message-resubscription-7dce7b9831c9",
+        "twitch-irc-event-action-usernotice-541488f4d6e7",
+        "twitch-irc-event-message-text-message-18e44952e1aa",
+        "twitch-irc-event-action-usernotice-541488f4d6e7",
+    ]
+
+
+def test_real_parser_unknown_types_share_raw_action_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
+    raw_frames = [
+        _usernotice("unknown-1", "unknown-one", "First unknown"),
+        _usernotice("unknown-2", "unknown-two", "Second unknown"),
+        (
+            "@badge-info=;badges=;display-name=User;room-id=1;tmi-sent-ts=1;"
+            "user-id=1 :tmi.twitch.tv MYSTERY #example :Unknown action"
+        ),
+    ]
+    matches = list(
+        irc_transport.MESSAGE_REGEX.finditer("\r\n".join(raw_frames) + "\r\n")
+    )
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setattr(irc_diagnostics, "capture_debug_sample", record_capture)
+
+    items, _message_count = irc_transport._parse_irc_matches(
+        matches,
+        None,
+        0,
+        event_frame_capture=irc_diagnostics._EventDiverseIrcFrameCapture(),
+    )
+
+    assert [item["message_type"] for item in items] == [
+        "unknown-one",
+        "unknown-two",
+        "MYSTERY",
+    ]
+    assert [args[0] for args, _kwargs in captured] == [
+        "twitch-irc-event-action-usernotice-541488f4d6e7",
+        "twitch-irc-event-action-mystery-9a26a76fee31",
+    ]
+
+
+def test_successful_capture_modes_have_additive_fifteen_frame_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        record_capture,
+    )
+    first_frame_capture = irc_diagnostics._SuccessfulIrcFrameCapture()
+    event_frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+
+    for index in range(20):
+        raw_frame = f"frame {index}\r\n"
+        first_frame_capture.capture(raw_frame)
+        event_frame_capture.capture(
+            raw_frame,
+            {},
+            f"ACTION-{index}",
+            "",
+        )
+
+    assert len(captured) == 15
+    assert [args[1]["raw"] for args, _kwargs in captured].count("frame 0\r\n") == 2
+    assert sum(args[0] == "twitch-irc-frame" for args, _kwargs in captured) == 3
+    assert (
+        sum(args[0].startswith("twitch-irc-event-") for args, _kwargs in captured) == 12
+    )
 
 
 def test_live_diagnostics_count_split_control_frames_with_bounded_state() -> None:

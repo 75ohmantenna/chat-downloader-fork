@@ -287,6 +287,46 @@ three successfully parsed raw IRC frames are sanitized and captured across the
 entire live run, including reconnects. This explicit second opt-in is required
 because valid frames contain ordinary public chat data.
 
+For broader event coverage, enable
+`CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES=1` with the shared capture
+flag and debug logging. This separate mode captures at most one successfully
+parsed raw frame for each recognized event. When a frame carries `msg-id`, only
+raw keys present in Twitch's `MESSAGE_TYPE_REMAPPING` qualify for a normalized
+message key. An unknown raw value such as `resubscription` or `text_message`
+uses the action fallback even though it resembles a normalized output. When
+`msg-id` is absent, a known raw action may use its parsed normalized message
+type; an unknown action uses the action fallback. Thus different unknown
+`USERNOTICE` values share one action key rather than exhausting the quota or
+aliasing a genuine normalized event. This classification reads raw tags without
+adding provenance fields to normal output records.
+
+Provider values are case-sensitive identities; capture labels combine a
+readable normalized prefix with a stable digest so punctuation or case variants
+cannot alias. Labels and in-memory keys are length-bounded and path-safe. Raw
+frames remain sanitized and retain their original `\r\n` terminator.
+
+The per-run sampler attempts at most 12 distinct event keys across all
+reconnects. A failed write is retried once for that key, for at most 24 backend
+capture attempts, and a key is considered captured only after the backend
+returns a path. The shared backend adds a 12-sample group limit scoped to the
+current process and absolute output directory. Consequently, a later run in
+the same process that reuses that directory may have fewer than 12 group slots
+available; 12 is a ceiling, not a guaranteed fresh allowance. The backend's
+per-label `sample_limit=1` persists at that same scope: an exact payload from a
+later run can resolve to its existing deterministic path, while a different
+payload for the same event key is rejected even when aggregate group slots
+remain.
+
+The first-three and event-diverse modes are additive. With both enabled, clean
+traffic capture writes at most 15 raw-frame samples: three first-arrival samples
+plus 12 event-key samples. The same frame can appear once under each mode, so
+review all captured public chat data before sharing it. Drift samples for
+unknown types, tags, actions, and shapes use their own limits and are not part
+of this clean-traffic maximum. Both raw modes run after parsing but before live
+message deduplication and type or group filtering, so they can retain duplicates
+or records excluded from normal JSONL/TXT output. An unknown frame can also
+appear in both its drift sample and the event mode's raw-action fallback.
+
 When a live IRC message or GraphQL response contains an unknown type, tag, or
 shape, the runtime emits a drift diagnostic and saves a sanitized snapshot when
 debug-sample capture is enabled. Unknown IRC actions, message types, tags, and
@@ -308,6 +348,7 @@ capture_dir="$(mktemp -d)"
 CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR="${capture_dir}/samples" \
 CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \
 CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1 \
+CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES=1 \
 uv run chat_downloader "https://www.twitch.tv/auronplay" \
   --message_groups all \
   --logging debug \
@@ -327,9 +368,10 @@ setup plus final output shutdown can make the command's total wall time longer
 than four minutes.
 
 JSONL is the lossless record for checking message types and provider metadata,
-while TXT verifies user-visible formatting. The raw-frame option captures only
-the first three successfully parsed IRC frames, not the entire conversation.
-Review captured public chat data before sharing it.
+while TXT verifies user-visible formatting. The raw-frame options capture only
+the first three successfully parsed IRC frames and the first frame for up to 12
+distinct event keys, not the entire conversation. Review captured public chat
+data before sharing it.
 
 Use `--message_groups all` for this output inspection because Twitch's default
 `messages` group emits ordinary chat messages but omits known system and

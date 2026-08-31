@@ -230,6 +230,25 @@ successfully parse. The per-run attempt cap spans reconnects and preserves the
 original `\r\n` terminator so reviewed samples can be promoted directly into
 live-event fixtures.
 
+For event-diverse Twitch inspection, use
+`CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES=1`. It captures the first
+successfully parsed raw frame for each known normalized message type, or for a
+bounded, collision-resistant raw-action fallback when the parsed type is
+unknown. A message key requires a recognized raw `msg-id`; normalized-looking
+unknown values use the action fallback. Without `msg-id`, only known raw actions
+can use the parsed normalized type. The fixed per-run limit is 12 attempted
+event keys across reconnects, with one successful sample per key and one retry
+after a failed write. The backend separately caps this sample group and each
+label per process and output directory; later runs may retain fewer than 12. An
+exact prior payload can reuse its path, but a different payload for that label
+is rejected even with free group slots. Labels and in-memory keys are path-safe
+and length-bounded; payloads use the same sanitization and retain `\r\n`.
+Enabling this together with the first-three mode is additive: no more than 15
+clean-traffic raw-frame samples are captured, and one source frame can appear
+in both modes. Both modes run before live deduplication and output filtering.
+Separate drift samples can add files, and unknown frames can overlap the event
+mode's fallback capture.
+
 Kick supports the equivalent clean-run workflow with
 `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`. Combined with the shared capture flag
 and debug logging, it captures at most the first three raw WebSocket frames per

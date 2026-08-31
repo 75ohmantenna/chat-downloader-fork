@@ -33,7 +33,11 @@ if TYPE_CHECKING:
 
     from chat_downloader.models import ChatRequest
 
-    from .irc_diagnostics import _SuccessfulIrcFrameCapture, _TwitchLiveDiagnostics
+    from .irc_diagnostics import (
+        _EventDiverseIrcFrameCapture,
+        _SuccessfulIrcFrameCapture,
+        _TwitchLiveDiagnostics,
+    )
     from .types import BadgeSet
 
 _PROGRESS_LOG_INTERVAL_MESSAGES = 250
@@ -143,14 +147,18 @@ def _parse_irc_matches(
     badge_set: BadgeSet | None,
     message_count: int,
     successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
+    event_frame_capture: _EventDiverseIrcFrameCapture | None = None,
     diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Parse IRC matches and update the running message count."""
     items: list[dict[str, Any]] = []
     for match in matches:
         item = _parse_irc_item(match, badge_set)
+        raw_frame = f"{match.group(0)}\r\n"
         if successful_frame_capture is not None:
-            successful_frame_capture.capture(f"{match.group(0)}\r\n")
+            successful_frame_capture.capture(raw_frame)
+        if event_frame_capture is not None:
+            event_frame_capture.capture(raw_frame, item, match.group(2), match.group(1))
         items.append(item)
         message_count += 1
         if diagnostics is not None:
@@ -290,6 +298,7 @@ def get_chat_messages_by_stream_id(
     badge_set: BadgeSet | None = None,
     *,
     successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
+    event_frame_capture: _EventDiverseIrcFrameCapture | None = None,
     diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield live chat messages for a stream via IRC."""
@@ -338,6 +347,7 @@ def get_chat_messages_by_stream_id(
                     badge_set,
                     message_count,
                     successful_frame_capture,
+                    event_frame_capture,
                     diagnostics,
                 )
                 yield from items

@@ -4,12 +4,35 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
+import re
+from typing import TYPE_CHECKING
 
 from chat_downloader.redaction import capture_debug_sample
 
+from .constants import (
+    ACTION_TYPE_REMAPPING,
+    MESSAGE_GROUPS,
+    MESSAGE_TYPE_REMAPPING,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 _SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES"
 _SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
+_EVENT_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES"
+_EVENT_FRAME_CAPTURE_LIMIT = 12
+_EVENT_FRAME_CAPTURE_ATTEMPTS_PER_KEY = 2
+_EVENT_FRAME_CAPTURE_GROUP = "twitch-irc-event-frames"
+_EVENT_KEY_COMPONENT_LIMIT = 48
+_EVENT_KEY_COMPONENT_RE = re.compile(r"[^a-z0-9]+")
+_KNOWN_NORMALIZED_MESSAGE_TYPES = frozenset(
+    message_type
+    for message_types in MESSAGE_GROUPS.values()
+    for message_type in message_types
+)
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 _CONTROL_FRAME_PREFIX_LIMIT = 128
 
@@ -105,6 +128,98 @@ class _SuccessfulIrcFrameCapture:
             {"raw": raw_frame},
             sample_limit=_SUCCESSFUL_FRAME_CAPTURE_LIMIT,
         )
+
+
+def _bounded_event_component(value: str) -> str:
+    """Return a readable, collision-resistant component for a provider value."""
+    normalized = _EVENT_KEY_COMPONENT_RE.sub("-", value.casefold()).strip("-")
+    digest = hashlib.sha256(
+        value.encode("utf-8"),
+    ).hexdigest()[:12]
+    prefix_limit = _EVENT_KEY_COMPONENT_LIMIT - len(digest) - 1
+    prefix = normalized[:prefix_limit].rstrip("-") or "unknown"
+    return f"{prefix}-{digest}"
+
+
+def _irc_msg_id(raw_tags: str) -> tuple[bool, str]:
+    """Return whether raw IRC tags contain ``msg-id`` and its exact value."""
+    found = False
+    msg_id = ""
+    for raw_tag in raw_tags.split(";"):
+        name, separator, value = raw_tag.partition("=")
+        if name == "msg-id":
+            found = True
+            msg_id = value if separator else ""
+    return found, msg_id
+
+
+def _event_capture_key(
+    parsed_item: Mapping[str, object],
+    raw_action: str,
+    raw_tags: str,
+) -> str:
+    """Classify an event from recognized raw IRC provenance."""
+    has_msg_id, raw_msg_id = _irc_msg_id(raw_tags)
+    if has_msg_id:
+        normalized_message_type = MESSAGE_TYPE_REMAPPING.get(raw_msg_id)
+        if normalized_message_type is not None:
+            return f"message-{_bounded_event_component(normalized_message_type)}"
+        return f"action-{_bounded_event_component(raw_action)}"
+
+    message_type = parsed_item.get("message_type")
+    if (
+        raw_action in ACTION_TYPE_REMAPPING
+        and isinstance(message_type, str)
+        and message_type in _KNOWN_NORMALIZED_MESSAGE_TYPES
+    ):
+        return f"message-{_bounded_event_component(message_type)}"
+    return f"action-{_bounded_event_component(raw_action)}"
+
+
+class _EventDiverseIrcFrameCapture:
+    """Capture one sanitized raw frame per bounded Twitch event key."""
+
+    def __init__(self) -> None:
+        self._enabled = (
+            os.environ.get(_EVENT_FRAME_CAPTURE_ENV, "").strip().lower()
+            in _TRUTHY_ENV_VALUES
+        )
+        self._captured_event_keys: set[str] = set()
+        self._event_key_attempts: dict[str, int] = {}
+
+    def capture(
+        self,
+        raw_frame: str,
+        parsed_item: Mapping[str, object],
+        raw_action: str,
+        raw_tags: str,
+    ) -> None:
+        """Capture the first frame for one normalized, bounded event key."""
+        if not self._enabled:
+            return
+
+        event_key = _event_capture_key(parsed_item, raw_action, raw_tags)
+        if event_key in self._captured_event_keys:
+            return
+
+        attempts = self._event_key_attempts.get(event_key)
+        if attempts is None:
+            if len(self._event_key_attempts) >= _EVENT_FRAME_CAPTURE_LIMIT:
+                return
+            attempts = 0
+        if attempts >= _EVENT_FRAME_CAPTURE_ATTEMPTS_PER_KEY:
+            return
+        self._event_key_attempts[event_key] = attempts + 1
+
+        path = capture_debug_sample(
+            f"twitch-irc-event-{event_key}",
+            {"raw": raw_frame},
+            sample_limit=1,
+            sample_group=_EVENT_FRAME_CAPTURE_GROUP,
+            group_limit=_EVENT_FRAME_CAPTURE_LIMIT,
+        )
+        if path is not None:
+            self._captured_event_keys.add(event_key)
 
 
 def _is_benign_unmatched_irc_buffer(readbuffer: str) -> bool:

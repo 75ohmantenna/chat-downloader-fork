@@ -21,7 +21,11 @@ from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_str
 
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
-from .irc_diagnostics import _SuccessfulIrcFrameCapture, _TwitchLiveDiagnostics
+from .irc_diagnostics import (
+    _EventDiverseIrcFrameCapture,
+    _SuccessfulIrcFrameCapture,
+    _TwitchLiveDiagnostics,
+)
 from .irc_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
     _PROGRESS_LOG_INTERVAL_MESSAGES,
@@ -96,6 +100,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
             partial(
                 message_generator,
                 successful_frame_capture=_SuccessfulIrcFrameCapture(),
+                event_frame_capture=_EventDiverseIrcFrameCapture(),
                 diagnostics=diagnostics,
             ),
         )

@@ -370,6 +370,22 @@ Set `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1` to capture the first three
 valid raw Twitch IRC frames across reconnects. The shared capture flag and
 debug logging must also be enabled.
 
+Set `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES=1` to capture one valid
+raw Twitch IRC frame per known normalized message type, using a bounded,
+collision-resistant raw-action fallback for unknown types, up to 12 event keys
+across reconnects. Recognition uses raw `msg-id` mapping keys; normalized-looking
+unknown values cannot alias genuine events. With no `msg-id`, only known raw
+actions can use the parsed normalized type. Failed writes are retried once per
+key. The backend's 12-sample group limit and one-sample-per-label limit are
+shared per process and output directory, so a later run may retain fewer
+samples. An exact prior payload can reuse its deterministic path; a different
+payload for that event key is rejected even if group slots remain. This mode
+also requires the shared capture flag and debug logging. When both Twitch modes
+are enabled, their limits are additive: at most 15 raw-frame samples, with a
+frame potentially appearing once in each mode. Capture occurs before live
+deduplication and output filtering; separate drift samples can add files and
+overlap unknown fallback frames.
+
 Set `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1` to capture up to three successfully
 parsed raw Kick WebSocket frames per normalized event type across reconnects.
 It likewise requires the shared capture flag and debug logging; control,

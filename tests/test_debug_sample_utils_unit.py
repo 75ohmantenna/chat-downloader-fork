@@ -71,6 +71,14 @@ def test_twitch_irc_frame_maps_to_message_fixtures() -> None:
     assert infer_group_from_sample_name(sample_path) == "messages"
 
 
+def test_twitch_irc_event_frame_maps_to_message_fixtures() -> None:
+    sample_path = Path(
+        "twitch-irc-event-message-resubscription-7dce7b9831c9-abc123def456.json"
+    )
+
+    assert infer_group_from_sample_name(sample_path) == "messages"
+
+
 @pytest.mark.parametrize(
     ("sample_name", "group"),
     [

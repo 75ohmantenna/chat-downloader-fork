@@ -24,6 +24,15 @@ def _privmsg(message_id: str, text: str) -> str:
     )
 
 
+def _usernotice(message_id: str, message_type: str, text: str) -> str:
+    return (
+        "@badge-info=;badges=;color=;display-name=User;emotes=;flags=;id="
+        f"{message_id};mod=0;msg-id={message_type};room-id=1;subscriber=1;"
+        "system-msg=Event;tmi-sent-ts=1;turbo=0;user-id=1;user-type= "
+        f":tmi.twitch.tv USERNOTICE #example :{text}"
+    )
+
+
 def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (
     None
 ):
@@ -146,11 +155,16 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
         message_groups=["messages"],
     )
     captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
     diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "yes")
     monkeypatch.setattr(
         "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
+        record_capture,
     )
 
     messages = live_service.iter_stream_chat_messages(
@@ -184,6 +198,118 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
     assert diagnostics.summary["keepalive_ping_received_count"] == 0
     assert diagnostics.summary["keepalive_pong_sent_count"] == 0
     assert diagnostics.summary["live_emitted_count"] == 5
+
+
+def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeIRC:
+        def __init__(self, responses: list[str]) -> None:
+            self.responses = iter(responses)
+            self.closed = False
+
+        def recv(self, _buffer_size: int) -> str:
+            return next(self.responses)
+
+        def send_raw(self, _message: str) -> None:
+            return None
+
+        def set_timeout(self, _timeout: float) -> None:
+            return None
+
+        def join_channel(self, _channel: str) -> None:
+            return None
+
+        def close_connection(self) -> None:
+            self.closed = True
+
+    resub_one = _usernotice("resub-1", "resub", "First resub")
+    text_message = _privmsg("text-1", "Hello")
+    resub_two = _usernotice("resub-2", "resub", "Second resub")
+    milestone = _usernotice("milestone-1", "viewermilestone", "Milestone")
+    ircs = [
+        FakeIRC([f"{resub_one}\r\n{text_message}\r\n", ""]),
+        FakeIRC([f"{resub_two}\r\n{milestone}\r\n", ""]),
+    ]
+    downloader = SimpleNamespace(
+        badge_cache=SimpleNamespace(snapshot=lambda: None),
+        _update_badge_info=Mock(),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/example",
+        max_attempts=2,
+        retry_timeout=0,
+        interruptible_retry=False,
+        message_groups=["all"],
+    )
+    captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
+    diagnostics = live_service._TwitchLiveDiagnostics()
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "on")
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
+        record_capture,
+    )
+
+    messages = live_service.iter_stream_chat_messages(
+        cast("Any", downloader),
+        "example",
+        request,
+        irc_factory=cast("live_service._IRCFactory", Mock(side_effect=ircs)),
+        diagnostics=diagnostics,
+    )
+    received = [next(messages) for _ in range(4)]
+    messages.close()
+
+    assert [message["message_type"] for message in received] == [
+        "resubscription",
+        "text_message",
+        "resubscription",
+        "viewermilestone",
+    ]
+    assert captured == [
+        (
+            (
+                "twitch-irc-event-message-resubscription-7dce7b9831c9",
+                {"raw": f"{resub_one}\r\n"},
+            ),
+            {
+                "sample_limit": 1,
+                "sample_group": "twitch-irc-event-frames",
+                "group_limit": 12,
+            },
+        ),
+        (
+            (
+                "twitch-irc-event-message-text-message-18e44952e1aa",
+                {"raw": f"{text_message}\r\n"},
+            ),
+            {
+                "sample_limit": 1,
+                "sample_group": "twitch-irc-event-frames",
+                "group_limit": 12,
+            },
+        ),
+        (
+            (
+                "twitch-irc-event-message-viewermilestone-71b63634a922",
+                {"raw": f"{milestone}\r\n"},
+            ),
+            {
+                "sample_limit": 1,
+                "sample_group": "twitch-irc-event-frames",
+                "group_limit": 12,
+            },
+        ),
+    ]
+    assert all(irc.closed for irc in ircs)
+    assert diagnostics.summary["reconnect_count"] == 1
+    assert diagnostics.summary["parsed_irc_message_count"] == 4
 
 
 def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
