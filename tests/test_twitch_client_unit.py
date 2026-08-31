@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from typing import NoReturn
 
 import pytest
 from requests.exceptions import RequestException
 
-from chat_downloader.errors import UserNotFound
+from chat_downloader.errors import LoginRequired, ParsingError, UserNotFound
 from chat_downloader.sites.twitch.constants import (
     CLIENT_ID,
     GQL_API_URL,
@@ -16,6 +17,7 @@ from chat_downloader.sites.twitch.constants import (
 )
 from chat_downloader.sites.twitch.discovery import get_user_videos
 from chat_downloader.sites.twitch.graphql_client import (
+    _FULL_QUERY_DOCUMENTS,
     _download_gql,
     update_badge_info,
 )
@@ -77,6 +79,128 @@ def test_download_gql_uses_client_id_override() -> None:
     )
 
     assert calls["headers"]["Client-ID"] == "custom-client"
+
+
+@pytest.mark.parametrize(
+    ("operation_name", "variables", "fallback_variables"),
+    [
+        (
+            "StreamMetadata",
+            {"channelLogin": "caseoh_", "includeIsDJ": True},
+            {"channelLogin": "caseoh_"},
+        ),
+        (
+            "VideoMetadata",
+            {"channelLogin": "", "videoID": "123"},
+            {"videoID": "123"},
+        ),
+        (
+            "VideoCommentsQuery",
+            {"vodId": "123", "after": "cursor"},
+            {"vodId": "123", "after": "cursor"},
+        ),
+    ],
+)
+def test_download_gql_retries_supported_hash_failure_with_full_document(
+    operation_name: str,
+    variables: dict[str, object],
+    fallback_variables: dict[str, object],
+) -> None:
+    payloads = iter(
+        [
+            [{"errors": [{"message": "PersistedQueryNotFound"}]}],
+            [{"data": {"ok": True}}],
+        ]
+    )
+    requests = []
+
+    def session_post(_url, json, headers):
+        _ = headers
+        requests.append(json)
+        return _Resp(next(payloads))
+
+    result = _download_gql(
+        session_post,
+        [{"operationName": operation_name, "variables": variables}],
+    )
+
+    assert result == [{"data": {"ok": True}}]
+    assert (
+        requests[0][0]["extensions"]["persistedQuery"]["sha256Hash"]
+        == (OPERATION_HASHES[operation_name])
+    )
+    assert requests[1] == [
+        {
+            "operationName": operation_name,
+            "variables": fallback_variables,
+            "query": _FULL_QUERY_DOCUMENTS[operation_name],
+        }
+    ]
+
+
+def test_mobile_replay_document_matches_apk_persisted_hash() -> None:
+    query_hash = hashlib.sha256(
+        _FULL_QUERY_DOCUMENTS["VideoCommentsQuery"].encode()
+    ).hexdigest()
+
+    assert query_hash == OPERATION_HASHES["VideoCommentsQuery"]
+
+
+def test_download_gql_does_not_fallback_for_unsupported_operation() -> None:
+    calls = 0
+
+    def session_post(_url, json, headers):
+        nonlocal calls
+        _ = json, headers
+        calls += 1
+        return _Resp([{"errors": [{"message": "PersistedQueryNotFound"}]}])
+
+    with pytest.raises(ParsingError, match="GlobalBadges"):
+        _download_gql(session_post, [{"operationName": "GlobalBadges"}])
+
+    assert calls == 1
+
+
+def test_download_gql_maps_full_document_errors_without_another_retry() -> None:
+    payloads = iter(
+        [
+            [{"errors": [{"message": "Persisted query not found"}]}],
+            [{"errors": [{"message": "Unauthorized"}]}],
+        ]
+    )
+    calls = 0
+
+    def session_post(_url, json, headers):
+        nonlocal calls
+        _ = json, headers
+        calls += 1
+        return _Resp(next(payloads))
+
+    with pytest.raises(LoginRequired, match="Authentication required"):
+        _download_gql(
+            session_post,
+            [{"operationName": "StreamMetadata", "variables": {}}],
+        )
+
+    assert calls == 2
+
+
+def test_download_gql_does_not_fallback_for_non_hash_error() -> None:
+    calls = 0
+
+    def session_post(_url, json, headers):
+        nonlocal calls
+        _ = json, headers
+        calls += 1
+        return _Resp([{"errors": [{"message": "Unauthorized"}]}])
+
+    with pytest.raises(LoginRequired):
+        _download_gql(
+            session_post,
+            [{"operationName": "VideoMetadata", "variables": {}}],
+        )
+
+    assert calls == 1
 
 
 def test_update_badge_info_merges_global_and_channel_badges() -> None:

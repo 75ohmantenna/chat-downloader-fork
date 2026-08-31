@@ -38,6 +38,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Fall back to Twitch's current mobile VOD-comment operation when the legacy
   replay hash is unavailable, preserving explicit emote ranges and cursor
   pagination.
+- Retry core Twitch stream metadata, VOD metadata, and mobile replay comment
+  operations with bundled full GraphQL documents only when Twitch rejects a
+  persisted-query hash.
 - Classify Kick's provider-specific HTTP 423 response as a terminal
   country/region block, expose a typed error for integrations, and preserve it
   through clip metadata fallback decisions without retrying.

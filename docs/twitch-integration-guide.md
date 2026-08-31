@@ -65,7 +65,8 @@ The Twitch flow depends on the target type.
 ### Transport and API access
 
 - `irc_transport.py`: low-level Twitch IRC socket lifecycle
-- `graphql_client.py`: persisted-query GraphQL requests and error mapping
+- `graphql_client.py`: persisted-query and bounded full-document GraphQL
+  requests plus error mapping
 - `replay_transport.py`: replay comment retrieval
 - `discovery.py` and `url_generation.py`: discovery helpers and generated URLs
 
@@ -160,7 +161,9 @@ The legacy `VideoCommentsByOffsetOrCursor` operation remains primary. If
 Twitch reports that its persisted hash is unavailable, replay retries through
 the Android client's `VideoCommentsQuery` operation. The transport normalizes
 that operation's explicit `from`/`to` emote positions and cursor-only terminal
-signal into the existing replay contract before parsing.
+signal into the existing replay contract before parsing. If Twitch also rejects
+the mobile persisted hash, the client retries that operation once with the
+exact full query document shipped by the Android client.
 
 ### Clip handling
 
@@ -174,6 +177,11 @@ If the source VOD has expired, the integration raises `NoChatReplay`.
 
 Twitch metadata and replay capture depend on private persisted GraphQL queries.
 That is the main fragility point in the Twitch stack.
+
+Stream metadata, VOD metadata, and the mobile replay-comment operation have a
+bounded full-document fallback. It runs only after Twitch explicitly reports a
+missing persisted query; authentication, challenge, availability, and other
+GraphQL errors retain their normal handling without a fallback request.
 
 If Twitch rotates a hash or changes required variables, failures usually appear
 first in:

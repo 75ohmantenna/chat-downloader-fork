@@ -27,11 +27,38 @@ from chat_downloader.utils.string_utils import contains_any_hint
 from .constants import CLIENT_ID, GQL_API_URL, OPERATION_HASHES
 
 if TYPE_CHECKING:
-    from chat_downloader.utils.json_types import JSONAny, JSONList
+    from chat_downloader.utils.json_types import JSONAny, JSONDict, JSONList
 
     from ._protocols import _DownloadGQL, _SessionPost
 
 GQL_AUTH_COOKIE_NAME: str = "auth-token"
+
+_FULL_QUERY_DOCUMENTS: dict[str, str] = {
+    "StreamMetadata": (
+        "query StreamMetadata($channelLogin: String!) { user(login: "
+        "$channelLogin) { id login displayName lastBroadcast { title } "
+        "stream { id type } } }"
+    ),
+    "VideoMetadata": (
+        "query VideoMetadata($videoID: ID!) { video(id: $videoID) { id title "
+        "lengthSeconds owner { id login } } }"
+    ),
+    "VideoCommentsQuery": (
+        "query VideoCommentsQuery($vodId: ID!, $after: Cursor, "
+        "$contentOffsetSeconds: Int) { video(id: $vodId) { comments(after: "
+        "$after, contentOffsetSeconds: $contentOffsetSeconds) { edges { cursor "
+        "node { __typename ...VideoCommentChommentModelFragment } } } } }  "
+        "fragment VideoCommentChommentModelFragment on VideoComment { commenter "
+        "{ id displayName login } contentOffsetSeconds createdAt id message { "
+        "fragments { emote { from emoteID to } text } userBadges { setID version "
+        "} userColor } video { id owner { id } } }"
+    ),
+}
+
+_FULL_QUERY_OMITTED_VARIABLES: dict[str, frozenset[str]] = {
+    "StreamMetadata": frozenset({"includeIsDJ"}),
+    "VideoMetadata": frozenset({"channelLogin"}),
+}
 
 
 class _PersistedQueryUnavailable(ParsingError):
@@ -205,6 +232,28 @@ def _download_gql(
         session_post, cast("JSONList", request_ops), auth_token, client_id
     )
 
+    try:
+        _handle_result_errors(result, operation_names)
+    except _PersistedQueryUnavailable:
+        fallback_ops = _build_full_query_ops(ops)
+        if fallback_ops is None:
+            raise
+        result = _download_base_gql(
+            session_post,
+            fallback_ops,
+            auth_token,
+            client_id,
+        )
+        _handle_result_errors(result, operation_names)
+
+    return cast("JSONList", result)
+
+
+def _handle_result_errors(
+    result: JSONAny,
+    operation_names: list[str],
+) -> None:
+    """Raise mapped errors found in a GraphQL response."""
     if isinstance(result, list):
         for item in result:
             if isinstance(item, dict) and "errors" in item:
@@ -212,7 +261,31 @@ def _download_gql(
     elif isinstance(result, dict) and "errors" in result:
         _handle_gql_errors(cast("JSONList", result["errors"]), operation_names)
 
-    return cast("JSONList", result)
+
+def _build_full_query_ops(ops: JSONList) -> JSONList | None:
+    """Build full-document fallbacks when every operation is supported."""
+    fallback_ops: list[dict[str, object]] = []
+    for raw_op in ops:
+        # _download_gql rejects non-dict operations before making a request.
+        op = cast("JSONDict", raw_op)
+        operation_name = get_str(op, "operationName")
+        query = _FULL_QUERY_DOCUMENTS.get(operation_name)
+        if query is None:
+            return None
+        raw_variables = op.get("variables")
+        variables = dict(raw_variables) if isinstance(raw_variables, dict) else {}
+        for omitted_variable in _FULL_QUERY_OMITTED_VARIABLES.get(
+            operation_name, frozenset()
+        ):
+            variables.pop(omitted_variable, None)
+        fallback_ops.append(
+            {
+                "operationName": operation_name,
+                "variables": variables,
+                "query": query,
+            }
+        )
+    return cast("JSONList", fallback_ops)
 
 
 def update_badge_info(

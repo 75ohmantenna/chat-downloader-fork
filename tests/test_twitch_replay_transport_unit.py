@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
+from functools import partial
+
+from chat_downloader.sites.twitch.graphql_client import (
+    _download_gql,
+    _PersistedQueryUnavailable,
+)
 from chat_downloader.sites.twitch.replay_transport import (
     get_chat_messages_by_vod_id,
 )
@@ -112,6 +117,61 @@ def test_get_chat_messages_by_vod_id_falls_back_to_mobile_operation() -> None:
             "variables": {"vodId": "123", "after": "legacy-cursor"},
         }
     ]
+    assert comments == {
+        "edges": [{"cursor": "mobile-cursor", "node": {}}],
+        "pageInfo": {"hasNextPage": True},
+    }
+
+
+def test_replay_fallback_composes_persisted_and_full_document_requests() -> None:
+    payloads = iter(
+        [
+            [{"errors": [{"message": "PersistedQueryNotFound"}]}],
+            [{"errors": [{"message": "Persisted query not found"}]}],
+            [
+                {
+                    "data": {
+                        "video": {
+                            "comments": {
+                                "edges": [{"cursor": "mobile-cursor", "node": {}}]
+                            }
+                        }
+                    }
+                }
+            ],
+        ]
+    )
+    requests = []
+
+    class Response:
+        def json(self):
+            return next(payloads)
+
+    def session_post(_url, json, headers):
+        _ = headers
+        requests.append(json)
+        return Response()
+
+    comments, _info = get_chat_messages_by_vod_id(
+        session_post=session_post,
+        download_gql_func=partial(_download_gql, session_post),
+        vod_id="123",
+        cursor="legacy-cursor",
+        content_offset_seconds=4.5,
+    )
+
+    assert [request[0]["operationName"] for request in requests] == [
+        "VideoCommentsByOffsetOrCursor",
+        "VideoCommentsQuery",
+        "VideoCommentsQuery",
+    ]
+    assert "extensions" in requests[0][0]
+    assert "extensions" in requests[1][0]
+    assert "extensions" not in requests[2][0]
+    assert requests[2][0]["variables"] == {
+        "vodId": "123",
+        "after": "legacy-cursor",
+    }
     assert comments == {
         "edges": [{"cursor": "mobile-cursor", "node": {}}],
         "pageInfo": {"hasNextPage": True},
