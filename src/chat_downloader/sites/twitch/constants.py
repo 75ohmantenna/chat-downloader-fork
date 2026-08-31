@@ -177,6 +177,10 @@ MESSAGE_GROUP_REMAPPINGS = {
     },
     "bits": {
         "bitsbadgetier": "bits_badge_tier",
+        "onetapbreakpointachieved": "one_tap_breakpoint_achieved",
+        "onetapgiftredeemed": "one_tap_gift_redeemed",
+        "onetapstreakexpired": "one_tap_streak_expired",
+        "onetapstreakstarted": "one_tap_streak_started",
     },
     "subscriptions": {
         "sub": "subscription",
@@ -189,6 +193,7 @@ MESSAGE_GROUP_REMAPPINGS = {
         "standardpayforward": "standard_pay_forward",
         "communitypayforward": "community_pay_forward",
         "primecommunitygiftreceived": "prime_community_gift_received",
+        "giftsubbasematch": "gift_subscription_match",
     },
     "upgrades": {
         "primepaidupgrade": "prime_paid_upgrade",
@@ -276,6 +281,8 @@ MESSAGE_GROUP_REMAPPINGS = {
         "unmod_success": "unmod_success",
         "no_mods": "no_mods",
         "room_mods": "room_mods",
+        "mod-anniversary": "moderator_anniversary",
+        "modiversary": "moderator_anniversary",
     },
     "colours": {
         "turbo_only_color": "turbo_only_colour",
@@ -295,7 +302,10 @@ MESSAGE_GROUP_REMAPPINGS = {
         "vips_success": "vips_success",
     },
     "chants": {"crowd-chant": "crowd_chant"},
-    "charity": {"charity": "charity"},
+    "charity": {
+        "charity": "charity",
+        "charitydonation": "charity_donation",
+    },
     "milestones": {
         "viewermilestone": "viewermilestone",
     },

@@ -146,6 +146,14 @@ Before yielding live messages, the service:
 - validates unexpected keys during debugging
 - filters messages through configured message groups and message types
 
+Current Android-client IRC events retain typed provider metadata. Paid pinned
+chat remains a `text_message` and exposes its integer amount and exponent as
+separate fields, avoiding lossy floating-point currency conversion. Charity
+donations use the `charity` group, gift-sub matches use `subscriptions`, one-tap
+breakpoint/gift/streak notices use `bits`, and moderator anniversaries use
+`mods`. One-tap streak contributor fields are explicitly bounded to the three
+positions supported by the client protocol.
+
 ### Shared Chat attribution
 
 The IRC parser preserves raw Shared Chat tags and emits derived attribution
@@ -325,8 +333,10 @@ To turn a captured drift sample into a permanent regression anchor:
    - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`; see
      [GraphQL hash rotation](#graphql-hash-rotation).
 4. Promote reviewed IRC samples into `tests/fixtures/twitch/live_events/` and
-   replay samples into `tests/fixtures/twitch/graphql/`. The drift harness runs
-   both fixture families through their real parser composition.
+   replay samples into `tests/fixtures/twitch/graphql/`. Protocol-derived
+   synthetic IRC fixtures are also accepted when they are intentionally built
+   from reviewed client evidence. The drift harness runs both fixture families
+   through their real parser composition.
 5. Run the drift harness, then the canonical validation:
    ```bash
    uv run pytest -q tests/test_twitch_drift_harness_unit.py

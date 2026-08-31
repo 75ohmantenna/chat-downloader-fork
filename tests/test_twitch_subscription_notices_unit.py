@@ -22,6 +22,7 @@ _SUBSCRIPTION_NOTICE_CASES = [
     ("standardpayforward", "standard_pay_forward", False),
     ("communitypayforward", "community_pay_forward", False),
     ("primecommunitygiftreceived", "prime_community_gift_received", False),
+    ("giftsubbasematch", "gift_subscription_match", False),
     ("primepaidupgrade", "prime_paid_upgrade", False),
     ("giftpaidupgrade", "gift_paid_upgrade", False),
     ("rewardgift", "reward_gift", False),

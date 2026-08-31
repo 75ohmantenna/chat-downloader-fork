@@ -10,6 +10,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Features
 
+- Parse Twitch paid pinned-chat metadata and current charity donation, gift-sub
+  match, one-tap gift, and moderator-anniversary notices with typed fields and
+  provider-specific message groups.
 - Fall back to Kick's anonymous mobile clip metadata when web clip or source-VOD
   metadata is unavailable, reconciling any known channel identity and using a
   validated, provider-bounded absolute time window for clip chat replay. The

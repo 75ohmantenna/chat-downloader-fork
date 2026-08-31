@@ -144,7 +144,9 @@ def build_message_param_remapping() -> dict[str, Any]:
         "msg-param-prior-gifter-id": "prior_gifter_id",
         "msg-param-fun-string": "fun_string",
         "msg-param-charity": "charity",
-        "msg-param-charity-name": "charity_name",
+        "msg-param-charity-name": r("charity_name", _decode_pseudo_bnf),
+        "msg-param-donation-amount": r("donation_amount", int_or_none),
+        "msg-param-donation-currency": "donation_currency",
         "msg-param-charity-hashtag": "charity_hashtag",
         "msg-param-charity-learn-more": "charity_link",
         "msg-param-charity-hours-remaining": r("charity_hours_remaining", int_or_none),
@@ -165,6 +167,36 @@ def build_message_param_remapping() -> dict[str, Any]:
         "msg-param-goal-user-contributions": ("msg_param_goal_user_contributions"),
         "msg-param-goal-description": "msg_param_goal_description",
         "msg-param-goal-contribution-type": ("msg_param_goal_contribution_type"),
+        "msg-param-advertiser-name": r("advertiser_name", _decode_pseudo_bnf),
+        "msg-param-gift-sub-match-quantity": r(
+            "gift_subscription_match_quantity",
+            int_or_none,
+        ),
+        "msg-param-breakpoint-number": r(
+            "one_tap_breakpoint_number",
+            int_or_none,
+        ),
+        "msg-param-gift-id": "one_tap_gift_id",
+        "msg-param-breakpoint-threshold-bits": r(
+            "one_tap_breakpoint_threshold_bits",
+            int_or_none,
+        ),
+        "msg-param-user-display-name": "one_tap_user_display_name",
+        "msg-param-bits-spent": r("one_tap_bits_spent", int_or_none),
+        "msg-param-largest-contributor-count": r(
+            "one_tap_largest_contributor_count",
+            int_or_none,
+        ),
+        "msg-param-channel-display-name": "one_tap_channel_display_name",
+        "msg-param-streak-size-bits": r("one_tap_streak_size_bits", int_or_none),
+        "msg-param-streak-size-taps": r("one_tap_streak_size_taps", int_or_none),
+        "msg-param-contributor-1": "one_tap_contributor_1",
+        "msg-param-contributor-1-taps": r("one_tap_contributor_1_taps", int_or_none),
+        "msg-param-contributor-2": "one_tap_contributor_2",
+        "msg-param-contributor-2-taps": r("one_tap_contributor_2_taps", int_or_none),
+        "msg-param-contributor-3": "one_tap_contributor_3",
+        "msg-param-contributor-3-taps": r("one_tap_contributor_3_taps", int_or_none),
+        "msg-param-ms-remaining": r("one_tap_ms_remaining", int_or_none),
     }
 
 
@@ -232,6 +264,18 @@ def build_irc_remapping() -> dict[str, Any]:
         "number-of-viewers": "number_of_viewers",
         "target-user-id": r("target_author_id", str_or_none),
         "animation-id": "animation_id",
+        "pinned-chat-paid-amount": r("pinned_chat_paid_amount", int_or_none),
+        "pinned-chat-paid-canonical-amount": r(
+            "pinned_chat_paid_canonical_amount",
+            int_or_none,
+        ),
+        "pinned-chat-paid-currency": "pinned_chat_paid_currency",
+        "pinned-chat-paid-exponent": r("pinned_chat_paid_exponent", int_or_none),
+        "pinned-chat-paid-is-system-message": r(
+            "pinned_chat_paid_is_system_message",
+            _parse_bool,
+        ),
+        "pinned-chat-paid-level": "pinned_chat_paid_level",
         **message_param_remapping,
     }
 

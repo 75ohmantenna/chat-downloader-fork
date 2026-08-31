@@ -399,11 +399,18 @@ def test_format_with_list_format_object(formatter: ItemFormatter) -> None:
         "standard_pay_forward",
         "community_pay_forward",
         "prime_community_gift_received",
+        "gift_subscription_match",
         "prime_paid_upgrade",
         "gift_paid_upgrade",
         "reward_gift",
         "anonymous_gift_paid_upgrade",
         "viewermilestone",
+        "charity_donation",
+        "one_tap_breakpoint_achieved",
+        "one_tap_gift_redeemed",
+        "one_tap_streak_expired",
+        "one_tap_streak_started",
+        "moderator_anniversary",
     ],
 )
 @pytest.mark.parametrize(
