@@ -16,10 +16,10 @@ PING_TEXT = "PING :tmi.twitch.tv"
 PONG_TEXT = "PONG :tmi.twitch.tv"
 IRC_HOST = "irc.chat.twitch.tv"
 IRC_PORT = 6697
-# Standard Twitch IRC capability request.
-IRC_CAP_REQUEST = "CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership"
+# Anonymous mobile chat requests only message tags and commands.
+IRC_CAP_REQUEST = "CAP REQ :twitch.tv/tags twitch.tv/commands"
 # Any PASS value and a justinfan* NICK grants anonymous read-only IRC access.
-IRC_ANONYMOUS_PASSWORD = "SCHMOOPIIE"  # noqa: S105 — not a real password; any PASS value grants Twitch anonymous IRC access
+IRC_ANONYMOUS_PASSWORD = "listen"  # noqa: S105 — APK anonymous placeholder, not a credential
 IRC_ANONYMOUS_NICK = "justinfan67420"
 
 # Persisted GraphQL operation hashes, including GlobalBadges.

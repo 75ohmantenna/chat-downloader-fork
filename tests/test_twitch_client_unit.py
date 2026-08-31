@@ -338,7 +338,7 @@ def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric
     readbuffer = (
         "PING :tmi.twitch.tv\r\n"
         "PONG :tmi.twitch.tv\r\n"
-        ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n"  # noqa: E501
+        ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n"
         ":tmi.twitch.tv 001 justinfan67420 :Welcome, GLHF!\r\n"
         ":justinfan67420.tmi.twitch.tv 353 justinfan67420 = #idubbbz :foo bar baz\r\n"
         ":user!user@user.tmi.twitch.tv JOIN #idubbbz\r\n"

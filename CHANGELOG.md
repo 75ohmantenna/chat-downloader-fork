@@ -44,6 +44,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Fall back independently to the Android client's current channel and global
   badge operations, preserving badge metadata while normalizing mobile image
   fields for live, VOD, clip, and reconnect parsing.
+- Align anonymous Twitch IRC negotiation with the Android client by requesting
+  only tags and commands and using its non-secret `listen` PASS placeholder.
 - Classify Kick's provider-specific HTTP 423 response as a terminal
   country/region block, expose a typed error for integrations, and preserve it
   through clip metadata fallback decisions without retrying.

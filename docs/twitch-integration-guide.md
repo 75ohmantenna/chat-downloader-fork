@@ -123,7 +123,7 @@ state. That keeps ownership clearer and testing simpler.
 
 Live chat uses Twitch IRC over TLS. The transport:
 
-- requests Twitch IRC tags, commands, and membership capabilities
+- requests Twitch IRC tags and commands capabilities
 - connects anonymously with a `justinfan`-style nick
 - joins the channel
 - reads and parses IRC messages continuously

@@ -237,11 +237,8 @@ def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
 
     assert fake_socket.settimeout.call_args_list == [((None,), {})]
     assert fake_socket.sendall.call_args_list == [
-        (
-            (b"CAP REQ :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",),
-            {},
-        ),
-        ((b"PASS SCHMOOPIIE\r\n",), {}),
+        ((b"CAP REQ :twitch.tv/tags twitch.tv/commands\r\n",), {}),
+        ((b"PASS listen\r\n",), {}),
         ((b"NICK justinfan67420\r\n",), {}),
     ]
 
@@ -277,7 +274,7 @@ def test_twitch_chat_irc_preserves_utf8_split_across_recv_chunks(
         (":user!user@user.tmi.twitch.tv PART #example\r\n", True),
         (":tmi.twitch.tv 001 justinfan :Welcome\r\n", True),
         (
-            ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands twitch.tv/membership\r\n",  # noqa: E501
+            ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n",
             True,
         ),
         (":tmi.twitch.tv NOTICE * :hello\r\n", False),
