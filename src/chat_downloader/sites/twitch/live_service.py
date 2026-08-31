@@ -21,7 +21,7 @@ from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_str
 
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
-from .irc_diagnostics import _SuccessfulIrcFrameCapture
+from .irc_diagnostics import _SuccessfulIrcFrameCapture, _TwitchLiveDiagnostics
 from .irc_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
     _PROGRESS_LOG_INTERVAL_MESSAGES,
@@ -84,16 +84,19 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     request: ChatRequest,
     irc_factory: _IRCFactory | None = None,
     message_generator: _MessageGenerator | None = None,
+    diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield live IRC chat messages for a stream."""
     irc_factory = irc_factory or TwitchChatIRC
     message_generator = message_generator or get_chat_messages_by_stream_id
+    diagnostics = diagnostics or _TwitchLiveDiagnostics()
     if message_generator is get_chat_messages_by_stream_id:
         message_generator = cast(
             "_MessageGenerator",
             partial(
                 message_generator,
                 successful_frame_capture=_SuccessfulIrcFrameCapture(),
+                diagnostics=diagnostics,
             ),
         )
     msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
@@ -105,6 +108,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
             f"https://{IRC_HOST}",
         )
         for attempt_number in _attempt_numbers(request.max_attempts):
+            diagnostics.increment("connection_attempt_count")
             irc: TwitchChatIRC | None = None
             try:
                 irc = irc_factory(
@@ -124,10 +128,12 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                 irc.set_timeout(effective_receive_timeout)
                 irc.join_channel(stream_id)
             except OSError as error:
+                diagnostics.increment("connection_setup_failure_count")
                 if irc is not None:
                     irc.close_connection()
                 downloader.retry(attempt_number, error=error, request=request)
             else:
+                diagnostics.increment("connection_success_count")
                 return irc
         msg_0 = "unreachable: retry should have raised RetriesExceeded"
         raise RuntimeError(msg_0)
@@ -151,6 +157,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     badge_set,
                 ):
                     if raw_message.get("action_type") == "reconnect":
+                        diagnostics.increment("server_reconnect_requested_count")
                         log(
                             "info",
                             "Twitch IRC server requested reconnect; reconnecting.",
@@ -166,6 +173,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                         raw_message.get("message_id"),
                         seen_message_cache,
                     ):
+                        diagnostics.increment("duplicate_message_suppressed_count")
                         continue
 
                     unexpected_keys = raw_message.keys() - build_known_irc_keys()
@@ -176,9 +184,11 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                         )
 
                     if not msg_filter.should_add(raw_message):
+                        diagnostics.increment("filtered_message_count")
                         continue
 
                     message_count += 1
+                    diagnostics.increment("live_emitted_count")
                     if message_count % _PROGRESS_LOG_INTERVAL_MESSAGES == 0:
                         log(
                             "debug",
@@ -188,6 +198,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
 
             except ConnectionError as error:
                 twitch_chat_irc.close_connection()
+                diagnostics.increment("reconnect_count")
                 consecutive_connection_failures += 1
                 wait_for_reconnect(
                     consecutive_connection_failures,
@@ -263,11 +274,17 @@ def get_chat_by_stream_id(
     else:
         downloader._update_badge_info(stream_id)
 
+    diagnostics = _TwitchLiveDiagnostics()
     return Chat(
-        downloader._get_chat_messages_by_stream_id(stream_id, request),
+        downloader._get_chat_messages_by_stream_id(
+            stream_id,
+            request,
+            diagnostics=diagnostics,
+        ),
         title=title,
         duration=None,
         status="live" if is_live else "upcoming",
         video_type="video",
         id=stream_id,
+        diagnostics=diagnostics.summary,
     )

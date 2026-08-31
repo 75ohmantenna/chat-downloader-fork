@@ -266,7 +266,11 @@ the same class.
 wraps the underlying generator and carries metadata such as `title`, `id`,
 `status`, `video_type`, `start_time`, and `duration`. Provider-specific live
 diagnostics, when available, are exposed through `chat.diagnostics` and included
-in the successful debug run summary.
+in the successful debug run summary. Twitch live diagnostics use fixed-schema
+counters for connection setup and reconnects, IRC frames and parsed messages,
+receive timeouts and idle-watchdog expirations, `PING`/`PONG` keepalives,
+duplicate suppression, filtering, and source emission. They contain no endpoint
+or chat-content fields.
 
 In normal usage, treat it as an iterable of message dictionaries:
 

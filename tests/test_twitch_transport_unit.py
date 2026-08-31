@@ -51,6 +51,26 @@ def test_successful_irc_frame_capture_requires_explicit_scope_opt_in(
     assert captured == []
 
 
+def test_live_diagnostics_count_split_control_frames_with_bounded_state() -> None:
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+
+    diagnostics.record_received_data("PING :tmi.twitch.tv\r")
+    diagnostics.record_received_data(
+        "\n:tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n"
+    )
+    diagnostics.record_received_data("x" * 100 + "PING :tmi.twitch.tv\r\n")
+    diagnostics.increment("not_a_supported_counter")
+
+    assert diagnostics.summary["received_irc_chunk_count"] == 3
+    assert diagnostics.summary["received_irc_frame_count"] == 3
+    assert diagnostics.summary["keepalive_ping_received_count"] == 1
+    assert diagnostics.summary["keepalive_pong_received_count"] == 1
+    assert "not_a_supported_counter" not in diagnostics.summary
+    assert len(diagnostics._frame_prefix) <= (
+        irc_diagnostics._CONTROL_FRAME_PREFIX_LIMIT
+    )
+
+
 @pytest.mark.parametrize(
     ("message", "expected_exception"),
     [
@@ -270,6 +290,7 @@ def test_twitch_chat_irc_preserves_utf8_split_across_recv_chunks(
     [
         ("", True),
         ("PING :tmi.twitch.tv\r\nPONG :tmi.twitch.tv\r\n", True),
+        (":tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n", True),
         (":user!user@user.tmi.twitch.tv JOIN #example\r\n", True),
         (":user!user@user.tmi.twitch.tv PART #example\r\n", True),
         (":tmi.twitch.tv 001 justinfan :Welcome\r\n", True),
@@ -303,6 +324,7 @@ def test_maybe_send_keepalive_updates_last_ping_only_when_due() -> None:
             self.sent.append(message)
 
     irc = FakeIRC()
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
 
     assert (
         irc_transport._maybe_send_keepalive(
@@ -310,6 +332,7 @@ def test_maybe_send_keepalive_updates_last_ping_only_when_due() -> None:
             current_time=120.0,
             last_ping_time=40.0,
             ping_every=60.0,
+            diagnostics=diagnostics,
         )
         == 120.0
     )
@@ -321,10 +344,12 @@ def test_maybe_send_keepalive_updates_last_ping_only_when_due() -> None:
             current_time=150.0,
             last_ping_time=120.0,
             ping_every=60.0,
+            diagnostics=diagnostics,
         )
         == 120.0
     )
     assert irc.sent == ["PING"]
+    assert diagnostics.summary["keepalive_ping_sent_count"] == 1
 
 
 def test_process_irc_buffer_keeps_partial_tail_without_final_newline() -> None:
@@ -366,10 +391,17 @@ def test_parse_irc_matches_returns_items_and_updated_count(monkeypatch) -> None:
         lambda match, _badge_set: {"message": match.group(3)},
     )
 
-    items, message_count = irc_transport._parse_irc_matches(matches, None, 249)
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+    items, message_count = irc_transport._parse_irc_matches(
+        matches,
+        None,
+        249,
+        diagnostics=diagnostics,
+    )
 
     assert items == [{"message": "one"}, {"message": "two"}]
     assert message_count == 251
+    assert diagnostics.summary["parsed_irc_message_count"] == 2
 
 
 def test_irc_transport_sends_pong_on_ping_before_connection_error() -> None:
@@ -385,6 +417,7 @@ def test_irc_transport_sends_pong_on_ping_before_connection_error() -> None:
             self.sent.append(message)
 
     irc = FakeIRC()
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
 
     with pytest.raises(ConnectionError):
         list(
@@ -392,10 +425,144 @@ def test_irc_transport_sends_pong_on_ping_before_connection_error() -> None:
                 cast("Any", irc),
                 "example",
                 ChatRequest(url="https://www.twitch.tv/example"),
+                diagnostics=diagnostics,
             ),
         )
 
     assert irc.sent == [irc_transport.PONG_TEXT]
+    assert diagnostics.summary["received_irc_chunk_count"] == 1
+    assert diagnostics.summary["received_irc_frame_count"] == 1
+    assert diagnostics.summary["keepalive_ping_received_count"] == 1
+    assert diagnostics.summary["keepalive_pong_sent_count"] == 1
+
+
+def test_irc_transport_waits_for_complete_ping_before_sending_pong() -> None:
+    class FakeIRC:
+        def __init__(self) -> None:
+            self.responses = iter(["PING :tmi.twitch.tv\r", "\n", ""])
+            self.sent: list[str] = []
+
+        def recv(self, _buffer_size: int) -> str:
+            response = next(self.responses)
+            if response == "\n":
+                assert self.sent == []
+            return response
+
+        def send_raw(self, message: str) -> None:
+            self.sent.append(message)
+
+    irc = FakeIRC()
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+
+    with pytest.raises(ConnectionError):
+        list(
+            irc_transport.get_chat_messages_by_stream_id(
+                cast("Any", irc),
+                "example",
+                ChatRequest(url="https://www.twitch.tv/example"),
+                diagnostics=diagnostics,
+            )
+        )
+
+    assert irc.sent == [irc_transport.PONG_TEXT]
+    assert diagnostics.summary["received_irc_frame_count"] == 1
+    assert diagnostics.summary["keepalive_ping_received_count"] == 1
+    assert diagnostics.summary["keepalive_pong_sent_count"] == 1
+
+
+def test_irc_transport_sends_one_pong_per_completed_ping() -> None:
+    class FakeIRC:
+        def __init__(self) -> None:
+            self.responses = iter(
+                ["PING :tmi.twitch.tv\r\nPING :tmi.twitch.tv\r\n", ""]
+            )
+            self.sent: list[str] = []
+
+        def recv(self, _buffer_size: int) -> str:
+            return next(self.responses)
+
+        def send_raw(self, message: str) -> None:
+            self.sent.append(message)
+
+    irc = FakeIRC()
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+
+    with pytest.raises(ConnectionError):
+        list(
+            irc_transport.get_chat_messages_by_stream_id(
+                cast("Any", irc),
+                "example",
+                ChatRequest(url="https://www.twitch.tv/example"),
+                diagnostics=diagnostics,
+            )
+        )
+
+    assert irc.sent == [irc_transport.PONG_TEXT, irc_transport.PONG_TEXT]
+    assert diagnostics.summary["keepalive_ping_received_count"] == 2
+    assert diagnostics.summary["keepalive_pong_sent_count"] == 2
+
+
+def test_irc_transport_ignores_ping_text_in_chat_payload() -> None:
+    class FakeIRC:
+        def __init__(self) -> None:
+            self.responses = iter([_privmsg("1", "PING :tmi.twitch.tv") + "\r\n", ""])
+            self.sent: list[str] = []
+
+        def recv(self, _buffer_size: int) -> str:
+            return next(self.responses)
+
+        def send_raw(self, message: str) -> None:
+            self.sent.append(message)
+
+    irc = FakeIRC()
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+
+    with pytest.raises(ConnectionError):
+        list(
+            irc_transport.get_chat_messages_by_stream_id(
+                cast("Any", irc),
+                "example",
+                ChatRequest(url="https://www.twitch.tv/example"),
+                diagnostics=diagnostics,
+            )
+        )
+
+    assert irc.sent == []
+    assert diagnostics.summary["keepalive_ping_received_count"] == 0
+    assert diagnostics.summary["keepalive_pong_sent_count"] == 0
+
+
+def test_irc_transport_ignores_prefixed_pong_without_drift_capture() -> None:
+    class FakeIRC:
+        def __init__(self) -> None:
+            self.responses = iter(
+                [":tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n", ""]
+            )
+
+        def recv(self, _buffer_size: int) -> str:
+            return next(self.responses)
+
+        def send_raw(self, _message: str) -> None:
+            return None
+
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+    with (
+        patch.object(irc_transport, "log") as mock_log,
+        patch.object(irc_transport, "capture_debug_sample") as mock_capture,
+        pytest.raises(ConnectionError),
+    ):
+        list(
+            irc_transport.get_chat_messages_by_stream_id(
+                cast("Any", FakeIRC()),
+                "example",
+                ChatRequest(url="https://www.twitch.tv/example"),
+                diagnostics=diagnostics,
+            )
+        )
+
+    mock_log.assert_not_called()
+    mock_capture.assert_not_called()
+    assert diagnostics.summary["keepalive_pong_received_count"] == 1
 
 
 def test_irc_transport_logs_unknown_full_buffer_when_no_matches() -> None:
@@ -464,6 +631,7 @@ def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive
             self.sent.append(message)
 
     irc = FakeIRC()
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
     time_values = iter([0.0, 61.0, 62.0])
 
     with (
@@ -485,12 +653,17 @@ def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive
                 cast("Any", irc),
                 "example",
                 ChatRequest(url="https://www.twitch.tv/example"),
+                diagnostics=diagnostics,
             ),
         ) == [{"message": "hello"}, {"message": "partial"}]
 
     assert mock_parse.call_count == 2
     mock_log.assert_not_called()
     assert irc.sent == ["PING"]
+    assert diagnostics.summary["received_irc_chunk_count"] == 2
+    assert diagnostics.summary["received_irc_frame_count"] == 2
+    assert diagnostics.summary["parsed_irc_message_count"] == 2
+    assert diagnostics.summary["keepalive_ping_sent_count"] == 1
 
 
 def test_irc_transport_does_not_log_progress_every_250_messages() -> None:
@@ -613,6 +786,7 @@ def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
             self.sent.append(message)
 
     irc = FakeIRC()
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
     time_values = iter([0.0, 61.0, 180.0])
 
     with (
@@ -629,10 +803,14 @@ def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
                 cast("Any", irc),
                 "example",
                 ChatRequest(url="https://www.twitch.tv/example"),
+                diagnostics=diagnostics,
             )
         )
 
     assert irc.sent == ["PING", "PING"]
+    assert diagnostics.summary["receive_timeout_count"] == 2
+    assert diagnostics.summary["idle_watchdog_expiration_count"] == 1
+    assert diagnostics.summary["keepalive_ping_sent_count"] == 2
     mock_log.assert_called_once_with(
         "debug",
         "Twitch IRC idle watchdog expired after 180s; reconnecting.",

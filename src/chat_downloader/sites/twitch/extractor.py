@@ -34,6 +34,8 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
 
+    from .irc_diagnostics import _TwitchLiveDiagnostics
+
 
 class TwitchError(SiteError):
     """Raised when an error occurs with a Twitch video."""
@@ -258,6 +260,8 @@ class TwitchChatDownloader(BaseChatDownloader):
         self,
         stream_id: str,
         params: ChatRequest | dict[str, Any],
+        *,
+        diagnostics: _TwitchLiveDiagnostics | None = None,
     ) -> Generator[dict[str, Any], None, None]:
         """Get live chat messages for a stream via IRC.
 
@@ -274,6 +278,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         Args:
             stream_id: Channel name
             params: Parameters dictionary
+            diagnostics: Mutable counters for the owning live-chat run.
 
         Yields:
             Parsed IRC message dictionaries
@@ -285,6 +290,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             request,
             irc_factory=TwitchChatIRC,
             message_generator=get_chat_messages_by_stream_id,
+            diagnostics=diagnostics,
         )
 
     def _get_chat_by_stream_id(

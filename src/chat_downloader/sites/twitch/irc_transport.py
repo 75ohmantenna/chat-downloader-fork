@@ -21,7 +21,6 @@ from .constants import (
     IRC_HOST,
     IRC_PORT,
     MESSAGE_REGEX,
-    PING_TEXT,
     PONG_TEXT,
     TWITCH_DEBUG_SAMPLE_LIMIT,
 )
@@ -34,7 +33,7 @@ if TYPE_CHECKING:
 
     from chat_downloader.models import ChatRequest
 
-    from .irc_diagnostics import _SuccessfulIrcFrameCapture
+    from .irc_diagnostics import _SuccessfulIrcFrameCapture, _TwitchLiveDiagnostics
     from .types import BadgeSet
 
 _PROGRESS_LOG_INTERVAL_MESSAGES = 250
@@ -63,6 +62,7 @@ def _maybe_send_keepalive(
     current_time: float,
     last_ping_time: float,
     ping_every: float,
+    diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> float:
     """Send IRC keepalive if needed and return the updated last-ping time."""
     if not _should_send_keepalive(current_time, last_ping_time, ping_every):
@@ -72,6 +72,8 @@ def _maybe_send_keepalive(
     except OSError as e:
         msg = "Lost connection while sending PING."
         raise ConnectionError(msg) from e
+    if diagnostics is not None:
+        diagnostics.increment("keepalive_ping_sent_count")
     return current_time
 
 
@@ -141,6 +143,7 @@ def _parse_irc_matches(
     badge_set: BadgeSet | None,
     message_count: int,
     successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
+    diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Parse IRC matches and update the running message count."""
     items: list[dict[str, Any]] = []
@@ -150,26 +153,15 @@ def _parse_irc_matches(
             successful_frame_capture.capture(f"{match.group(0)}\r\n")
         items.append(item)
         message_count += 1
+        if diagnostics is not None:
+            diagnostics.increment("parsed_irc_message_count")
     return items, message_count
 
 
 def _should_send_keepalive(
     current_time: float, last_ping_time: float, ping_every: float
 ) -> bool:
-    """Return ``True`` when enough time has elapsed to send a keepalive PING.
-
-    The caller is responsible for sampling ``time.monotonic()`` once and passing
-    it as ``current_time``.  This keeps the function pure and avoids a second
-    clock read per loop iteration.
-
-    Args:
-        current_time: The caller's snapshot of ``time.monotonic()``.
-        last_ping_time: Monotonic timestamp of the most recent PING send.
-        ping_every: Interval in seconds between keepalive PINGs.
-
-    Returns:
-        ``True`` if ``ping_every`` seconds have passed since ``last_ping_time``.
-    """
+    """Return whether the sampled monotonic time requires a keepalive PING."""
     return current_time - last_ping_time > ping_every
 
 
@@ -264,15 +256,20 @@ def _drain_readbuffer(readbuffer: str) -> str:
     return readbuffer[last_crlf + _CRLF_LENGTH :] if last_crlf >= 0 else ""
 
 
-def _handle_ping(irc: TwitchChatIRC, readbuffer: str) -> None:
-    """Reply to a server PING, raising ConnectionError on send failure."""
-    if PING_TEXT not in readbuffer:
-        return
-    try:
-        irc.send_raw(PONG_TEXT)
-    except OSError as e:
-        msg = "Lost connection while sending PONG."
-        raise ConnectionError(msg) from e
+def _handle_ping(
+    irc: TwitchChatIRC,
+    completed_ping_count: int,
+    diagnostics: _TwitchLiveDiagnostics | None = None,
+) -> None:
+    """Reply once per newly completed server PING frame."""
+    for _ in range(completed_ping_count):
+        try:
+            irc.send_raw(PONG_TEXT)
+        except OSError as e:
+            msg = "Lost connection while sending PONG."
+            raise ConnectionError(msg) from e
+        if diagnostics is not None:
+            diagnostics.increment("keepalive_pong_sent_count")
 
 
 def _recv_irc(irc: TwitchChatIRC, buffer_size: int) -> str:
@@ -293,6 +290,7 @@ def get_chat_messages_by_stream_id(
     badge_set: BadgeSet | None = None,
     *,
     successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
+    diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield live chat messages for a stream via IRC."""
     from chat_downloader.models import ChatRequest
@@ -300,6 +298,11 @@ def get_chat_messages_by_stream_id(
     request = (
         params if isinstance(params, ChatRequest) else ChatRequest.from_kwargs(**params)
     )
+    if diagnostics is None:
+        from .irc_diagnostics import _TwitchLiveDiagnostics
+
+        diagnostics = _TwitchLiveDiagnostics()
+    diagnostics.reset_transport_state()
     buffer_size = request.buffer_size
 
     last_receive_time = time.monotonic()
@@ -315,13 +318,14 @@ def get_chat_messages_by_stream_id(
             if not new_info:
                 msg = "Lost connection, reconnecting."
                 raise ConnectionError(msg)
+            completed_ping_count = diagnostics.record_received_data(new_info)
 
             readbuffer += new_info
 
             if len(readbuffer) > _READBUFFER_MAX_BYTES:
                 readbuffer = _drain_readbuffer(readbuffer)
 
-            _handle_ping(irc, readbuffer)
+            _handle_ping(irc, completed_ping_count, diagnostics)
 
             readbuffer, matches, unmatched_full_buffer = _consume_irc_buffer(
                 readbuffer,
@@ -334,6 +338,7 @@ def get_chat_messages_by_stream_id(
                     badge_set,
                     message_count,
                     successful_frame_capture,
+                    diagnostics,
                 )
                 yield from items
             elif unmatched_full_buffer is not None:
@@ -357,16 +362,20 @@ def get_chat_messages_by_stream_id(
                 current_time,
                 last_ping_time,
                 ping_every,
+                diagnostics,
             )
         except TimeoutError:
+            diagnostics.increment("receive_timeout_count")
             current_time = time.monotonic()
             last_ping_time = _maybe_send_keepalive(
                 irc,
                 current_time,
                 last_ping_time,
                 ping_every,
+                diagnostics,
             )
             if current_time - last_receive_time >= _IDLE_WATCHDOG_SECONDS:
+                diagnostics.increment("idle_watchdog_expiration_count")
                 log(
                     "debug",
                     "Twitch IRC idle watchdog expired after "

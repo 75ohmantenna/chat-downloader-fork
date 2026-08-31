@@ -137,6 +137,36 @@ Debug logging reports both the requested socket receive timeout and the
 effective timeout. Twitch clamps values below one second to one second to
 avoid idle CPU churn.
 
+### Live diagnostics
+
+Each live `Chat` exposes fixed-schema connection counters through
+`chat.diagnostics`. The same mapping appears under `provider_diagnostics` in a
+successful debug run summary.
+
+| Field | Meaning |
+| --- | --- |
+| `connection_attempt_count` | IRC setup attempts |
+| `connection_success_count` | Completed socket, timeout, and channel-join setup |
+| `connection_setup_failure_count` | Setup attempts that failed before use |
+| `reconnect_count` | Runtime disconnects that entered reconnect recovery |
+| `server_reconnect_requested_count` | Parsed Twitch reconnect commands |
+| `received_irc_chunk_count` | Non-empty socket receive chunks |
+| `received_irc_frame_count` | Complete CRLF-delimited IRC frames |
+| `parsed_irc_message_count` | Frames successfully parsed as Twitch messages |
+| `receive_timeout_count` | Socket receive polls that timed out |
+| `idle_watchdog_expiration_count` | Idle watchdog expirations that forced reconnect |
+| `keepalive_ping_sent_count` | Periodic client `PING` commands sent |
+| `keepalive_ping_received_count` | Server `PING` commands received |
+| `keepalive_pong_sent_count` | Client `PONG` replies sent |
+| `keepalive_pong_received_count` | Server `PONG` replies received |
+| `duplicate_message_suppressed_count` | Repeated message IDs excluded from emission |
+| `filtered_message_count` | Parsed messages excluded by type/group filters |
+| `live_emitted_count` | Live messages emitted by the Twitch source generator |
+
+The mapping contains only counters: it does not retain the channel, endpoint,
+raw IRC frames, or chat content. Its keys are fixed so unexpected counter names
+cannot grow retained state during a long capture.
+
 ### Filtering and deduplication
 
 Before yielding live messages, the service:

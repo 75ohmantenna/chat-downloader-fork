@@ -104,9 +104,10 @@ def test_twitch_stream_entry_accepts_chat_request() -> None:
     )
     downloader._update_badge_info = Mock()
 
-    def fake_generator(stream_id, params):
+    def fake_generator(stream_id, params, *, diagnostics=None):
         captured["stream_id"] = stream_id
         captured["params"] = params
+        captured["diagnostics"] = diagnostics
         return iter(())
 
     downloader._get_chat_messages_by_stream_id = fake_generator
@@ -116,6 +117,7 @@ def test_twitch_stream_entry_accepts_chat_request() -> None:
     assert chat.title == "Live Title"
     assert captured["stream_id"] == "example"
     assert captured["params"] is request
+    assert chat.diagnostics is captured["diagnostics"].summary
 
 
 @patch("chat_downloader.sites.twitch.extractor.get_chat_messages_by_stream_id")

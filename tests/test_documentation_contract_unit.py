@@ -17,12 +17,14 @@ from chat_downloader.models import ChatRequest, DownloaderConfig, RunConfig, Sit
 from chat_downloader.output.continuous_write import SUPPORTED_OUTPUT_FORMATS
 from chat_downloader.runtime import RunResult
 from chat_downloader.sites.kick.constants import MESSAGE_GROUPS as KICK_MESSAGE_GROUPS
+from chat_downloader.sites.twitch.irc_diagnostics import _TwitchLiveDiagnostics
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "chat_downloader"
 API_REFERENCE = ROOT / "docs" / "python-api-reference.md"
 CLI_REFERENCE = ROOT / "docs" / "cli-usage.md"
 KICK_REFERENCE = ROOT / "docs" / "kick-integration-guide.md"
+TWITCH_REFERENCE = ROOT / "docs" / "twitch-integration-guide.md"
 _MARKDOWN_LINK = re.compile(r"(?<!!)\[[^]]*]\(([^)]+)\)")
 _FIELD_ROW = re.compile(
     r"^\| `(?P<name>[a-z_]+)` \| (?P<default>[^|]+?) \|",
@@ -179,6 +181,17 @@ def test_python_api_reference_documents_exact_typed_fields_and_defaults() -> Non
             for field in fields(dataclass_type)
         ]
         assert _documented_fields(heading) == expected
+
+
+def test_twitch_guide_documents_exact_live_diagnostic_fields() -> None:
+    """Keep the observable Twitch live summary schema documented."""
+    section = _section(
+        TWITCH_REFERENCE.read_text(encoding="utf-8"),
+        "### Live diagnostics",
+    )
+    documented = re.findall(r"^\| `([a-z_]+)` \|", section, flags=re.MULTILINE)
+
+    assert documented == list(_TwitchLiveDiagnostics().summary)
 
 
 def test_cli_reference_mentions_only_real_cli_flags() -> None:

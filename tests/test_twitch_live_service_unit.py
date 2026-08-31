@@ -63,6 +63,7 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
             ],
         ),
     )
+    diagnostics = live_service._TwitchLiveDiagnostics()
 
     with (
         patch.object(
@@ -79,6 +80,7 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
                 request,
                 irc_factory=irc_factory,
                 message_generator=message_generator,
+                diagnostics=diagnostics,
             ),
         )
 
@@ -89,21 +91,27 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
     first_irc.close_connection.assert_called_once()
     second_irc.close_connection.assert_called_once()
     mock_debug_log.assert_called_once()
+    assert diagnostics.summary["connection_attempt_count"] == 3
+    assert diagnostics.summary["connection_success_count"] == 2
+    assert diagnostics.summary["connection_setup_failure_count"] == 1
+    assert diagnostics.summary["reconnect_count"] == 1
+    assert diagnostics.summary["live_emitted_count"] == 1
 
 
 def test_successful_irc_frame_capture_is_bounded_across_reconnects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeIRC:
-        def __init__(self, frames: list[str]) -> None:
-            self.responses = iter(["\r\n".join(frames) + "\r\n", ""])
+        def __init__(self, responses: list[str]) -> None:
+            self.responses = iter(responses)
             self.closed = False
+            self.sent: list[str] = []
 
         def recv(self, _buffer_size: int) -> str:
             return next(self.responses)
 
-        def send_raw(self, _message: str) -> None:
-            return None
+        def send_raw(self, message: str) -> None:
+            self.sent.append(message)
 
         def set_timeout(self, _timeout: float) -> None:
             return None
@@ -116,7 +124,15 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
 
     first_frames = [_privmsg(str(index), f"message {index}") for index in range(2)]
     second_frames = [_privmsg(str(index), f"message {index}") for index in range(2, 5)]
-    ircs = [FakeIRC(first_frames), FakeIRC(second_frames)]
+    ircs = [
+        FakeIRC(
+            [
+                "\r\n".join(first_frames) + "\r\nPING :tmi.twitch.tv\r",
+                "",
+            ]
+        ),
+        FakeIRC(["\n" + "\r\n".join(second_frames) + "\r\n", ""]),
+    ]
     downloader = SimpleNamespace(
         badge_cache=SimpleNamespace(snapshot=lambda: None),
         _update_badge_info=Mock(),
@@ -130,6 +146,7 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
         message_groups=["messages"],
     )
     captured = []
+    diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "yes")
     monkeypatch.setattr(
         "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
@@ -141,6 +158,7 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
         "example",
         request,
         irc_factory=cast("live_service._IRCFactory", Mock(side_effect=ircs)),
+        diagnostics=diagnostics,
     )
     received = [next(messages) for _ in range(5)]
     messages.close()
@@ -156,6 +174,16 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
         for frame in [*first_frames, second_frames[0]]
     ]
     assert all(irc.closed for irc in ircs)
+    assert all(irc.sent == [] for irc in ircs)
+    assert diagnostics.summary["connection_attempt_count"] == 2
+    assert diagnostics.summary["connection_success_count"] == 2
+    assert diagnostics.summary["reconnect_count"] == 1
+    assert diagnostics.summary["received_irc_chunk_count"] == 2
+    assert diagnostics.summary["received_irc_frame_count"] == 5
+    assert diagnostics.summary["parsed_irc_message_count"] == 5
+    assert diagnostics.summary["keepalive_ping_received_count"] == 0
+    assert diagnostics.summary["keepalive_pong_sent_count"] == 0
+    assert diagnostics.summary["live_emitted_count"] == 5
 
 
 def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
@@ -389,6 +417,7 @@ def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> 
             "message": "second",
         },
     ]
+    diagnostics = live_service._TwitchLiveDiagnostics()
 
     result = list(
         live_service.iter_stream_chat_messages(
@@ -400,6 +429,7 @@ def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> 
                 "live_service._MessageGenerator",
                 Mock(return_value=iter(messages)),
             ),
+            diagnostics=diagnostics,
         ),
     )
 
@@ -415,6 +445,8 @@ def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> 
             "message": "second",
         },
     ]
+    assert diagnostics.summary["duplicate_message_suppressed_count"] == 1
+    assert diagnostics.summary["live_emitted_count"] == 2
 
 
 def test_live_service_iter_stream_chat_messages_rejects_zero_attempts() -> None:
@@ -457,6 +489,11 @@ def test_live_service_get_chat_by_stream_id_handles_rerun_and_updates_badges(
 
     assert chat.title == "Rerun Title"
     assert chat.status == "live"
+    assert chat.diagnostics["connection_attempt_count"] == 0
+    diagnostics = downloader._get_chat_messages_by_stream_id.call_args.kwargs[
+        "diagnostics"
+    ]
+    assert chat.diagnostics is diagnostics.summary
     downloader._update_badge_info.assert_called_once_with("example", "channel-123")
     assert any("broadcasting a rerun" in r.message for r in caplog.records)
 

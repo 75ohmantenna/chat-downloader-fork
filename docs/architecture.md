@@ -66,7 +66,7 @@ same interfaces as production callers.
 | Transport | Open/read path | Retry/reconnect owner | Close path |
 |-----------|----------------|-----------------------|------------|
 | Shared HTTP (YouTube and Twitch) | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
-| Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, and a 180-second idle watchdog | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
+| Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, a 180-second idle watchdog, and fixed-schema transport counters | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
 | Kick API HTTP | `kick/http_session.py` creates the Cloudflare-capable transports owned by `KickApiClient`, preserves explicit/environment proxy policy, and origin-isolates the anonymous mobile host from credential-shaped user headers and main-origin cookies | Kick channel metadata plus reconnect/VOD/clip history and metadata retry transient network, malformed-response, 429, and 5xx failures; provider-specific HTTP 423 is a terminal country/region block; clip replay can fail over from unavailable web/source-VOD metadata to the anonymous mobile v1 contract while preserving terminal access policy and reconciling known channel and duration evidence; startup/reconnect preload state remains one-shot best-effort | `KickChatDownloader.close()` closes the client sessions and base session exactly once |
 | Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits, and permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
 
@@ -237,7 +237,7 @@ module names.
 | `extractor.py` | Twitch site extractor class |
 | `graphql_client.py` | Persisted-query GraphQL client and error handling |
 | `badge_client.py` | Badge retrieval, operation fallback, and normalization |
-| `irc_diagnostics.py` | IRC control-traffic classification and bounded clean-run capture |
+| `irc_diagnostics.py` | Fixed-schema live IRC counters, control-traffic classification, and bounded clean-run capture |
 | `irc_transport.py` | Low-level IRC socket connection and message stream |
 | `live_service.py` | Live IRC chat orchestration |
 | `parsing/` | IRC message, tag, badge, and emote parsing |
