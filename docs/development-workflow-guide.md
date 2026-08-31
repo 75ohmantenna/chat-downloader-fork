@@ -68,6 +68,57 @@ uv run pytest tests/FILE.py -q
 uv run pytest tests/FILE.py::test_name -q
 ```
 
+### Capture parity audit
+
+After collecting the same run as `.jsonl` and `.txt`, audit the artifacts
+offline with the exact format name used by the production run:
+
+```bash
+uv run python scripts/audit_capture_parity.py \
+  capture.jsonl capture.txt --format twitch
+```
+
+`--format` is required because an artifact does not record its resolved
+provider format. Use the resolved name that produced the text, such as
+`twitch`, `kick`, or `youtube_live_default`, rather than the unresolved
+site-default marker. Pass `--format-file path/to/formats.json` when the capture
+used custom formatting. If the capture used a nondefault formatted-message
+dedup cache, pass the same nonnegative value with
+`--max-seen-message-ids`; zero has the production default meaning.
+
+By default, the JSONL input represents one logical retrieval run. For JSONL
+and TXT files formed by appending separate runs, repeat
+`--dedup-reset-before-jsonl-line LINE` in strictly increasing order at each
+later run's first one-based JSONL line. A reset beyond the input is an audit
+failure.
+
+The auditor parses every JSONL line as an object, applies the same bounded
+paid/ticker semantic deduplication as formatted production outputs, renders
+with `ItemFormatter`, and compares exact physical TXT content. Nonempty JSONL
+and TXT files must end in LF or CRLF, must use one newline style consistently,
+and must agree on the capture-origin style, so a Windows capture audits
+correctly on a POSIX host and vice versa. Memory scales with the largest
+individual input record plus the bounded dedup cache and explicitly supplied
+reset list, rather than with total capture size.
+
+Reports contain only counts, completeness state, and first issue/mismatch
+indices; captured chat and rejected argument values are never printed. A JSON
+parse, deduplication, or formatting error makes exact realignment unsafe, so
+`comparison_complete=no` and `comparison_skipped` report how many JSONL lines
+were not compared from that point onward. The tool still scans every JSONL and
+TXT physical line for bounded diagnostics.
+
+Only a truly absent artifact is treated as empty, matching lazy writers that
+retrieve no records. Permission failures, dangling links, nonregular files,
+and two input paths that open the same device/inode are usage/I/O errors. A
+missing artifact still fails parity when its counterpart contains records.
+
+Exit status `0` means parity passed, `1` means the artifacts failed audit, and
+`2` means command usage, format configuration, or input I/O failed. Invalid
+UTF-8, malformed or blank JSONL lines, non-object JSON, formatting failures,
+line-count differences, mixed/missing/mismatched physical newlines, and invalid
+dedup reset boundaries are audit failures.
+
 Offline suite:
 
 ```bash

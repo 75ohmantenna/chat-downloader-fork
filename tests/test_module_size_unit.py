@@ -46,6 +46,11 @@ ALLOWLIST: frozenset[str] = frozenset(
         # Splitting file creation from sanitization would duplicate or weaken
         # the invariant that captured payloads are scrubbed before persistence.
         "redaction.py",
+        # Cohesive offline parity state machine: input identity, physical-line
+        # validity, semantic deduplication, rendering, and comparison share one
+        # streaming alignment state. The privacy-safe CLI/reporting layer is
+        # already separate under scripts/.
+        "output/capture_parity.py",
     }
 )
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"

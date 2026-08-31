@@ -147,6 +147,7 @@ module names.
 ### `output/`
 | Module | Purpose |
 |--------|---------|
+| `capture_parity.py` | Internal provider-neutral streaming audit state machine for JSONL/TXT formatting, deduplication, physical-newline, input-identity, and content-safety parity checks |
 | `continuous_write.py` | `ContinuousWriter` factory; re-exports writer types |
 | `writers.py` | `ContinuousFileWriter` ABC; `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
 

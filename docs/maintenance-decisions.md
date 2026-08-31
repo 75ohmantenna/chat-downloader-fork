@@ -129,6 +129,19 @@ selection and duplicate suppression.
 **Revisit when:** output targets grow beyond local files or a writer backend
 provides a stronger destination-identity contract.
 
+## Keep capture parity alignment in one state machine
+
+**Decision:** `output/capture_parity.py` owns the provider-neutral streaming
+relationship among opened artifact identity, JSONL validity, physical newline
+style, formatted-message deduplication, rendering, and TXT alignment. It is
+narrowly allowlisted above 400 lines because splitting those coupled checks by
+scan phase would make comparison completeness and first-mismatch positions
+implicit. Privacy-safe argument parsing and summary rendering remain in the
+separate `scripts/audit_capture_parity.py` command layer.
+
+**Revisit when:** input reading or semantic comparison gains an independent
+production consumer with a contract that removes shared alignment state.
+
 ## Keep orchestration and session ownership deep
 
 **Decision:** Runtime callers cross two orchestration interfaces:
