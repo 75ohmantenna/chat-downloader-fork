@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock, patch
 
@@ -198,7 +200,7 @@ def test_event_frame_capture_bounds_provider_controlled_keys_and_labels(
     )
 
 
-def test_event_components_are_stable_case_sensitive_and_collision_resistant() -> None:
+def test_unknown_action_components_are_opaque_stable_and_collision_resistant() -> None:
     provider_values = [
         "foo-bar",
         "foo_bar",
@@ -210,17 +212,80 @@ def test_event_components_are_stable_case_sensitive_and_collision_resistant() ->
     ]
 
     components = [
-        irc_diagnostics._bounded_event_component(value) for value in provider_values
+        irc_diagnostics._action_event_component(value) for value in provider_values
     ]
 
     assert len(components) == len(set(components))
     assert components == [
-        irc_diagnostics._bounded_event_component(value) for value in provider_values
+        irc_diagnostics._action_event_component(value) for value in provider_values
     ]
-    assert all(len(component) <= 48 for component in components)
-    assert all(
-        "/" not in component and "_" not in component for component in components
+    assert all(len(component) == 20 for component in components)
+    assert all(component.startswith("unknown-") for component in components)
+    assert not any(
+        fragment in component
+        for component in components
+        for fragment in ("foo", "case", "authorization", "/", "_")
     )
+
+
+def test_unknown_action_credentials_share_sanitized_opaque_identity() -> None:
+    first = irc_diagnostics._action_event_component(
+        "Authorization=BearerFirstSecretCredential123",
+    )
+    second = irc_diagnostics._action_event_component(
+        "Authorization=BearerSecondSecretCredential456",
+    )
+
+    assert first == second
+    assert first.startswith("unknown-")
+    assert "authorization" not in first
+    assert "credential" not in first
+
+
+def test_unknown_action_capture_keeps_credentials_out_of_identity_and_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    sample_dir = tmp_path / "samples"
+    canary = "SuperSecretCredential123"
+    raw_action = f"Authorization=Bearer{canary}"
+    raw_frame = f"@room-id=1 :provider.test {raw_action} #example :public message\r\n"
+    captured_labels: list[str] = []
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    monkeypatch.setattr(red, "_debug_sample_capture_enabled", lambda: True)
+    caplog.set_level(logging.DEBUG, logger=red._get_logger().name)
+
+    def capture_real_sample(label, payload, **kwargs):
+        captured_labels.append(label)
+        return red.capture_debug_sample(label, payload, **kwargs)
+
+    monkeypatch.setattr(
+        irc_diagnostics,
+        "capture_debug_sample",
+        capture_real_sample,
+    )
+    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    frame_capture.capture(raw_frame, {}, raw_action, "room-id=1")
+
+    event_key = next(iter(frame_capture._captured_event_keys))
+    sample_path = next(sample_dir.glob("*.json"))
+    stored_payload = json.loads(sample_path.read_text(encoding="utf-8"))
+
+    assert event_key.startswith("action-unknown-")
+    assert captured_labels[0].startswith("twitch-irc-event-action-unknown-")
+    for exposed_value in (
+        event_key,
+        captured_labels[0],
+        str(sample_path),
+        caplog.text,
+    ):
+        assert raw_action not in exposed_value
+        assert canary not in exposed_value
+    assert canary not in stored_payload["raw"]
+    assert raw_action not in stored_payload["raw"]
+    assert red.REDACTED in stored_payload["raw"]
 
 
 def test_event_keys_require_recognized_case_sensitive_raw_provenance() -> None:
@@ -267,7 +332,7 @@ def test_event_keys_require_recognized_case_sensitive_raw_provenance() -> None:
         {"message_type": "text_message"},
         "text_message",
         "room-id=1",
-    ).startswith("action-text-message-")
+    ).startswith("action-unknown-")
     assert irc_diagnostics._event_capture_key(
         {"message_type": "resubscription"},
         "USERNOTICE",
@@ -528,7 +593,7 @@ def test_real_parser_unknown_types_share_raw_action_fallback(
     ]
     assert [args[0] for args, _kwargs in captured] == [
         "twitch-irc-event-action-usernotice-541488f4d6e7",
-        "twitch-irc-event-action-mystery-9a26a76fee31",
+        "twitch-irc-event-action-unknown-9a26a76fee31",
     ]
 
 
@@ -587,6 +652,11 @@ def test_live_diagnostics_count_split_control_frames_with_bounded_state() -> Non
     assert len(diagnostics._frame_prefix) <= (
         irc_diagnostics._CONTROL_FRAME_PREFIX_LIMIT
     )
+
+
+@pytest.mark.parametrize("frame_prefix", ["", " \r\n", ":tmi.twitch.tv"])
+def test_control_command_ignores_incomplete_prefixes(frame_prefix: str) -> None:
+    assert irc_diagnostics._control_command(frame_prefix) is None
 
 
 @pytest.mark.parametrize(

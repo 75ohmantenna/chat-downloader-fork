@@ -287,7 +287,9 @@ successfully parsed raw frame for each known normalized message type, or for a
 bounded, collision-resistant raw-action fallback when the parsed type is
 unknown. A message key requires a recognized raw `msg-id`; normalized-looking
 unknown values use the action fallback. Without `msg-id`, only known raw actions
-can use the parsed normalized type. The fixed per-run limit is 12 attempted
+can use the parsed normalized type. Unknown raw actions are sanitized before
+hashing and use opaque labels, preventing provider or credential fragments from
+entering filenames and capture logs. The fixed per-run limit is 12 attempted
 event keys across reconnects, with one successful sample per key and one retry
 after a failed write. The backend separately caps this sample group and each
 label per process and output directory; later runs may retain fewer than 12. An

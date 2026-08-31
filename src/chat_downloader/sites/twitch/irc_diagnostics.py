@@ -9,7 +9,7 @@ import os
 import re
 from typing import TYPE_CHECKING
 
-from chat_downloader.redaction import capture_debug_sample
+from chat_downloader.redaction import capture_debug_sample, sanitize_for_log
 
 from .constants import (
     ACTION_TYPE_REMAPPING,
@@ -141,6 +141,16 @@ def _bounded_event_component(value: str) -> str:
     return f"{prefix}-{digest}"
 
 
+def _action_event_component(raw_action: str) -> str:
+    """Return a readable known action or opaque sanitized unknown identity."""
+    if raw_action in ACTION_TYPE_REMAPPING:
+        return _bounded_event_component(raw_action)
+
+    sanitized_action = str(sanitize_for_log(raw_action))
+    digest = hashlib.sha256(sanitized_action.encode("utf-8")).hexdigest()[:12]
+    return f"unknown-{digest}"
+
+
 def _irc_msg_id(raw_tags: str) -> tuple[bool, str]:
     """Return whether raw IRC tags contain ``msg-id`` and its exact value."""
     found = False
@@ -164,7 +174,7 @@ def _event_capture_key(
         normalized_message_type = MESSAGE_TYPE_REMAPPING.get(raw_msg_id)
         if normalized_message_type is not None:
             return f"message-{_bounded_event_component(normalized_message_type)}"
-        return f"action-{_bounded_event_component(raw_action)}"
+        return f"action-{_action_event_component(raw_action)}"
 
     message_type = parsed_item.get("message_type")
     if (
@@ -173,7 +183,7 @@ def _event_capture_key(
         and message_type in _KNOWN_NORMALIZED_MESSAGE_TYPES
     ):
         return f"message-{_bounded_event_component(message_type)}"
-    return f"action-{_bounded_event_component(raw_action)}"
+    return f"action-{_action_event_component(raw_action)}"
 
 
 class _EventDiverseIrcFrameCapture:

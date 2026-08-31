@@ -10,6 +10,15 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Features
 
+- Report fixed-schema Twitch live IRC connection, reconnect, frame, keepalive,
+  timeout, deduplication, filtering, and emission diagnostics in run summaries
+  without retaining endpoints or chat content.
+- Add explicitly opted-in, bounded Twitch IRC raw-frame capture across known
+  normalized event types, with reconnect-stable quotas, sanitized payloads, and
+  opaque identities for unknown provider actions.
+- Add an offline streaming JSONL/TXT capture parity auditor for exact
+  formatting, semantic duplicates, physical-line validity, input identity, and
+  content-safe diagnostics.
 - Parse Twitch paid pinned-chat metadata and current charity donation, gift-sub
   match, one-tap gift, and moderator-anniversary notices with typed fields and
   provider-specific message groups.

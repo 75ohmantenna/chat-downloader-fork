@@ -300,9 +300,13 @@ type; an unknown action uses the action fallback. Thus different unknown
 aliasing a genuine normalized event. This classification reads raw tags without
 adding provenance fields to normal output records.
 
-Provider values are case-sensitive identities; capture labels combine a
-readable normalized prefix with a stable digest so punctuation or case variants
-cannot alias. Labels and in-memory keys are length-bounded and path-safe. Raw
+Known normalized types and known raw actions retain readable labels with stable
+digests. Unknown raw actions are sanitized before hashing and use only an
+opaque `unknown-<digest>` component, so provider text or credential fragments
+cannot enter event keys, filenames, or capture-path logs. Non-secret unknown
+actions retain case- and punctuation-sensitive identity through that digest;
+credential variants that sanitize to the same value intentionally share an
+opaque key. Labels and in-memory keys are length-bounded and path-safe. Raw
 frames remain sanitized and retain their original `\r\n` terminator.
 
 The per-run sampler attempts at most 12 distinct event keys across all
