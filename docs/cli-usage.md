@@ -90,10 +90,17 @@ chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE" \
 | Format | Notes |
 | --- | --- |
 | `jsonl` | One JSON object per line. Best for long or live captures. |
-| `txt`   | Applies the configured message formatter. |
+| `txt`   | Applies the configured message formatter, one physical line per record. |
 
 Other extensions, including `.json` and `.csv`, are unsupported. Output paths
 must end in `.jsonl` or `.txt`.
+
+Formatted stdout and TXT output flatten the final rendered string, including
+custom-template text. Carriage returns, newlines, and Unicode line separators
+render visibly as `\r`, `\n`, `\u0085`, `\u2028`, or `\u2029`, preserving the
+one-record-per-line boundary. Horizontal tabs remain intact; other terminal
+control characters are removed. JSONL retains the original message characters
+for lossless downstream processing.
 
 Output writers initialize lazily on the first record. When a successful run
 retrieves zero records, configured `.jsonl` and `.txt` files are not created.

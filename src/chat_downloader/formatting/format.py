@@ -75,8 +75,17 @@ class ItemFormatter:
     # Default values
     DEFAULT_TEMPLATE = ""
     # Keep plain-printable text output resilient to control chars commonly
-    # present in moderation/bot messages (eg. ASCII 0x01).
-    CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+    # present in moderation/bot messages (eg. ASCII 0x01 and C1 CSI/OSC).
+    CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]")
+    LINE_SEPARATOR_TRANSLATION = str.maketrans(
+        {
+            "\r": r"\r",
+            "\n": r"\n",
+            "\x85": r"\u0085",
+            "\u2028": r"\u2028",
+            "\u2029": r"\u2029",
+        }
+    )
 
     def __init__(self, path: str | None = None) -> None:
         """Create an ItemFormatter object.
@@ -125,7 +134,8 @@ class ItemFormatter:
 
     def _sanitize_output(self, text: str) -> str:
         """Remove unsupported control characters from formatted output lines."""
-        return self.CONTROL_CHARS_RE.sub("", text)
+        visible_line_breaks = text.translate(self.LINE_SEPARATOR_TRANSLATION)
+        return self.CONTROL_CHARS_RE.sub("", visible_line_breaks)
 
     def _resolve_format_object(
         self,

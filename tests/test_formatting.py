@@ -58,6 +58,50 @@ def test_format_default(formatter: ItemFormatter) -> None:
     assert isinstance(result, str)
 
 
+@pytest.mark.parametrize(
+    ("line_break", "visible"),
+    [
+        ("\r", r"\r"),
+        ("\n", r"\n"),
+        ("\r\n", r"\r\n"),
+        ("\x85", r"\u0085"),
+        ("\u2028", r"\u2028"),
+        ("\u2029", r"\u2029"),
+    ],
+)
+def test_format_renders_line_breaks_visibly(
+    formatter: ItemFormatter,
+    line_break: str,
+    visible: str,
+) -> None:
+    result = formatter.format(
+        {"message": f"first{line_break}second"},
+        format_object={"template": "{message}"},
+    )
+
+    assert result == f"first{visible}second"
+
+
+def test_format_flattens_template_line_breaks_and_removes_c1_controls(
+    formatter: ItemFormatter,
+) -> None:
+    result = formatter.format(
+        {"message": "value\x9bhidden\x9dtitle\x9c"},
+        format_object={"template": "head\n{message}\rfoot"},
+    )
+
+    assert result == r"head\nvaluehiddentitle\rfoot"
+
+
+def test_format_preserves_horizontal_tabs(formatter: ItemFormatter) -> None:
+    result = formatter.format(
+        {"message": "first\tsecond"},
+        format_object={"template": "{message}"},
+    )
+
+    assert result == "first\tsecond"
+
+
 def test_format_nonexistent(formatter: ItemFormatter) -> None:
     """Test formatting with non-existent format."""
     item = {"message": "test"}

@@ -62,6 +62,39 @@ def test_multiple_writers_attached(tmp_path: pathlib.Path) -> None:
         assert len(f.readlines()) == 3
 
 
+def test_formatted_output_keeps_provider_line_breaks_on_one_line(
+    tmp_path: pathlib.Path,
+) -> None:
+    message = {
+        "message_id": "multiline",
+        "message": (
+            "first\r\nsecond\nthird\rfour\x85five\u2028six\u2029seven\x9bhidden"
+        ),
+    }
+    chat = Chat(chat=iter((message,)), title="Test Stream", id="test123")
+    formatter = ItemFormatter()
+    chat.set_formatter(
+        lambda item: formatter.format(
+            item,
+            format_object={"template": "{message}"},
+        )
+    )
+    jsonl_path = tmp_path / "multiline.jsonl"
+    txt_path = tmp_path / "multiline.txt"
+    chat.attach_writer(ContinuousWriter(str(jsonl_path), lazy_initialise=True))
+    chat.attach_writer(ContinuousWriter(str(txt_path), lazy_initialise=True))
+
+    assert list(chat) == [message]
+
+    assert json.loads(jsonl_path.read_text(encoding="utf-8"))["message"] == (
+        "first\r\nsecond\nthird\rfour\x85five\u2028six\u2029seven\x9bhidden"
+    )
+    assert txt_path.read_text(encoding="utf-8") == (
+        r"first\r\nsecond\nthird\rfour\u0085five\u2028six\u2029sevenhidden" + "\n"
+    )
+    assert len(txt_path.read_text(encoding="utf-8").splitlines()) == 1
+
+
 def test_single_writer_backwards_compatibility(tmp_path: pathlib.Path) -> None:
     chat = Chat(
         chat=iter([{"message": "Test", "author": {"name": "User"}}]),

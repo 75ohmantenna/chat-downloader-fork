@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from chat_downloader.errors import NoChatReplay
+from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.models import get_field_default
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
@@ -209,6 +210,27 @@ def test_chat_next_without_generator_and_print_formatted(monkeypatch) -> None:
 
     chat.print_formatted({"message": "hello"}, flush=False)
     assert printed == [("formatted:hello", False)]
+
+
+def test_chat_print_formatted_keeps_output_on_one_physical_line(monkeypatch) -> None:
+    printed: list[str] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.models.safe_print",
+        lambda message, flush=True: printed.append(message),
+    )
+    formatter = ItemFormatter()
+    chat = Chat(None, title="Example")
+    chat.set_formatter(
+        lambda item: formatter.format(
+            item,
+            format_object={"template": "head\n{message}"},
+        )
+    )
+
+    chat.print_formatted({"message": "first\u2028second\x9bhidden"})
+
+    assert printed == [r"head\nfirst\u2028secondhidden"]
+    assert len(printed[0].splitlines()) == 1
 
 
 def test_chat_next_suppresses_close_error_while_preserving_generator_error(

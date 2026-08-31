@@ -286,9 +286,13 @@ Custom `ItemFormatter` field definitions may provide a `template`, an optional
 `singular_template`, and `omit_if_false: true`. The singular template is used
 only for an exact numeric value of one; booleans and numeric strings continue to
 use the normal template. Conditional fields suppress their complete rendered
-fragment for false, zero, empty, or null values. These controls support natural
-event notices without adding presentation-only fields to normalized JSONL
-records.
+fragment for false, zero, empty, or null values. The final formatted string,
+including custom-template text, renders carriage returns, newlines, and Unicode
+line separators visibly as `\r`, `\n`, `\u0085`, `\u2028`, or `\u2029` and
+preserves horizontal tabs while removing other terminal controls. This keeps
+one physical line per record while JSONL remains lossless. These controls
+support natural event notices without adding presentation-only fields to
+normalized JSONL records.
 
 The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
