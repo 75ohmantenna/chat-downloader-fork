@@ -35,18 +35,53 @@ _KNOWN_NORMALIZED_MESSAGE_TYPES = frozenset(
 )
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 _CONTROL_FRAME_PREFIX_LIMIT = 128
+_BENIGN_NUMERIC_COMMANDS = frozenset(
+    {
+        "001",  # welcome
+        "002",  # host information
+        "003",  # server creation time
+        "004",  # server/version information
+        "353",  # channel names
+        "366",  # end of channel names
+        "372",  # message of the day
+        "375",  # start of message of the day
+        "376",  # end of message of the day
+    },
+)
+_BENIGN_CONTROL_COMMANDS = frozenset({"PING", "PONG", "JOIN", "PART", "CAP"}) | (
+    _BENIGN_NUMERIC_COMMANDS
+)
 
 
-def _control_command(frame_prefix: str) -> str | None:
-    """Return an incoming IRC control command from a bounded frame prefix."""
+def _irc_command(frame_prefix: str) -> str | None:
+    """Return an IRC command from a bounded frame prefix."""
     parts = frame_prefix.split()
     if not parts:
         return None
-    command_index = 1 if parts[0].startswith(":") else 0
+    command_index = 1 if parts[0].startswith("@") else 0
+    if command_index < len(parts) and parts[command_index].startswith(":"):
+        command_index += 1
     if command_index >= len(parts):
         return None
-    command = parts[command_index]
+    return parts[command_index]
+
+
+def _control_command(frame_prefix: str) -> str | None:
+    """Return an incoming IRC keepalive command from a bounded frame prefix."""
+    command = _irc_command(frame_prefix)
     return command if command in {"PING", "PONG"} else None
+
+
+def _is_benign_control_frame(frame_prefix: str) -> bool:
+    """Return whether a complete frame is recognized benign control traffic."""
+    if frame_prefix.lstrip().startswith("@"):
+        # Tagged frames can match MESSAGE_REGEX and contribute to parsed
+        # message counts, so they are not part of this disjoint control count.
+        return False
+    command = _irc_command(frame_prefix)
+    if command not in _BENIGN_CONTROL_COMMANDS:
+        return False
+    return _is_benign_unmatched_irc_buffer(frame_prefix)
 
 
 class _TwitchLiveDiagnostics:
@@ -62,6 +97,7 @@ class _TwitchLiveDiagnostics:
             "server_reconnect_requested_count": 0,
             "received_irc_chunk_count": 0,
             "received_irc_frame_count": 0,
+            "benign_irc_control_frame_count": 0,
             "parsed_irc_message_count": 0,
             "receive_timeout_count": 0,
             "idle_watchdog_expiration_count": 0,
@@ -98,6 +134,8 @@ class _TwitchLiveDiagnostics:
             if character == "\n" and self._previous_character_was_cr:
                 self.increment("received_irc_frame_count")
                 control_command = _control_command(self._frame_prefix)
+                if _is_benign_control_frame(self._frame_prefix):
+                    self.increment("benign_irc_control_frame_count")
                 if control_command == "PING":
                     self.increment("keepalive_ping_received_count")
                     completed_ping_count += 1
@@ -244,22 +282,18 @@ def _is_benign_unmatched_irc_buffer(readbuffer: str) -> bool:
         return True
 
     for line in lines:
-        if _control_command(line) in {"PING", "PONG"}:
+        command = _irc_command(line)
+        if command in {"PING", "PONG", "JOIN", "PART"}:
             continue
-
-        if " JOIN #" in line or " PART #" in line:
-            continue
-
         if "tmi.twitch.tv" not in line:
             return False
-
-        parts = line.split()
-        if len(parts) >= 3 and parts[1].isdigit():
+        if command in _BENIGN_NUMERIC_COMMANDS:
             continue
 
+        parts = line.split()
         if (
             len(parts) >= 4
-            and parts[1] == "CAP"
+            and command == "CAP"
             and parts[2] == "*"
             and parts[3] == "ACK"
         ):

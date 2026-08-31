@@ -153,6 +153,7 @@ successful debug run summary.
 | `server_reconnect_requested_count` | Parsed Twitch reconnect commands |
 | `received_irc_chunk_count` | Non-empty socket receive chunks |
 | `received_irc_frame_count` | Complete CRLF-delimited IRC frames |
+| `benign_irc_control_frame_count` | Recognized setup, join/part, and keepalive frames that do not produce messages |
 | `parsed_irc_message_count` | Frames successfully parsed as Twitch messages |
 | `receive_timeout_count` | Socket receive polls that timed out |
 | `idle_watchdog_expiration_count` | Idle watchdog expirations that forced reconnect |
@@ -167,6 +168,22 @@ successful debug run summary.
 The mapping contains only counters: it does not retain the channel, endpoint,
 raw IRC frames, or chat content. Its keys are fixed so unexpected counter names
 cannot grow retained state during a long capture.
+
+`received_irc_frame_count` includes both message-bearing frames and benign IRC
+setup/control traffic. `benign_irc_control_frame_count` identifies the
+recognized numeric setup replies, capability acknowledgements, joins, parts,
+and `PING`/`PONG` frames within that total, so a healthy received-versus-parsed
+gap does not need to be inferred. Numeric errors and other unknown traffic are
+not counted as benign controls; any remaining received-versus-benign-versus-
+parsed gap warrants review of the drift log and captured samples.
+
+Live records remain in IRC arrival order. Timestamp-bearing Twitch records can
+arrive non-monotonically even when their frames arrive in that order, and some
+control records have no provider timestamp. The downloader preserves the
+provider values and does not buffer or reorder live chat. Consumers that
+require a timestamp-sorted view should define a missing-timestamp policy, sort
+offline, and use the original record index as a stable tie-breaker; use file
+order when arrival sequence matters.
 
 The metadata-degradation counter increments once per GraphQL result item that
 contains one or more explicitly recognized optional service errors, but only

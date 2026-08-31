@@ -646,12 +646,31 @@ def test_live_diagnostics_count_split_control_frames_with_bounded_state() -> Non
 
     assert diagnostics.summary["received_irc_chunk_count"] == 3
     assert diagnostics.summary["received_irc_frame_count"] == 3
+    assert diagnostics.summary["benign_irc_control_frame_count"] == 2
     assert diagnostics.summary["keepalive_ping_received_count"] == 1
     assert diagnostics.summary["keepalive_pong_received_count"] == 1
     assert "not_a_supported_counter" not in diagnostics.summary
     assert len(diagnostics._frame_prefix) <= (
         irc_diagnostics._CONTROL_FRAME_PREFIX_LIMIT
     )
+
+
+def test_live_diagnostics_separate_benign_control_and_message_frames() -> None:
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+
+    diagnostics.record_received_data(
+        ":tmi.twitch.tv 001 justinfan :Welcome\r\n"
+        ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n"
+        ":user!user@user.tmi.twitch.tv JOIN #example\r\n"
+        "@badge-info=;badges= :user!user@user.tmi.twitch.tv "
+        "PRIVMSG #example :JOIN #another-channel\r\n"
+        "@badge-info= :user!user@user.tmi.twitch.tv JOIN #example\r\n"
+        ":tmi.twitch.tv 421 justinfan CAP :Unknown command\r\n"
+        "UNKNOWN LINE\r\n",
+    )
+
+    assert diagnostics.summary["received_irc_frame_count"] == 7
+    assert diagnostics.summary["benign_irc_control_frame_count"] == 3
 
 
 @pytest.mark.parametrize("frame_prefix", ["", " \r\n", ":tmi.twitch.tv"])
@@ -882,6 +901,9 @@ def test_twitch_chat_irc_preserves_utf8_split_across_recv_chunks(
         (":user!user@user.tmi.twitch.tv JOIN #example\r\n", True),
         (":user!user@user.tmi.twitch.tv PART #example\r\n", True),
         (":tmi.twitch.tv 001 justinfan :Welcome\r\n", True),
+        (":tmi.twitch.tv 353 justinfan = #example :justinfan\r\n", True),
+        (":tmi.twitch.tv 421 justinfan CAP :Unknown command\r\n", False),
+        (":tmi.twitch.tv 433 * justinfan :Nickname in use\r\n", False),
         (
             ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n",
             True,
