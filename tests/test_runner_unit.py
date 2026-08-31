@@ -319,12 +319,63 @@ def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
             "'message_type_counts': {'paid_message': 1, "
             "'ticker_paid_message_item': 1}, "
             "'formatted_duplicates_suppressed': 1, "
+            "'prefetched_after_deadline_count': 0, "
+            "'deadline_prefetch_count_complete': True, "
             "'provider_diagnostics': {}, 'output_writers': "
             "[{'file_name': 'chat.jsonl', 'file_created': True, "
             "'records_written': 2}, {'file_name': 'chat.txt', "
             "'file_created': True, 'records_written': 1}]}"
         ),
     )
+
+
+def test_execute_run_marks_deadline_prefetch_summary_incomplete(monkeypatch) -> None:
+    import threading
+
+    from chat_downloader.sites.models import Chat
+    from chat_downloader.utils.timed_generator import TimedGenerator
+
+    advance_started = threading.Event()
+    allow_item = threading.Event()
+    diagnostics: dict[str, object] = {"live_emitted_count": 0}
+
+    def blocked_source():
+        advance_started.set()
+        allow_item.wait()
+        diagnostics["live_emitted_count"] = 1
+        yield {"message_type": "text_message", "message_id": "late"}
+
+    timed_source = TimedGenerator(blocked_source(), timeout=0.01)
+
+    class Downloader:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def get_chat(self, **_kwargs):
+            return Chat(timed_source, diagnostics=diagnostics)
+
+        def close(self) -> None:
+            pass
+
+    logged: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda level, message: logged.append((level, message)),
+    )
+
+    assert advance_started.wait(timeout=1)
+    result = execute_run(Downloader, quiet=True)
+
+    assert result.success is True
+    assert result.message_count == 0
+    assert "'prefetched_after_deadline_count': 0" in logged[-1][1]
+    assert "'deadline_prefetch_count_complete': False" in logged[-1][1]
+    assert "'provider_diagnostics': {'live_emitted_count': 0}" in logged[-1][1]
+
+    allow_item.set()
+    timed_source._worker.join(timeout=1)
+    assert timed_source.deadline_prefetch_summary() == (1, True)
+    assert diagnostics == {"live_emitted_count": 1}
 
 
 def test_log_run_summary_redacts_credentials(monkeypatch) -> None:
@@ -401,6 +452,8 @@ def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> 
         (
             "Run summary: {'message_count': 0, "
             "'message_type_counts': {}, 'formatted_duplicates_suppressed': 0, "
+            "'prefetched_after_deadline_count': 0, "
+            "'deadline_prefetch_count_complete': True, "
             "'provider_diagnostics': {}, 'output_writers': "
             "[{'file_name': 'empty.txt', 'file_created': False, "
             "'records_written': 0}]}"

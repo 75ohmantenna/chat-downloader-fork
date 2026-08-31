@@ -48,6 +48,10 @@ class TimedGenerator:
         self._worker_advancing = False
         self._generator_close_lock = threading.Lock()
         self._generator_closed = False
+        self._prefetch_accounting_lock = threading.Lock()
+        self._outstanding_prefetched_item_count = 0
+        self._finish_reason: str | None = None
+        self._consumer_finished = False
         self._start_time = time.monotonic()
         self._timeout_expired = threading.Event()
         self._inactivity_expired = threading.Event()
@@ -196,6 +200,7 @@ class TimedGenerator:
                     finally:
                         with self._worker_state_lock:
                             self._worker_advancing = False
+                    self._record_prefetched_item()
                     if self._stop_requested.is_set():
                         return
                     if not self._publish_result(("item", item, time.monotonic())):
@@ -249,6 +254,9 @@ class TimedGenerator:
 
     def _finish(self, reason: str | None) -> NoReturn:
         """Cancel timers, close, run callback for reason, then stop."""
+        with self._prefetch_accounting_lock:
+            self._finish_reason = reason
+            self._consumer_finished = True
         self.close()
         if reason == "timeout":
             self._run_function(self.on_timeout)
@@ -279,7 +287,29 @@ class TimedGenerator:
         if reason is not None:
             self._finish(reason)
         self.reset_inactivity_timer()
+        self._record_delivered_item()
         return value
+
+    def _record_prefetched_item(self) -> None:
+        """Track one item returned by the source worker."""
+        with self._prefetch_accounting_lock:
+            self._outstanding_prefetched_item_count += 1
+
+    def _record_delivered_item(self) -> None:
+        """Remove one prefetched item after delivery to the consumer."""
+        with self._prefetch_accounting_lock:
+            self._outstanding_prefetched_item_count -= 1
+
+    def deadline_prefetch_summary(self) -> tuple[int, bool]:
+        """Return the deadline-excluded count and whether it is final."""
+        with self._prefetch_accounting_lock:
+            count = (
+                self._outstanding_prefetched_item_count
+                if self._finish_reason in {"timeout", "inactivity"}
+                else 0
+            )
+            complete = self._consumer_finished and not self._worker.is_alive()
+            return count, complete
 
     def __next__(self) -> Any:
         """Return the next item or stop when configured timers expire."""

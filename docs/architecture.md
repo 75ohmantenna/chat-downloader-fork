@@ -74,9 +74,15 @@ same interfaces as production callers.
 output writers are finalized. When the timeout worker is actively advancing the
 provider iterator, its join is intentionally bounded; writer finalization may
 finish first, and the worker closes the provider iterator as soon as that active
-advance returns or raises. This is the common Ctrl-C/SIGTERM and early-stop
-cleanup path. Reconnect diagnostics are debug-only; normal message output and
-file formats are unchanged.
+advance returns or raises. Successful debug summaries expose
+`prefetched_after_deadline_count` so provider source-emission counters can be
+reconciled with records that crossed an overall or inactivity deadline and were
+intentionally excluded from output. `deadline_prefetch_count_complete` is false
+when bounded shutdown returns while the provider worker is still advancing; in
+that case the count is explicitly a lower bound and may finish updating after
+the summary. This is the common Ctrl-C/SIGTERM and early-stop cleanup path.
+Reconnect diagnostics are debug-only; normal message output and file formats are
+unchanged.
 
 JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing

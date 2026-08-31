@@ -152,11 +152,26 @@ def _log_run_summary(
         if output_dispatcher is not None
         else 0
     )
+    chat_iterator = getattr(chat, "chat", None)
+    deadline_prefetch_summary = getattr(
+        chat_iterator,
+        "deadline_prefetch_summary",
+        None,
+    )
+    if callable(deadline_prefetch_summary):
+        prefetched_after_deadline_count, deadline_prefetch_count_complete = (
+            deadline_prefetch_summary()
+        )
+    else:
+        prefetched_after_deadline_count = 0
+        deadline_prefetch_count_complete = True
     summary = sanitize_for_log(
         {
             "message_count": message_count,
             "message_type_counts": message_type_counts,
             "formatted_duplicates_suppressed": formatted_duplicates_suppressed,
+            "prefetched_after_deadline_count": prefetched_after_deadline_count,
+            "deadline_prefetch_count_complete": deadline_prefetch_count_complete,
             "provider_diagnostics": getattr(chat, "diagnostics", {}),
             "output_writers": writer_summaries,
         }

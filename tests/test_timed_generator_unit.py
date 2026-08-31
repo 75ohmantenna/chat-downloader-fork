@@ -294,6 +294,7 @@ def test_next_item_after_expiry_uses_inactivity_callback() -> None:
         on_inactivity_timeout=lambda: called.append("inactivity"),
     )
     tg._result_queue = _FakeQueue(value=("item", "late-item", 0.0))
+    tg._record_prefetched_item()
     # type: ignore[method-assign]
     tg._timeout_reason = lambda at_time=None: "inactivity"
 
@@ -302,6 +303,7 @@ def test_next_item_after_expiry_uses_inactivity_callback() -> None:
 
     assert called == ["inactivity"]
     assert tg._closed is True
+    assert tg.deadline_prefetch_summary() == (1, True)
 
 
 def test_next_item_after_expiry_uses_timeout_callback() -> None:
@@ -310,6 +312,7 @@ def test_next_item_after_expiry_uses_timeout_callback() -> None:
         iter(()), timeout=1, on_timeout=lambda: called.append("timeout")
     )
     tg._result_queue = _FakeQueue(value=("item", "late-item", 0.0))
+    tg._record_prefetched_item()
     # type: ignore[method-assign]
     tg._timeout_reason = lambda at_time=None: "timeout"
 
@@ -318,6 +321,91 @@ def test_next_item_after_expiry_uses_timeout_callback() -> None:
 
     assert called == ["timeout"]
     assert tg._closed is True
+    assert tg.deadline_prefetch_summary() == (1, True)
+
+
+def test_worker_counts_item_returned_while_deadline_shutdown_completes() -> None:
+    advance_started = threading.Event()
+    allow_item = threading.Event()
+
+    def blocked_source():
+        advance_started.set()
+        allow_item.wait()
+        yield "prefetched"
+
+    tg = TimedGenerator(blocked_source(), timeout=0.01)
+    assert advance_started.wait(timeout=1)
+
+    with pytest.raises(StopIteration):
+        next(tg)
+
+    allow_item.set()
+    tg._worker.join(timeout=1)
+
+    assert tg.deadline_prefetch_summary() == (1, True)
+
+
+def test_deadline_counts_late_item_and_second_queued_prefetch() -> None:
+    allow_finish = threading.Event()
+    handling_first = threading.Event()
+
+    def source():
+        yield "first"
+        yield "second"
+
+    tg = TimedGenerator(source())
+    tg._timeout_deadline = 0.0
+    original_handle = tg._handle_item_result
+
+    def delayed_handle(value, completed_at):
+        handling_first.set()
+        assert allow_finish.wait(timeout=1)
+        return original_handle(value, completed_at)
+
+    # Hold the consumer after dequeueing the first item so the worker can
+    # publish its second prefetched item into the newly available queue slot.
+    tg._handle_item_result = delayed_handle  # type: ignore[method-assign]
+    consumer = threading.Thread(target=lambda: next(tg, None))
+    consumer.start()
+    assert handling_first.wait(timeout=1)
+
+    deadline = time.monotonic() + 1
+    while tg._result_queue.qsize() != 1 and time.monotonic() < deadline:
+        time.sleep(0.001)
+    assert tg._result_queue.qsize() == 1
+
+    allow_finish.set()
+    consumer.join(timeout=1)
+    tg._worker.join(timeout=1)
+
+    assert tg.deadline_prefetch_summary() == (2, True)
+
+
+def test_deadline_summary_waits_for_consumer_terminal_decision() -> None:
+    allow_finish = threading.Event()
+    handling_item = threading.Event()
+
+    tg = TimedGenerator(iter(("late",)))
+    tg._timeout_deadline = 0.0
+    original_handle = tg._handle_item_result
+
+    def delayed_handle(value, completed_at):
+        handling_item.set()
+        assert allow_finish.wait(timeout=1)
+        return original_handle(value, completed_at)
+
+    tg._handle_item_result = delayed_handle  # type: ignore[method-assign]
+    consumer = threading.Thread(target=lambda: next(tg, None))
+    consumer.start()
+    assert handling_item.wait(timeout=1)
+    tg._worker.join(timeout=1)
+
+    assert tg.deadline_prefetch_summary() == (0, False)
+
+    allow_finish.set()
+    consumer.join(timeout=1)
+
+    assert tg.deadline_prefetch_summary() == (1, True)
 
 
 def test_next_item_after_timeout_deadline_uses_callback_without_timer_flag() -> None:

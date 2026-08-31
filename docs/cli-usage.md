@@ -222,8 +222,12 @@ Debug and automation:
   supplies another continuation token.
 - Successful debug runs end with total and per-type retrieved-message counts,
   provider diagnostics when available, the number of semantic duplicates
-  suppressed across formatted file outputs, and the creation state and
-  completed-record count for each output writer. Kick live diagnostics include
+  suppressed across formatted file outputs, the number of source items
+  prefetched but excluded at a retrieval deadline, whether that count is final,
+  and the creation state and completed-record count for each output writer. A
+  false `deadline_prefetch_count_complete` means the provider is still returning
+  from a bounded shutdown; treat the accompanying count as a lower bound. Kick
+  live diagnostics include
   decoded, control, parsed, unsupported, unknown-message-type, malformed, and
   invalid-frame counts; reconnect and Pusher-key recovery counts; and the last
   decoded-frame timestamp. A duplicate is counted once even when multiple
