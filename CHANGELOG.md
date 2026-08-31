@@ -8,6 +8,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.2.0 — 2026-08-31
+
 ### Features
 
 - Report fixed-schema Twitch live IRC connection, reconnect, frame, keepalive,
