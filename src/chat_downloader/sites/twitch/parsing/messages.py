@@ -195,8 +195,8 @@ def _parse_item(
         item: Comment node from GraphQL
         offset: Time offset for clips
         channel_id: Channel ID for badge lookup
-        badge_set: Explicit badge data snapshot.  When provided, module
-            globals are ignored entirely.
+        badge_set: Optional snapshot used to enrich normalized badge names and
+            versions with channel or global badge metadata.
 
     Returns:
         Parsed comment dictionary
@@ -250,8 +250,8 @@ def _parse_irc_item(
 
     Args:
         match: Regex match object with groups (tags, action, message)
-        badge_set: Explicit badge data snapshot.  When provided, module
-            globals are ignored entirely.
+        badge_set: Optional snapshot used to enrich normalized badge names and
+            versions with channel or global badge metadata.
 
     Returns:
         Parsed IRC message dictionary

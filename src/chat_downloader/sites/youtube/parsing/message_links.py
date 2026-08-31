@@ -37,7 +37,6 @@ def _parse_youtube_link(text: str) -> str:
         _YT_REDIRECT_PATH,
     )
 
-    # is a redirect link
     if text.startswith((_YT_REDIRECT_PATH, _YT_HOME + _YT_REDIRECT_PATH)):
         info = dict(parse.parse_qsl(parse.urlsplit(text).query))
         return info.get("q") or ""
@@ -45,7 +44,6 @@ def _parse_youtube_link(text: str) -> str:
         return "https:" + text
     if text.startswith("/"):  # is a youtube link
         return _YT_HOME + text
-    # is a normal link
     return text
 
 

@@ -22,10 +22,8 @@ Before parsing a batch of messages, take a snapshot once and pass it through::
     _parse_item(node, offset, channel_id, badge_set=badge_set)
 
 Parsing functions must use the injected ``badge_set`` as the primary source
-of badge data.  Module-level globals in ``parsing.messages`` remain only as
-a compatibility fallback for callers that invoke parsing functions directly
-without providing a badge_set (e.g. third-party integrations).  They will be
-removed in a future version.
+of fetched badge metadata. Callers that omit it still receive normalized badge
+names and versions, but not cached icon metadata.
 """
 
 from __future__ import annotations
@@ -38,9 +36,7 @@ from typing import Any
 class BadgeSet:
     """Immutable snapshot of badge data for use during parsing.
 
-    ``badge_set`` is required for deterministic parsing; module globals in
-    ``parsing.messages`` remain only as a compatibility fallback (to be
-    removed in a future version).
+    The snapshot makes badge lookup deterministic for one parse operation.
 
     Attributes:
         global_badges: Global badges keyed by ``(setID, version)`` tuples.
@@ -62,10 +58,10 @@ class BadgeCache:
 
     Attributes:
         global_badges: Global badges keyed by ``(setID, version)`` tuples.
-            Mutated in-place by :func:`~.client.update_badge_info`.
+            Mutated in-place by :func:`~.badge_client.update_badge_info`.
         channel_badges: Channel-specific subscriber badges keyed by
             *channelID*, then ``(setID, version)`` tuples.
-            Mutated in-place by :func:`~.client.update_badge_info`.
+            Mutated in-place by :func:`~.badge_client.update_badge_info`.
     """
 
     global_badges: dict[tuple[str, str], dict[str, Any]] = field(default_factory=dict)

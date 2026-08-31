@@ -233,8 +233,7 @@ class TwitchChatIRC:
         """Set the socket receive timeout.
 
         Args:
-            message_receive_timeout: Timeout in seconds; ``None`` means
-                blocking.
+            message_receive_timeout: Positive timeout in seconds.
         """
         self.socket.settimeout(message_receive_timeout)
 

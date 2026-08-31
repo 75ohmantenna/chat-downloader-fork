@@ -94,13 +94,12 @@ def _repair_jsonl_final_line(file_name: str) -> None:
 
 
 def _assert_utc_aware(item: Any) -> None:
-    """Guard against naive datetimes ending up in serialized output.
+    """Give top-level naive datetimes a specific serialization error.
 
-    The codebase contract is "timestamps are UTC, either as integer
-    microseconds or as tz-aware datetimes." This is a cheap top-level
-    scan that fails loudly if a regression introduces a naive datetime,
-    which would otherwise be silently misinterpreted by downstream
-    consumers as local-time.
+    JSON does not encode ``datetime`` objects. This cheap scan explains the
+    particularly ambiguous naive case before the standard JSON encoder rejects
+    other unsupported values. Callers must convert datetimes to UTC integer
+    microseconds or strings before writing.
     """
     if not isinstance(item, dict):
         return
@@ -108,9 +107,9 @@ def _assert_utc_aware(item: Any) -> None:
         if isinstance(value, _dt.datetime) and value.tzinfo is None:
             msg = (
                 f"Output field {key!r} contains a naive datetime "
-                f"({value!r}); chat_downloader emits UTC-aware datetimes "
-                "only. Convert with .replace(tzinfo=datetime.UTC) before "
-                "writing."
+                f"({value!r}); JSONL accepts only JSON-compatible values. "
+                "Convert timestamps to UTC integer microseconds or ISO 8601 "
+                "strings before writing."
             )
             raise ValueError(msg)
 

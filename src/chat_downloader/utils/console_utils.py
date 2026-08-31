@@ -145,11 +145,9 @@ def _write_to_windows_console(
     wrote_any = False
 
     while text:
-        # Determine how many characters to write
         next_nonbmp = _find_next_nonbmp_position(text)
         count = min(next_nonbmp, WINDOWS_CONSOLE_BUFFER_SIZE)
 
-        # Write to console
         ret = WriteConsoleW(
             handle,
             text,
@@ -170,7 +168,6 @@ def _write_to_windows_console(
         consecutive_failures = 0
         wrote_any = True
 
-        # Update position in string
         if not count:  # We just wrote a non-BMP character
             if written.value != 2:
                 msg_0 = (

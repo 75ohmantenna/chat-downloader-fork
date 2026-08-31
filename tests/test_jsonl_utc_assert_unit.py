@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""JSONL writer rejects naive datetimes at the output boundary."""
+"""JSONL datetime serialization errors remain explicit."""
 
 from __future__ import annotations
 
@@ -25,18 +25,27 @@ def test_jsonl_rejects_naive_datetime(tmp_path: Path) -> None:
         writer.close()
 
 
-def test_jsonl_accepts_utc_aware_datetime(tmp_path: Path) -> None:
+def test_jsonl_writes_pre_serialized_utc_datetime(tmp_path: Path) -> None:
     path = tmp_path / "out.jsonl"
     writer = JsonLinesContinuousWriter(str(path))
     try:
         aware = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
-        # Should not raise; JSON serialization is via default=str fallback,
-        # but the dict will be passed through the boundary check first.
-        # The standard json.dumps doesn't support datetime, so this test
-        # only verifies the assertion passes — actual serialization would
-        # require a custom encoder upstream. To keep the test focused, we
-        # serialize a representation, not the raw datetime.
         writer.write({"ts_iso": aware.isoformat(), "ok": True})
+    finally:
+        writer.close()
+    with open(path, encoding="utf-8") as f:
+        assert json.loads(f.read()) == {
+            "ok": True,
+            "ts_iso": "2024-01-01T12:00:00+00:00",
+        }
+
+
+def test_jsonl_rejects_raw_utc_aware_datetime(tmp_path: Path) -> None:
+    writer = JsonLinesContinuousWriter(str(tmp_path / "out.jsonl"))
+    try:
+        aware = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
+        with pytest.raises(TypeError, match="not JSON serializable"):
+            writer.write({"timestamp": aware})
     finally:
         writer.close()
 
@@ -54,15 +63,11 @@ def test_jsonl_assert_passes_non_dict_items(tmp_path: Path) -> None:
 
 
 def test_jsonl_assert_only_inspects_top_level(tmp_path: Path) -> None:
-    """Nested naive datetimes are not caught (cheap top-level only)."""
+    """The JSON encoder rejects nested datetimes skipped by the top-level guard."""
     writer = JsonLinesContinuousWriter(str(tmp_path / "out.jsonl"))
     try:
-        # A nested naive datetime slips past the cheap guard. This is by
-        # design — recursive scanning would be too expensive on the hot
-        # path. The contract is enforced at the surface where regressions
-        # would actually appear.
-        writer.write(
-            {"nested": {"ts": datetime.datetime(2024, 1, 1).isoformat()}}  # noqa: DTZ001 — intentional naive datetime (tests non-surface bypass)
-        )
+        nested = {"nested": {"ts": datetime.datetime(2024, 1, 1)}}  # noqa: DTZ001 — intentional nested naive datetime
+        with pytest.raises(TypeError, match="not JSON serializable"):
+            writer.write(nested)
     finally:
         writer.close()

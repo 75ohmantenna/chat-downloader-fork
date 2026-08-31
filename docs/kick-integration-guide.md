@@ -431,9 +431,9 @@ environments diagnosable:
 1. **curl-cffi with Chrome 124 TLS impersonation** — avoids Cloudflare
    challenges at the TLS-fingerprint level before they are even presented.
 2. **cloudscraper** — JS-challenge solver for simpler challenges (used if
-   curl-cffi cannot be imported or initialized).
+   curl-cffi cannot be imported).
 3. **Plain requests session** with browser-like headers — last resort when
-   neither specialized backend can be imported or initialized.
+   neither specialized backend can be imported.
 
 When a response body looks like a challenge page (Cloudflare markers, or an HTML
 body where JSON was expected) or returns HTTP 403, the client raises

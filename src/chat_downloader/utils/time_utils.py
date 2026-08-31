@@ -89,15 +89,12 @@ def time_to_seconds(time: str) -> int:
     if not time:
         return 0
 
-    # Remove commas and check for negative sign
     is_negative = time[0] == "-"
     clean_time = time.replace(",", "")
 
-    # Split into parts and reverse (seconds, minutes, hours, ...)
     parts = clean_time.split(":")
     reversed_parts = reversed(parts)
 
-    # Calculate total seconds: seconds + (minutes * 60) + (hours * 3600)
     total: int = sum(
         abs(int(part)) * (SECONDS_PER_MINUTE**i)
         for i, part in enumerate(reversed_parts)

@@ -1,185 +1,128 @@
-# Repository Guidelines
+# Repository Guide
 
-YouTube, Twitch, and Kick livestream chat CLI plus typed Python API. Python 3.12+;
-CI validates 3.12, 3.13, and 3.14. This is a personal fork of
-`xenova/chat-downloader`; no upstream support is offered. Do not file issues or
-PRs against upstream for fork-originating problems.
+## Project facts
 
-Do not link to or cite upstream issue or pull-request discussions in project
-documentation, source, tests, fixtures, or release notes. Keep fork-owned
-regression context self-contained.
+`chat-downloader-fork` is a Python 3.12+ CLI and typed API for YouTube, Twitch,
+and Kick live chat and replay. CI tests Python 3.12, 3.13, and 3.14. It is a
+personal fork of `xenova/chat-downloader`; upstream does not support fork-owned
+changes.
 
-For deeper context use:
+Important locations:
 
-- [`docs/architecture.md`](docs/architecture.md) — layer diagram, module
-  inventory, guardrails
-- [`docs/capability-inventory.md`](docs/capability-inventory.md) — behavior
-  preservation checklist
-- [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md) —
-  local workflow and validation
-- [`docs/maintenance-backlog.md`](docs/maintenance-backlog.md) — open
-  maintainability work
-- [`docs/maintenance-decisions.md`](docs/maintenance-decisions.md) — durable
-  design rationale and reopen criteria
+- `src/chat_downloader/chat_downloader.py`: thin public facade.
+- `src/chat_downloader/models/`: canonical init, request, and run parameters.
+- `src/chat_downloader/runtime/`: orchestration, iteration, deadlines, and
+  shutdown.
+- `src/chat_downloader/sites/`: provider implementations; provider directories
+  have additional scoped `AGENTS.md` files.
+- `src/chat_downloader/output/` and `src/chat_downloader/formatting/`:
+  provider-neutral output and rendering.
+- `tests/fixtures/`: maintained provider payload fixtures.
+- `docs/architecture.md`: module inventory and dependency guardrails.
+- `docs/capability-inventory.md`: behavior-preservation checklist.
+- `docs/development-workflow-guide.md`: full local and release workflow.
+- `docs/maintenance-backlog.md` and `docs/maintenance-decisions.md`: open work
+  and durable design decisions.
 
-## Branch Safety
+Supported output extensions are `.jsonl` and `.txt`. `uv.lock`, `dist/`,
+coverage files, and package metadata directories are generated; do not hand-edit
+or commit build output. Update `uv.lock` with `uv lock` only when dependencies
+intentionally change.
 
-- Check `git status --short --branch` before editing.
-- Work on the requested branch; if the task names a branch, create or switch to
-  it before changing files.
-- Preserve user changes. Do not revert unrelated dirty files.
-- Do not weaken guardrail thresholds or reopen closed deferrals without
-  documented evidence.
+## Architecture invariants
 
-## Architecture Rules
+- Keep the facade thin; put runtime orchestration in `runtime/`.
+- Add user-facing init, request, or runtime fields to the matching dataclass in
+  `models/` first. CLI help comes from dataclass metadata, while parser
+  registration remains explicit in `cli_args.py`.
+- Keep provider behavior in its site package. YouTube, Twitch, and Kick are
+  import-independent, and provider-neutral runtime/output/formatting code must
+  not import a concrete site package. `lint-imports` enforces these boundaries.
+- Use `utils/json_types` accessors for incoming provider JSON. Avoid `Any` for
+  raw payloads; reserve `dict[str, Any]` for genuinely heterogeneous
+  accumulators.
+- Split by cohesive behavior, not execution phase or line count. A helper that
+  requires its parent object and a broad protocol belongs on that class. Extract
+  pure reusable helpers; accompany an extracted helper cluster with a real
+  composition test.
+- Do not create import-only re-export barrels or forwarding methods. The
+  400-line ratchet is a smell signal, not a reason for temporal decomposition;
+  allowlist an unusually large cohesive module with a rationale.
 
-- `src/chat_downloader/chat_downloader.py` is a thin public facade; runtime
-  orchestration belongs in `src/chat_downloader/runtime/`.
-- `src/chat_downloader/models/` is the canonical typed shape for init, request,
-  and run parameters. Add user-facing request/init/runtime fields there first
-  so CLI help and the typed API stay aligned.
-- CLI help is generated from dataclass metadata; change dataclasses before
-  parser wiring.
-- Keep YouTube, Twitch, and Kick behavior inside their site packages. The site
-  packages are import-independent (enforced by `lint-imports`); do not add
-  cross-site abstractions for remapping, badges, retry, or parser logic unless
-  a genuine shared-maintenance case exists.
-- Use `utils/json_types` accessors (`get_str`, `get_int`, `get_dict`,
-  `get_list`, `dig`) for incoming platform JSON. Avoid annotating raw payloads
-  as `Any`; reserve `dict[str, Any]` for heterogeneous accumulator dicts.
-- Output formats are `jsonl` and `txt`. Other extensions are not supported.
-
-## Commands
-
-- `uv sync` — install dependencies
-- `make setup` — install Git hooks, then `uv sync`
-- `uv run pytest -q -p no:rerunfailures -m "not network"` — offline suite
-- `uv run pytest tests/FILE.py -q` — single file
-- `uv run pytest tests/FILE.py::test_name -q` — single test
-- `uv run pytest -v -m network --run-network` — opt-in network tests
-- `uv run ruff check src/chat_downloader tests` — lint
-- `make spell` — spell-check all tracked text and filenames
-- `uv run ruff format --check src/chat_downloader tests` — format check
-- `uv run mypy .` — type check
-- `make ci` — canonical validation: lock-check, lint, spelling, fmt-check,
-  typecheck, 100% offline line coverage, build, smoke
-
-## Testing
-
-- Default to offline tests. Mark live-network tests with `@pytest.mark.network`.
-- Add regression tests for parser, retry, output, runtime, public API, or
-  tooling changes.
-- Add or promote a fixture before reshaping parser behavior.
-- Keep curated fixtures under `tests/fixtures/`.
-- Coverage pragmas are only for defensive or unreachable branches and must
-  include a one-line reason.
-
-Key ratchets:
-
-| Test file | What it guards |
-| --- | --- |
-| `tests/test_facade_param_sync_unit.py` | `get_chat()` params stay in sync with `ChatRequest` |
-| `tests/test_any_density_unit.py` | Per-module `Any` counts do not regress |
-| `tests/test_module_size_unit.py` | Non-allowlisted modules stay under 400 lines |
-| `tests/test_public_api_unit.py` | Public import surfaces stay intentional |
-| `tests/test_cli_surface_unit.py` | Observable CLI option strings, defaults, and groups stay intentional |
-| `tests/test_makefile_contract_unit.py` | Canonical Makefile validation target stays pinned |
-| `tests/test_architecture_doc_contract_unit.py` | Package inventories stay aligned with source modules |
-| `tests/test_documentation_contract_unit.py` | Local links, typed API docs, and debug-capture settings stay aligned |
-
-## Style
-
-- Every source file starts with `from __future__ import annotations`.
-- Ruff formatter, 88-character lines, double quotes.
-- Type-only imports go in `if TYPE_CHECKING:` blocks.
-- Mccabe complexity gate is 10. Intrinsically branchy functions may carry
-  `# noqa: C901` only with a short rationale comment.
-- Prefer focused modules over broad compatibility helpers.
-- Test files are named `test_<behavior>.py` or `test_<area>_unit.py`.
-
-## Decomposition policy
-
-Split by cohesion, not by line count or test convenience. Concretely:
-
-- Split by **domain/behavior**, never by **phase**. Cutting one routine into
-  `*_context` / `*_response` / `*_iteration` (setup vs. iterate vs. handle) is
-  temporal decomposition — the reader must reassemble the phases and their
-  ordering. Keep a single behavior in one place.
-- **A module boundary must remove coupling.** A helper that takes its whole
-  parent object (`self: SomeProto`) and depends on a Protocol redeclaring most
-  of the class is a split on the wrong axis — it belongs *on* the class as a
-  method. Pure, genuinely-reusable helpers (no `self`, no I/O) are the right
-  thing to extract to a sibling module.
-- **Re-export/forwarding modules are a smell.** A module whose body is only
-  imports + `__all__` (a barrel), or a method that only casts and delegates,
-  adds an import boundary without cohesive behavior. Guarded by
-  `tests/test_no_reexport_barrels_unit.py`.
-- The 400-line gate (`tests/test_module_size_unit.py`) is a *smell signal, not a
-  splitting trigger*. If a cohesive unit needs a few more lines, allowlist it
-  with a rationale rather than splitting it by phase to duck under the ceiling.
-- **Test the assembly, not just the stages.** Every extracted pure-helper
-  cluster must ship at least one integration test that drives the real
-  composition (real collaborators, not a lambda/fake for every stage). Unit
-  tests prove stage contracts; composition tests catch where bugs actually live.
-- **Generic layers stay provider-neutral.** `runtime`/`output`/`formatting` must
-  not import a concrete site package; put site-specific behavior behind a
-  capability method on `BaseChatDownloader`. Enforced by `lint-imports`.
-- The 88-column reformat commit (Round-10.1) is listed in
-  `.git-blame-ignore-revs`; use
-  `git config blame.ignoreRevsFile .git-blame-ignore-revs` locally when blame
-  noise matters.
-
-## Debugging
-
-- Use `--logging debug` or `--verbose` for parser and transport issues.
-- `--testing` means debug logging plus pause-on-debug.
-- `debug_log()` is for unexpected data-quality conditions only.
-
-## Done Means
-
-A behavior, runtime, parser, or tooling change is not done until:
-
-- Regression test added or updated under `tests/`
-- `uv run ruff check src/chat_downloader tests` clean
-- `make spell` clean
-- `uv run ruff format --check src/chat_downloader tests` clean
-- `uv run mypy .` clean
-- `uv run lint-imports` clean
-- `uv run pytest -q -p no:rerunfailures -m "not network"` green
-- Docs updated in the same commit for user-facing behavior, tooling, project
-  structure, or public API changes
-- Version bumps also update `CHANGELOG.md`, and the topmost release heading
-  matches `src/chat_downloader/metadata.py::__version__`
-
-## CI
-
-GitHub Actions is the only supported hosted CI platform. Preserve push
-coverage for all branches, pull-request coverage targeting `master`,
-`workflow_dispatch`, Python matrix `["3.12", "3.13", "3.14"]`, `uv sync
---locked`, canonical `make ci`, read-only `contents` permission, concurrency
-cancellation, and job timeout. Do not add Gitea, Forgejo, Codeberg, or
-Woodpecker CI configuration.
-
-## Commits
-
-Subject format: `topic: short imperative summary`. Topic is one of `build`,
-`chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`,
-or `test`. Aim for about 50 characters; 72 max; no trailing period. Bodies use
-`- ` bullets, one per logical change, wrapped at 72 columns.
-
-No commit message may contain a bare `#123` issue reference, because GitHub
-renders one as a link that can notify the upstream tracker.
-`scripts/check_issue_references.py` enforces this across all history reachable
-from `HEAD`, and `make ci` fails while an offending commit stays reachable.
-
-This applies to merge commits, where GitHub appends a `(#N)` suffix to the
-default subject. Always pass an explicit subject when merging a pull request:
+## Setup and commands
 
 ```bash
-gh pr merge <N> --merge --subject "topic: short imperative summary"
+make setup
+uv run pytest tests/FILE.py -q
+uv run pytest tests/FILE.py::test_name -q
+uv run pytest -q -p no:rerunfailures -m "not network"
+uv run pytest -v -m network --run-network
+make lint
+make spell
+make fmt-check
+make typecheck
+uv run lint-imports
+make ci
 ```
 
-Prefer a merge commit over squash or rebase when the branch carries a release
-tag, so the tagged commit stays reachable from `master`. A violating merge
-commit cannot be fixed by reverting — the original stays reachable — so amend
-the subject and force-push before anyone builds on it.
+`make setup` installs pre-commit/pre-push hooks and runs `uv sync`. Network tests
+are opt-in. `make ci` is canonical validation: lock check, lint, spelling,
+format check, type checking, 100% offline line coverage, build, and smoke test.
+
+Minimum verification:
+
+- Documentation-only: `make spell` plus relevant documentation contract tests.
+- Source or test: focused tests while iterating, then lint, format, mypy,
+  `lint-imports`, and the offline suite.
+- Parser, retry, output, runtime, or public API: add a regression test; promote a
+  curated fixture before changing parser behavior.
+- Tooling, packaging, architecture, or cross-cutting changes: run `make ci`.
+
+## Code and documentation conventions
+
+- Source files start with `from __future__ import annotations`; Ruff owns the
+  88-column, double-quoted format. Put type-only imports under `TYPE_CHECKING`.
+- Mccabe complexity is capped at 10. Use `# noqa: C901` only for an intrinsically
+  branchy function and include a short rationale.
+- Name tests `test_<behavior>.py` or `test_<area>_unit.py`. Coverage pragmas are
+  only for defensive or unreachable branches and require a one-line reason.
+- Use `--logging debug` or `--verbose` for parser/transport investigation.
+  `--testing` also pauses on debug conditions. Reserve `debug_log()` for
+  unexpected data-quality conditions.
+- Update the owning guide with user-facing behavior, public API, project
+  structure, or tooling changes. Version changes must update `CHANGELOG.md`;
+  its top release heading must match `metadata.py::__version__`.
+- Keep architecture package inventories aligned with source. Preserve local
+  links, CLI defaults/groups, public imports, facade/request parameter parity,
+  Makefile contracts, `Any` density, and module-size ratchets.
+- `.git-blame-ignore-revs` records the repository-wide formatting commit; set
+  `git config blame.ignoreRevsFile .git-blame-ignore-revs` when using blame.
+
+## Project policies
+
+- Check `git status --short --branch` before editing. Work on the requested
+  branch and preserve unrelated changes. Do not weaken ratchets or reopen a
+  closed maintenance deferral without documented evidence.
+- Do not file fork-originating issues or pull requests upstream. Do not cite or
+  link upstream issue/PR discussions in project docs, source, tests, fixtures,
+  or release notes; keep regression context self-contained.
+- GitHub Actions is the only hosted CI. Preserve pushes for all branches, pull
+  requests targeting `master`, manual dispatch, Python 3.12–3.14, locked sync,
+  `make ci`, read-only contents permission, concurrency cancellation, and the
+  job timeout. Do not add other hosted CI configurations.
+- Commit subjects use `topic: imperative summary`, where topic is `build`,
+  `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, or
+  `test`. Keep subjects at 72 characters or fewer with no trailing period.
+  Bodies use one `- ` bullet per logical change, wrapped at 72 columns.
+- Never put a bare issue reference such as `#123` in a commit message. The
+  history check covers merge commits too. Merge pull requests with an explicit
+  subject, for example:
+
+  ```bash
+  gh pr merge <N> --merge --subject "topic: short imperative summary"
+  ```
+
+  Prefer a merge commit when the branch contains a release tag so the tagged
+  commit remains reachable from `master`. Reverting a violating merge does not
+  remove it from reachable history; amend and force-push before others build on
+  it.

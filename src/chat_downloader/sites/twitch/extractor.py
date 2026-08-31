@@ -296,15 +296,8 @@ class TwitchChatDownloader(BaseChatDownloader):
     ) -> Generator[dict[str, Any], None, None]:
         """Get live chat messages for a stream via IRC.
 
-        Uses Twitch's IRC interface for real-time chat messages. Note that IRC
-        is considered a legacy method by Twitch (EventSub is preferred), but
-        remains functional for read-only chat access.
-
-        IRC Limitations (per Twitch documentation):
-        - Message order is not guaranteed (messages may arrive out-of-sequence)
-        - Channels with 1000+ users don't send JOIN/PART messages
-        - Only /me command available (other commands require API calls)
-        - Rate limits apply (see constants.py for current limits)
+        The transport connects anonymously, requests Twitch IRC tags and
+        commands, and yields parsed frames in arrival order.
 
         Args:
             stream_id: Channel name
@@ -347,12 +340,8 @@ class TwitchChatDownloader(BaseChatDownloader):
     ) -> Chat:
         """Get live chat messages for a stream by channel name.
 
-        This is a public API method for retrieving live chat from an active
-        or upcoming stream using Twitch's IRC interface.
-
-        Note: IRC is Twitch's legacy chat method (EventSub is now preferred),
-        but remains functional. Messages may arrive out-of-order, and rate
-        limits apply (see constants.py).
+        This public API method builds an IRC-backed chat for the channel. An
+        offline or upcoming channel remains open while it waits for messages.
 
         Args:
             stream_id: Twitch channel name (e.g., 'shroud')

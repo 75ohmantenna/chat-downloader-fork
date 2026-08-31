@@ -89,7 +89,6 @@ def main(cli_args: Sequence[str] | None = None) -> None:
     parser = _build_arg_parser()
     args = parser.parse_args(args=cli_args)
 
-    # Resolve CLI-only debugging flags
     if args.testing:  # (only for CLI)
         args.logging = "debug"
         args.pause_on_debug = True
@@ -110,7 +109,6 @@ def main(cli_args: Sequence[str] | None = None) -> None:
     if headers:
         args_dict["headers"] = headers
 
-    # Run with these arguments
     result = run(**args_dict)
     if not result.success or result.interrupted:
         sys.exit(1)

@@ -81,8 +81,8 @@ intentionally excluded from output. `deadline_prefetch_count_complete` is false
 when bounded shutdown returns while the provider worker is still advancing; in
 that case the count is explicitly a lower bound and may finish updating after
 the summary. This is the common Ctrl-C/SIGTERM and early-stop cleanup path.
-Reconnect diagnostics are debug-only; normal message output and file formats are
-unchanged.
+Provider diagnostics remain available on the returned `Chat` and appear in
+successful debug summaries; normal message output and file formats are unchanged.
 
 JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing

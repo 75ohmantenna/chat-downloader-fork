@@ -147,7 +147,7 @@ class KickChatDownloader(BaseChatDownloader):
             UserNotFound: If the channel does not exist.
             CaptchaChallengeRequired: If Kick returns a challenge page.
             KickCountryBlocked: If Kick blocks the request's country or region.
-            KickError: If metadata is incomplete or the channel is offline.
+            KickError: If required channel metadata is incomplete.
         """
         request = self._coerce_chat_request(params)
         return build_channel_chat(self, username, request)
@@ -188,12 +188,14 @@ class KickChatDownloader(BaseChatDownloader):
     ) -> Chat:
         """Get chat replay for a Kick clip.
 
-        ``start_time`` and ``end_time`` remain relative to the clip and are
-        clamped to its duration before being mapped onto the source VOD.
+        ``start_time`` and ``end_time`` remain relative to the clip. The web
+        metadata path maps the bounded interval onto the source VOD; the
+        mobile fallback uses the clip's validated absolute timestamp window.
 
         Raises:
             KickCountryBlocked: If Kick blocks the request's country or region.
-            KickError: If clip or source-video metadata is unavailable.
+            KickError: If validated web and mobile metadata cannot establish
+                a replay interval.
         """
         request = self._coerce_chat_request(params)
         return build_clip_chat(

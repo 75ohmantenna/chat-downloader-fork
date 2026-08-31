@@ -156,20 +156,21 @@ def process_pipeline_action(
 
     Steps:
 
-    1. :func:`~.parsing.actions.process_action` — parse the raw action dict
-       into a typed message dict; returns ``None`` for ignored/unknown actions.
-    2. :func:`~.parsing.actions.validate_and_finalize_message` — validate
-       required fields and apply any post-processing; returns ``None`` when
-       the message is malformed.
-    3. :meth:`~..common.MessageFilter.should_add` — message-type / group
-       filter; ``False`` means the message is excluded.
-    4. :meth:`~..common.TimeRangeFilter.check` (when *time_filter* is not
-       ``None``) — time-range filter; ``"skip"`` skips the message,
-       ``"stop"`` signals end of stream.
+    1. :func:`~.parsing.actions_router.process_action` — parse the raw action
+       dict into a typed message dict; returns ``None`` for ignored or unknown
+       actions.
+    2. :func:`~.parsing.actions_handlers_validation.validate_and_finalize_message`
+       — validate required fields and apply post-processing; returns ``None``
+       when the message is malformed.
+    3. :meth:`chat_downloader.sites.filters.MessageFilter.should_add` —
+       message-type / group filter; ``False`` means the message is excluded.
+    4. :meth:`chat_downloader.sites.filters.TimeRangeFilter.check` (when
+       *time_filter* is not ``None``) — time-range filter; ``"skip"`` skips
+       the message, ``"stop"`` signals end of stream.
 
     :param action: Raw action dict from the YouTube live-chat API.
     :param offset: Time offset in seconds for replay chat (passed to
-        :func:`~.parsing.actions.process_action`).
+        :func:`~.parsing.actions_router.process_action`).
     :param msg_filter: Message-type / group filter instance.
     :param time_filter: Optional time-range filter; pass ``None`` for
         live (non-replay) streams.

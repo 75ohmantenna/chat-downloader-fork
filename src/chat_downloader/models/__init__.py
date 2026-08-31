@@ -1,26 +1,23 @@
 # SPDX-License-Identifier: MIT
 
-"""Typed configuration and request objects for chat-downloader.
-
-Replaces the parameter-bag-via-locals() pattern in
-``ChatDownloader.__init__`` and ``ChatDownloader.get_chat()``.
+"""Canonical typed configuration, request, and run models.
 
 Public surface
 --------------
 - :class:`DownloaderConfig` — session-level options (headers/cookies/proxy).
 - :class:`ChatRequest`       — a single chat retrieval request.
+- :class:`RunConfig`         — CLI/runtime presentation and control options.
 - :class:`SiteDefault`       — marker for site-specific default values.
 
-Both dataclasses expose an ``as_dict()`` bridge so that existing internal
-helpers that still expect plain dicts continue to work unchanged during the
-transition.
+The configuration dataclasses expose ``as_dict()`` bridges for internal
+boundaries that still consume mappings.
 
 CLI metadata
 ------------
-Fields tagged with ``field(metadata={"cli": {...}})`` provide the defaults,
-help text, and short flags used by :mod:`chat_downloader.cli_args`. Parser
-registration remains explicit there. Fields without a ``"cli"`` key are
-internal-only and are not exposed as CLI arguments.
+Fields tagged with ``field(metadata={"cli": {...}})`` provide defaults, help
+text, and short flags used by :mod:`chat_downloader.cli_args`; parser
+registration remains explicit there. ``DownloaderConfig.headers`` is exposed
+through the separately registered ``--user-agent`` and ``--header`` options.
 
 CLI metadata keys:
 

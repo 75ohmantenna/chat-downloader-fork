@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick HTTP-session construction with anti-challenge fallbacks."""
+"""Kick HTTP-session backend selection."""
 
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def create_kick_session(
     extra_headers: dict[str, str] | None = None,
     trust_env: bool = True,
 ) -> _KickSession:  # pragma: no cover — live optional-dependency path
-    """Create a dedicated Kick API session with challenge-aware fallbacks."""
+    """Create a dedicated Kick API session with the first available backend."""
     session = _try_curl_cffi()
     if session is None:
         session = _try_cloudscraper()

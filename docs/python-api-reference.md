@@ -190,10 +190,11 @@ while later messages use positive values. Replay chats keep the standard
 elapsed-time rendering.
 
 Kick VOD offsets are relative to the recording start and are clamped to its
-duration. Kick clip offsets are relative to the clip, then mapped onto and
-bounded by its source VOD. Kick live channel URLs reject `start_time` and
-`end_time` because the public live feed cannot seek. A Kick live WebSocket
-event that lacks a valid provider `timestamp` receives a distinct
+duration. Kick clip offsets are relative to the clip; the web path maps them
+onto its source VOD, while the mobile fallback maps them onto a validated
+absolute timestamp window. Kick live channel URLs reject `start_time` and
+`end_time` because the public live feed cannot seek. A Kick live WebSocket event
+that lacks a valid provider `timestamp` receives a distinct
 UTC-microsecond `received_timestamp`; provider timestamps retain priority, TXT
 labels the fallback `[received]`, and replay/preloaded records are unchanged.
 
@@ -272,6 +273,10 @@ reconnects, IRC frames, recognized benign control frames, parsed messages,
 receive timeouts and idle-watchdog expirations, `PING`/`PONG` keepalives,
 duplicate suppression, filtering, and source emission. They contain no
 endpoint, error path/message, or chat-content fields.
+Kick live diagnostics likewise expose fixed-schema WebSocket, control, parsed,
+unsupported, malformed, reconnect, Pusher-key recovery, and
+preload/live/backfill emission counters, plus bounded malformed-event-type
+counts and the last frame's receive timestamp.
 
 In normal usage, treat it as an iterable of message dictionaries:
 
@@ -314,9 +319,10 @@ placeholder expansion and canonical path resolution; existing hard links are
 also treated as one destination.
 
 File writers are crash-resilient: each record is flushed on write and the file
-is synchronized to disk periodically (about every 60 seconds). Datetime values
-serialized to JSONL output must be timezone-aware (UTC); a naive `datetime`
-raises `ValueError` at the output boundary to keep timestamps unambiguous.
+is synchronized to disk periodically (about every 60 seconds). JSONL accepts
+JSON-compatible values, so callers must convert `datetime` objects to UTC
+integer microseconds or ISO 8601 strings. A top-level naive `datetime` receives
+a specific `ValueError`; other raw datetimes are rejected by the JSON encoder.
 Kick pin records reserve the top-level `timestamp` for the pin event time.
 Startup pin state has no event time and omits it; the original chat message time
 is available as `metadata.original_message_created_at`, with

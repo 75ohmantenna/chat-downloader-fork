@@ -37,7 +37,7 @@ class YouTubeChatUsersRetrievalMixin:
     ) -> Chat:
         """Get chat by user arguments."""
         title = try_get_first_value(user_video_args)
-        chat_item = Chat(title=title, id=title)  # Create empty chat object
+        chat_item = Chat(title=title, id=title)
         chat_item.chat = self._get_chat_messages_by_user_args(
             user_video_args,
             chat_item,
@@ -56,8 +56,7 @@ class YouTubeChatUsersRetrievalMixin:
         list_of_vids_to_ignore = params.ignore or []
 
         sleep_amount = 30
-        # For efficiency purposes, do not loop over all past broadcasts if not
-        # found
+        # Bound each discovery pass before refreshing live/upcoming results.
         max_vids_to_try = 5
 
         while True:

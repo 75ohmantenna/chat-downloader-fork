@@ -92,8 +92,9 @@ class ChatDownloader:
             (youtube_web/youtube_android/youtube_ios/twitch_web)
         :type request_profile: str, optional
         :param auto_profile_fallback: Whether to automatically rotate
-            YouTube request profiles after repeated incomplete continuation
-            responses. Defaults to True.
+            YouTube request profiles after generic initial playability
+            failures or repeated incomplete continuation responses. Defaults
+            to True.
         :type auto_profile_fallback: bool, optional
         :param twitch_client_id: Optional Twitch Client-ID override.
         :type twitch_client_id: str, optional
@@ -197,8 +198,9 @@ class ChatDownloader:
         chat_type: Literal["live", "top"] = "live",
         ignore: list[str] | None = None,
         youtube_replay_poll_interval: float | None = None,
-        # Twitch
+        # Live transport
         message_receive_timeout: float = DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
+        # Twitch
         buffer_size: int = DEFAULT_BUFFER_SIZE,
     ) -> Chat:
         """Retrieve chat messages from a stream, video, clip or broadcast.
@@ -278,7 +280,7 @@ class ChatDownloader:
 
         Live transport (Twitch and Kick):
         :param message_receive_timeout: Live socket receive-poll timeout in
-            seconds (default: 0.1; Twitch and Kick enforce a minimum of 1)
+            seconds (default: 1.0; Twitch and Kick enforce a minimum of 1)
         :type message_receive_timeout: float, optional
 
         Site-specific (Twitch):
@@ -344,7 +346,7 @@ def run(*, propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
     This is a convenience function that creates a ChatDownloader
     instance, retrieves chat messages, and handles common errors. It
     automatically:
-    - Separates init parameters from get_chat parameters
+    - Separates downloader, request, and run parameters
     - Iterates through all chat messages
     - Logs messages unless quiet=True
     - Handles and logs errors appropriately
@@ -354,9 +356,9 @@ def run(*, propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
         instead of catching it. Useful when embedding in other
         applications. (default: False)
     :type propagate_interrupt: bool, optional
-    :param kwargs: Combined parameters for ChatDownloader.__init__()
-        and get_chat(). Will be automatically separated based on
-        method signatures.
+    :param kwargs: Combined fields from :class:`DownloaderConfig`,
+        :class:`ChatRequest`, and :class:`RunConfig`. They are separated by
+        the typed CLI bridge before execution.
     :type kwargs: dict
 
     :return: Structured execution summary.

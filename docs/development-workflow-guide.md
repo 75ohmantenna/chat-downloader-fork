@@ -33,8 +33,8 @@ make setup
 The equivalent explicit commands are:
 
 ```bash
-uv sync
 uv run pre-commit install --install-hooks --hook-type pre-commit --hook-type pre-push
+uv sync
 ```
 
 The pre-commit stage runs Ruff lint and format checks plus codespell over every

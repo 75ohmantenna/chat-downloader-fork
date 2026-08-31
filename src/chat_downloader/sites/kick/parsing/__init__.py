@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick payload parsing: events, chat messages, emotes, subscriptions.
-
-moderation, pins, and hosts.
-"""
+"""Parse Kick chat, emote, subscription, moderation, pin, poll, and host events."""
 
 from __future__ import annotations
 

@@ -135,7 +135,7 @@ def supports_colour() -> bool:
             else:
                 return bool(reg_key_value == 1)
 
-    # isatty is not always implemented, #6223.
+    # Some stream objects do not implement isatty().
     is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
 
     return is_a_tty and (
@@ -197,10 +197,8 @@ else:  # fallback support
 
 handler.addFilter(_SafeLogFilter())
 
-# Create logger object for this module
 logger = logging.getLogger(logger_name)
 
-# Define which loggers to display
 loggers = [logging.getLogger(name) for name in (logger_name, "urllib3")]
 for configured_logger in loggers:
     configured_logger.addHandler(handler)
@@ -224,7 +222,6 @@ def disable_logger() -> None:
         configured_logger.disabled = True
 
 
-# Export public API
 __all__ = [
     "TestingException",
     "TestingModes",

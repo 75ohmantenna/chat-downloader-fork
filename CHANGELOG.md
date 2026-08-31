@@ -8,6 +8,19 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.2.1 — 2026-08-31
+
+### Documentation / tooling
+
+- Correct the public API and provider documentation for live receive timeouts,
+  Twitch IRC and badge parsing, Kick clip fallback and diagnostics, and YouTube
+  pipeline ownership.
+- Clarify that JSONL callers must convert `datetime` objects to JSON-compatible
+  UTC values, and align the output-boundary regression tests with the actual
+  encoder behavior.
+- Condense the coding-agent guide around verified repository commands,
+  architecture invariants, validation requirements, and release safeguards.
+
 ## 2.2.0 — 2026-08-31
 
 ### Features
