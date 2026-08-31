@@ -16,7 +16,12 @@ from chat_downloader.errors import (
     VideoUnplayable,
 )
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.twitch import graphql_client, irc_diagnostics, irc_transport
+from chat_downloader.sites.twitch import (
+    badge_client,
+    graphql_client,
+    irc_diagnostics,
+    irc_transport,
+)
 
 
 def _privmsg(message_id: str, text: str) -> str:
@@ -782,7 +787,7 @@ def test_update_badge_info_skips_malformed_badge_and_keeps_others() -> None:
     badge_info: dict = {}
     subscriber_badge_info: dict = {}
 
-    graphql_client.update_badge_info(
+    badge_client.update_badge_info(
         session_post=Mock(),
         channel="example",
         download_gql_func=fake_download_gql,

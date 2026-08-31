@@ -18,6 +18,7 @@ from chat_downloader.sites.models import Chat
 from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_str
 
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
 from .irc_diagnostics import _SuccessfulIrcFrameCapture
@@ -256,7 +257,11 @@ def get_chat_by_stream_id(
         )
         logger.debug(f"Stream status for {stream_id}: offline/upcoming")
 
-    downloader._update_badge_info(stream_id)
+    channel_id = get_str(stream_info, "id")
+    if channel_id:
+        downloader._update_badge_info(stream_id, channel_id)
+    else:
+        downloader._update_badge_info(stream_id)
 
     return Chat(
         downloader._get_chat_messages_by_stream_id(stream_id, request),

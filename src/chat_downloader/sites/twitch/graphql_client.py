@@ -4,11 +4,7 @@
 
 from __future__ import annotations
 
-import base64
-from json import JSONDecodeError
-from typing import TYPE_CHECKING, Any, cast
-
-from requests.exceptions import RequestException
+from typing import TYPE_CHECKING, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import (
@@ -20,16 +16,20 @@ from chat_downloader.errors import (
     VideoUnplayable,
 )
 from chat_downloader.metadata import __version__
-from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_list, get_str
 from chat_downloader.utils.string_utils import contains_any_hint
 
-from .constants import CLIENT_ID, GQL_API_URL, OPERATION_HASHES
+from .constants import (
+    CLIENT_ID,
+    GQL_API_URL,
+    OPERATION_HASHES,
+    PERSISTED_OPERATION_NAMES,
+)
 
 if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONAny, JSONDict, JSONList
 
-    from ._protocols import _DownloadGQL, _SessionPost
+    from ._protocols import _SessionPost
 
 GQL_AUTH_COOKIE_NAME: str = "auth-token"
 
@@ -218,6 +218,10 @@ def _download_gql(
     request_ops: list[dict[str, object]] = [
         {
             **op,
+            "operationName": PERSISTED_OPERATION_NAMES.get(
+                str(op.get("operationName", "")),
+                str(op.get("operationName", "")),
+            ),
             "extensions": {
                 "persistedQuery": {
                     "version": 1,
@@ -286,68 +290,3 @@ def _build_full_query_ops(ops: JSONList) -> JSONList | None:
             }
         )
     return cast("JSONList", fallback_ops)
-
-
-def update_badge_info(
-    session_post: _SessionPost,
-    channel: str,
-    download_gql_func: _DownloadGQL,
-    badge_info: dict[tuple[str, str], dict[str, Any]],
-    subscriber_badge_info: dict[str, dict[tuple[str, str], dict[str, Any]]],
-    client_id: str | None = None,
-) -> None:
-    """Update badge information cache for a channel."""
-    try:
-        query: JSONList = [
-            {
-                "operationName": "ChatList_Badges",
-                "variables": {"channelLogin": channel},
-            },
-        ]
-        gquery: JSONList = [{"operationName": "GlobalBadges"}]
-        channel_data = (
-            multi_get(
-                download_gql_func(session_post, query, client_id=client_id),
-                0,
-                "data",
-            )
-            or {}
-        )
-        global_data = (
-            multi_get(
-                download_gql_func(session_post, gquery, client_id=client_id),
-                0,
-                "data",
-            )
-            or {}
-        )
-
-        badges = (channel_data.get("badges") or []) + (global_data.get("badges") or [])
-        user = (multi_get(channel_data, "user", "broadcastBadges") or []) + (
-            multi_get(global_data, "user", "broadcastBadges") or []
-        )
-
-        for badge in badges + user:
-            try:
-                set_id, version, channel_id, *_ = (
-                    base64.b64decode(badge["id"]).decode().strip().split(";")
-                )
-            except (ValueError, KeyError) as badge_error:
-                log(
-                    "debug",
-                    f"Skipping malformed badge (id={badge.get('id')!r}): {badge_error}",
-                )
-                continue
-
-            if channel_id:
-                subscriber_badge_info.setdefault(channel_id, {})
-                subscriber_badge_info[channel_id][(set_id, version)] = badge
-            else:
-                badge_info[(set_id, version)] = badge
-
-    except (RequestException, JSONDecodeError, KeyError, ValueError) as error:
-        log(
-            "warning",
-            f"Failed to retrieve badge information for channel '{channel}': "
-            f"{type(error).__name__}: {error}. Continuing without badges.",
-        )

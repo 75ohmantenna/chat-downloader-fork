@@ -335,9 +335,10 @@ def get_chat_by_vod_id(
 
     title: str | None = get_str(video, "title") or None
     duration: float | None = get_float(video, "lengthSeconds") or None
-    channel_login = multi_get(video, "owner", "login")
+    owner = get_dict(video, "owner")
+    channel_login = get_str(owner, "login")
     if channel_login:
-        downloader._update_badge_info(channel_login)
+        downloader._update_badge_info(channel_login, get_str(owner, "id") or None)
 
     return Chat(
         downloader._get_chat_messages_by_vod_id(vod_id, request, duration),
@@ -388,7 +389,10 @@ def get_chat_by_clip_id(
 
     offset: float | None = get_float(clip, "videoOffsetSeconds") or None
     duration: float | None = get_float(clip, "durationSeconds") or None
-    downloader._update_badge_info(multi_get(clip, "broadcaster", "login"))
+    broadcaster = get_dict(clip, "broadcaster")
+    downloader._update_badge_info(
+        get_str(broadcaster, "login"), get_str(broadcaster, "id") or None
+    )
 
     return Chat(
         downloader._get_chat_messages_by_vod_id(vod_id, request, duration, offset),

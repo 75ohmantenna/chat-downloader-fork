@@ -37,6 +37,10 @@ ALLOWLIST: frozenset[str] = frozenset(
         # security boundary. Splitting the lookup phases would obscure when
         # cross-endpoint identity and bounds must fail closed.
         "sites/kick/clip_service.py",
+        # Cohesive Twitch replay service: metadata, bounded cursor pagination,
+        # edge validation, and badge-channel identity form one replay contract.
+        # Splitting request phases would obscure cursor and creator-ID state.
+        "sites/twitch/replay_service.py",
         # Cohesive security boundary: structured/string redaction and secure
         # debug-sample creation share the same secret-classification rules.
         # Splitting file creation from sanitization would duplicate or weaken

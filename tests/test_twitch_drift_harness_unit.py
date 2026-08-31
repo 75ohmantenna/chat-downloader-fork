@@ -152,10 +152,12 @@ def test_graphql_fixture_parses_without_drift(
 _EXPECTED_OPERATIONS: frozenset[str] = frozenset(
     {
         "BrowsePage_Popular",
+        "BroadcastBadges",
         "ChatList_Badges",
         "ClipsCards__User",
         "FilterableVideoTower_Videos",
         "GlobalBadges",
+        "GlobalBadgesMobile",
         "StreamMetadata",
         "VideoCommentsByOffsetOrCursor",
         "VideoCommentsQuery",

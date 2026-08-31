@@ -392,6 +392,21 @@ def test_twitch_update_badge_info_passes_configured_client_id(
     ]
 
 
+def test_twitch_badge_refresh_reuses_known_channel_id(monkeypatch) -> None:
+    downloader = TwitchChatDownloader()
+    downloader._session_post = object()
+    calls = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.extractor.update_badge_info",
+        lambda *args, **kwargs: calls.append(kwargs),
+    )
+
+    downloader._update_badge_info("CaseOh_", "123")
+    downloader._update_badge_info("caseoh_")
+
+    assert calls == [{"channel_id": "123"}, {"channel_id": "123"}]
+
+
 def test_twitch_extractor_routing_wrappers_delegate(monkeypatch) -> None:
     downloader = TwitchChatDownloader()
     request = ChatRequest(url="https://www.twitch.tv/example")

@@ -9,6 +9,7 @@ metadata, live IRC, replay, and parsing modules:
 - live_service.py and irc_transport.py: live chat orchestration and IRC.
 - replay_service.py and replay_transport.py: VOD/clip chat replay retrieval.
 - graphql_client.py: Twitch GraphQL metadata and persisted-query requests.
+- badge_client.py: Twitch badge retrieval, fallback, and normalization.
 - parsing/: message, tag, badge, emote, and system-event parsing.
 """
 

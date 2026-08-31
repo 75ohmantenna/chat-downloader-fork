@@ -41,6 +41,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Retry core Twitch stream metadata, VOD metadata, and mobile replay comment
   operations with bundled full GraphQL documents only when Twitch rejects a
   persisted-query hash.
+- Fall back independently to the Android client's current channel and global
+  badge operations, preserving badge metadata while normalizing mobile image
+  fields for live, VOD, clip, and reconnect parsing.
 - Classify Kick's provider-specific HTTP 423 response as a terminal
   country/region block, expose a typed error for integrations, and preserve it
   through clip metadata fallback decisions without retrying.

@@ -435,6 +435,7 @@ def test_live_service_get_chat_by_stream_id_handles_rerun_and_updates_badges(
                 {
                     "data": {
                         "user": {
+                            "id": "channel-123",
                             "stream": {"type": "rerun"},
                             "lastBroadcast": {"title": "Rerun Title"},
                         },
@@ -456,7 +457,7 @@ def test_live_service_get_chat_by_stream_id_handles_rerun_and_updates_badges(
 
     assert chat.title == "Rerun Title"
     assert chat.status == "live"
-    downloader._update_badge_info.assert_called_once_with("example")
+    downloader._update_badge_info.assert_called_once_with("example", "channel-123")
     assert any("broadcasting a rerun" in r.message for r in caplog.records)
 
 

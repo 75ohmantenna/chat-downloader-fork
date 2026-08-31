@@ -30,6 +30,12 @@ OPERATION_HASHES = {
     "GlobalBadges": (
         "9db27e18d61ee393ccfdec8c7d90f14f9a11266298c2e5eb808550b77d7bcdf6"
     ),
+    "GlobalBadgesMobile": (
+        "a5e3f2d41b6a1444821e046d043127782d1cb2a537f13d40ef9f7b5e365d8d91"
+    ),
+    "BroadcastBadges": (
+        "90c678a88bd2bc5536b42e373022f6a53c4edee337122a67a5a9d1c1ca1e2b6b"
+    ),
     "StreamMetadata": (
         "ad022ca32220d5523d03a23cbcb5beaa1e0999889c1f8f78f9f2520dafb5cae6"
     ),
@@ -52,6 +58,9 @@ OPERATION_HASHES = {
         "81ce27a2633e066398ca7d05e92acdc364d90726587a2bbdeed8d6f1b38144af"
     ),
 }
+
+# Internal aliases let two persisted hashes target the same GraphQL operation.
+PERSISTED_OPERATION_NAMES = {"GlobalBadgesMobile": "GlobalBadges"}
 
 # URL Validation Patterns
 _RESERVED_CHANNEL_PATHS = (

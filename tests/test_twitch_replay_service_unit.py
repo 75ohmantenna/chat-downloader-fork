@@ -410,7 +410,10 @@ def test_replay_service_get_chat_by_vod_id_retries_before_success() -> None:
                             "video": {
                                 "title": "Example VOD",
                                 "lengthSeconds": 123,
-                                "owner": {"login": "streamer"},
+                                "owner": {
+                                    "id": "channel-123",
+                                    "login": "streamer",
+                                },
                             },
                         },
                     },
@@ -430,7 +433,7 @@ def test_replay_service_get_chat_by_vod_id_retries_before_success() -> None:
 
     assert chat.title == "Example VOD"
     downloader.retry.assert_called_once()
-    downloader._update_badge_info.assert_called_once_with("streamer")
+    downloader._update_badge_info.assert_called_once_with("streamer", "channel-123")
 
 
 def test_replay_service_get_chat_by_vod_id_rejects_zero_attempts() -> None:
@@ -477,7 +480,10 @@ def test_replay_service_get_chat_by_clip_id_retries_before_success() -> None:
                             "videoOffsetSeconds": 15,
                             "durationSeconds": 45,
                             "title": "Example Clip",
-                            "broadcaster": {"login": "streamer"},
+                            "broadcaster": {
+                                "id": "channel-123",
+                                "login": "streamer",
+                            },
                         },
                     },
                 },
@@ -496,7 +502,7 @@ def test_replay_service_get_chat_by_clip_id_retries_before_success() -> None:
 
     assert chat.title == "Example Clip (clip123)"
     downloader.retry.assert_called_once()
-    downloader._update_badge_info.assert_called_once_with("streamer")
+    downloader._update_badge_info.assert_called_once_with("streamer", "channel-123")
 
 
 def test_replay_service_get_chat_by_clip_id_rejects_zero_attempts() -> None:

@@ -10,12 +10,12 @@ from chat_downloader.debugging import logger
 from chat_downloader.errors import SiteError
 from chat_downloader.sites.base import BaseChatDownloader
 
+from .badge_client import update_badge_info
 from .constants import VALID_URLS
 from .graphql_client import (
     GQL_AUTH_COOKIE_NAME,
     _download_base_gql,
     _download_gql,
-    update_badge_info,
 )
 from .irc_transport import TwitchChatIRC, get_chat_messages_by_stream_id
 from .live_service import get_chat_by_stream_id as build_stream_chat
@@ -59,6 +59,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         """Initialize TwitchChatDownloader with an owned badge cache."""
         super().__init__(**kwargs)
         self.badge_cache = BadgeCache()
+        self._channel_ids: dict[str, str] = {}
 
     def _client_id_kwargs(self) -> dict[str, str]:
         """Return ``{'client_id': ...}`` when a custom client ID is configured.
@@ -69,7 +70,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         client_id: str | None = getattr(self, "_twitch_client_id", None)
         return {"client_id": client_id} if client_id is not None else {}
 
-    def _update_badge_info(self, channel: str) -> None:
+    def _update_badge_info(self, channel: str, channel_id: str | None = None) -> None:
         """Fetch badge data from the Twitch API and update the instance cache.
 
         The instance-owned :attr:`badge_cache` is mutated in-place.  Parsing
@@ -77,15 +78,24 @@ class TwitchChatDownloader(BaseChatDownloader):
         receive badge data via the explicit ``badge_set`` parameter instead.
 
         Args:
-            channel: Channel name to retrieve badges for
+            channel: Channel name to retrieve badges for.
+            channel_id: Numeric channel ID used by the current badge operation.
         """
+        channel_ids: dict[str, str] = getattr(self, "_channel_ids", {})
+        self._channel_ids = channel_ids
+        if channel_id:
+            channel_ids[channel.lower()] = channel_id
+        effective_channel_id = channel_id or channel_ids.get(channel.lower())
+        badge_kwargs = self._client_id_kwargs()
+        if effective_channel_id:
+            badge_kwargs["channel_id"] = effective_channel_id
         update_badge_info(
             self._session_post,
             channel,
             _download_gql,
             self.badge_cache.global_badges,
             self.badge_cache.channel_badges,
-            **self._client_id_kwargs(),
+            **badge_kwargs,
         )
 
     def _download_base_gql(self, ops: Any) -> Any:

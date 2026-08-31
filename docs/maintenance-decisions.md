@@ -45,6 +45,16 @@ must fail closed.
 **Revisit when:** a pure metadata-validation component gains another real
 consumer, or a new ownership boundary can remove state and fallback coupling.
 
+## Keep Twitch replay identity and pagination together
+
+**Decision:** `sites/twitch/replay_service.py` owns VOD/clip metadata, bounded
+cursor pagination, edge validation, and creator identity used during replay
+parsing and badge lookup. It is narrowly allowlisted above 400 lines rather
+than split into request phases that would obscure cursor and creator-ID state.
+
+**Revisit when:** creator identity or edge validation becomes a pure component
+with another real consumer, or a new boundary removes replay-loop coupling.
+
 ## Distinguish raw JSON from assembled output
 
 **Decision:** Incoming platform payloads use `utils/json_types` aliases and

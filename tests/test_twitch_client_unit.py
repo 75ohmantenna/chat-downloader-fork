@@ -10,6 +10,7 @@ import pytest
 from requests.exceptions import RequestException
 
 from chat_downloader.errors import LoginRequired, ParsingError, UserNotFound
+from chat_downloader.sites.twitch.badge_client import update_badge_info
 from chat_downloader.sites.twitch.constants import (
     CLIENT_ID,
     GQL_API_URL,
@@ -19,7 +20,6 @@ from chat_downloader.sites.twitch.discovery import get_user_videos
 from chat_downloader.sites.twitch.graphql_client import (
     _FULL_QUERY_DOCUMENTS,
     _download_gql,
-    update_badge_info,
 )
 from chat_downloader.sites.twitch.irc_transport import (
     _is_benign_unmatched_irc_buffer,
@@ -79,6 +79,24 @@ def test_download_gql_uses_client_id_override() -> None:
     )
 
     assert calls["headers"]["Client-ID"] == "custom-client"
+
+
+def test_download_gql_maps_mobile_global_badge_alias_to_wire_operation() -> None:
+    captured = {}
+
+    def session_post(_url, json, headers):
+        _ = headers
+        captured["operation"] = json[0]
+        return _Resp([{"data": {"badges": []}}])
+
+    _download_gql(session_post, [{"operationName": "GlobalBadgesMobile"}])
+
+    operation = captured["operation"]
+    assert operation["operationName"] == "GlobalBadges"
+    assert (
+        operation["extensions"]["persistedQuery"]["sha256Hash"]
+        == (OPERATION_HASHES["GlobalBadgesMobile"])
+    )
 
 
 @pytest.mark.parametrize(

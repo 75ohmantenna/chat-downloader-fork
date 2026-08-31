@@ -67,6 +67,8 @@ The Twitch flow depends on the target type.
 - `irc_transport.py`: low-level Twitch IRC socket lifecycle
 - `graphql_client.py`: persisted-query and bounded full-document GraphQL
   requests plus error mapping
+- `badge_client.py`: channel/global badge retrieval, operation fallback, and
+  response normalization
 - `replay_transport.py`: replay comment retrieval
 - `discovery.py` and `url_generation.py`: discovery helpers and generated URLs
 
@@ -105,6 +107,14 @@ is not live yet, which allows callers to wait for chat activity.
 
 Before parsing live traffic, the downloader fetches channel and global badges.
 The result is stored in an instance-owned `BadgeCache`.
+
+The legacy login-based operations remain primary. If Twitch rejects either
+persisted hash, that badge source retries independently through the Android
+client's current operation. Channel fallback uses the numeric channel ID from
+stream, VOD, or clip metadata; the downloader retains that mapping for IRC
+reconnect refreshes. Mobile `imageUrlNormal`, `imageUrlDouble`, and
+`imageUrlQuadruple` fields are normalized to the existing cache shape without
+discarding legacy click metadata.
 
 The parser consumes a snapshot of badge data rather than mutating module-level
 state. That keeps ownership clearer and testing simpler.
