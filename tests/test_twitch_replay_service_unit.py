@@ -13,7 +13,10 @@ from requests.exceptions import RequestException
 from chat_downloader.errors import NoChatReplay, VideoUnavailable
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch import _replay_vod_loop, replay_service
+from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
 from chat_downloader.sites.twitch.replay_service import _process_vod_edge
+from chat_downloader.sites.twitch.replay_transport import get_chat_messages_by_vod_id
+from chat_downloader.sites.twitch.types import BadgeSet
 
 
 def test_replay_service_get_chat_by_vod_id_raises_when_video_missing() -> None:
@@ -100,6 +103,116 @@ def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page(
 
     assert result == []
     downloader.retry.assert_called_once()
+
+
+def test_mobile_replay_fallback_drives_full_multi_page_composition() -> None:
+    calls: list[list[dict[str, Any]]] = []
+
+    def mobile_page(message_id: str, cursor: str, offset: int) -> list[dict[str, Any]]:
+        return [
+            {
+                "data": {
+                    "video": {
+                        "comments": {
+                            "edges": [
+                                {
+                                    "cursor": cursor,
+                                    "node": {
+                                        "__typename": "VideoComment",
+                                        "id": message_id,
+                                        "createdAt": "2026-08-31T00:00:00Z",
+                                        "contentOffsetSeconds": offset,
+                                        "commenter": {
+                                            "id": "user-1",
+                                            "login": "viewer",
+                                            "displayName": "Viewer",
+                                        },
+                                        "message": {
+                                            "fragments": [
+                                                {
+                                                    "text": "Kappa",
+                                                    "emote": {
+                                                        "from": 0,
+                                                        "emoteID": "25",
+                                                        "to": 4,
+                                                    },
+                                                }
+                                            ],
+                                            "userBadges": [
+                                                {
+                                                    "setID": "subscriber",
+                                                    "version": "1",
+                                                }
+                                            ],
+                                        },
+                                        "video": {
+                                            "id": "vod-1",
+                                            "owner": {"id": "owner-1"},
+                                        },
+                                    },
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+
+    responses: list[object] = [
+        _PersistedQueryUnavailable("rotated"),
+        mobile_page("message-1", "cursor-1", 1),
+        _PersistedQueryUnavailable("rotated"),
+        mobile_page("message-2", "", 2),
+    ]
+
+    def download(query: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        calls.append(query)
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return cast("list[dict[str, Any]]", response)
+
+    badge_set = BadgeSet(
+        global_badges={},
+        channel_badges={
+            "owner-1": {
+                ("subscriber", "1"): {
+                    "title": "Channel subscriber",
+                    "image1x": "https://example.invalid/1.png",
+                    "image2x": "https://example.invalid/2.png",
+                    "image4x": "https://example.invalid/4.png",
+                }
+            }
+        },
+    )
+    downloader = SimpleNamespace(
+        _session_post=Mock(),
+        _download_gql=download,
+        badge_cache=SimpleNamespace(snapshot=lambda: badge_set),
+        retry=Mock(),
+    )
+    request = ChatRequest(
+        url="https://www.twitch.tv/videos/123",
+        max_attempts=1,
+        message_groups=["messages"],
+    )
+
+    result = list(
+        replay_service.iter_vod_chat_messages(
+            cast("Any", downloader),
+            "vod-1",
+            request,
+            max_duration=30,
+            fetch_messages=get_chat_messages_by_vod_id,
+        )
+    )
+
+    assert [item["message_id"] for item in result] == ["message-1", "message-2"]
+    assert result[0]["emotes"][0]["locations"] == "0-4"
+    assert result[0]["author"]["badges"][0]["title"] == "Channel subscriber"
+    assert calls[2][0]["variables"] == {"videoID": "vod-1", "cursor": "cursor-1"}
+    assert calls[3][0]["variables"] == {"vodId": "vod-1", "after": "cursor-1"}
+    assert responses == []
 
 
 def test_replay_service_iter_vod_chat_messages_rejects_zero_attempts() -> None:

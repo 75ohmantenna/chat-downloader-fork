@@ -158,6 +158,7 @@ _EXPECTED_OPERATIONS: frozenset[str] = frozenset(
         "GlobalBadges",
         "StreamMetadata",
         "VideoCommentsByOffsetOrCursor",
+        "VideoCommentsQuery",
         "VideoMetadata",
     }
 )

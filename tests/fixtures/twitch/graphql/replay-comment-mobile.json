@@ -1,0 +1,41 @@
+{
+  "raw": {
+    "cursor": "mobile-page-cursor",
+    "node": {
+      "__typename": "VideoComment",
+      "id": "mobile-message-1",
+      "createdAt": "2026-08-31T00:00:00Z",
+      "contentOffsetSeconds": 12,
+      "commenter": {
+        "id": "user-1",
+        "login": "fixture-user",
+        "displayName": "FixtureUser"
+      },
+      "message": {
+        "fragments": [
+          {
+            "text": "Kappa hello",
+            "emote": {
+              "from": 0,
+              "emoteID": "25",
+              "to": 4
+            }
+          }
+        ],
+        "userBadges": [
+          {
+            "setID": "subscriber",
+            "version": "1"
+          }
+        ],
+        "userColor": "#abcdef"
+      },
+      "video": {
+        "id": "video-1",
+        "owner": {
+          "id": "channel-1"
+        }
+      }
+    }
+  }
+}

@@ -33,6 +33,11 @@ if TYPE_CHECKING:
 
 GQL_AUTH_COOKIE_NAME: str = "auth-token"
 
+
+class _PersistedQueryUnavailable(ParsingError):
+    """Raised when Twitch no longer recognizes a persisted operation hash."""
+
+
 _CHALLENGE_HINTS: tuple[str, ...] = (
     "captcha",
     "challenge",
@@ -108,6 +113,18 @@ def _handle_gql_errors(
         error_path = get_list(error, "path")
         message_lower = error_message.lower()
 
+        if (
+            "persistedquerynotfound" in message_lower
+            or "persisted query not found" in message_lower
+        ):
+            msg = (
+                "Twitch persisted GraphQL query failed for "
+                f"{operation_text}: {error_message}. "
+                "Operation hashes or required variables may be stale."
+            )
+            raise _PersistedQueryUnavailable(
+                msg,
+            )
         if "not found" in message_lower or "does not exist" in message_lower:
             raise VideoNotFound(error_message)
         if "unauthorized" in message_lower or "not authorized" in message_lower:
@@ -123,19 +140,6 @@ def _handle_gql_errors(
         if "service error" in message_lower:
             _log_service_error(error_message, error_path)
             continue
-        if (
-            "persistedquerynotfound" in message_lower
-            or "persisted query not found" in message_lower
-        ):
-            msg = (
-                "Twitch persisted GraphQL query failed for "
-                f"{operation_text}: {error_message}. "
-                "Operation hashes or required variables may be stale."
-            )
-            raise ParsingError(
-                msg,
-            )
-
         path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
         msg = f"GraphQL error at {path_str} during {operation_text}: {error_message}"
         raise ParsingError(

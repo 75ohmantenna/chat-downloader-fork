@@ -13,7 +13,7 @@ large refactors, parser reshaping, or tooling changes.
 | YouTube bootstrap, live/replay/clip continuations, parsing | `sites/youtube/` | YouTube unit tests, live-event fixtures, continuation fixtures, drift harness |
 | YouTube channel, handle, and playlist discovery | `sites/youtube/discovery.py`, `discovery_playlists.py` | YouTube discovery unit and downloader-assembly tests |
 | Twitch live IRC | `sites/twitch/live_service.py`, `irc_transport.py`, `parsing/` | live-service, transport, IRC parser, drift harness tests |
-| Twitch VOD and clip replay | `sites/twitch/replay_service.py`, `_replay_vod_loop.py`, `replay_transport.py` | replay service, replay transport, VOD edge tests |
+| Twitch VOD and clip replay | `sites/twitch/replay_service.py`, `_replay_vod_loop.py`, `replay_transport.py` | replay service, legacy/mobile replay transport, VOD edge tests |
 | Twitch GraphQL hashes, badges, Client-ID | `graphql_client.py`, `constants.py`, `types.py`, `parsing/badges.py` | Twitch client, hash coverage, badge-purity tests |
 | Kick live Pusher chat, current pin state, bounded timestamp reconnect backfill, diagnostics, and rejected-key recovery | `sites/kick/live_service.py`, `history.py`, `request_retry.py`, `websocket_transport.py`, `api_client.py`, `http_session.py`, `parsing/` | Kick live-service, history, request-retry, transport, api-client, parsing unit tests |
 | Kick VOD and clip replay, including anonymous mobile clip-metadata fallback | `sites/kick/replay_service.py`, `clip_service.py`, `history.py`, `request_retry.py`, `api_client.py` | Kick replay-service, history, request-retry, clip-service, and api-client tests |

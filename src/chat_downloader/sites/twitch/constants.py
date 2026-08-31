@@ -48,6 +48,9 @@ OPERATION_HASHES = {
     "VideoCommentsByOffsetOrCursor": (
         "b70a3591ff0f4e0313d126c6a1502d79a1c02baebb288227c582044aa76adf6a"
     ),
+    "VideoCommentsQuery": (
+        "81ce27a2633e066398ca7d05e92acdc364d90726587a2bbdeed8d6f1b38144af"
+    ),
 }
 
 # URL Validation Patterns

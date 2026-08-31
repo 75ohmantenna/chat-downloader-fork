@@ -74,9 +74,13 @@ def _parse_message_info(message: dict[str, Any]) -> dict[str, Any]:
         if emote:
             try:
                 emote_id = emote["emoteID"]
-                _, *positions = emote["id"].split(";")
-                begin, end = map(int, positions)
-            except (ValueError, KeyError) as emote_error:
+                encoded_positions = emote.get("id")
+                if isinstance(encoded_positions, str):
+                    _, begin_text, end_text = encoded_positions.split(";")
+                    begin, end = int(begin_text), int(end_text)
+                else:
+                    begin, end = int(emote["from"]), int(emote["to"])
+            except (TypeError, ValueError, KeyError) as emote_error:
                 debug_log(
                     "Skipping malformed VOD emote "
                     f"(id={emote.get('id')!r}): {emote_error}",

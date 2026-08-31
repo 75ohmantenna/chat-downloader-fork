@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
 from chat_downloader.sites.twitch.replay_transport import (
     get_chat_messages_by_vod_id,
 )
@@ -78,3 +79,107 @@ def test_get_chat_messages_by_vod_id_returns_none_for_malformed_or_empty_payload
         )
         assert comments is None
         assert info is None
+
+
+def test_get_chat_messages_by_vod_id_falls_back_to_mobile_operation() -> None:
+    captured = []
+
+    def fake_download(query):
+        captured.append(query)
+        if len(captured) == 1:
+            raise _PersistedQueryUnavailable("rotated")
+        return [
+            {
+                "data": {
+                    "video": {
+                        "comments": {"edges": [{"cursor": "mobile-cursor", "node": {}}]}
+                    }
+                }
+            }
+        ]
+
+    comments, _info = get_chat_messages_by_vod_id(
+        session_post=None,
+        download_gql_func=fake_download,
+        vod_id="123",
+        cursor="legacy-cursor",
+        content_offset_seconds=4.5,
+    )
+
+    assert captured[1] == [
+        {
+            "operationName": "VideoCommentsQuery",
+            "variables": {"vodId": "123", "after": "legacy-cursor"},
+        }
+    ]
+    assert comments == {
+        "edges": [{"cursor": "mobile-cursor", "node": {}}],
+        "pageInfo": {"hasNextPage": True},
+    }
+
+
+def test_mobile_replay_terminal_page_uses_empty_cursor() -> None:
+    def fake_download(_query):
+        raise _PersistedQueryUnavailable("rotated")
+
+    calls = 0
+
+    def fallback_download(query):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return fake_download(query)
+        return [
+            {"data": {"video": {"comments": {"edges": [{"cursor": "", "node": {}}]}}}}
+        ]
+
+    comments, _info = get_chat_messages_by_vod_id(
+        session_post=None,
+        download_gql_func=fallback_download,
+        vod_id="123",
+        cursor=None,
+        content_offset_seconds=4.9,
+    )
+
+    assert comments is not None
+    assert comments["pageInfo"] == {"hasNextPage": False}
+
+
+def test_mobile_replay_returns_none_for_malformed_payload() -> None:
+    calls = 0
+
+    def fake_download(_query):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise _PersistedQueryUnavailable("rotated")
+        return [{"data": {"video": {"comments": None}}}]
+
+    assert get_chat_messages_by_vod_id(
+        session_post=None,
+        download_gql_func=fake_download,
+        vod_id="123",
+        cursor=None,
+        content_offset_seconds=0,
+    ) == (None, None)
+
+
+def test_mobile_replay_normalizes_empty_edges_as_terminal() -> None:
+    calls = 0
+
+    def fake_download(_query):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise _PersistedQueryUnavailable("rotated")
+        return [{"data": {"video": {"comments": {"edges": []}}}}]
+
+    comments, _info = get_chat_messages_by_vod_id(
+        session_post=None,
+        download_gql_func=fake_download,
+        vod_id="123",
+        cursor=None,
+        content_offset_seconds=0,
+    )
+
+    assert comments == {"edges": [], "pageInfo": {"hasNextPage": False}}

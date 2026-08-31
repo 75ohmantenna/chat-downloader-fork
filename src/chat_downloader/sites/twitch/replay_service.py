@@ -118,8 +118,12 @@ def _process_vod_edge(
         logger_obj.debug("Skipping unexpected node type: %s", node_typename)
         return None, "skip"
 
+    owner = get_dict(get_dict(node, "video"), "owner")
+    effective_creator_channel_id = creator_channel_id or get_str(owner, "id")
+
     data: JSONDict = cast(
-        "JSONDict", _parse_item(node, offset, creator_channel_id, badge_set)
+        "JSONDict",
+        _parse_item(node, offset, effective_creator_channel_id, badge_set),
     )
     unexpected_keys = data.keys() - build_known_comment_keys()
     if unexpected_keys:

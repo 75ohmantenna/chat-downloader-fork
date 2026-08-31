@@ -591,6 +591,29 @@ def test_parse_item_defaults_to_text_message_and_drops_empty_badges() -> None:
     assert "badges" not in parsed["author"]
 
 
+def test_parse_item_accepts_mobile_emote_positions() -> None:
+    parsed = tw_messages._parse_item(
+        {
+            "id": "mobile-msg",
+            "message": {
+                "userBadges": [],
+                "fragments": [
+                    {
+                        "text": "Kappa hello",
+                        "emote": {"from": 0, "emoteID": "25", "to": 4},
+                    }
+                ],
+            },
+        },
+        offset=0,
+    )
+
+    assert parsed["message"] == "Kappa hello"
+    assert parsed["emotes"][0]["id"] == "25"
+    assert parsed["emotes"][0]["name"] == "Kappa"
+    assert parsed["emotes"][0]["locations"] == "0-4"
+
+
 def test_parse_item_attaches_badges_without_commenter() -> None:
     parsed = tw_messages._parse_item(
         {

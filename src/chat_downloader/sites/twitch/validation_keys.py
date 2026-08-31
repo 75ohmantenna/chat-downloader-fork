@@ -32,6 +32,7 @@ _VOD_NODE_KEYS = frozenset(
         "commenter",
         "contentOffsetSeconds",
         "message",
+        "video",
     }
 )
 _VOD_COMMENTER_KEYS = frozenset(
@@ -48,7 +49,9 @@ _VOD_COMMENTER_KEYS = frozenset(
 _VOD_MESSAGE_KEYS = frozenset({"__typename", "userColor", "userBadges", "fragments"})
 _VOD_BADGE_KEYS = frozenset({"__typename", "setID", "version"})
 _VOD_FRAGMENT_KEYS = frozenset({"__typename", "text", "emote"})
-_VOD_EMOTE_KEYS = frozenset({"__typename", "emoteID", "id"})
+_VOD_EMOTE_KEYS = frozenset({"__typename", "emoteID", "id", "from", "to"})
+_VOD_VIDEO_KEYS = frozenset({"__typename", "id", "owner"})
+_VOD_OWNER_KEYS = frozenset({"__typename", "id"})
 _VOD_EDGE_TYPENAMES = frozenset({"VideoCommentEdge"})
 _VOD_NODE_TYPENAMES = frozenset({"Comment", "VideoComment"})
 
@@ -152,6 +155,21 @@ def find_unexpected_vod_edge_paths(edge: JSONDict) -> list[str]:
                 "edge.node.commenter",
             )
         )
+
+    video = _get_shape_dict(node, "video", "edge.node", unexpected)
+    if video is not None:
+        unexpected.extend(
+            _find_unexpected_keys(video, _VOD_VIDEO_KEYS, "edge.node.video")
+        )
+        owner = _get_shape_dict(video, "owner", "edge.node.video", unexpected)
+        if owner is not None:
+            unexpected.extend(
+                _find_unexpected_keys(
+                    owner,
+                    _VOD_OWNER_KEYS,
+                    "edge.node.video.owner",
+                )
+            )
 
     message = _get_shape_dict(node, "message", "edge.node", unexpected)
     if message is None:

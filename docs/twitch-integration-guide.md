@@ -156,6 +156,12 @@ IRC. The replay service:
 - pages through comment edges
 - parses each comment node into the shared message schema
 
+The legacy `VideoCommentsByOffsetOrCursor` operation remains primary. If
+Twitch reports that its persisted hash is unavailable, replay retries through
+the Android client's `VideoCommentsQuery` operation. The transport normalizes
+that operation's explicit `from`/`to` emote positions and cursor-only terminal
+signal into the existing replay contract before parsing.
+
 ### Clip handling
 
 Clips do not have their own standalone chat stream. The integration maps a clip

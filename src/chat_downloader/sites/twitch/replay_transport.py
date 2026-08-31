@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from chat_downloader.utils.json_types import JSONDict, get_dict
+from chat_downloader.utils.json_types import JSONDict, get_dict, get_list, get_str
+
+from .graphql_client import _PersistedQueryUnavailable
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -37,7 +39,37 @@ def get_chat_messages_by_vod_id(
             "variables": variables,
         }
     ]
-    result = download_gql_func(query)
+    try:
+        result = download_gql_func(query)
+    except _PersistedQueryUnavailable:
+        fallback_variables: JSONDict = {"vodId": vod_id}
+        if cursor:
+            fallback_variables["after"] = cursor
+        else:
+            fallback_variables["contentOffsetSeconds"] = int(
+                content_offset_seconds or 0
+            )
+        result = download_gql_func(
+            [
+                {
+                    "operationName": "VideoCommentsQuery",
+                    "variables": fallback_variables,
+                }
+            ]
+        )
+        data = get_dict(result[0], "data") if result else {}
+        info = get_dict(data, "video")
+        fallback_comments = get_dict(info, "comments")
+        if not fallback_comments:
+            return None, None
+        edges = get_list(fallback_comments, "edges")
+        final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
+        final_cursor = get_str(final_edge, "cursor")
+        normalized_comments: JSONDict = {
+            **fallback_comments,
+            "pageInfo": {"hasNextPage": bool(final_cursor)},
+        }
+        return normalized_comments, info
 
     data = get_dict(result[0], "data") if result else {}
     info = get_dict(data, "video")

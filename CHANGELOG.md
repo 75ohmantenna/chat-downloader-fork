@@ -35,6 +35,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Fall back to Twitch's current mobile VOD-comment operation when the legacy
+  replay hash is unavailable, preserving explicit emote ranges and cursor
+  pagination.
 - Classify Kick's provider-specific HTTP 423 response as a terminal
   country/region block, expose a typed error for integrations, and preserve it
   through clip metadata fallback decisions without retrying.

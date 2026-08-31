@@ -80,10 +80,16 @@ def test_handle_gql_errors_raises_parsing_error_with_path() -> None:
     assert "VideoCommentsByOffsetOrCursor" in str(excinfo.value)
 
 
-def test_handle_gql_errors_reports_persisted_query_failures_actionably() -> None:
-    with pytest.raises(ParsingError) as excinfo:
+@pytest.mark.parametrize(
+    "message",
+    ["PersistedQueryNotFound", "Persisted query not found"],
+)
+def test_handle_gql_errors_reports_persisted_query_failures_actionably(
+    message: str,
+) -> None:
+    with pytest.raises(graphql_client._PersistedQueryUnavailable) as excinfo:
         graphql_client._handle_gql_errors(
-            [{"message": "PersistedQueryNotFound", "path": ["video"]}],
+            [{"message": message, "path": ["video"]}],
             ["StreamMetadata"],
         )
 
