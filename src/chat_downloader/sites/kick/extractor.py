@@ -77,15 +77,14 @@ class KickChatDownloader(BaseChatDownloader):
             if (
                 cookie.name != "session_token"
                 or cookie.domain.lstrip(".").casefold() != "kick.com"
+                or cookie.path != "/"
                 or cookie.is_expired()
             ):
                 continue
             cookie_value = cookie.value
             if not cookie_value:
                 continue
-            token = unquote(cookie_value).strip()
-            if token and "\r" not in token and "\n" not in token:
-                return token
+            return unquote(cookie_value)
         return None
 
     @property

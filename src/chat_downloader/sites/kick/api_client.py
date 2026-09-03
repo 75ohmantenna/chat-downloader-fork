@@ -47,6 +47,15 @@ _KICK_COUNTRY_BLOCKED_STATUS = 423
 _ResourceKind = Literal["channel", "video", "clip", "messages"]
 
 
+def _is_safe_bearer_token(token: object) -> bool:
+    """Return whether ``token`` is non-empty visible ASCII without spaces."""
+    return (
+        isinstance(token, str)
+        and bool(token)
+        and all(0x21 <= ord(character) <= 0x7E for character in token)
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class PreloadedChatState:
     """Recent messages and the current pin returned by Kick's history API."""
@@ -194,7 +203,7 @@ class KickApiClient:
         elif not mobile and not self._has_explicit_authorization:
             token_provider = self._bearer_token_provider
             token = token_provider() if token_provider is not None else None
-            if token:
+            if _is_safe_bearer_token(token):
                 request_kwargs["headers"] = {"Authorization": f"Bearer {token}"}
         response = session.get(url, **request_kwargs)
         if response.status_code == _KICK_COUNTRY_BLOCKED_STATUS:

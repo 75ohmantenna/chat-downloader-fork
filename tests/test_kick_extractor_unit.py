@@ -118,29 +118,30 @@ def test_kick_client_uses_explicit_headers_and_current_session_cookie(
         downloader.session.cookies.set_cookie(
             create_cookie(
                 "session_token",
-                "encoded%20token",
+                "encoded%7Ctoken",
                 domain=".kick.com",
             ),
         )
 
         assert captured["extra_headers"] == {"X-Trace": "trace-value"}
-        assert captured["bearer_token_provider"]() == "encoded token"
+        assert captured["bearer_token_provider"]() == "encoded|token"
     finally:
         downloader.close()
 
 
 @pytest.mark.parametrize(
-    ("domain", "value"),
+    ("domain", "path", "expires"),
     [
-        ("example.com", "wrong-domain"),
-        (".kick.com", "bad%0Atoken"),
-        (".kick.com", ""),
+        ("example.com", "/", None),
+        (".kick.com", "/account", None),
+        (".kick.com", "/", 1),
     ],
 )
 def test_kick_bearer_token_rejects_inapplicable_or_unsafe_cookies(
     monkeypatch: Any,
     domain: str,
-    value: str,
+    path: str,
+    expires: int | None,
 ) -> None:
     captured: dict[str, Any] = {}
     monkeypatch.setattr(
@@ -151,7 +152,13 @@ def test_kick_bearer_token_rejects_inapplicable_or_unsafe_cookies(
     downloader = KickChatDownloader()
     try:
         downloader.session.cookies.set_cookie(
-            create_cookie("session_token", value, domain=domain),
+            create_cookie(
+                "session_token",
+                "token",
+                domain=domain,
+                path=path,
+                expires=expires,
+            ),
         )
 
         assert captured["bearer_token_provider"]() is None

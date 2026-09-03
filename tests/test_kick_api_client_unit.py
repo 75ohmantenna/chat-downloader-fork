@@ -87,6 +87,20 @@ def test_explicit_authorization_takes_precedence_over_cookie_token() -> None:
     assert "headers" not in session.calls[0][1]
 
 
+@pytest.mark.parametrize("token", ["", "has spaces", "has\ttab", "has\nnewline", "é"])
+def test_primary_requests_reject_unsafe_bearer_tokens(token: str) -> None:
+    payload = load_fixture("channel_live.json")
+    session = FakeKickSession([FakeResponse(200, payload)])
+    client = KickApiClient(
+        session=session,
+        bearer_token_provider=lambda: token,
+    )
+
+    client.fetch_channel("examplechannel")
+
+    assert "headers" not in session.calls[0][1]
+
+
 def test_client_copies_proxy_and_header_configuration(monkeypatch: Any) -> None:
     captured: dict[str, Any] = {}
     session = FakeKickSession([])
