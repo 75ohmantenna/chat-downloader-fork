@@ -45,6 +45,11 @@ class _DummyDownloader:
     def update_session_headers(self, headers) -> None:
         self.session.headers.update(headers)
 
+    def replace_session_headers(self, headers, managed_names) -> None:
+        for name in managed_names:
+            self.session.headers.pop(name, None)
+        self.update_session_headers(headers)
+
     def apply_request_profile(self, profile_name: str) -> bool:
         self._request_profile = profile_name
         return True

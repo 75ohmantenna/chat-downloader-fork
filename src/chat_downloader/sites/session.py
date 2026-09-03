@@ -23,7 +23,7 @@ from chat_downloader.request_profiles import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
     from chat_downloader.utils.json_types import JSONAny
 
@@ -136,6 +136,7 @@ class ChatDownloaderSession:
         self.request_profile = normalize_request_profile(request_profile)
         self.auto_profile_fallback = bool(auto_profile_fallback)
         self.twitch_client_id = twitch_client_id
+        self._explicit_headers = dict(headers or {})
         self._explicit_header_names = {key.casefold() for key in headers or ()}
 
         merged_headers = _build_session_headers(headers, self.request_profile)
@@ -167,6 +168,24 @@ class ChatDownloaderSession:
     def update_headers(self, new_headers: dict[str, str]) -> None:
         """Merge headers into the active session."""
         self.session.headers.update(new_headers)
+
+    def replace_headers(
+        self,
+        new_headers: dict[str, str],
+        managed_names: Iterable[str],
+    ) -> None:
+        """Replace generated headers while preserving explicit user values."""
+        managed = {name.casefold() for name in managed_names}
+        for name in tuple(self.session.headers):
+            if name.casefold() in managed:
+                del self.session.headers[name]
+        self.session.headers.update(new_headers)
+        for name, value in self._explicit_headers.items():
+            if name.casefold() in managed:
+                for current_name in tuple(self.session.headers):
+                    if current_name.casefold() == name.casefold():
+                        del self.session.headers[current_name]
+                self.session.headers[name] = value
 
     def apply_request_profile(self, profile_name: str) -> bool:
         """Apply a named request profile; return whether it exists."""

@@ -52,6 +52,11 @@ class _DummyDownloader:
         self.header_updates.append(headers)
         self.session.headers.update(headers)
 
+    def replace_session_headers(self, headers, managed_names) -> None:
+        for name in managed_names:
+            self.session.headers.pop(name, None)
+        self.update_session_headers(headers)
+
     def apply_request_profile(self, profile_name: str) -> bool:
         self.applied_profiles.append(profile_name)
         self._request_profile = profile_name
@@ -390,8 +395,18 @@ def test_apply_session_headers_calls_update_twice(monkeypatch) -> None:
         lambda *_a, **_k: None,
     )
     downloader = _DummyDownloader()
+    downloader.session.headers.update(
+        {
+            "authorization": "stale-auth",
+            "x-youtube-identity-token": "stale-identity",
+            "x-custom": "preserved",
+        }
+    )
     _apply_session_headers(downloader, {}, "https://www.youtube.com/init")
     assert len(downloader.header_updates) == 2
     combined = {k: v for d in downloader.header_updates for k, v in d.items()}
     assert "content-type" in combined
     assert "referer" in combined
+    assert "authorization" not in downloader.session.headers
+    assert "x-youtube-identity-token" not in downloader.session.headers
+    assert downloader.session.headers["x-custom"] == "preserved"

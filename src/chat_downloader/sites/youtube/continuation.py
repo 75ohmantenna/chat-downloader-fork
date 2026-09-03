@@ -35,6 +35,7 @@ from chat_downloader.utils.timed_generator import polling_sleep
 
 from .client_auth import _generate_sapisidhash_header
 from .client_context import (
+    _MANAGED_API_HEADER_NAMES,
     _generate_headers,
     _get_innertube_context,
     apply_request_profile_to_innertube_context,
@@ -398,10 +399,11 @@ class _ContinuationLoop:
 
     def _apply_session_headers(self, init_page: str) -> None:
         """Install the InnerTube auth and content-type headers on the session."""
-        self.downloader.update_session_headers(
+        self.downloader.replace_session_headers(
             _generate_headers(
                 self.ytcfg, self.downloader, _YT_HOME, _generate_sapisidhash_header
             ),
+            _MANAGED_API_HEADER_NAMES,
         )
         self.downloader.update_session_headers(
             {"content-type": "application/json", "referer": init_page},
@@ -613,13 +615,14 @@ class _ContinuationLoop:
         )
         if active_profile == previous_profile:
             return True
-        self.downloader.update_session_headers(
+        self.downloader.replace_session_headers(
             _generate_headers(
                 self.ytcfg,
                 self.downloader,
                 _YT_HOME,
                 _generate_sapisidhash_header,
-            )
+            ),
+            _MANAGED_API_HEADER_NAMES,
         )
         return True
 

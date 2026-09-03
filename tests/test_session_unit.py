@@ -236,10 +236,21 @@ def test_base_downloader_exposes_session_interface_and_rotation_warning(
 def test_base_downloader_cookie_and_profile_interface(monkeypatch) -> None:
     fake = _FakeSession()
     monkeypatch.setattr("chat_downloader.sites.session.requests.Session", lambda: fake)
-    downloader = BaseChatDownloader(request_profile="youtube_web")
+    downloader = BaseChatDownloader(
+        request_profile="youtube_web",
+        headers={"X-Replacement": "explicit"},
+    )
 
     downloader.update_session_headers({"X-Test": "1"})
     assert downloader.get_session_headers("X-Test") == "1"
+    downloader.update_session_headers({"X-Generated": "old"})
+    downloader.replace_session_headers(
+        {"x-replacement": "new"},
+        {"x-generated", "x-replacement"},
+    )
+    assert downloader.get_session_headers("X-Generated") is None
+    assert downloader.get_session_headers("X-Replacement") == "explicit"
+    assert "x-replacement" not in downloader.session.headers
     assert downloader.apply_request_profile("youtube_web") is True
     downloader.set_cookie_value(".example.com", "sid", "abc", path="/watch")
     assert downloader.get_cookie_value("sid") == "abc"

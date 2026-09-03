@@ -14,7 +14,7 @@ from .retry import retry as perform_retry
 from .session import ChatDownloaderSession, CookieSpec
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     import requests
 
@@ -97,6 +97,14 @@ class BaseChatDownloader:
     def update_session_headers(self, new_headers: dict[str, str]) -> None:
         """Merge ``new_headers`` into the active HTTP session headers."""
         self._http.update_headers(new_headers)
+
+    def replace_session_headers(
+        self,
+        new_headers: dict[str, str],
+        managed_names: Iterable[str],
+    ) -> None:
+        """Replace generated session headers without losing user overrides."""
+        self._http.replace_headers(new_headers, managed_names)
 
     def apply_request_profile(self, profile_name: str) -> bool:
         """Apply a named request profile to this session's headers."""

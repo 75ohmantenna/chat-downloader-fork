@@ -217,6 +217,11 @@ def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
         def update_session_headers(self, new_headers) -> None:
             self.session.headers.update(new_headers)
 
+        def replace_session_headers(self, new_headers, managed_names) -> None:
+            for name in managed_names:
+                self.session.headers.pop(name, None)
+            self.update_session_headers(new_headers)
+
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},

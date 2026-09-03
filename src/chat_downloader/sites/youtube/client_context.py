@@ -19,6 +19,20 @@ if TYPE_CHECKING:
 
 from .client_auth import _parse_data_sync_id
 
+_MANAGED_API_HEADER_NAMES = frozenset(
+    {
+        "authorization",
+        "origin",
+        "x-goog-authuser",
+        "x-goog-pageid",
+        "x-origin",
+        "x-youtube-bootstrap-logged-in",
+        "x-youtube-client-name",
+        "x-youtube-client-version",
+        "x-youtube-identity-token",
+    }
+)
+
 
 def _extract_account_syncid(ytcfg: JSONDict) -> str | None:
     """Extract account sync ID from YouTube config."""

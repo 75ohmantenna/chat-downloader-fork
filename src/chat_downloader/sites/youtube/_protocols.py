@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     import requests
 
@@ -35,6 +35,12 @@ class YouTubeDownloaderProto(Protocol):
     def apply_request_profile(self, profile_name: str) -> bool: ...
 
     def update_session_headers(self, new_headers: dict[str, str]) -> None: ...
+
+    def replace_session_headers(
+        self,
+        new_headers: dict[str, str],
+        managed_names: Iterable[str],
+    ) -> None: ...
 
     def _session_post(self, url: str, **kwargs: Any) -> Any: ...
 
