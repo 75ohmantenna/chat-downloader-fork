@@ -130,16 +130,18 @@ def test_kick_client_uses_explicit_headers_and_current_session_cookie(
 
 
 @pytest.mark.parametrize(
-    ("domain", "path", "expires"),
+    ("domain", "value", "path", "expires"),
     [
-        ("example.com", "/", None),
-        (".kick.com", "/account", None),
-        (".kick.com", "/", 1),
+        ("example.com", "token", "/", None),
+        (".kick.com", "token", "/account", None),
+        (".kick.com", "token", "/", 1),
+        (".kick.com", "", "/", None),
     ],
 )
-def test_kick_bearer_token_rejects_inapplicable_or_unsafe_cookies(
+def test_kick_bearer_token_rejects_inapplicable_or_empty_cookies(
     monkeypatch: Any,
     domain: str,
+    value: str,
     path: str,
     expires: int | None,
 ) -> None:
@@ -154,7 +156,7 @@ def test_kick_bearer_token_rejects_inapplicable_or_unsafe_cookies(
         downloader.session.cookies.set_cookie(
             create_cookie(
                 "session_token",
-                "token",
+                value,
                 domain=domain,
                 path=path,
                 expires=expires,
