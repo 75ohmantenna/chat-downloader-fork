@@ -143,6 +143,9 @@ Before polling continuations, the downloader builds browser-style headers.
 If the cookie jar contains the right auth cookies, the code can also attach
 SAPISIDHASH-style authorization headers. Public chats often work without
 cookies, but cookies help when YouTube wants stronger session context.
+Authentication-only headers are emitted only with the corresponding account or
+authorization state, and missing client metadata is omitted rather than sent as
+the literal string `None`.
 
 ### Continuation polling and parsing
 

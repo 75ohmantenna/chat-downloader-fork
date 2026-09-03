@@ -39,22 +39,22 @@ def _generate_headers(
     """Generate headers for YouTube API requests."""
     headers = {
         "origin": yt_home,
-        "x-youtube-client-name": str(ytcfg.get("INNERTUBE_CONTEXT_CLIENT_NAME")),
-        "x-youtube-client-version": str(ytcfg.get("INNERTUBE_CLIENT_VERSION")),
-        "x-origin": yt_home,
-        "x-goog-authuser": "0",
     }
 
-    identity_token = get_str(ytcfg, "ID_TOKEN")
-    if identity_token:
-        headers["x-youtube-identity-token"] = identity_token
+    client_name = ytcfg.get("INNERTUBE_CONTEXT_CLIENT_NAME")
+    if isinstance(client_name, (str, int)) and not isinstance(client_name, bool):
+        headers["x-youtube-client-name"] = str(client_name)
+
+    client_version = get_str(ytcfg, "INNERTUBE_CLIENT_VERSION")
+    if client_version:
+        headers["x-youtube-client-version"] = client_version
 
     account_syncid = _extract_account_syncid(ytcfg)
     if account_syncid:
         headers["x-goog-pageid"] = account_syncid
 
     session_index = ytcfg.get("SESSION_INDEX")
-    if account_syncid or session_index:
+    if account_syncid or session_index is not None:
         headers["x-goog-authuser"] = str(session_index or 0)
 
     visitor_data = multi_get(ytcfg, "INNERTUBE_CONTEXT", "client", "visitorData")
@@ -71,6 +71,7 @@ def _generate_headers(
     auth = sapisidhash_generator(session, yt_home, ytcfg)
     if auth:
         headers["authorization"] = auth
+        headers["x-origin"] = yt_home
 
     return headers
 

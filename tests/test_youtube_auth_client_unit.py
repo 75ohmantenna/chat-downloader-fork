@@ -270,7 +270,7 @@ def test_generate_headers_handles_optional_auth_and_minimal_paths() -> None:
     ytcfg = {
         "INNERTUBE_CONTEXT_CLIENT_NAME": 1,
         "INNERTUBE_CLIENT_VERSION": "2.0",
-        "ID_TOKEN": "id-token",
+        "ID_TOKEN": "obsolete-id-token",
         "DATASYNC_ID": "delegated||user",
         "SESSION_INDEX": 5,
         "LOGGED_IN": True,
@@ -298,16 +298,40 @@ def test_generate_headers_handles_optional_auth_and_minimal_paths() -> None:
         sapisidhash_generator=lambda *_a, **_k: None,
     )
 
-    assert headers["x-youtube-identity-token"] == "id-token"
+    assert "x-youtube-identity-token" not in headers
     assert headers["x-goog-pageid"] == "delegated"
     assert headers["x-goog-authuser"] == "5"
     assert headers["x-goog-visitor-id"] == "visitor-1"
     assert headers["user-agent"] == "TestAgent/1.0"
     assert headers["x-youtube-bootstrap-logged-in"] == "true"
     assert headers["authorization"] == "AUTH"
-    assert minimal_headers["x-goog-authuser"] == "0"
+    assert headers["x-origin"] == "https://www.youtube.com"
+    assert "x-goog-authuser" not in minimal_headers
+    assert "x-origin" not in minimal_headers
     assert "authorization" not in minimal_headers
     assert "x-goog-pageid" not in minimal_headers
+
+
+def test_generate_headers_omits_missing_client_metadata() -> None:
+    headers = _generate_headers(
+        {},
+        session=object(),
+        yt_home="https://www.youtube.com",
+        sapisidhash_generator=lambda *_a, **_k: None,
+    )
+
+    assert headers == {"origin": "https://www.youtube.com"}
+
+
+def test_generate_headers_preserves_zero_session_index() -> None:
+    headers = _generate_headers(
+        {"SESSION_INDEX": 0},
+        session=object(),
+        yt_home="https://www.youtube.com",
+        sapisidhash_generator=lambda *_a, **_k: None,
+    )
+
+    assert headers["x-goog-authuser"] == "0"
 
 
 def test_get_innertube_context_handles_non_dict_and_missing_client() -> None:
