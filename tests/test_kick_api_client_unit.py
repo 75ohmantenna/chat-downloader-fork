@@ -51,6 +51,42 @@ def test_fetch_channel_success_uses_owned_session_and_timeout() -> None:
     ]
 
 
+def test_primary_requests_resolve_bearer_token_lazily() -> None:
+    payload = load_fixture("channel_live.json")
+    tokens = iter(["first-token", "rotated-token"])
+    session = FakeKickSession([FakeResponse(200, payload), FakeResponse(200, payload)])
+    client = KickApiClient(
+        session=session,
+        bearer_token_provider=lambda: next(tokens),
+    )
+
+    client.fetch_channel("examplechannel")
+    client.fetch_channel("examplechannel")
+
+    assert [call[1]["headers"] for call in session.calls] == [
+        {"Authorization": "Bearer first-token"},
+        {"Authorization": "Bearer rotated-token"},
+    ]
+
+
+def test_explicit_authorization_takes_precedence_over_cookie_token() -> None:
+    payload = load_fixture("channel_live.json")
+    session = FakeKickSession([FakeResponse(200, payload)])
+
+    def unexpected_provider() -> str:
+        raise AssertionError("cookie token provider should not be called")
+
+    client = KickApiClient(
+        extra_headers={"authorization": "Bearer explicit"},
+        bearer_token_provider=unexpected_provider,
+        session=session,
+    )
+
+    client.fetch_channel("examplechannel")
+
+    assert "headers" not in session.calls[0][1]
+
+
 def test_client_copies_proxy_and_header_configuration(monkeypatch: Any) -> None:
     captured: dict[str, Any] = {}
     session = FakeKickSession([])

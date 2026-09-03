@@ -6,6 +6,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
+from requests.cookies import create_cookie
 
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import extractor
@@ -98,6 +99,62 @@ def test_empty_proxy_disables_environment_for_kick_client(monkeypatch: Any) -> N
     downloader = KickChatDownloader(proxy="")
     try:
         assert captured["trust_env"] is False
+    finally:
+        downloader.close()
+
+
+def test_kick_client_uses_explicit_headers_and_current_session_cookie(
+    monkeypatch: Any,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def build_client(**kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(extractor, "KickApiClient", build_client)
+    downloader = KickChatDownloader(headers={"X-Trace": "trace-value"})
+    try:
+        downloader.session.cookies.set_cookie(
+            create_cookie(
+                "session_token",
+                "encoded%20token",
+                domain=".kick.com",
+            ),
+        )
+
+        assert captured["extra_headers"] == {"X-Trace": "trace-value"}
+        assert captured["bearer_token_provider"]() == "encoded token"
+    finally:
+        downloader.close()
+
+
+@pytest.mark.parametrize(
+    ("domain", "value"),
+    [
+        ("example.com", "wrong-domain"),
+        (".kick.com", "bad%0Atoken"),
+        (".kick.com", ""),
+    ],
+)
+def test_kick_bearer_token_rejects_inapplicable_or_unsafe_cookies(
+    monkeypatch: Any,
+    domain: str,
+    value: str,
+) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        extractor,
+        "KickApiClient",
+        lambda **kwargs: captured.update(kwargs) or MagicMock(),
+    )
+    downloader = KickChatDownloader()
+    try:
+        downloader.session.cookies.set_cookie(
+            create_cookie("session_token", value, domain=domain),
+        )
+
+        assert captured["bearer_token_provider"]() is None
     finally:
         downloader.close()
 

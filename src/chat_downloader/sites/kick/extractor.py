@@ -13,6 +13,7 @@ Supports live chat (``kick.com/{username}``), VOD chat replay
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
+from urllib.parse import unquote
 
 from chat_downloader.sites.base import BaseChatDownloader
 
@@ -53,17 +54,39 @@ class KickChatDownloader(BaseChatDownloader):
         """Initialize base HTTP state and an isolated Kick API session."""
         super().__init__(**kwargs)
         proxies = dict(self.session.proxies) if self.session.proxies else None
+        configured_headers = kwargs.get("headers")
+        extra_headers = (
+            dict(configured_headers) if isinstance(configured_headers, dict) else None
+        )
         self._kick_api_client: KickApiClient | None = None
         try:
             self._kick_api_client = KickApiClient(
                 proxy=proxies,
-                extra_headers=dict(self.session.headers),
+                extra_headers=extra_headers,
                 timeout=self._http_timeout,
                 trust_env=self.session.trust_env,
+                bearer_token_provider=self._get_kick_bearer_token,
             )
         except BaseException:
             super().close()
             raise
+
+    def _get_kick_bearer_token(self) -> str | None:
+        """Return a safe, current bearer token from Kick's session cookie."""
+        for cookie in self.session.cookies:
+            if (
+                cookie.name != "session_token"
+                or cookie.domain.lstrip(".").casefold() != "kick.com"
+                or cookie.is_expired()
+            ):
+                continue
+            cookie_value = cookie.value
+            if not cookie_value:
+                continue
+            token = unquote(cookie_value).strip()
+            if token and "\r" not in token and "\n" not in token:
+                return token
+        return None
 
     @property
     def _kick_client(self) -> KickApiClient:

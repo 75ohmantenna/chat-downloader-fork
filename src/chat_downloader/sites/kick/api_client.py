@@ -38,6 +38,8 @@ from .errors import (
 from .http_session import _KickSession, create_kick_session
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import requests
 
 _DEFAULT_TIMEOUT = (10.0, 30.0)
@@ -63,6 +65,7 @@ class KickApiClient:
         extra_headers: dict[str, str] | None = None,
         timeout: tuple[float, float] = _DEFAULT_TIMEOUT,
         trust_env: bool = True,
+        bearer_token_provider: Callable[[], str | None] | None = None,
         session: _KickSession | None = None,
         mobile_session: _KickSession | None = None,
     ) -> None:
@@ -86,6 +89,10 @@ class KickApiClient:
             if is_sensitive_header(name, value)
         }
         self._timeout = tuple(timeout)
+        self._bearer_token_provider = bearer_token_provider
+        self._has_explicit_authorization = any(
+            name.casefold() == "authorization" for name in extra_headers or ()
+        )
         self._closed = False
 
     def fetch_channel(self, username: str) -> JSONDict:
@@ -184,6 +191,11 @@ class KickApiClient:
         }
         if mobile and self._mobile_header_overrides:
             request_kwargs["headers"] = dict(self._mobile_header_overrides)
+        elif not mobile and not self._has_explicit_authorization:
+            token_provider = self._bearer_token_provider
+            token = token_provider() if token_provider is not None else None
+            if token:
+                request_kwargs["headers"] = {"Authorization": f"Bearer {token}"}
         response = session.get(url, **request_kwargs)
         if response.status_code == _KICK_COUNTRY_BLOCKED_STATUS:
             # Kick's explicit country-block status outranks body heuristics.

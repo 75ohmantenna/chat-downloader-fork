@@ -42,13 +42,12 @@ def create_kick_session(
 
 
 def _try_curl_cffi() -> Any | None:  # pragma: no cover
-    """Try a curl-cffi session with a Chrome TLS fingerprint."""
+    """Try a curl-cffi session with its current Chrome TLS fingerprint."""
     try:
         from curl_cffi import requests as curl_requests
 
-        session: Any = curl_requests.Session()
-        session.impersonate = "chrome124"
-        session.headers.update(_browser_headers("124"))
+        session: Any = curl_requests.Session(impersonate="chrome")
+        session.headers.update(_api_headers())
     except ImportError:
         logger.debug("curl-cffi unavailable; skipping impersonated Kick session.")
         return None
@@ -62,7 +61,7 @@ def _try_cloudscraper() -> Any | None:  # pragma: no cover
         import cloudscraper  # type: ignore[import-untyped]
 
         session = cloudscraper.create_scraper()
-        session.headers.update(_browser_headers("120"))
+        session.headers.update(_api_headers())
     except ImportError:
         logger.debug("cloudscraper unavailable; skipping Kick scraper session.")
         return None
@@ -73,19 +72,27 @@ def _try_cloudscraper() -> Any | None:  # pragma: no cover
 def _make_plain_session() -> requests.Session:  # pragma: no cover
     """Create the final plain-requests fallback."""
     session = requests.Session()
-    session.headers.update(_browser_headers("120"))
+    session.headers.update(_plain_browser_headers())
     return session
 
 
-def _browser_headers(chrome_version: str) -> dict[str, str]:
-    """Return the provider's browser-like default request headers."""
+def _api_headers() -> dict[str, str]:
+    """Return provider-specific headers without overriding backend identity."""
     return {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            f"Chrome/{chrome_version}.0.0.0 Safari/537.36"
-        ),
         "Accept": "application/json, text/plain, */*",
         "Referer": "https://kick.com/",
         "DNT": "1",
+    }
+
+
+def _plain_browser_headers() -> dict[str, str]:
+    """Return browser-like headers for the non-impersonating fallback."""
+    return {
+        **_api_headers(),
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/143.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
     }

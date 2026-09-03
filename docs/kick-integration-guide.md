@@ -7,9 +7,10 @@ Pusher path or the REST-backed VOD and clip replay paths.
 The Kick stack is split across two transport families:
 
 - A Pusher (WebSocket) feed for live chat.
-- Kick's unauthenticated web JSON endpoints (`api/v2` for channel, clip, and
-  message data, plus `api/v1/video` for VOD metadata) and the anonymous mobile
-  `api/v1/clips` fallback.
+- Kick's public web JSON endpoints (`api/v2` for channel, clip, and message data,
+  plus `api/v1/video` for VOD metadata) and the anonymous mobile `api/v1/clips`
+  fallback. When a cookie file supplies a `kick.com` `session_token`, primary
+  web API calls authenticate with its URL-decoded bearer value.
 
 Kick's OAuth-scoped official Public API is a useful schema reference, but it
 does not expose the unauthenticated read-chat or replay stream this tool needs.
@@ -152,9 +153,9 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 
 ### Transport and API access
 
-- `api_client.py`: downloader-owned HTTP client for the unauthenticated
-  `kick.com/api/v1` and `api/v2` channel, history, VOD, and clip JSON endpoints,
-  plus `mobile.kick.com/api/v1` clip metadata. It owns endpoint status,
+- `api_client.py`: downloader-owned HTTP client for the public `kick.com/api/v1`
+  and `api/v2` channel, history, VOD, and clip JSON endpoints, plus
+  `mobile.kick.com/api/v1` clip metadata. It owns endpoint status,
   challenge, JSON, and object-shape classification but does no chat parsing.
   The mobile origin uses a separate session that retains proxy, trust,
   timeout, browser-profile, and safe custom-header policy while excluding
@@ -428,8 +429,8 @@ session strategy for the client-owned transport. Standard installations include
 all three dependencies; the fallbacks also keep degraded or partial
 environments diagnosable:
 
-1. **curl-cffi with Chrome 124 TLS impersonation** — avoids Cloudflare
-   challenges at the TLS-fingerprint level before they are even presented.
+1. **curl-cffi with its current Chrome TLS impersonation alias** — tracks the
+   dependency's supported browser identity without a stale version pin.
 2. **cloudscraper** — JS-challenge solver for simpler challenges (used if
    curl-cffi cannot be imported).
 3. **Plain requests session** with browser-like headers — last resort when
