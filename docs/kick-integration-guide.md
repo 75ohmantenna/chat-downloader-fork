@@ -402,6 +402,11 @@ site-specific group map. Kick `celebration` chat payloads remain in `messages`
 because they carry user-authored chat text; their subscription-renewal details
 remain available as structured JSONL metadata.
 
+Kick TXT replies include `[replying to NAME]`, preferring the parent author's
+display name and falling back to their name. When only a parent message or
+thread ID is available, TXT uses `[reply to message ID]`. Ordinary messages
+retain their existing rendering; JSONL retains the full reply context.
+
 Kick's default text formatter labels subscription, pin, host, and moderation
 events. Empty-message events such as deletions and chat clears render bracketed
 notices rather than blank lines. Live WebSocket events without a valid provider
@@ -496,7 +501,19 @@ chat_downloader "https://kick.com/xqc" --logging debug
 For clean-run schema review, a second explicit opt-in captures the first three
 raw WebSocket frames for each normalized event type that successfully parses.
 Type-specific per-run attempt bounds survive reconnects and exclude Pusher
-control, unknown, and malformed frames:
+control, unknown, and malformed frames.
+
+Replies, emote-bearing text, and badge-bearing text each have an additional
+independent three-attempt quota under `text-shape-in-reply-to`,
+`text-shape-emotes`, and `text-shape-badges` labels. Shape detection uses the
+normalized reply, emote, and author-badge fields. These quotas add at most nine
+samples per run; overlapping shapes can capture the same frame under multiple
+labels. All quotas span reconnects, run before deduplication and message
+filtering, and retain the shared capture opt-in, redaction, and private-file
+requirements. Failed writes consume an attempt. Shared per-label limits can
+reduce the number of new samples when reusing a directory in one process.
+
+Example:
 
 ```bash
 CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1 \

@@ -319,7 +319,13 @@
         {
             "matching": "all",
             "inherit": "default",
-            "template": "{time_text|timestamp|received_timestamp}{author.badges}{money.text}{author.display_name|author.name}{message}"
+            "template": "{time_text|timestamp|received_timestamp}{author.badges}{money.text}{author.display_name|author.name}{in_reply_to.author.display_name|in_reply_to.author.name|in_reply_to.message_id|in_reply_to.thread_parent_message_id}{message}",
+            "keys": {
+                "in_reply_to.author.display_name": " [replying to {}]",
+                "in_reply_to.author.name": " [replying to {}]",
+                "in_reply_to.message_id": " [reply to message {}]",
+                "in_reply_to.thread_parent_message_id": " [reply to message {}]"
+            }
         }
     ],
     "twitch": [

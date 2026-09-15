@@ -925,7 +925,15 @@ def test_successful_frame_capture_writes_independent_type_samples(
     message_frames = [
         pusher_frame(
             CHAT_MESSAGE_EVENT,
-            {"id": f"msg-{index}", "type": "message", "content": "message"},
+            {
+                "id": f"msg-{index}",
+                "type": "reply",
+                "content": "[emote:123:hello]",
+                "metadata": {"original_sender": {"username": "Parent"}},
+                "sender": {
+                    "identity": {"badges_v2": [{"name": "level", "selected": True}]}
+                },
+            },
         )
         for index in range(4)
     ]
@@ -952,6 +960,15 @@ def test_successful_frame_capture_writes_independent_type_samples(
 
     assert len(list(sample_dir.glob("kick-websocket-frame-text-message-*.json"))) == 3
     assert len(list(sample_dir.glob("kick-websocket-frame-subscription-*.json"))) == 3
+
+    for shape in ("in-reply-to", "emotes", "badges"):
+        assert (
+            len(
+                list(sample_dir.glob(f"kick-websocket-frame-text-shape-{shape}-*.json"))
+            )
+            == 3
+        )
+    assert len(list(sample_dir.glob("*.json"))) == 15
 
 
 def test_get_chat_by_channel_emits_current_pin_after_preloaded_history() -> None:
@@ -2322,3 +2339,75 @@ def test_preloaded_chat_captures_and_skips_malformed_current_pin(
     assert captured[0][0][0] == "kick-malformed-preloaded-pin"
     assert captured[0][0][1]["raw"] == {"duration": 1}
     assert captured[0][1]["sample_limit"] == 10
+
+
+def test_successful_frame_shapes_survive_type_quota_and_reconnect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES", "1")
+    captured = []
+    monkeypatch.setattr(
+        live_service,
+        "capture_debug_sample",
+        lambda *args, **kwargs: captured.append((args, kwargs)),
+    )
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            *[FakeResponse(200, {"data": {"messages": []}}) for _ in range(3)],
+        ]
+    )
+    plain = [
+        pusher_frame(
+            CHAT_MESSAGE_EVENT,
+            {
+                "id": f"plain-{i}",
+                "type": "message",
+                "content": "plain",
+            },
+        )
+        for i in range(3)
+    ]
+    diverse = [
+        pusher_frame(
+            CHAT_MESSAGE_EVENT,
+            {
+                "id": f"reply-{i}",
+                "type": "reply",
+                "content": "[emote:123:hello]",
+                "metadata": {"original_sender": {"username": "Parent"}},
+                "sender": {
+                    "identity": {"badges_v2": [{"name": "level", "selected": True}]}
+                },
+            },
+        )
+        for i in range(5)
+    ]
+    with patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator(
+                [
+                    [*plain, *diverse[:2], ConnectionError("drop")],
+                    diverse[2:],
+                ]
+            ),
+        )
+        assert len(list(chat.chat)) == 8
+    for shape in ("in-reply-to", "emotes", "badges"):
+        calls = [
+            call
+            for call in captured
+            if call[0][0] == f"kick-websocket-frame-text-shape-{shape}"
+        ]
+        assert [call[0][1] for call in calls] == diverse[:3]
+        assert all(call[1] == {"sample_limit": 3} for call in calls)
+    assert len(captured) == 12
+
+
+def test_successful_frame_labels_ignore_missing_type() -> None:
+    assert live_service._successful_frame_labels({}) == []

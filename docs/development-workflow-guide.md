@@ -308,6 +308,16 @@ and debug logging, it captures at most the first three raw WebSocket frames per
 normalized event type that successfully parses. Type-specific per-run attempt
 caps span reconnects and exclude control, unknown, and malformed frames.
 
+Replies, emote-bearing text, and badge-bearing text each have an additional
+independent three-attempt quota under `text-shape-in-reply-to`,
+`text-shape-emotes`, and `text-shape-badges` labels. Shape detection uses the
+normalized reply, emote, and author-badge fields. These quotas add at most nine
+samples per run; overlapping shapes can capture the same frame under multiple
+labels. All quotas span reconnects, run before deduplication and message
+filtering, and retain the shared capture opt-in, redaction, and private-file
+requirements. Failed writes consume an attempt. Shared per-label limits can
+reduce the number of new samples when reusing a directory in one process.
+
 The logging handler applies the same structured and string redaction to project
 messages, exception text, and stack information. It redacts credentials in
 URLs and sensitive query or labeled values, including continuation tokens and

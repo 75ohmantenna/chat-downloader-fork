@@ -36,6 +36,7 @@ from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
+from chat_downloader.utils.json_types import get_dict, get_list
 
 from .constants import (
     KICK_DEBUG_SAMPLE_LIMIT,
@@ -75,6 +76,24 @@ _RECONNECT_BACKFILL_MICROSECONDS = 10_000_000
 _RECONNECT_BACKFILL_RECORD_LIMIT = _KICK_LIVE_SEEN_MESSAGE_LIMIT
 _RECONNECT_BACKFILL_PAGE_LIMIT = 100
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+
+
+def _successful_frame_labels(message: JSONDict) -> list[str]:
+    """Return bounded capture categories without provider text in labels."""
+    message_type = message.get("message_type")
+    if not isinstance(message_type, str):
+        return []
+    labels = [message_type.replace("_", "-")]
+    if message_type == "text_message":
+        labels.extend(
+            "text-shape-" + field.replace("_", "-")
+            for field in ("in_reply_to", "emotes")
+            if message.get(field)
+        )
+        badges = get_list(get_dict(message, "author"), "badges")
+        if badges:
+            labels.append("text-shape-badges")
+    return labels
 
 
 class _KickLiveDiagnostics:
@@ -718,26 +737,19 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                                 "received_timestamp",
                                 received_timestamp,
                             )
-                        message_type = live_message.get("message_type")
-                        capture_attempts = (
-                            successful_frame_capture_attempts.get(message_type, 0)
-                            if isinstance(message_type, str)
-                            else 0
-                        )
-                        if (
-                            capture_successful_frames
-                            and isinstance(message_type, str)
-                            and capture_attempts < _SUCCESSFUL_FRAME_CAPTURE_LIMIT
-                        ):
-                            successful_frame_capture_attempts[message_type] = (
-                                capture_attempts + 1
-                            )
-                            capture_debug_sample(
-                                "kick-websocket-frame-"
-                                + message_type.replace("_", "-"),
-                                frame,
-                                sample_limit=_SUCCESSFUL_FRAME_CAPTURE_LIMIT,
-                            )
+                        if capture_successful_frames:
+                            for label in _successful_frame_labels(live_message):
+                                attempts = successful_frame_capture_attempts.get(
+                                    label, 0
+                                )
+                                if attempts >= _SUCCESSFUL_FRAME_CAPTURE_LIMIT:
+                                    continue
+                                successful_frame_capture_attempts[label] = attempts + 1
+                                capture_debug_sample(
+                                    "kick-websocket-frame-" + label,
+                                    frame,
+                                    sample_limit=_SUCCESSFUL_FRAME_CAPTURE_LIMIT,
+                                )
                         pusher_error_recoveries = 0
                         if emit(live_message):
                             diagnostics.increment("live_emitted_count")

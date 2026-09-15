@@ -241,3 +241,39 @@ def test_kick_non_ai_deletion_omits_ai_context(formatter: ItemFormatter) -> None
     assert formatter.format(deleted, format_name="kick") == (
         "[Message deleted: deleted-id]"
     )
+
+
+@pytest.mark.parametrize(
+    ("reply", "label"),
+    [
+        ({"author": {"display_name": "Parent", "name": "slug"}}, "replying to Parent"),
+        ({"author": {"name": "slug"}}, "replying to slug"),
+        ({"message_id": "parent-id"}, "reply to message parent-id"),
+        ({"thread_parent_message_id": "thread-id"}, "reply to message thread-id"),
+        ({}, None),
+        ({"author": {"display_name": ""}}, None),
+        (
+            {"author": {"display_name": "Parent\nForged\x1b"}},
+            r"replying to Parent\nForged",
+        ),
+    ],
+)
+def test_kick_reply_context_fallbacks_and_safe_rendering(
+    formatter: ItemFormatter, reply: dict[str, object], label: str | None
+) -> None:
+    item = {
+        "message_type": "text_message",
+        "author": {"display_name": "Author"},
+        "message": "Hello",
+        "in_reply_to": reply,
+    }
+    suffix = f" [{label}]" if label else ""
+    assert formatter.format(item, format_name="kick") == f"Author{suffix}: Hello"
+    assert formatter.format(item, format_name="default") == "Author: Hello"
+
+
+def test_kick_provider_reply_renders_parent_author(formatter: ItemFormatter) -> None:
+    item = parse_chat_message(load_fixture("reply_message_event_data.json"))
+    assert formatter.format(item, format_name="kick") == (
+        "2026-08-25 09:29:20 | ReplyAuthor [replying to OriginalAuthor]: Reply text"
+    )
