@@ -16,14 +16,13 @@ from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
 from chat_downloader.utils.json_types import (
     JSONDict,
-    JSONList,
-    dig,
     get_dict,
-    get_list,
-    get_str,
 )
 from chat_downloader.utils.string_utils import camel_case_split
 from chat_downloader.utils.time_utils import seconds_to_time, time_to_seconds
+
+from .message_content_text_parser import _get_simple_text
+from .modern_elements import normalize_element
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -39,122 +38,6 @@ _ROLE_ICON_MAP: dict[str, str] = {
 # instead of raising RecursionError and aborting message parsing.  Mirrors the
 # _MAX_FLATTEN_DEPTH guard in utils/json_utils.py.
 _MAX_ITEM_PARSE_DEPTH = 50
-
-
-def _modern_attributed_text(value: JSONDict, key: str) -> JSONDict:
-    """Convert modern attributed text into the classic runs representation."""
-    text = get_str(get_dict(value, key), "content")
-    return {"runs": [{"text": text}]} if text else {}
-
-
-def _modern_avatar(value: JSONDict) -> JSONDict:
-    """Convert a modern image source list into classic thumbnail metadata."""
-    sources = dig(value, "authorAvatar", "image", "sources")
-    thumbnails: JSONList = (
-        [source for source in sources if isinstance(source, dict)]
-        if isinstance(sources, list)
-        else []
-    )
-    return {"thumbnails": thumbnails} if thumbnails else {}
-
-
-def _modern_author_badges(attributed: JSONDict) -> JSONList:
-    """Convert inline mobile author badge images to classic badge renderers."""
-    badges: JSONList = []
-    author_name = get_dict(attributed, "authorName")
-    for attachment in get_list(author_name, "attachmentRuns"):
-        if not isinstance(attachment, dict):
-            continue
-        sources = dig(
-            attachment,
-            "element",
-            "type",
-            "imageType",
-            "image",
-            "sources",
-        )
-        thumbnails: JSONList = (
-            [
-                source
-                for source in sources
-                if isinstance(source, dict) and get_str(source, "url")
-            ]
-            if isinstance(sources, list)
-            else []
-        )
-        if thumbnails:
-            badges.append(
-                {
-                    "liveChatAuthorBadgeRenderer": {
-                        "customThumbnail": {"thumbnails": thumbnails},
-                        "tooltip": "Member",
-                    },
-                }
-            )
-    return badges
-
-
-def _modern_timestamp_usec(element: JSONDict) -> str:
-    """Convert a nanosecond logging identifier to a microsecond timestamp."""
-    identifier = dig(
-        element,
-        "newElement",
-        "properties",
-        "identifierProperties",
-        "uniqueLoggingIdentifier",
-    )
-    if not isinstance(identifier, str) or len(identifier) != 19:
-        return ""
-    try:
-        return str(int(identifier) // 1000)
-    except ValueError:
-        return ""
-
-
-def _normalize_modern_element_item(item: JSONDict) -> JSONDict:
-    """Adapt a modern mobile text-message element to the classic renderer."""
-    element = get_dict(item, "elementRenderer")
-    model = dig(
-        element,
-        "newElement",
-        "type",
-        "componentType",
-        "model",
-        "liveChatTextMessageModel",
-    )
-    if not isinstance(model, dict):
-        return item
-
-    attributed = dig(model, "messageData", "attributedTextData")
-    if not isinstance(attributed, dict):
-        return item
-
-    compatibility = get_dict(element, "compatibilityOptions")
-    renderer: JSONDict = {}
-    message_id = get_str(compatibility, "liveChatId")
-    author_id = get_str(compatibility, "liveChatAuthorExternalChannelId")
-    author_name = get_str(get_dict(attributed, "authorName"), "content").strip()
-    timestamp_usec = _modern_timestamp_usec(element)
-    message = _modern_attributed_text(attributed, "contentText")
-    author_photo = _modern_avatar(get_dict(model, "messageData"))
-    author_badges = _modern_author_badges(attributed)
-
-    if message_id:
-        renderer["id"] = message_id
-    if author_id:
-        renderer["authorExternalChannelId"] = author_id
-    if author_name:
-        renderer["authorName"] = {"simpleText": author_name}
-    if timestamp_usec:
-        renderer["timestampUsec"] = timestamp_usec
-    if message:
-        renderer["message"] = message
-    if author_photo:
-        renderer["authorPhoto"] = author_photo
-    if author_badges:
-        renderer["authorBadges"] = author_badges
-
-    return {"liveChatTextMessageRenderer": renderer} if renderer else item
 
 
 def _apply_author_roles(author: dict[str, Any]) -> None:
@@ -281,6 +164,7 @@ def _parse_item(
     if depth > _MAX_ITEM_PARSE_DEPTH:
         return info
 
+    item = normalize_element(item)
     item_index = try_get_first_key(item)
     item_info = get_dict(item, item_index) if item_index else {}
     if not item_info:
@@ -290,6 +174,15 @@ def _parse_item(
 
     for key, value in item_info.items():
         r.remap(info, remapping, key, value)
+
+    if "authorUsername" in item_info:
+        # A ticker's fallback handle must not replace a supplied display name,
+        # regardless of JSON key order.
+        name = _get_simple_text(get_dict(item_info, "authorName")) or _get_simple_text(
+            get_dict(item_info, "authorUsername")
+        )
+        if name:
+            info["author_name"] = name
 
     _apply_colour_keys(info, item_info, colour_keys)
     _merge_nested_renderers(

@@ -91,6 +91,7 @@ The normal YouTube flow is:
   lookup routing and retrieval helpers
 - `continuations.py`: continuation parsing models and utilities
 - `message_pipeline.py`: filtering and action-to-message pipeline boundary
+- `paid_events.py`: bounded per-run paid-event cache for sparse tickers
 
 ### Parsing
 
@@ -102,6 +103,8 @@ The normal YouTube flow is:
   `parsing/message_items_content_parser.py`,
   `parsing/message_items_video.py`, and `parsing/message_links.py`: message
   content, links, video metadata, and shared normalization helpers
+- `parsing/modern_elements.py` and `parsing/modern_text.py`: mobile model,
+  attributed-text, and UTF-16 inline-image adapters
 - `parsing/__init__.py`: package-level parsing surface; focused modules own the
   implementations directly
 
@@ -229,15 +232,43 @@ such as authorization and visitor identifiers.
 The initial InnerTube fallback uses the same request-profile context fields
 when constructing its `player` and `next` payloads. Continuation-loop profile
 fallback remains separate and still handles incomplete chat-poll responses
-after bootstrap has succeeded.
+after bootstrap has succeeded. A first replay response with HTTP 400
+`INVALID_ARGUMENT` also permits bounded profile fallback while preserving the
+continuation token and seek bounds. Once any response is accepted, this error
+is terminal; retrieval does not restart and duplicate earlier messages. A
+generic HTTP 400 reports request rejection rather than claiming the video has
+no replay. Fresh retrieval with an explicit mobile profile can still help when
+all retries of the existing token fail.
 
 Android and iOS `next` responses use mobile-specific `playerOverlays` and
 `engagementPanels` layouts rather than the desktop conversation bar. The
 bootstrap recognizes their filter-mode models to preserve distinct Top and
-Live chat selections. Mobile continuation responses may also wrap text
-messages in `elementRenderer`; these are normalized into the same text-message
-shape used by the web client, including author identity, membership badge,
-avatar, message ID, and timestamp fields.
+Live chat selections. Mobile `elementRenderer` text, Super Chat, paid-sticker,
+and viewer-engagement models are normalized into the corresponding classic
+message types. Inline emote images use their UTF-16 attachment ranges to restore
+labels and image metadata; malformed or overlapping ranges retain the original
+text. Paid stickers retain their accessibility description as message text.
+Unknown models remain visible in debug diagnostics.
+
+Mobile response logging identifiers are not original-message timestamps.
+Mobile messages therefore omit `timestamp` when the provider supplies only a
+logging identifier; replay offsets remain available in `time_in_seconds` and
+`time_text`. Classic renderer timestamps are unchanged. A live mobile message
+without an original timestamp also has no derived timing; callers must not
+interpret an absent timestamp as the current time.
+
+Sparse paid tickers inherit missing content from a preceding paid event with
+the same ID and type. The per-run cache keeps at most 10,000 paid IDs, runs
+before message/time filtering, and retains copies independent of emitted
+records. Unmatched or evicted tickers retain only available source fields.
+Raw JSONL keeps both paid and ticker events; formatted TXT suppresses their
+shared ID once, so correct parity can involve different record counts.
+
+The curated `mobile-replay-elements.json` fixture under
+`tests/fixtures/youtube/live_events/` covers captured engagement, emote, paid,
+and nested/sparse ticker shapes. Regression tests compose the real continuation
+loop, filters, cache, formatter, writers, and parity auditor. Visitor-data
+updates are logged without the identifier value.
 
 `client_auth.py` handles SAPISIDHASH-style authorization when suitable cookies
 are available. Header values are sanitized before they appear in debug logs.

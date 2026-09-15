@@ -68,6 +68,7 @@ from .continuations import (
 )
 from .helpers import require_innertube_api_key
 from .message_pipeline import NonEmissionReason, process_pipeline_action
+from .paid_events import PaidEventCache
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
@@ -206,10 +207,19 @@ def _raise_if_api_error(yt_info: JSONDict) -> None:
     log("debug", f"API error response: {error_info}")
 
     if str(error_code) == "400":
-        msg = f"Chat replay is not available for this video. {error_message}"
-        raise NoChatReplay(
-            msg,
+        detail = str(error_message).casefold().rstrip(".")
+        if detail in {
+            "replay disabled",
+            "chat replay is disabled",
+            "live chat replay is disabled",
+        }:
+            raise NoChatReplay(str(error_message))
+        msg = (
+            f"YouTube rejected the chat continuation (HTTP 400): {error_message}. "
+            "Try a fresh retrieval with --request_profile youtube_android or "
+            "youtube_ios. This response does not establish replay availability."
         )
+        raise ChatDownloaderError(msg)
     msg = f"YouTube API error ({error_code}): {error_message}"
     raise ChatDownloaderError(msg)
 
@@ -255,6 +265,7 @@ def _process_actions(
     live_start_time_ms: int,
     *,
     is_replay: bool,
+    paid_events: PaidEventCache | None = None,
 ) -> Generator[JSONDict, None, bool]:
     """Walk *actions*, apply filters, and yield accepted messages.
 
@@ -265,6 +276,7 @@ def _process_actions(
     Args:
         actions: Raw action dicts from the ``liveChatContinuation`` payload.
         offset: Clip or replay time offset in seconds (passed to the pipeline).
+        paid_events: Optional per-run cache for enriching sparse paid tickers.
         msg_filter: Message-type inclusion filter.
         time_filter: Optional time-range filter for replay captures.
         loop_state: Mutable loop state; ``offset_milliseconds`` may be updated.
@@ -288,6 +300,7 @@ def _process_actions(
             offset or 0.0,
             msg_filter,
             time_filter,
+            paid_events,
         )
         processed_action_count += 1
         if pipeline_result.non_emission_reason is not None:
@@ -385,6 +398,8 @@ class _ContinuationLoop:
         self.initial_info = initial_info
         self.ytcfg = ytcfg
         self.params = params
+        self.paid_events = PaidEventCache()
+        self._accepted_response = False
         self.ctx: _ChatContext
         self.progress = _ContinuationProgress(
             _YT_MAX_NO_PROGRESS_POLLS, _YT_MAX_PROFILE_FALLBACKS
@@ -498,7 +513,7 @@ class _ContinuationLoop:
         visitor_data = extract_visitor_data(yt_info)
         if visitor_data:
             self.downloader.update_session_headers({"x-goog-visitor-id": visitor_data})
-            log("debug", f"Updated visitor data: {visitor_data}")
+            log("debug", "Updated visitor data")
 
     def _apply_response_state_updates(
         self, yt_info: JSONDict, auth: str | None = None
@@ -565,7 +580,9 @@ class _ContinuationLoop:
 
     # -- profile fallback ---------------------------------------------------
 
-    def _attempt_profile_fallback(self) -> bool:
+    def _attempt_profile_fallback(
+        self, reason: str = "repeated incomplete continuation responses"
+    ) -> bool:
         """Try switching to the next YouTube request profile on incomplete data.
 
         Returns True if a new profile was applied (caller should retry). Returns
@@ -583,12 +600,13 @@ class _ContinuationLoop:
             return False
         log(
             "warning",
-            "Switching YouTube request profile after repeated incomplete "
-            f"continuation responses: {next_profile}",
+            f"Switching YouTube request profile after {reason}: {next_profile}",
         )
         return True
 
-    def _recover_incomplete_continuation(self) -> bool:
+    def _recover_incomplete_continuation(
+        self, reason: str = "repeated incomplete continuation responses"
+    ) -> bool:
         """Try profile fallback after an incomplete continuation.
 
         Returns True if the loop should retry; False means the caller should
@@ -603,7 +621,7 @@ class _ContinuationLoop:
                 "continuation responses; surfacing the underlying error.",
             )
             return False
-        if not self._attempt_profile_fallback():
+        if not self._attempt_profile_fallback(reason):
             return False
         active_profile = getattr(self.downloader, "_request_profile", None)
         self.ytcfg = apply_request_profile_to_ytcfg(
@@ -626,6 +644,24 @@ class _ContinuationLoop:
         )
         return True
 
+    def _retry_rejected_initial_replay(self, response: JSONDict) -> bool:
+        """Try the next profile only for an initial replay INVALID_ARGUMENT.
+
+        Reuse the continuation and seek bounds. Once a response is accepted,
+        never restart or switch profiles on this terminal API error.
+        """
+        error = get_dict(response, "error")
+        if (
+            self._accepted_response
+            or not self.ctx.is_replay
+            or str(error.get("code")) != "400"
+            or get_str(error, "status") != "INVALID_ARGUMENT"
+        ):
+            return False
+        return self._recover_incomplete_continuation(
+            "a rejected initial replay request"
+        )
+
     # -- main loop ----------------------------------------------------------
 
     def run(
@@ -634,7 +670,6 @@ class _ContinuationLoop:
         """Yield chat messages from a YouTube continuation endpoint."""
         self.ctx = self._build_context()
         ctx = self.ctx
-        ended_cleanly = False
 
         while True:
             continuation_params = build_continuation_params(
@@ -656,7 +691,10 @@ class _ContinuationLoop:
                     raise
                 continue
 
+            if self._retry_rejected_initial_replay(yt_info):
+                continue
             self._handle_continuation_response(yt_info, continuation_params)
+            self._accepted_response = True
 
             info = multi_get(yt_info, "continuationContents", "liveChatContinuation")
             if not info:
@@ -679,12 +717,12 @@ class _ContinuationLoop:
                 ctx.loop_state,
                 ctx.live_start_time_ms,
                 is_replay=ctx.is_replay,
+                paid_events=self.paid_events,
             )
             if stop_requested:
                 return
 
             if _advance_continuation_loop(ctx, yt_info):
-                ended_cleanly = True
                 break
 
             made_progress = self.progress.response_advanced(
@@ -702,14 +740,13 @@ class _ContinuationLoop:
                 )
                 raise NoContinuation(msg)
 
-        if ended_cleanly:
-            end_msg: JSONDict = {
-                "message_type": "chat_ended",
-                "action_type": "chat_ended",
-                "message": None,
-            }
-            if ctx.msg_filter.should_add(end_msg):
-                yield end_msg
+        end_msg: JSONDict = {
+            "message_type": "chat_ended",
+            "action_type": "chat_ended",
+            "message": None,
+        }
+        if ctx.msg_filter.should_add(end_msg):
+            yield end_msg
 
 
 def _get_chat_messages(

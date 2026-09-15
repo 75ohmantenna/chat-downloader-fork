@@ -35,9 +35,12 @@ def test_raise_if_api_error_no_op_when_no_error_key() -> None:
     _raise_if_api_error({"continuationContents": {}})
 
 
-def test_raise_if_api_error_raises_no_chat_replay_for_400() -> None:
-    with pytest.raises(NoChatReplay):
+def test_raise_if_api_error_does_not_infer_availability_from_generic_400() -> None:
+    with pytest.raises(
+        ChatDownloaderError, match="rejected the chat continuation"
+    ) as exc:
         _raise_if_api_error({"error": {"code": 400, "message": "bad request"}})
+    assert not isinstance(exc.value, NoChatReplay)
 
 
 @pytest.mark.parametrize("code", [403, 500, "403", ""])

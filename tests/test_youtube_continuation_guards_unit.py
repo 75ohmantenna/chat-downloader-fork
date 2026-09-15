@@ -124,7 +124,7 @@ def test_continuation_loop_bounded_profile_fallbacks(monkeypatch) -> None:
     """If IncompleteContinuationError fires forever, give up after the cap."""
     fallback_calls: list[int] = []
 
-    def fake_fallback(_downloader) -> bool:
+    def fake_fallback(_downloader, _reason) -> bool:
         fallback_calls.append(1)
         return True
 

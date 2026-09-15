@@ -157,8 +157,6 @@ _KEYS_TO_IGNORE = [
     "dismissStrategy",
     "suggestedPosition",
     "promoConfig",
-    # redundant field for ticker renderer
-    "authorUsername",
     # new YouTube UI fields (2024+)
     "replyButton",
     "likeButton",
@@ -216,6 +214,7 @@ def build_remapping() -> Mapping[str, Any]:
             "id": "message_id",
             "authorExternalChannelId": "author_id",
             "authorName": r("author_name", _get_simple_text),
+            "authorUsername": r("author_name", _get_simple_text),
             "purchaseAmountText": r("money", _parse_currency),
             "message": r(None, _parse_runs, to_unpack=True),
             "timestampText": r("time_text", _get_simple_text),

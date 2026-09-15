@@ -225,6 +225,7 @@ module names.
 | `extractor.py` | YouTube site extractor class wiring mixins together |
 | `helpers.py` | YouTube payload/navigation helpers |
 | `message_pipeline.py` | Message filtering/remapping pipeline |
+| `paid_events.py` | Bounded per-run enrichment of sparse paid tickers before filtering |
 | `parsing/` | Action routing and message content parsers |
 | `playability.py` | YouTube playability status classification |
 | `video_initialization.py`, `video_metadata.py`, `video_status.py`, `video_status_helpers.py`, `video_status_models.py` | Video bootstrap metadata and status models |

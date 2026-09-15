@@ -295,7 +295,6 @@ def test_mobile_element_chat_fixture_parses_through_real_pipeline() -> None:
         "message": "Fixture mobile chat message",
         "message_id": "sanitized-message-id",
         "message_type": "text_message",
-        "timestamp": 1784402103176311,
     }
 
 

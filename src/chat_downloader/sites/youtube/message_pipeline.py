@@ -31,6 +31,8 @@ from .parsing.actions_router import (
 if TYPE_CHECKING:
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 
+    from .paid_events import PaidEventCache
+
 # ---------------------------------------------------------------------------
 # Result type
 # ---------------------------------------------------------------------------
@@ -151,6 +153,7 @@ def process_pipeline_action(
     offset: float,
     msg_filter: MessageFilter,
     time_filter: TimeRangeFilter | None,
+    paid_events: PaidEventCache | None = None,
 ) -> PipelineResult:
     """Run a single raw action through the full message pipeline.
 
@@ -195,6 +198,9 @@ def process_pipeline_action(
             else NonEmissionReason.INVALID_MESSAGE
         )
         return PipelineResult(disposition="skip", non_emission_reason=reason)
+
+    if paid_events is not None:
+        paid_events.enrich(validated_data)
 
     if not msg_filter.should_add(validated_data):
         return PipelineResult(

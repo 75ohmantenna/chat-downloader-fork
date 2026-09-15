@@ -1,0 +1,880 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "item": {
+                    "elementRenderer": {
+                      "compatibilityOptions": {
+                        "liveChatId": "fixture-id-1"
+                      },
+                      "newElement": {
+                        "properties": {
+                          "identifierProperties": {
+                            "identifier": "viewer_engagement_message.eml-fe|fixture",
+                            "uniqueLoggingIdentifier": "1789485735158894512"
+                          }
+                        },
+                        "type": {
+                          "componentType": {
+                            "model": {
+                              "viewerEngagementMessageModel": {
+                                "data": {
+                                  "backgroundColor": 218103808,
+                                  "buttonData": {},
+                                  "image": {
+                                    "contentMode": "CONTENT_MODE_SCALE_ASPECT_FIT",
+                                    "sources": [
+                                      {
+                                        "height": 32,
+                                        "url": "https://img.example/mobile-1",
+                                        "width": 32
+                                      }
+                                    ]
+                                  },
+                                  "messageText": {
+                                    "content": "Live chat replay is on. Messages that appeared when the stream was live will show up here."
+                                  },
+                                  "textMarginStart": 16
+                                },
+                                "environment": {
+                                  "platformName": "PLATFORM_NAME_ANDROID"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "0"
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "clientId": "CKTzx5ua8JYDFXnBwgQd0eoDrw",
+                  "item": {
+                    "elementRenderer": {
+                      "compatibilityOptions": {
+                        "liveChatAuthorExternalChannelId": "fixture-id-2",
+                        "liveChatId": "fixture-id-3"
+                      },
+                      "newElement": {
+                        "properties": {
+                          "identifierProperties": {
+                            "identifier": "live_chat_text_message.eml-fe|fixture",
+                            "uniqueLoggingIdentifier": "1789485735158894512"
+                          }
+                        },
+                        "type": {
+                          "componentType": {
+                            "model": {
+                              "liveChatTextMessageModel": {
+                                "entityKeys": {
+                                  "updateMessageEntityKey": "EihDaHdLR2tOTFZIcDROWFZoT0VwWlJFWllia0ozWjFGa01HVnZSSEozILABKAE%3D"
+                                },
+                                "messageData": {
+                                  "attributedTextData": {
+                                    "a11yLabel": "@fixture-viewer",
+                                    "authorName": {
+                                      "content": "@fixture-viewer"
+                                    },
+                                    "authorNameUtf16Length": 22,
+                                    "contentText": {
+                                      "attachmentRuns": [
+                                        {
+                                          "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                          "element": {
+                                            "properties": {
+                                              "accessibilityProperties": {
+                                                "label": "thanksdoc"
+                                              },
+                                              "layoutProperties": {
+                                                "height": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                },
+                                                "margin": {
+                                                  "left": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  },
+                                                  "right": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  }
+                                                },
+                                                "width": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                }
+                                              }
+                                            },
+                                            "type": {
+                                              "imageType": {
+                                                "image": {
+                                                  "sources": [
+                                                    {
+                                                      "height": 24,
+                                                      "url": "https://img.example/mobile-2",
+                                                      "width": 24
+                                                    }
+                                                  ]
+                                                },
+                                                "playbackState": "IMAGE_PLAYBACK_STATE_STOPPED"
+                                              }
+                                            }
+                                          },
+                                          "length": 1,
+                                          "startIndex": 0
+                                        },
+                                        {
+                                          "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                          "element": {
+                                            "properties": {
+                                              "accessibilityProperties": {
+                                                "label": "thanksdoc"
+                                              },
+                                              "layoutProperties": {
+                                                "height": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                },
+                                                "margin": {
+                                                  "left": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  },
+                                                  "right": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  }
+                                                },
+                                                "width": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                }
+                                              }
+                                            },
+                                            "type": {
+                                              "imageType": {
+                                                "image": {
+                                                  "sources": [
+                                                    {
+                                                      "height": 24,
+                                                      "url": "https://img.example/mobile-2",
+                                                      "width": 24
+                                                    }
+                                                  ]
+                                                },
+                                                "playbackState": "IMAGE_PLAYBACK_STATE_STOPPED"
+                                              }
+                                            }
+                                          },
+                                          "length": 1,
+                                          "startIndex": 1
+                                        },
+                                        {
+                                          "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                          "element": {
+                                            "properties": {
+                                              "accessibilityProperties": {
+                                                "label": "thanksdoc"
+                                              },
+                                              "layoutProperties": {
+                                                "height": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                },
+                                                "margin": {
+                                                  "left": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  },
+                                                  "right": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  }
+                                                },
+                                                "width": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                }
+                                              }
+                                            },
+                                            "type": {
+                                              "imageType": {
+                                                "image": {
+                                                  "sources": [
+                                                    {
+                                                      "height": 24,
+                                                      "url": "https://img.example/mobile-2",
+                                                      "width": 24
+                                                    }
+                                                  ]
+                                                },
+                                                "playbackState": "IMAGE_PLAYBACK_STATE_STOPPED"
+                                              }
+                                            }
+                                          },
+                                          "length": 1,
+                                          "startIndex": 2
+                                        },
+                                        {
+                                          "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                          "element": {
+                                            "properties": {
+                                              "accessibilityProperties": {
+                                                "label": "thanksdoc"
+                                              },
+                                              "layoutProperties": {
+                                                "height": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                },
+                                                "margin": {
+                                                  "left": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  },
+                                                  "right": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  }
+                                                },
+                                                "width": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                }
+                                              }
+                                            },
+                                            "type": {
+                                              "imageType": {
+                                                "image": {
+                                                  "sources": [
+                                                    {
+                                                      "height": 24,
+                                                      "url": "https://img.example/mobile-2",
+                                                      "width": 24
+                                                    }
+                                                  ]
+                                                },
+                                                "playbackState": "IMAGE_PLAYBACK_STATE_STOPPED"
+                                              }
+                                            }
+                                          },
+                                          "length": 1,
+                                          "startIndex": 3
+                                        },
+                                        {
+                                          "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                          "element": {
+                                            "properties": {
+                                              "accessibilityProperties": {
+                                                "label": "thanksdoc"
+                                              },
+                                              "layoutProperties": {
+                                                "height": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                },
+                                                "margin": {
+                                                  "left": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  },
+                                                  "right": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  }
+                                                },
+                                                "width": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                }
+                                              }
+                                            },
+                                            "type": {
+                                              "imageType": {
+                                                "image": {
+                                                  "sources": [
+                                                    {
+                                                      "height": 24,
+                                                      "url": "https://img.example/mobile-2",
+                                                      "width": 24
+                                                    }
+                                                  ]
+                                                },
+                                                "playbackState": "IMAGE_PLAYBACK_STATE_STOPPED"
+                                              }
+                                            }
+                                          },
+                                          "length": 1,
+                                          "startIndex": 4
+                                        },
+                                        {
+                                          "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                          "element": {
+                                            "properties": {
+                                              "accessibilityProperties": {
+                                                "label": "thanksdoc"
+                                              },
+                                              "layoutProperties": {
+                                                "height": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                },
+                                                "margin": {
+                                                  "left": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  },
+                                                  "right": {
+                                                    "unit": "DIMENSION_UNIT_POINT",
+                                                    "value": 2
+                                                  }
+                                                },
+                                                "width": {
+                                                  "unit": "DIMENSION_UNIT_POINT",
+                                                  "value": 24
+                                                }
+                                              }
+                                            },
+                                            "type": {
+                                              "imageType": {
+                                                "image": {
+                                                  "sources": [
+                                                    {
+                                                      "height": 24,
+                                                      "url": "https://img.example/mobile-2",
+                                                      "width": 24
+                                                    }
+                                                  ]
+                                                },
+                                                "playbackState": "IMAGE_PLAYBACK_STATE_STOPPED"
+                                              }
+                                            }
+                                          },
+                                          "length": 1,
+                                          "startIndex": 5
+                                        }
+                                      ],
+                                      "content": "□□□□□□"
+                                    },
+                                    "contentTextUtf16Length": 6,
+                                    "linkFeedbackColor": 0,
+                                    "removedContentTextColorDark": 4285624689,
+                                    "removedContentTextColorLight": 4287664272
+                                  },
+                                  "authorAvatar": {
+                                    "avatarImageSize": "AVATAR_SIZE_XS",
+                                    "image": {
+                                      "processor": {
+                                        "borderImageProcessor": {
+                                          "circular": true
+                                        }
+                                      },
+                                      "sources": [
+                                        {
+                                          "height": 32,
+                                          "url": "https://img.example/mobile-3",
+                                          "width": 32
+                                        },
+                                        {
+                                          "height": 64,
+                                          "url": "https://img.example/mobile-4",
+                                          "width": 64
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "backgroundColorDark": 4279176975,
+                                  "backgroundColorLight": 4294967295,
+                                  "shouldUseLeftShiftedAvatar": false,
+                                  "shouldUseModernizedFeedMargins": true,
+                                  "shouldUseSmallerRightMargin": false
+                                },
+                                "updateMessageEntity": {
+                                  "key": "EihDaHdLR2tOTFZIcDROWFZoT0VwWlJFWllia0ozWjFGa01HVnZSSEozILABKAE%3D"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "8392570"
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "clientId": "COHQgIKa8JYDFZzG5wMdn2otdw",
+                  "item": {
+                    "elementRenderer": {
+                      "compatibilityOptions": {
+                        "liveChatAuthorExternalChannelId": "fixture-id-4",
+                        "liveChatId": "fixture-id-5",
+                        "pdgElementRendererCompatibilityOptions": {
+                          "entityKeys": [
+                            "EiNVZ3dhRkZyZDk4dXFvUXU5WkZWNEFhQUJEcWdCb2FfSmxBSSDxAygB"
+                          ]
+                        }
+                      },
+                      "newElement": {
+                        "properties": {
+                          "identifierProperties": {
+                            "identifier": "super_chat_item.eml-fe|fixture",
+                            "uniqueLoggingIdentifier": "1789485735158894512"
+                          }
+                        },
+                        "type": {
+                          "componentType": {
+                            "model": {
+                              "superChatItemModel": {
+                                "isImmersiveLive": false,
+                                "isV2Style": true,
+                                "paidMessageData": {
+                                  "bodyBackgroundColor": 4294278144,
+                                  "message": {
+                                    "content": "Fixture paid message"
+                                  },
+                                  "paidItemHeaderStaticData": {
+                                    "authorName": "@fixture-viewer",
+                                    "authorNameData": {
+                                      "a11yLabel": "@fixture-viewer",
+                                      "authorName": {
+                                        "content": "@fixture-viewer"
+                                      },
+                                      "authorNameUtf16Length": 13
+                                    },
+                                    "authorNameTextColor": 3019898879,
+                                    "authorPhoto": {
+                                      "avatarImageSize": "AVATAR_SIZE_40",
+                                      "image": {
+                                        "processor": {
+                                          "borderImageProcessor": {
+                                            "circular": true
+                                          }
+                                        },
+                                        "sources": [
+                                          {
+                                            "height": 32,
+                                            "url": "https://img.example/mobile-5",
+                                            "width": 32
+                                          },
+                                          {
+                                            "height": 64,
+                                            "url": "https://img.example/mobile-6",
+                                            "width": 64
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "priceTextColor": 3758096383
+                                  },
+                                  "paidMessageHeaderData": {
+                                    "backgroundColor": 0,
+                                    "environmentData": {
+                                      "platformName": "PLATFORM_NAME_ANDROID"
+                                    },
+                                    "priceText": "R$20.00"
+                                  }
+                                },
+                                "theme": {}
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "8376202"
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addLiveChatTickerItemAction": {
+                  "durationSec": "582",
+                  "item": {
+                    "liveChatTickerPaidMessageItemRenderer": {
+                      "amountTextColor": 3758096383,
+                      "animationOrigin": "ANIMATION_ORIGIN_PDG_TICKER_LIKE",
+                      "authorExternalChannelId": "fixture-id-4",
+                      "authorPhoto": {
+                        "accessibility": {
+                          "accessibilityData": {
+                            "label": "@fixture-viewer"
+                          }
+                        },
+                        "thumbnails": [
+                          {
+                            "height": 32,
+                            "url": "https://img.example/mobile-5",
+                            "width": 32
+                          },
+                          {
+                            "height": 64,
+                            "url": "https://img.example/mobile-6",
+                            "width": 64
+                          }
+                        ]
+                      },
+                      "authorUsername": {
+                        "simpleText": "@fixture-viewer"
+                      },
+                      "durationSec": 582,
+                      "endBackgroundColor": 4293284096,
+                      "fullDurationSec": 600,
+                      "id": "fixture-id-5",
+                      "openEngagementPanelCommand": {
+                        "showEngagementPanelEndpoint": {
+                          "globalConfiguration": {
+                            "initialState": {
+                              "engagementPanelSectionListRenderer": {
+                                "footerPosition": "ENGAGEMENT_PANEL_FOOTER_POSITION_ABOVE_KEYBOARD"
+                              }
+                            },
+                            "params": "fixture-params"
+                          },
+                          "identifier": {
+                            "tag": "PAreply_thread"
+                          },
+                          "sourcePanelIdentifier": "live-chat-item-section"
+                        }
+                      },
+                      "startBackgroundColor": 4294278144
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "8376202"
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "clientId": "CMKJgOWZ8JYDFQnm5wMdyJIZ-Q",
+                  "item": {
+                    "elementRenderer": {
+                      "compatibilityOptions": {
+                        "liveChatAuthorExternalChannelId": "fixture-id-6",
+                        "liveChatId": "fixture-id-7"
+                      },
+                      "newElement": {
+                        "properties": {
+                          "identifierProperties": {
+                            "identifier": "live_chat_paid_sticker_cell.eml-fe|fixture",
+                            "uniqueLoggingIdentifier": "1789485735158894512"
+                          }
+                        },
+                        "type": {
+                          "componentType": {
+                            "model": {
+                              "liveChatPaidStickerModel": {
+                                "isImmersiveLive": false,
+                                "isV2Style": true,
+                                "liveChatPaidSticker": {
+                                  "authorName": {
+                                    "content": "@fixture-viewer"
+                                  },
+                                  "authorNameData": {
+                                    "a11yLabel": "@fixture-viewer",
+                                    "authorName": {
+                                      "content": "@fixture-viewer"
+                                    },
+                                    "authorNameUtf16Length": 16
+                                  },
+                                  "authorNameTextColor": 2315255808,
+                                  "authorPhoto": {
+                                    "avatarImageSize": "AVATAR_SIZE_40",
+                                    "image": {
+                                      "imageFormatHint": "IMAGE_FORMAT_DEFAULT",
+                                      "processor": {
+                                        "borderImageProcessor": {
+                                          "circular": true
+                                        }
+                                      },
+                                      "sources": [
+                                        {
+                                          "height": 32,
+                                          "url": "https://img.example/mobile-7",
+                                          "width": 32
+                                        },
+                                        {
+                                          "height": 64,
+                                          "url": "https://img.example/mobile-8",
+                                          "width": 64
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "backgroundColor": 4280150454,
+                                  "environmentData": {
+                                    "platformName": "PLATFORM_NAME_ANDROID"
+                                  },
+                                  "isPurchasedSticker": true,
+                                  "priceTextColor": 4278190080,
+                                  "purchaseText": "",
+                                  "sticker": {
+                                    "imageFormatHint": "IMAGE_FORMAT_ANIMATED_WEBP",
+                                    "sources": [
+                                      {
+                                        "height": 88,
+                                        "url": "https://img.example/mobile-9",
+                                        "width": 88
+                                      },
+                                      {
+                                        "height": 132,
+                                        "url": "https://img.example/mobile-10",
+                                        "width": 132
+                                      },
+                                      {
+                                        "height": 176,
+                                        "url": "https://img.example/mobile-11",
+                                        "width": 176
+                                      },
+                                      {
+                                        "height": 264,
+                                        "url": "https://img.example/mobile-12",
+                                        "width": 264
+                                      },
+                                      {
+                                        "height": 352,
+                                        "url": "https://img.example/mobile-13",
+                                        "width": 352
+                                      }
+                                    ]
+                                  },
+                                  "stickerAccessibilityLabel": "Lemon character and Baby Lemon blowing a party horn while marching",
+                                  "stickerDisplayHeight": 88,
+                                  "stickerDisplayWidth": 88
+                                },
+                                "priceText": "R$5.00",
+                                "theme": {}
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "8297796"
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addLiveChatTickerItemAction": {
+                  "durationSec": "23",
+                  "item": {
+                    "liveChatTickerPaidStickerItemRenderer": {
+                      "authorExternalChannelId": "fixture-id-6",
+                      "authorPhoto": {
+                        "accessibility": {
+                          "accessibilityData": {
+                            "label": "@fixture-viewer"
+                          }
+                        },
+                        "thumbnails": [
+                          {
+                            "height": 32,
+                            "url": "https://img.example/mobile-7",
+                            "width": 32
+                          },
+                          {
+                            "height": 64,
+                            "url": "https://img.example/mobile-8",
+                            "width": 64
+                          }
+                        ]
+                      },
+                      "durationSec": 23,
+                      "endBackgroundColor": 4278239141,
+                      "fullDurationSec": 120,
+                      "id": "fixture-id-7",
+                      "showItemEndpoint": {
+                        "showLiveChatItemEndpoint": {
+                          "renderer": {
+                            "elementRenderer": {
+                              "compatibilityOptions": {
+                                "liveChatAuthorExternalChannelId": "fixture-id-6",
+                                "liveChatId": "fixture-id-7"
+                              },
+                              "newElement": {
+                                "properties": {
+                                  "identifierProperties": {
+                                    "identifier": "live_chat_paid_sticker_cell.eml-fe|fixture",
+                                    "uniqueLoggingIdentifier": "1789485735158894512"
+                                  }
+                                },
+                                "type": {
+                                  "componentType": {
+                                    "model": {
+                                      "liveChatPaidStickerModel": {
+                                        "isImmersiveLive": false,
+                                        "isV2Style": true,
+                                        "liveChatPaidSticker": {
+                                          "authorName": {
+                                            "content": "@fixture-viewer"
+                                          },
+                                          "authorNameData": {
+                                            "a11yLabel": "@fixture-viewer",
+                                            "authorName": {
+                                              "content": "@fixture-viewer"
+                                            },
+                                            "authorNameUtf16Length": 16
+                                          },
+                                          "authorNameTextColor": 2315255808,
+                                          "authorPhoto": {
+                                            "avatarImageSize": "AVATAR_SIZE_40",
+                                            "image": {
+                                              "imageFormatHint": "IMAGE_FORMAT_DEFAULT",
+                                              "processor": {
+                                                "borderImageProcessor": {
+                                                  "circular": true
+                                                }
+                                              },
+                                              "sources": [
+                                                {
+                                                  "height": 32,
+                                                  "url": "https://img.example/mobile-7",
+                                                  "width": 32
+                                                },
+                                                {
+                                                  "height": 64,
+                                                  "url": "https://img.example/mobile-8",
+                                                  "width": 64
+                                                }
+                                              ]
+                                            }
+                                          },
+                                          "backgroundColor": 4280150454,
+                                          "environmentData": {
+                                            "platformName": "PLATFORM_NAME_ANDROID"
+                                          },
+                                          "isPurchasedSticker": true,
+                                          "priceTextColor": 4278190080,
+                                          "purchaseText": "",
+                                          "sticker": {
+                                            "imageFormatHint": "IMAGE_FORMAT_ANIMATED_WEBP",
+                                            "sources": [
+                                              {
+                                                "height": 88,
+                                                "url": "https://img.example/mobile-9",
+                                                "width": 88
+                                              },
+                                              {
+                                                "height": 132,
+                                                "url": "https://img.example/mobile-10",
+                                                "width": 132
+                                              },
+                                              {
+                                                "height": 176,
+                                                "url": "https://img.example/mobile-11",
+                                                "width": 176
+                                              },
+                                              {
+                                                "height": 264,
+                                                "url": "https://img.example/mobile-12",
+                                                "width": 264
+                                              },
+                                              {
+                                                "height": 352,
+                                                "url": "https://img.example/mobile-13",
+                                                "width": 352
+                                              }
+                                            ]
+                                          },
+                                          "stickerAccessibilityLabel": "Lemon character and Baby Lemon blowing a party horn while marching",
+                                          "stickerDisplayHeight": 88,
+                                          "stickerDisplayWidth": 88
+                                        },
+                                        "priceText": "R$5.00",
+                                        "theme": {}
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "startBackgroundColor": 4280150454,
+                      "tickerThumbnails": [
+                        {
+                          "accessibility": {
+                            "accessibilityData": {
+                              "label": "Lemon sticker pack"
+                            }
+                          },
+                          "thumbnails": [
+                            {
+                              "height": 32,
+                              "url": "https://img.example/mobile-14",
+                              "width": 32
+                            },
+                            {
+                              "height": 48,
+                              "url": "https://img.example/mobile-15",
+                              "width": 48
+                            },
+                            {
+                              "height": 64,
+                              "url": "https://img.example/mobile-16",
+                              "width": 64
+                            },
+                            {
+                              "height": 96,
+                              "url": "https://img.example/mobile-17",
+                              "width": 96
+                            },
+                            {
+                              "height": 128,
+                              "url": "https://img.example/mobile-18",
+                              "width": 128
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "8297796"
+          }
+        }
+      ]
+    }
+  }
+}

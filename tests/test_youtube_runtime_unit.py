@@ -930,7 +930,7 @@ def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailab
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._ContinuationLoop._attempt_profile_fallback",
-        lambda _downloader: False,
+        lambda _downloader, _reason: False,
     )
 
     with pytest.raises(IncompleteContinuationError, match="original"):
@@ -1447,7 +1447,9 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         ],
     )
 
-    def fake_process_pipeline_action(action, offset, _msg_filter, _time_filter):
+    def fake_process_pipeline_action(
+        action, offset, _msg_filter, _time_filter, _paid_events
+    ):
         process_calls.append((action, offset))
         return next(pipeline_results)
 

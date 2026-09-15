@@ -180,8 +180,11 @@ class ChatDownloaderSession:
             if name.casefold() in managed:
                 del self.session.headers[name]
         self.session.headers.update(new_headers)
+        # Generated headers may include profile fields outside the managed API
+        # set (notably User-Agent). They must not replace explicit overrides.
+        restore = managed | {name.casefold() for name in new_headers}
         for name, value in self._explicit_headers.items():
-            if name.casefold() in managed:
+            if name.casefold() in restore:
                 for current_name in tuple(self.session.headers):
                     if current_name.casefold() == name.casefold():
                         del self.session.headers[current_name]

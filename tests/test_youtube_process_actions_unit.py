@@ -31,7 +31,7 @@ def test_process_actions_yields_accepted_messages() -> None:
         ]
     )
 
-    def fake_pipeline(action, offset, mf, tf):
+    def fake_pipeline(action, offset, mf, tf, _paid_events):
         return next(pipeline_results)
 
     import chat_downloader.sites.youtube.continuation as mod
@@ -80,7 +80,7 @@ def test_process_actions_stop_disposition_logs_reason_and_yields_nothing_after(
         ]
     )
 
-    def fake_pipeline(action, offset, mf, tf):
+    def fake_pipeline(action, offset, mf, tf, _paid_events):
         return next(pipeline_results)
 
     import chat_downloader.sites.youtube.continuation as mod
@@ -137,7 +137,7 @@ def test_process_actions_skip_disposition_does_not_yield() -> None:
         ]
     )
 
-    def fake_pipeline(action, offset, mf, tf):
+    def fake_pipeline(action, offset, mf, tf, _paid_events):
         return next(pipeline_results)
 
     import chat_downloader.sites.youtube.continuation as mod
@@ -181,7 +181,7 @@ def test_process_actions_logs_bounded_non_emission_counts(monkeypatch) -> None:
         ]
     )
 
-    def fake_pipeline(action, offset, mf, tf):
+    def fake_pipeline(action, offset, mf, tf, _paid_events):
         return next(pipeline_results)
 
     import chat_downloader.sites.youtube.continuation as mod
