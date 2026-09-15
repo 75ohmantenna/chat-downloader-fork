@@ -315,7 +315,8 @@ def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
     assert logged[-1] == (
         "debug",
         (
-            "Run summary: {'message_count': 2, "
+            "Run summary: {'success': True, 'termination_reason': 'completed', "
+            "'parity_status': 'not_requested', 'message_count': 2, "
             "'message_type_counts': {'paid_message': 1, "
             "'ticker_paid_message_item': 1}, "
             "'formatted_duplicates_suppressed': 1, "
@@ -450,7 +451,8 @@ def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> 
     assert logged[-2:] == [
         "Lazy output file was not created because no records were retrieved: empty.txt",
         (
-            "Run summary: {'message_count': 0, "
+            "Run summary: {'success': True, 'termination_reason': 'completed', "
+            "'parity_status': 'not_requested', 'message_count': 0, "
             "'message_type_counts': {}, 'formatted_duplicates_suppressed': 0, "
             "'prefetched_after_deadline_count': 0, "
             "'deadline_prefetch_count_complete': True, "
@@ -706,7 +708,7 @@ def test_execute_run_logs_error_message_for_generator_and_testing_errors(
         url="https://www.youtube.com/watch?v=abc",
     )
 
-    assert logged == [
+    assert logged[:-1] == [
         (
             "error",
             (
@@ -829,7 +831,7 @@ def test_execute_run_detects_write_errors(
     assert result.success is False
     assert result.error_message is not None
     assert "output writers reported errors" in result.error_message
-    assert not any("Run summary" in message for _level, message in logged)
+    assert any("Run summary" in message for _level, message in logged)
 
 
 def test_execute_run_raises_downloader_close_error_when_no_primary_error(
@@ -859,7 +861,8 @@ def test_execute_run_logs_keyboard_interrupt_without_propagation(
         url="https://www.youtube.com/watch?v=abc",
     )
 
-    assert logged == [("error", "Keyboard Interrupt")]
+    assert logged[0] == ("error", "Keyboard Interrupt")
+    assert "Run summary" in logged[-1][1]
     assert FakeDownloader._last is not None
     assert FakeDownloader._last.closed is True
 

@@ -137,6 +137,8 @@ module names.
 ### `runtime/`
 | Module | Purpose |
 |--------|---------|
+| `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, and replay overlap suppression |
+| `capture_verification.py` | Optional post-shutdown verification using the resolved production formatter |
 | `cli_bridge.py` | Categorize `run()` kwargs into init / chat / run param groups |
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
 | `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
@@ -254,9 +256,10 @@ module names.
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
 | `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, clock/latency-safe reconnect backfill, bounded diagnostics, and rejected-key recovery |
-| `replay_service.py` | VOD metadata, replay-window and message filtering, chronological parsing, and reverse compatibility output |
+| `replay_service.py` | VOD metadata, reverse history spooling, replay-relative timestamps, filtering, and completion diagnostics |
+| `vod_metadata.py` | Legacy video lookup and validated, origin-isolated current website metadata fallback |
 | `clip_service.py` | Web/mobile clip metadata validation, clip-relative bounds, and source-VOD or absolute-time replay assembly |
-| `history.py` | Timestamp-forward replay and reconnect pagination, exact microsecond cursor advancement, bounded ID deduplication, and loop guards |
+| `history.py` | Five-second reconnect history windows, bounded ID deduplication, and page validation |
 | `request_retry.py` | Shared transient-request retry policy for Kick services |
 | `api_client.py` | Downloader-owned, origin-scoped sessions and unified status/challenge/JSON policy for Kick channel, history, VOD, and web/mobile clip endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |

@@ -1,0 +1,26 @@
+{
+  "data": {
+    "category": {
+      "id": 15,
+      "name": "Just Chatting",
+      "slug": "just-chatting"
+    },
+    "channel": {
+      "id": 12345,
+      "slug": "examplechannel",
+      "username": "ExampleChannel"
+    },
+    "duration": 26152,
+    "end_time": "2026-09-11T23:24:26Z",
+    "id": "01a09138-ec70-7c4c-a2b7-47a9ed4fc9b4",
+    "is_live": false,
+    "is_mature": false,
+    "language": "en",
+    "start_time": "2026-09-11T16:07:02Z",
+    "status": "public",
+    "tier": "unverified",
+    "title": "Replay fixture",
+    "viewer_count": 5930
+  },
+  "message": "Success"
+}

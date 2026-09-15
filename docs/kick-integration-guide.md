@@ -94,20 +94,21 @@ The Kick flow depends on the target type.
 ### VODs
 
 1. Resolve the username and video UUID from the URL.
-2. Fetch video metadata from `api/v1/video/{video_id}`.
-3. Derive the channel ID and the VOD time window (`start_time` plus
-   `duration`), normalizing timezone-qualified starts to UTC and rejecting
-   unusable datetime ranges as provider errors.
-4. Narrow the metadata window with request-relative `start_time` and
-   `end_time` offsets when supplied.
-5. Seed `api/v2/channels/{id}/messages` with the selected start timestamp, then
-   advance through returned Unix-microsecond cursors without floating-point
-   conversion.
-6. Stably order each page by `created_at`, keep messages inside the inclusive
-   window, and stop once the page passes the selected end.
-7. Parse and yield chronologically so `max_messages` can end retrieval early.
-   If a first-page HTTP 400 or 422 validation response explicitly names
-   `start_time`, use the prior bounded reverse/spooled protocol.
+2. Try `api/v1/video/{video_id}`. Only a video HTTP 404 activates the current
+   website fallback: resolve the channel and request
+   `web.kick.com/api/v1/channels/{channel_id}/videos/{video_id}` through an
+   isolated anonymous session. Validate the returned video/channel identity
+   and public completed state. Challenges and country restrictions are terminal.
+3. Derive the UTC recording window from `start_time` plus `duration`; legacy
+   duration is milliseconds, while the current website reports seconds.
+   Do not substitute `end_time`: observed metadata can disagree with media duration.
+4. Narrow the window using recording-relative request bounds.
+5. Page backwards from the inclusive end using the message API's reverse
+   `cursor`, buffering the selected messages in a temporary spool that spills
+   to disk after one MiB. Empty pages with continuation do not establish exhaustion.
+6. Emit chronologically with ID deduplication and relative time fields. Filtering
+   precedes the message limit. Reading the selected history before emission
+   trades startup latency for verified traversal semantics.
 
 ### Clips
 
@@ -128,8 +129,8 @@ The Kick flow depends on the target type.
 5. Treat request `start_time` and `end_time` as clip-relative and clamp them to
    the clip duration. Translate them to source-VOD offsets on the web path or
    absolute timestamps on the mobile path.
-6. Timestamp-seeded pagination then retrieves only the selected clip interval
-   and emits it in chronological order.
+6. Reverse pagination retrieves the selected clip interval and emits it in
+   chronological order with clip-relative offsets.
 
 Kick's web clip `started_at` can include a short HLS keyframe lead-in. The
 preferred path therefore uses `vod_starts_at` plus `duration`, which describes
@@ -146,9 +147,10 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
 - `clip_service.py`: web/mobile clip metadata validation and source-VOD or
   absolute-time replay assembly
-- `history.py`: chronological timestamp pagination, exact cursor advancement,
-  bounded ID deduplication, and cursor/page guards for replay and reconnect
-  history
+- `history.py`: five-second forward windows and bounded ID deduplication for
+  reconnect recovery, plus shared history-page validation
+- `vod_metadata.py`: legacy/current video identity reconciliation and validated
+  current website metadata normalization
 - `request_retry.py`: shared retry policy for transient Kick service requests
 
 ### Transport and API access
@@ -359,26 +361,28 @@ messages. The loop carries `# noqa: C901` for its intrinsic branchiness.
 
 ## Replay Capture Details
 
-VOD chat is served by the same `api/v2/channels/{id}/messages` endpoint as
-preloaded live history, not a dedicated replay API. `replay_service.py`:
+VOD and clip chat use `api/v2/channels/{id}/messages`. Reverse pagination
+passes the returned cursor unchanged and emits the selected history from a
+bounded-memory spool. Repeated pages or cursors fail as incomplete retrieval,
+instead of reporting a successful truncated capture. The final debug summary
+includes the protocol, page and record counts, selected/observed timestamps,
+HTTP status totals and latency, and an explicit termination reason. Deadline
+cancellation stops buffered pagination between page fetches. An in-flight
+fetch remains subject to the configured HTTP timeouts and retry policy.
 
-- loads video metadata and derives the `(start, end)` window from `start_time`
-  and `duration`
-- pages forward from the selected start using the timestamp `start_time` and
-  returned Unix-microsecond cursor until the window is exhausted
-- converts cursor values with integer arithmetic, sorts each page stably, and
-  stops regressive cursors or repeated pages safely
-- deduplicates IDs in bounded state while retaining distinct messages whose
-  second-granular `created_at` values span a microsecond cursor boundary
-- classifies each message against the inclusive window, yields
-  chronologically, applies message filters, and counts only included records
-  toward `max_messages` without reading later pages
-- retains reverse pagination as a compatibility path only when a first-page
-  400/422 validation body explicitly identifies `start_time` as rejected
+Forward `start_time` queries describe five-second windows. The returned cursor
+is not a forward continuation token: converting it into the next query start
+skipped most messages in an observed recording. Reconnect recovery follows the
+website's five-second increments, including empty windows, within its existing
+page and record limits. Curated sparse-window fixtures and real-client
+composition tests document that distinction.
 
-The VOD orchestration, forward protocol, reverse compatibility path, and real
-client composition are covered by offline service tests. Coverage pragmas
-remain only on defensive or network-only branches with inline rationale.
+Replay messages include `time_in_seconds` and `time_text` relative to the VOD
+or clip origin. Request-relative bounds do not reset that origin. Absolute
+`timestamp` values and provider metadata remain in JSONL.
+
+For recoverable shutdown checkpoints and automatic JSONL/TXT verification, see
+[the CLI guide](cli-usage.md#replay-checkpoints-and-output-verification).
 
 ## Message Groups and Types
 

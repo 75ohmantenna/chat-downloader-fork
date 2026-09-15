@@ -77,7 +77,7 @@ behavior, finalizes attached writers, and closes resources.
 Use `run()` when embedding CLI-like behavior.
 
 `run()` also accepts runtime controls such as `quiet`, `exit_on_debug`,
-`pause_on_debug`, and `max_seen_message_ids`. These fields are defined by
+`pause_on_debug`, `resume`, `verify_output`, and `max_seen_message_ids`. These fields are defined by
 `RunConfig` in `chat_downloader.models`; `quiet`, `exit_on_debug`, and
 `pause_on_debug` are exposed on the CLI.
 
@@ -98,6 +98,8 @@ these fields:
 | `interrupted` | Whether execution ended through `KeyboardInterrupt` or `SIGTERM` |
 | `error_message` | Terminal error text, or `None` on success |
 | `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error, and messages without a string type use the `<missing>` key |
+| `parity_status` | `not_requested`, `not_run`, `passed`, or `failed`; parity verifies artifacts, not provider completeness |
+| `termination_reason` | Completion, message limit, timeout, interruption, or error; successful retrieval may be intentionally bounded |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.
@@ -240,6 +242,8 @@ chat = downloader.get_chat_request(request)
 | Field | Default | Description |
 | --- | --- | --- |
 | `quiet` | `False` | Suppress formatted chat output to stdout |
+| `resume` | `None` | Path to a validated replay shutdown checkpoint |
+| `verify_output` | `False` | Verify one JSONL/TXT output pair after successful retrieval |
 | `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |
 | `exit_on_debug` | `False` | Exit when unexpected debug conditions are hit |
 | `pause_on_debug` | `False` | Pause when selected debug conditions are hit |
@@ -250,7 +254,8 @@ Helpers:
   unrelated keys
 - `as_dict()`: convert to a plain dictionary
 
-The CLI exposes `quiet`, `exit_on_debug`, and `pause_on_debug`. The `--testing`
+The CLI exposes `quiet`, `exit_on_debug`, `pause_on_debug`, `resume`, and
+`verify_output`. The `--testing`
 flag is a CLI convenience that enables debug logging and `pause_on_debug`.
 
 ### `SiteDefault`
@@ -509,3 +514,14 @@ Kick URLs (`kick.com/{username}` for live chat,
 `kick.com/{username}/clips/{clip_id}` for clip replay) work through the
 standard `get_chat()` and `get_chat_request()` entry points like any other
 site.
+
+### Replay checkpoints and automatic parity
+
+Use `run(resume="capture.checkpoint.json", verify_output=True, ...)` with explicit
+JSONL and TXT output paths to resume a completed recording. These are runtime
+controls on `run()`, not fields of `ChatRequest` or `get_chat()`.
+See [CLI capture recovery](cli-usage.md#replay-checkpoints-and-output-verification)
+for shutdown semantics, immutable settings, and recovery limits.
+Kick VOD and clip messages now include `time_in_seconds` and `time_text`,
+relative to the recording or clip origin even when selecting a later start.
+Absolute provider timestamps remain available in `timestamp`.

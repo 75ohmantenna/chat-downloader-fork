@@ -4,8 +4,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING
@@ -14,7 +12,7 @@ from chat_downloader.debugging import log
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.utils.json_types import JSONDict, JSONList, get_dict, get_list
 
-from .errors import KickError, KickForwardHistoryRejected, KickServerError
+from .errors import KickServerError
 from .request_retry import fetch_with_retry
 
 if TYPE_CHECKING:
@@ -24,8 +22,6 @@ if TYPE_CHECKING:
 
     from .api_client import KickApiClient
 
-_MICROSECONDS_PER_SECOND = 1_000_000
-_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 _HISTORY_SEEN_MESSAGE_LIMIT = 10_000
 
 
@@ -39,22 +35,6 @@ def _as_utc(timestamp: datetime) -> datetime:
 def format_history_start(timestamp: datetime) -> str:
     """Format a timestamp for Kick's inclusive ``start_time`` parameter."""
     return _as_utc(timestamp).isoformat(timespec="microseconds").replace("+00:00", "Z")
-
-
-def _start_after_cursor(cursor: str) -> str | None:
-    """Convert a microsecond Unix cursor to the next exact UTC instant."""
-    if not cursor.isascii() or not cursor.isdigit():
-        return None
-    try:
-        microseconds = int(cursor) + 1
-    except ValueError:
-        return None
-    seconds, remainder = divmod(microseconds, _MICROSECONDS_PER_SECOND)
-    try:
-        timestamp = _EPOCH + timedelta(seconds=seconds, microseconds=remainder)
-    except OverflowError:
-        return None
-    return format_history_start(timestamp)
 
 
 def _message_timestamp(raw: JSONDict) -> datetime | None:
@@ -113,7 +93,7 @@ def fetch_validated_page(
     return raw_messages, cursor_value
 
 
-def iter_forward_history(  # noqa: C901 — pagination guards are one protocol behavior
+def iter_forward_history(  # noqa: C901 — bounded history window traversal
     api_client: KickApiClient,
     channel_id: str,
     start_dt: datetime,
@@ -123,29 +103,20 @@ def iter_forward_history(  # noqa: C901 — pagination guards are one protocol b
     max_pages: int | None = None,
     max_records: int | None = None,
 ) -> Generator[JSONDict, None, None]:
-    """Yield raw Kick history records chronologically within an inclusive window.
+    """Read five-second history windows, as the Kick website does.
 
-    The provider returns a Unix-microsecond cursor for the last instant in a
-    page. Advancing it with integer arithmetic avoids floating-point timestamp
-    loss. Provider message timestamps can have lower precision than that
-    cursor, so overlap suppression uses message IDs instead of comparing
-    visible timestamps to the page cursor.
+    The returned cursor belongs to reverse history, not forward continuation.
+    Empty windows cannot establish exhaustion. This bounded traversal is used
+    for reconnect recovery; whole recordings use reverse pagination/spooling.
     """
-    start_dt = _as_utc(start_dt)
-    end_dt = _as_utc(end_dt)
+    start_dt, end_dt = _as_utc(start_dt), _as_utc(end_dt)
     if end_dt <= start_dt:
         return
-
-    start_time = format_history_start(start_dt)
-    current_start_dt = start_dt
-    seen_page_digests: set[bytes] = set()
+    current = start_dt.replace(microsecond=0)
     seen_messages = _SeenMessageCache(limit=_HISTORY_SEEN_MESSAGE_LIMIT)
+    page_count = raw_record_count = 0
     last_yielded_timestamp: datetime | None = None
-    first_page = True
-    page_count = 0
-    raw_record_count = 0
-
-    while True:
+    while current <= end_dt:
         if max_pages is not None and page_count >= max_pages:
             log(
                 "warning",
@@ -159,85 +130,31 @@ def iter_forward_history(  # noqa: C901 — pagination guards are one protocol b
             )
             return
         page_count += 1
-        try:
-            raw_messages, cursor = fetch_with_retry(
-                partial(
-                    fetch_validated_page,
-                    api_client,
-                    channel_id,
-                    start_time=start_time,
-                ),
-                request,
-            )
-        except KickForwardHistoryRejected as error:
-            if first_page:
-                raise
-            msg = "Kick rejected forward history after pagination began."
-            raise KickError(msg) from error
-        first_page = False
-        if not raw_messages:
-            return
-        record_limit_exhausted = False
+        raw_messages, _cursor = fetch_with_retry(
+            partial(
+                fetch_validated_page,
+                api_client,
+                channel_id,
+                start_time=format_history_start(current),
+            ),
+            request,
+        )
         if max_records is not None:
-            remaining_records = max_records - raw_record_count
-            if len(raw_messages) > remaining_records:
-                raw_messages = raw_messages[:remaining_records]
-                record_limit_exhausted = True
+            raw_messages = raw_messages[: max_records - raw_record_count]
         raw_record_count += len(raw_messages)
-
-        page_digest = hashlib.sha256(
-            json.dumps(raw_messages, sort_keys=True).encode("utf-8")
-        ).digest()
-        if page_digest in seen_page_digests:
-            log(
-                "warning",
-                "Kick forward history returned a duplicate page; stopping.",
-            )
-            return
-        seen_page_digests.add(page_digest)
-
-        reached_end = False
         for timestamp, _index, raw in _ordered_page_messages(raw_messages):
-            if timestamp < start_dt:
+            if timestamp < start_dt or timestamp > end_dt:
                 continue
-            if timestamp > end_dt:
-                reached_end = True
-                break
             if (
                 last_yielded_timestamp is not None
                 and timestamp < last_yielded_timestamp
             ):
                 continue
             message_id = _message_identity(raw)
-            if message_id is not None:
-                is_new, _evicted = seen_messages.register(message_id)
-                if not is_new:
-                    continue
+            if message_id is not None and not seen_messages.register(message_id)[0]:
+                continue
             yield raw
             last_yielded_timestamp = timestamp
-        if reached_end:
+        if end_dt - current < timedelta(seconds=5):
             return
-        if record_limit_exhausted:
-            log(
-                "warning",
-                "Kick forward history reached its raw-record limit; stopping.",
-            )
-            return
-
-        next_start = _start_after_cursor(cursor) if cursor is not None else None
-        if next_start is None:
-            if cursor is not None:
-                log(
-                    "warning",
-                    "Kick forward history returned an invalid cursor; stopping.",
-                )
-            return
-        next_start_dt = datetime.fromisoformat(next_start)
-        if next_start_dt <= current_start_dt:
-            log(
-                "warning",
-                "Kick forward history cursor did not advance; stopping.",
-            )
-            return
-        start_time = next_start
-        current_start_dt = next_start_dt
+        current += timedelta(seconds=5)

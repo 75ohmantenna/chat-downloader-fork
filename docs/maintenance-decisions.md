@@ -160,3 +160,24 @@ with the provider and `BaseChatDownloader`.
 **Revisit when:** a second production caller requires an existing internal
 stage independently, or a new session implementation demonstrates a real seam
 that cannot be expressed by the current internal adapter factory.
+
+## Use reverse history for Kick replay completeness
+
+**Decision:** VODs and clips use reverse cursors and a temporary spool before
+chronological emission. Short reconnect recovery uses five-second forward
+windows. The cursor returned beside a forward window is not used to advance it.
+
+**Evidence:** A public recording's current website ID returned 404 from the
+legacy video endpoint while the web gateway returned valid public metadata.
+The legacy alias then returned an empty opening history page. Advancing its
+forward cursor recovered only 201 records; overlapping its rounded cursor
+recovered 408, with different IDs. Reverse pagination recovered 4,148 records,
+including all records from both experiments. A bounded forward request returned
+two of five available records. The website queries five-second windows.
+
+This evidence replaces the earlier forward-streaming assumption. The cost is
+higher time to first output and temporary storage proportional to the selected
+replay. Message limits apply after history collection and filtering. Keep
+source/clip identity checks, bounded-memory spooling, and explicit failure on
+pagination loops. Do not restore cursor-derived forward traversal from
+synthetic fixtures alone.

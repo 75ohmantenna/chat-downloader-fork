@@ -89,7 +89,7 @@ def test_configure_timeouts_wraps_chat_and_installs_callbacks(
             self.on_timeout = None
             self.on_inactivity_timeout = None
 
-    chat = SimpleNamespace(chat=iter([1, 2, 3]))
+    chat = SimpleNamespace(chat=iter([1, 2, 3]), diagnostics={})
 
     monkeypatch.setattr(
         "chat_downloader.runtime.chat_pipeline.TimedGenerator",
@@ -159,7 +159,7 @@ def test_configure_timeouts_installs_only_numeric_timeout_callbacks(
             self.on_timeout = None
             self.on_inactivity_timeout = None
 
-    chat = SimpleNamespace(chat=iter([1, 2, 3]))
+    chat = SimpleNamespace(chat=iter([1, 2, 3]), diagnostics={})
     monkeypatch.setattr(
         "chat_downloader.runtime.chat_pipeline.TimedGenerator",
         FakeTimedGenerator,

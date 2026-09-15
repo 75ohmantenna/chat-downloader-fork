@@ -27,11 +27,11 @@ from .constants import (
 )
 from .errors import KickCountryBlocked, KickError
 from .replay_service import (
+    ReplaySource,
     _apply_request_window,
-    _iter_vod_messages,
-    _resolve_vod_window,
 )
 from .request_retry import fetch_with_retry
+from .vod_metadata import _resolve_vod_window, fetch_vod_metadata
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
@@ -382,10 +382,7 @@ def get_clip_chat(
         video_id = metadata.video_id
         web_channel_id = metadata.channel_id
         try:
-            video_data = fetch_with_retry(
-                lambda: api_client.fetch_video_metadata(video_id),
-                request,
-            )
+            video_data = fetch_vod_metadata(api_client, username, video_id, request)
             vod_window = _resolve_clip_source_vod_window(video_data, username)
         except KickCountryBlocked:
             raise
@@ -405,12 +402,13 @@ def get_clip_chat(
         end_dt = metadata.started_at + timedelta(seconds=clip_end)
         log("info", f"Clip time window: {start_dt} to {end_dt}")
         return Chat(
-            _iter_vod_messages(
+            ReplaySource(
                 metadata.channel_id,
                 start_dt,
                 end_dt,
                 request,
                 api_client=api_client,
+                origin=metadata.started_at,
             ),
             title=metadata.title or username,
             duration=max(0.0, (end_dt - start_dt).total_seconds()),
@@ -443,12 +441,13 @@ def get_clip_chat(
 
     log("info", f"Clip time window: {start_dt} to {end_dt}")
     return Chat(
-        _iter_vod_messages(
+        ReplaySource(
             channel_id,
             start_dt,
             end_dt,
             source_request,
             api_client=api_client,
+            origin=clip_origin,
         ),
         title=metadata.title or source_title,
         duration=max(0.0, (end_dt - start_dt).total_seconds()),

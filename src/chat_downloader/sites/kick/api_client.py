@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from http import HTTPStatus
 from json import JSONDecodeError
+from time import monotonic
 from typing import TYPE_CHECKING, Literal, NoReturn, cast
 
 from chat_downloader.debugging import logger
@@ -28,12 +29,15 @@ from .constants import (
     MESSAGES_API_TEMPLATE,
     MOBILE_CLIP_API_TEMPLATE,
     VIDEO_API_TEMPLATE,
+    is_numeric_id,
+    is_video_id,
 )
 from .errors import (
     KickCountryBlocked,
     KickError,
     KickForwardHistoryRejected,
     KickServerError,
+    KickVideoNotFound,
 )
 from .http_session import _KickSession, create_kick_session
 
@@ -77,6 +81,7 @@ class KickApiClient:
         bearer_token_provider: Callable[[], str | None] | None = None,
         session: _KickSession | None = None,
         mobile_session: _KickSession | None = None,
+        web_session: _KickSession | None = None,
     ) -> None:
         """Create a client with origin-scoped supplied or new sessions."""
         self._session = session or create_kick_session(
@@ -84,7 +89,10 @@ class KickApiClient:
             extra_headers=dict(extra_headers) if extra_headers else None,
             trust_env=trust_env,
         )
-        self._mobile_session = mobile_session
+        self._alternate_sessions = {"mobile": mobile_session, "web": web_session}
+        self.diagnostics: dict[str, object] = {"http_requests": 0, "http_seconds": 0.0}
+        self._status_counts: dict[str, int] = {}
+        self.diagnostics["http_status_counts"] = self._status_counts
         self._mobile_proxy = dict(proxy) if proxy else None
         self._mobile_extra_headers = {
             name: value
@@ -141,6 +149,18 @@ class KickApiClient:
             resource="video",
         )
 
+    def fetch_web_video_metadata(self, channel_id: str, video_id: str) -> JSONDict:
+        """Fetch current website VOD metadata on its isolated origin."""
+        if not is_numeric_id(channel_id) or not is_video_id(video_id):
+            msg = "Invalid Kick web video endpoint identity."
+            raise ValueError(msg)
+        return self._request_object(
+            f"https://web.kick.com/api/v1/channels/{channel_id}/videos/{video_id}",
+            context=video_id,
+            resource="video",
+            web=True,
+        )
+
     def fetch_clip_metadata(self, clip_id: str) -> JSONDict:
         """Fetch clip metadata by provider clip ID."""
         return self._request_object(
@@ -191,21 +211,43 @@ class KickApiClient:
         params: dict[str, str] | None = None,
         forward_history: bool = False,
         mobile: bool = False,
+        web: bool = False,
     ) -> JSONDict:
         """GET one endpoint and require a JSON-object response."""
-        session = self._require_open_session(mobile=mobile)
+        session = self._require_open_session(mobile=mobile, web=web)
         request_kwargs: dict[str, object] = {
             "params": params,
             "timeout": self._timeout,
         }
-        if mobile and self._mobile_header_overrides:
+        if (mobile or web) and self._mobile_header_overrides:
             request_kwargs["headers"] = dict(self._mobile_header_overrides)
-        elif not mobile and not self._has_explicit_authorization:
+        elif not (mobile or web) and not self._has_explicit_authorization:
             token_provider = self._bearer_token_provider
             token = token_provider() if token_provider is not None else None
             if _is_safe_bearer_token(token):
                 request_kwargs["headers"] = {"Authorization": f"Bearer {token}"}
-        response = session.get(url, **request_kwargs)
+        if web:
+            request_kwargs["allow_redirects"] = False
+        started = monotonic()
+        self.diagnostics["http_requests"] = (
+            cast("int", self.diagnostics["http_requests"]) + 1
+        )
+        status_key = "transport_error"
+        try:
+            response = session.get(url, **request_kwargs)
+            status_key = str(response.status_code)
+        finally:
+            self._status_counts[status_key] = self._status_counts.get(status_key, 0) + 1
+            self.diagnostics["http_seconds"] = (
+                cast("float", self.diagnostics["http_seconds"]) + monotonic() - started
+            )
+            logger.debug(
+                "Kick HTTP resource=%s origin=%s status=%s elapsed=%.3fs",
+                resource,
+                "web" if web else "mobile" if mobile else "legacy",
+                status_key,
+                monotonic() - started,
+            )
         if response.status_code == _KICK_COUNTRY_BLOCKED_STATUS:
             # Kick's explicit country-block status outranks body heuristics.
             _check_status(response, context=context, resource=resource)
@@ -221,20 +263,23 @@ class KickApiClient:
             raise KickServerError(msg)
         return data
 
-    def _require_open_session(self, *, mobile: bool = False) -> _KickSession:
+    def _require_open_session(
+        self, *, mobile: bool = False, web: bool = False
+    ) -> _KickSession:
         """Return the owned session or fail deterministically after close."""
         if self._closed:
             msg = "KickApiClient is closed."
             raise RuntimeError(msg)
-        if mobile:
-            mobile_session = self._mobile_session
+        if mobile or web:
+            origin = "web" if web else "mobile"
+            mobile_session = self._alternate_sessions[origin]
             if mobile_session is None:
                 mobile_session = create_kick_session(
                     proxy=self._mobile_proxy,
                     extra_headers=self._mobile_extra_headers,
                     trust_env=self._mobile_trust_env,
                 )
-                self._mobile_session = mobile_session
+                self._alternate_sessions[origin] = mobile_session
             return mobile_session
         return self._session
 
@@ -244,11 +289,11 @@ class KickApiClient:
             return
         self._closed = True
         sessions = [self._session]
-        if (
-            self._mobile_session is not None
-            and self._mobile_session is not self._session
-        ):
-            sessions.append(self._mobile_session)
+        for alternate in self._alternate_sessions.values():
+            if alternate is not None and all(
+                alternate is not item for item in sessions
+            ):
+                sessions.append(alternate)
         for session in sessions:
             try:
                 session.close()
@@ -317,6 +362,9 @@ def _check_status(
         if resource == "channel":
             msg = f'Unable to find Kick channel: "{context}"'
             raise UserNotFound(msg)
+        if resource == "video":
+            msg_0 = f"Kick video not found: {context}"
+            raise KickVideoNotFound(msg_0)
         msg = f"Kick {resource} not found: {context}"
         raise KickError(msg)
     if status == HTTPStatus.FORBIDDEN:

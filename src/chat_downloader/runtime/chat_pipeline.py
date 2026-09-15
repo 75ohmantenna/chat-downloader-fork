@@ -78,6 +78,7 @@ def _configure_timeouts(
         start_time = time.monotonic()
 
         def log_on_timeout() -> None:
+            chat.diagnostics["termination_reason"] = "timeout"
             elapsed = time.monotonic() - start_time
             log("debug", f"Timeout occurred after {elapsed} seconds.")
 
@@ -86,6 +87,7 @@ def _configure_timeouts(
     if isinstance(inactivity_timeout, (float, int)):
 
         def log_on_inactivity_timeout() -> None:
+            chat.diagnostics["termination_reason"] = "inactivity_timeout"
             log(
                 "debug",
                 f"Inactivity timeout occurred after {inactivity_timeout} seconds.",

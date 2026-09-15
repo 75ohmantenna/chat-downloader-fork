@@ -92,7 +92,7 @@ def test_clip_replay_composes_real_client_metadata_cursor_and_parser() -> None:
         (
             "https://kick.com/api/v2/channels/1227772/messages",
             {
-                "params": {"start_time": "2026-08-18T22:54:23.000000Z"},
+                "params": {"cursor": "1787093724000000"},
                 "timeout": (10.0, 30.0),
             },
         ),
@@ -150,7 +150,7 @@ def test_clip_replay_falls_back_to_mobile_metadata_and_absolute_time(
         (
             "https://kick.com/api/v2/channels/1227772/messages",
             {
-                "params": {"start_time": "2026-08-18T22:54:21.000000Z"},
+                "params": {"cursor": "1787093722000000"},
                 "timeout": (10.0, 30.0),
             },
         ),
@@ -183,7 +183,7 @@ def test_clip_bounds_are_relative_clamped_and_do_not_mutate_request() -> None:
     assert list(chat) == []
     client.fetch_message_page.assert_called_once_with(
         "1227772",
-        start_time="2026-08-18T22:54:33.000000Z",
+        cursor="1787093724000000",
     )
     client.fetch_mobile_clip_metadata.assert_not_called()
 
@@ -516,7 +516,7 @@ def test_source_vod_unavailability_falls_back_to_mobile_metadata() -> None:
     session = FakeKickSession(
         [
             FakeResponse(200, load_fixture("clip_metadata.json")),
-            FakeResponse(404, {}),
+            FakeResponse(400, {}),
             FakeResponse(200, load_fixture("clip_metadata_mobile.json")),
             FakeResponse(200, {"data": {"messages": []}}),
         ]
@@ -735,7 +735,7 @@ def test_mobile_clip_bounds_are_relative_and_clamped() -> None:
     assert list(chat) == []
     client.fetch_message_page.assert_called_once_with(
         "1227772",
-        start_time="2026-08-18T22:54:31.000000Z",
+        cursor="1787093722000000",
     )
 
 

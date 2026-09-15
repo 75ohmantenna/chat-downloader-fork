@@ -490,7 +490,13 @@ def test_run_config_cli_flags_match_metadata() -> None:
     cli_fields = {
         f.name for f in dataclasses.fields(RunConfig) if f.metadata.get("cli")
     }
-    assert cli_fields == {"quiet", "pause_on_debug", "exit_on_debug"}
+    assert cli_fields == {
+        "quiet",
+        "pause_on_debug",
+        "exit_on_debug",
+        "resume",
+        "verify_output",
+    }
 
 
 def test_parse_header_empty_key_raises() -> None:

@@ -10,7 +10,7 @@ import os
 import stat
 from contextlib import ExitStack
 from dataclasses import dataclass
-from typing import IO, TYPE_CHECKING, cast
+from typing import IO, TYPE_CHECKING, Protocol, cast
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
@@ -18,7 +18,6 @@ from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from chat_downloader.formatting import ItemFormatter
     from chat_downloader.utils.json_types import JSONDict
 
 _NEWLINE_LF = "lf"
@@ -27,6 +26,14 @@ _NONBLOCKING_READ_FLAGS = (
     os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
 )
 _FileIdentity = tuple[int, int]
+
+
+class CaptureFormatter(Protocol):
+    """Render a capture with its production format configuration."""
+
+    def format(self, item: JSONDict, format_name: str) -> str:
+        """Render a record using the requested format."""
+        ...  # pragma: no cover — structural typing declaration
 
 
 class InputIdentityError(OSError):
@@ -276,7 +283,7 @@ def _parse_jsonl_line(
 
 
 def _render_expected_line(
-    formatter: ItemFormatter,
+    formatter: CaptureFormatter,
     format_name: str,
     item: JSONDict,
 ) -> bytes:
@@ -300,7 +307,7 @@ def audit_capture(  # noqa: C901 - one streaming state machine validates both fi
     jsonl_path: Path,
     txt_path: Path,
     *,
-    formatter: ItemFormatter,
+    formatter: CaptureFormatter,
     format_name: str,
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
     dedup_reset_before_lines: tuple[int, ...] = (),

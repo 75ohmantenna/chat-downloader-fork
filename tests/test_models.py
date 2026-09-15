@@ -467,6 +467,8 @@ def test_run_config_as_dict_contains_only_run_fields() -> None:
     cfg = RunConfig(quiet=True, max_seen_message_ids=50, exit_on_debug=True)
     assert cfg.as_dict() == {
         "quiet": True,
+        "resume": None,
+        "verify_output": False,
         "max_seen_message_ids": 50,
         "exit_on_debug": True,
         "pause_on_debug": False,

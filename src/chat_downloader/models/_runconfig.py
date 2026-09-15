@@ -28,6 +28,18 @@ class RunConfig:
             )
         },
     )
+    resume: str | None = field(
+        default=None,
+        metadata={
+            "cli": _cli("Create or resume a replay shutdown checkpoint", group="output")
+        },
+    )
+    verify_output: bool = field(
+        default=False,
+        metadata={
+            "cli": _cli("Verify exact JSONL/TXT parity after capture", group="output")
+        },
+    )
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS
     exit_on_debug: bool = field(
         default=False,

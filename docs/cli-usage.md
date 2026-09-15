@@ -240,7 +240,7 @@ Debug and automation:
 - YouTube terminal continuation responses finish immediately without an
   unnecessary final wait. Empty replay pages continue when the provider
   supplies another continuation token.
-- Successful debug runs end with total and per-type retrieved-message counts,
+- Debug runs, including failures, end with status and total and per-type retrieved-message counts,
   provider diagnostics when available, the number of semantic duplicates
   suppressed across formatted file outputs, the number of source items
   prefetched but excluded at a retrieval deadline, whether that count is final,
@@ -291,3 +291,46 @@ Debug and automation:
   [`youtube-integration-guide.md`](youtube-integration-guide.md),
   [`twitch-integration-guide.md`](twitch-integration-guide.md), and
   [`kick-integration-guide.md`](kick-integration-guide.md).
+
+## Replay checkpoints and output verification
+
+```bash
+chat_downloader "https://kick.com/examplechannel/videos/VIDEO_ID" \
+  --output capture.jsonl --output capture.txt \
+  --resume capture.checkpoint.json --verify_output --logging debug
+```
+
+`--resume PATH` creates a checkpoint for a completed replay. Run the same command
+again to append the remaining chat. The initial output files must be absent;
+use explicit filenames without `{title}` or `{id}` placeholders. The checkpoint
+and each output must be distinct regular files. At most one JSONL and one TXT
+output are accepted. The checkpoint takes precedence over `--overwrite` and
+always uses append mode. Stable message IDs and finite replay-relative offsets
+are required; Kick VODs and clips provide both.
+
+Checkpoints advance after output writers close and synchronize on normal,
+message-limited, or interrupted shutdown. A one-second overlap preserves
+messages at the saved timestamp while suppressing IDs already written. The
+record limit counts newly written messages. Keep the URL, filters, selected
+start/end, format, and filenames unchanged; message limits and timeouts may
+change. Request settings and file hashes are checked before append.
+
+A process crash or power failure can leave output newer than its checkpoint.
+The next run rejects that mismatch without truncating files. Preserve the
+artifacts for inspection and start a fresh capture to recover. A `.lock` file
+prevents simultaneous checkpoint writers; after an unclean exit, remove that
+lock only after confirming the previous process has stopped. Checkpoints are
+shutdown recovery points, not continuous crash journals.
+
+`--verify_output` checks exact formatting, semantic deduplication, UTF-8, and
+physical line endings after a successful run. It requires one JSONL and one TXT
+output; append verification requires a resume checkpoint so run boundaries are
+known. A verification error makes the command fail. A zero-message success can
+have no files because writers initialize lazily. The run summary separately
+reports success, termination reason, parity status, and writer counts. A parity
+pass does not prove complete provider history.
+
+Kick replay TXT now shows recording-relative time, matching the accompanying
+`time_in_seconds` and `time_text` JSONL fields. Absolute timestamps remain in
+JSONL. Replay diagnostics report HTTP statuses and latency, pages, raw and
+emitted records, selected and observed time bounds, and the termination reason.

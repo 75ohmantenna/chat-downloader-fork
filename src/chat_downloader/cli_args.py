@@ -275,6 +275,8 @@ def _add_format_site_output_args(
     reg.chat(output_group, "--output", "-o", action="append")
     reg.chat(output_group, "--overwrite", type=str2bool, nargs="?", const=True)
     reg.chat(output_group, "--sort_keys", type=str2bool, nargs="?", const=True)
+    reg.run(output_group, "--resume")
+    reg.run(output_group, "--verify_output", action="store_true")
 
 
 def _add_debug_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:

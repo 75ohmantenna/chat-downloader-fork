@@ -31,3 +31,7 @@ class KickServerError(KickError):
 
 class KickForwardHistoryRejected(KickError):
     """Raised for a validated rejection of forward history's start field."""
+
+
+class KickVideoNotFound(KickError):
+    """The requested video ID was absent from a metadata endpoint."""
