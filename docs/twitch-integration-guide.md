@@ -351,11 +351,20 @@ later run can resolve to its existing deterministic path, while a different
 payload for the same event key is rejected even when aggregate group slots
 remain.
 
+Event-diverse mode also captures up to three emote-bearing text frames and
+three reply frames under separate fixed labels. These independent attempt
+quotas survive reconnects and remain available after the ordinary text event
+or the 12 event-key quota has been filled. Only parsed `text_message` records
+from `PRIVMSG` without a raw `msg-id` qualify. Each attempt consumes its shape
+quota even if writing fails; an overlapping frame can consume one attempt in each shape. The shared
+backend caps these labels at three files each and their group at six, with the
+same process/output-directory scope and sanitization as other captures.
+
 The first-three and event-diverse modes are additive. With both enabled, clean
-traffic capture writes at most 15 raw-frame samples: three first-arrival samples
-plus 12 event-key samples. The same frame can appear once under each mode, so
-review all captured public chat data before sharing it. Drift samples for
-unknown types, tags, actions, and shapes use their own limits and are not part
+traffic capture writes at most 21 raw-frame samples: three first-arrival samples,
+12 event-key samples, and six text-shape samples. Quotas can retain the same
+frame, so review all captured public chat data before sharing it. Drift samples
+for unknown types, tags, actions, and shapes use their own limits and are not part
 of this clean-traffic maximum. Both raw modes run after parsing but before live
 message deduplication and type or group filtering, so they can retain duplicates
 or records excluded from normal JSONL/TXT output. An unknown frame can also
@@ -403,8 +412,9 @@ than four minutes.
 
 JSONL is the lossless record for checking message types and provider metadata,
 while TXT verifies user-visible formatting. The raw-frame options capture only
-the first three successfully parsed IRC frames and the first frame for up to 12
-distinct event keys, not the entire conversation. Review captured public chat
+the first three successfully parsed IRC frames, the first frame for up to 12
+distinct event keys, and up to three frames each for emote text and replies.
+They do not capture the entire conversation. Review captured public chat
 data before sharing it.
 
 Use `--message_groups all` for this output inspection because Twitch's default

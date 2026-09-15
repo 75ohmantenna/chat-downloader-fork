@@ -1,0 +1,3 @@
+{
+  "raw": "@badge-info=;badges=legendus/1;client-nonce=sample-nonce;color=#00FF7F;display-name=exampleuser;emotes=;first-msg=0;flags=;id=japanese-1;mod=0;returning-chatter=0;room-id=123;subscriber=0;tmi-sent-ts=1700000000000;turbo=0;user-id=456;user-type= :exampleuser!exampleuser@exampleuser.tmi.twitch.tv PRIVMSG #channel :日本語のテストです\r\n"
+}

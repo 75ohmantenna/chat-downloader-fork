@@ -1,0 +1,3 @@
+{
+  "raw": "@badge-info=subscriber/1;badges=subscriber/0;color=#008000;display-name=exampleuser;emotes=;flags=;id=subscription-goal-1;login=exampleuser;mod=0;msg-id=sub;msg-param-cumulative-months=1;msg-param-goal-contribution-type=SUB_POINTS;msg-param-goal-current-contributions=17722;msg-param-goal-target-contributions=24000;msg-param-goal-user-contributions=1;msg-param-months=0;msg-param-multimonth-duration=1;msg-param-multimonth-tenure=0;msg-param-should-share-streak=0;msg-param-sub-plan-name=Channel\\sSubscription\\s(channel);msg-param-sub-plan=1000;msg-param-was-gifted=false;room-id=123;subscriber=1;system-msg=exampleuser\\ssubscribed\\sat\\sTier\\s1.;tmi-sent-ts=1700000000000;user-id=456;user-type=;vip=0 :tmi.twitch.tv USERNOTICE #channel\r\n"
+}

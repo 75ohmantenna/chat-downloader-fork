@@ -26,6 +26,7 @@ _EVENT_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES"
 _EVENT_FRAME_CAPTURE_LIMIT = 12
 _EVENT_FRAME_CAPTURE_ATTEMPTS_PER_KEY = 2
 _EVENT_FRAME_CAPTURE_GROUP = "twitch-irc-event-frames"
+_TEXT_SHAPE_CAPTURE_LIMIT = 3
 _EVENT_KEY_COMPONENT_LIMIT = 48
 _EVENT_KEY_COMPONENT_RE = re.compile(r"[^a-z0-9]+")
 _KNOWN_NORMALIZED_MESSAGE_TYPES = frozenset(
@@ -239,6 +240,36 @@ class _EventDiverseIrcFrameCapture:
         )
         self._captured_event_keys: set[str] = set()
         self._event_key_attempts: dict[str, int] = {}
+        self._shape_attempts = {"emotes": 0, "in-reply-to": 0}
+
+    def _capture_text_shapes(
+        self,
+        raw_frame: str,
+        parsed_item: Mapping[str, object],
+        raw_action: str,
+        raw_tags: str,
+    ) -> None:
+        """Keep independent, fixed quotas even after the text event was saved."""
+        if (
+            raw_action != "PRIVMSG"
+            or parsed_item.get("message_type") != "text_message"
+            or _irc_msg_id(raw_tags)[0]
+        ):
+            return
+        for field in ("emotes", "in_reply_to"):
+            shape = field.replace("_", "-")
+            if not parsed_item.get(field):
+                continue
+            if self._shape_attempts[shape] >= _TEXT_SHAPE_CAPTURE_LIMIT:
+                continue
+            self._shape_attempts[shape] += 1
+            capture_debug_sample(
+                f"twitch-irc-text-shape-{shape}",
+                {"raw": raw_frame},
+                sample_limit=_TEXT_SHAPE_CAPTURE_LIMIT,
+                sample_group="twitch-irc-text-shapes",
+                group_limit=2 * _TEXT_SHAPE_CAPTURE_LIMIT,
+            )
 
     def capture(
         self,
@@ -251,6 +282,7 @@ class _EventDiverseIrcFrameCapture:
         if not self._enabled:
             return
 
+        self._capture_text_shapes(raw_frame, parsed_item, raw_action, raw_tags)
         event_key = _event_capture_key(parsed_item, raw_action, raw_tags)
         if event_key in self._captured_event_keys:
             return

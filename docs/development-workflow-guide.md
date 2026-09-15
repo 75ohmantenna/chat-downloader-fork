@@ -119,6 +119,42 @@ UTF-8, malformed or blank JSONL lines, non-object JSON, formatting failures,
 line-count differences, mixed/missing/mismatched physical newlines, and invalid
 dedup reset boundaries are audit failures.
 
+### Twitch capture inspection
+
+Inspect a single live retrieval run alongside the parity audit:
+
+```bash
+uv run python scripts/inspect_twitch_capture.py capture.jsonl \
+  --debug-log debug.log
+```
+
+The JSON report contains fixed diagnostic names, counts, and first issue line
+numbers. It checks unknown message types, duplicate message IDs, missing text
+identity/timestamp fields, malformed or ambiguous JSONL (including duplicate
+keys, non-finite numbers, and lone Unicode surrogates), and every emote
+location against its parsed name. It also reports badge/emote/reply counts and timestamp
+backsteps without treating arrival-order timestamp reversals as errors.
+Absent timestamps on control events such as room state are counted normally.
+This supplements exact TXT parity; it does not prove the provider's original
+payload was parsed correctly or that Twitch delivered every message.
+
+`--debug-log` is optional. When supplied, it requires exactly one standard
+`[DEBUG] Run summary:` line from the same run and reports received IRC frames
+minus benign controls minus parsed messages. A nonzero gap warrants review;
+unparsed frames at the retrieval deadline can explain a positive gap. The
+report does not equate this gap with lost output messages, and cannot verify
+that a supplied log belongs to the supplied capture. Appended multi-run logs
+are rejected. Summary lines are limited to 64 KiB.
+
+Exit `0` means no findings requiring review, `1` means findings or a frame
+accounting gap, and `2` means input, summary, or temporary-storage failure.
+An empty existing JSONL file reports zero records; missing or nonregular
+input files are I/O errors. Chat contents, IDs, unknown type names, and rejected input values are
+never printed. Exact duplicate detection uses a temporary SQLite database,
+with disk usage proportional to unique IDs; other state is bounded apart
+from the largest input line. Use this on one completed run, with closed files.
+The existing parity auditor remains responsible for physical newline checks.
+
 Offline suite:
 
 ```bash
@@ -296,9 +332,14 @@ label per process and output directory; later runs may retain fewer than 12. An
 exact prior payload can reuse its path, but a different payload for that label
 is rejected even with free group slots. Labels and in-memory keys are path-safe
 and length-bounded; payloads use the same sanitization and retain `\r\n`.
-Enabling this together with the first-three mode is additive: no more than 15
+The event mode also reserves three attempts each for emote-bearing text and
+replies, under fixed `text-shape-emotes` and `text-shape-in-reply-to` labels.
+These six attempts are independent of the event-key quota, span reconnects,
+and run before filtering and deduplication. Failed writes consume an attempt.
+Enabling this together with the first-three mode is additive: no more than 21
 clean-traffic raw-frame samples are captured, and one source frame can appear
-in both modes. Both modes run before live deduplication and output filtering.
+in multiple quotas. Both modes run before live deduplication and output
+filtering.
 Separate drift samples can add files, and unknown frames can overlap the event
 mode's fallback capture.
 
