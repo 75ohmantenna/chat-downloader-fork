@@ -217,7 +217,9 @@ uv run pytest -v -m network --run-network
 
 `make ci` runs `lock-check`, `lint`, `spell`, `fmt-check`, `typecheck`,
 `coverage`, and `smoke`. GitHub Actions invokes this exact target after
-`uv sync --locked`.
+`uv sync --locked`. CI pins uv to `0.12.15` and `astral-sh/setup-uv` to
+`v10.1.0` by full commit SHA. Use the same uv version locally when validating
+tooling changes; standalone installations can run `uv self update 0.12.15`.
 
 ## Architecture and test guardrails
 
