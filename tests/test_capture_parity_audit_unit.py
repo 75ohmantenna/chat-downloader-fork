@@ -246,30 +246,57 @@ def _content_error_summary(
     )
 
 
-def test_auditor_contains_deep_json_recursion_as_content_error(
+def test_auditor_rejects_deep_json_array_as_content_error(
     tmp_path: Path,
 ) -> None:
     jsonl_path = tmp_path / "capture.jsonl"
     txt_path = tmp_path / "capture.txt"
     nesting = max(10_000, sys.getrecursionlimit() * 10)
     raw_json = b"[" * nesting + b"{}" + b"]" * nesting
-    with pytest.raises(RecursionError):
-        json.loads(raw_json.decode())
     jsonl_path.write_bytes(raw_json + b"\n")
     txt_path.write_bytes(b"")
 
     result = _run_audit(jsonl_path, txt_path)
     direct = _audit_direct(jsonl_path, txt_path)
 
+    # Decoder nesting limits vary across supported Python versions.
+    assert direct.first_issue in {"jsonl_invalid_json", "jsonl_non_object"}
     assert result.returncode == 1
     assert result.stdout == _content_error_summary(
         jsonl_records=0,
         jsonl_errors=1,
         dedup_errors=0,
-        first_issue="jsonl_invalid_json",
+        first_issue=direct.first_issue,
     )
     assert result.stderr == ""
-    assert direct.first_issue == "jsonl_invalid_json"
+
+
+def test_auditor_contains_json_decoder_recursion_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    jsonl_path = tmp_path / "capture.jsonl"
+    txt_path = tmp_path / "capture.txt"
+    jsonl_path.write_text("{}\n", encoding="utf-8")
+    txt_path.write_bytes(b"")
+    formatter = ItemFormatter()
+
+    def raise_recursion_error(value: str) -> object:
+        raise RecursionError("private decoder detail")
+
+    monkeypatch.setattr(
+        "chat_downloader.output.capture_parity.json.loads", raise_recursion_error
+    )
+    stats = audit_capture(
+        jsonl_path, txt_path, formatter=formatter, format_name="default"
+    )
+
+    assert stats.failed
+    assert stats.jsonl_records == 0
+    assert stats.jsonl_errors == 1
+    assert stats.first_issue == "jsonl_invalid_json"
+    assert stats.first_issue_jsonl_line == 1
+    assert stats.comparison_skipped == 1
 
 
 def test_auditor_contains_unhashable_dedup_fields_as_content_error(
