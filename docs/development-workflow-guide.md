@@ -155,6 +155,39 @@ with disk usage proportional to unique IDs; other state is bounded apart
 from the largest input line. Use this on one completed run, with closed files.
 The existing parity auditor remains responsible for physical newline checks.
 
+### Kick capture inspection
+
+```bash
+uv run python scripts/inspect_kick_capture.py capture.jsonl --debug-log debug.log
+```
+
+Use one completed live run, preferably captured with `--message_groups all`,
+and its debug log. The log is optional. The content-free JSON report checks
+record IDs, text author IDs and timestamps, unknown types, invalid JSON,
+duplicates, and named/unnamed emote spans in messages and replies. Timestamp
+backsteps and absent provider timestamps on system events are informational.
+Receive timestamps, when present, must be nonnegative integers.
+
+With a log, it reconciles decoded frames against control, parsed, unsupported,
+malformed, and Pusher-error counts. Unknown chat subtypes overlap parsed events
+and are not subtracted twice. It compares preloaded/live/backfill source totals,
+the run message count, and per-type counts with JSONL. Recorded parser drops,
+unknown types, invalid frames, failed runs, and inconsistent totals require
+review even when frame accounting balances and TXT parity passes. Reconnects
+and recovered backfill alone are informational. Filters, deduplication, and
+deadline prefetch can make parsed counts differ from output; a count gap is
+evidence to investigate, not proof of message loss.
+
+Exit `0` means no review findings, `1` means review required, and `2` means an
+input, summary, or temporary-storage error. Exactly one bounded (64 KiB)
+standard run summary is required when a log is supplied. Logs from multiple
+runs are rejected; counts cannot authenticate that a log belongs to a capture.
+Reports never echo chat content, identifiers, unknown type names, or rejected
+arguments. Exact duplicate tracking uses temporary SQLite storage. Memory
+scales with the largest JSONL record, not total capture length. Missing or
+nonregular inputs fail; an empty existing capture is valid. Run the separate
+parity auditor to check exact TXT rendering and physical newlines.
+
 Offline suite:
 
 ```bash

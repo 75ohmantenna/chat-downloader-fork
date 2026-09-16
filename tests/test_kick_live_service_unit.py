@@ -25,6 +25,7 @@ from chat_downloader.sites.kick.constants import (
     POLL_UPDATE_EVENT,
     PUSHER_ERROR,
     PUSHER_SUBSCRIPTION_SUCCEEDED,
+    STREAM_HOST_EVENT,
     SUBSCRIPTION_EVENT,
 )
 from chat_downloader.sites.kick.errors import (
@@ -2425,3 +2426,62 @@ def test_successful_frame_shapes_survive_type_quota_and_reconnect(
 
 def test_successful_frame_labels_ignore_missing_type() -> None:
     assert live_service._successful_frame_labels({}) == []
+
+
+@pytest.mark.parametrize("optional_message", [None, "Welcome! 日本語"])
+def test_compact_hosts_compose_with_live_ids_formatting_and_writers(
+    tmp_path,
+    optional_message,
+) -> None:
+    from chat_downloader.output.capture_parity import audit_capture
+    from chat_downloader.runtime.chat_pipeline import configure_chat
+    from chat_downloader.sites.kick.extractor import KickChatDownloader
+
+    data = load_fixture("stream_host_event_compact.json")
+    data["optional_message"] = optional_message
+    session = _WindowSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            FakeResponse(200, {"data": {"messages": []}}),
+        ]
+    )
+    frame = pusher_frame(STREAM_HOST_EVENT, data)
+    jsonl, txt = tmp_path / "capture.jsonl", tmp_path / "capture.txt"
+    with (
+        patch(
+            "chat_downloader.sites.kick.api_client.create_kick_session",
+            return_value=session,
+        ),
+        patch.object(live_service.time, "time_ns", return_value=11_000),
+    ):
+        chat = _build_chat(
+            FakeDownloader(),
+            transport_factory=FakeTransport,
+            frame_iterator=make_frame_iterator([[frame, frame]]),
+        )
+        configure_chat(
+            chat,
+            _request(
+                message_groups=["all"], output=[str(jsonl), str(txt)], format="kick"
+            ),
+            KickChatDownloader(),
+        )
+        messages = list(chat)
+        chat.close()
+    assert [m["message_id"] for m in messages] == [
+        "kick-stream-host:11",
+        "kick-stream-host:12",
+    ]
+    assert [m["received_timestamp"] for m in messages] == [11, 12]
+    assert all("timestamp" not in m for m in messages)
+    assert chat.diagnostics["malformed_event_count"] == 0
+    assert chat.diagnostics["live_emitted_count"] == 2
+    suffix = f" — {optional_message}" if optional_message else ""
+    expected = (
+        "1970-01-01 00:00:00 [received] | [Stream host] hosting_user (1044 viewers)"
+        + suffix
+    )
+    assert txt.read_text().splitlines() == [expected, expected]
+    assert not audit_capture(
+        jsonl, txt, formatter=ItemFormatter(), format_name="kick"
+    ).failed

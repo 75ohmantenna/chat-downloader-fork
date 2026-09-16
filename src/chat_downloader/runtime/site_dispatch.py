@@ -14,7 +14,7 @@ from chat_downloader.errors import (
     SiteNotSupported,
     URLNotProvided,
 )
-from chat_downloader.redaction import sanitize_for_log
+from chat_downloader.redaction import preflight_debug_samples, sanitize_for_log
 from chat_downloader.sites import get_all_sites
 
 from .chat_pipeline import configure_chat
@@ -86,6 +86,7 @@ def _create_chat_for_site(
     request: ChatRequest,
 ) -> Chat:
     generator_method_name, match = match_info
+    preflight_debug_samples()
     site_object = owner.create_session(site)
     resolved_request = request.resolved_for_site(site_object)
     log("info", f"Site: {site_object._NAME}")

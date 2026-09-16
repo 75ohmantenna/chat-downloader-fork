@@ -29,7 +29,10 @@ from chat_downloader.sites.kick.constants import (
     PUSHER_SUBSCRIPTION_SUCCEEDED,
 )
 from chat_downloader.sites.kick.errors import KickError
-from chat_downloader.sites.kick.parsing.hosts import parse_stream_host_event
+from chat_downloader.sites.kick.parsing.hosts import (
+    normalize_compact_host,
+    parse_stream_host_event,
+)
 from chat_downloader.sites.kick.parsing.messages import parse_chat_message
 from chat_downloader.sites.kick.parsing.moderation import (
     parse_chat_clear_event,
@@ -128,6 +131,9 @@ def _normalize_compact_live_payload(
         or received_timestamp < 0
     ):
         return payload
+
+    if message_type == "stream_host":
+        return normalize_compact_host(payload, received_timestamp)
 
     if message_type == "pinned_message_deleted" and payload == []:
         return {"id": f"kick-unpin:{received_timestamp}"}

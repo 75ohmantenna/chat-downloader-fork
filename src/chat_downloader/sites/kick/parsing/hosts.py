@@ -16,6 +16,32 @@ from chat_downloader.sites.kick.parsing.common_fields import (
     _parse_author,
     _parse_timestamp,
 )
+from chat_downloader.utils.json_types import get_int, get_str
+
+
+def normalize_compact_host(payload: object, received_timestamp: int) -> object:
+    """Expand the observed ID-less live host shape without repairing bad IDs."""
+    if (
+        not isinstance(payload, dict)
+        or payload.get("id") is not None
+        or "sender" in payload
+        or "metadata" in payload
+    ):
+        return payload
+    username = get_str(payload, "host_username").strip()
+    viewers = get_int(payload, "number_viewers", -1)
+    if not username or viewers < 0 or get_int(payload, "chatroom_id") < 1:
+        return payload
+    normalized = dict(payload)
+    normalized.update(
+        {
+            "id": f"kick-stream-host:{received_timestamp}",
+            "sender": {"username": username},
+            "content": get_str(payload, "optional_message"),
+            "metadata": {"stream_host": payload},
+        }
+    )
+    return normalized
 
 
 def _extract_host_metadata(raw_meta: object) -> dict[str, Any]:
@@ -66,7 +92,7 @@ def parse_stream_host_event(raw: object) -> dict[str, Any]:
         raise ParsingError(msg)
 
     message_id = _opt_str(raw.get("id"))
-    if message_id is None:
+    if not message_id:
         msg = "Kick stream-host event payload was missing an id."
         raise ParsingError(msg)
 

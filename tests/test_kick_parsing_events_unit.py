@@ -18,6 +18,7 @@ from chat_downloader.sites.kick.constants import (
     PUSHER_ERROR,
     PUSHER_PING,
     PUSHER_SUBSCRIPTION_SUCCEEDED,
+    STREAM_HOST_EVENT,
     SUBSCRIPTION_EVENT,
 )
 from chat_downloader.sites.kick.errors import KickError
@@ -458,3 +459,77 @@ def test_unknown_event_capture_isolated_by_event_name(
 
     assert len(list(sample_dir.glob("kick-unknown-event-noisyevent-*.json"))) == 3
     assert len(list(sample_dir.glob("kick-unknown-event-differentevent-*.json"))) == 1
+
+
+def test_compact_host_preserves_context_without_mutating_payload() -> None:
+    data = load_fixture("stream_host_event_compact.json")
+    original = dict(data)
+    diagnostics: list[str] = []
+    message = dispatch_event(
+        pusher_frame(STREAM_HOST_EVENT, data),
+        received_timestamp=123,
+        record_diagnostic=diagnostics.append,
+    )
+    assert data == original
+    assert message == {
+        "message_id": "kick-stream-host:123",
+        "message_type": "stream_host",
+        "message": "",
+        "author": {"display_name": "hosting_user", "name": "hosting_user"},
+        "metadata": {"host_username": "hosting_user", "number_viewers": 1044},
+    }
+    assert diagnostics == ["parsed_event_count"]
+
+
+@pytest.mark.parametrize("received", [None, True, -1])
+def test_compact_host_requires_live_receive_time(received) -> None:
+    assert (
+        dispatch_event(
+            pusher_frame(
+                STREAM_HOST_EVENT, load_fixture("stream_host_event_compact.json")
+            ),
+            received_timestamp=received,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"host_username": " "},
+        {"host_username": 1},
+        {"number_viewers": True},
+        {"number_viewers": -1},
+        {"number_viewers": "1044"},
+        {"chatroom_id": 0},
+        {"chatroom_id": True},
+        {"sender": {}},
+        {"metadata": {}},
+        {"id": ""},
+    ],
+)
+def test_compact_host_does_not_repair_invalid_fields(overrides) -> None:
+    data = load_fixture("stream_host_event_compact.json") | overrides
+    assert (
+        dispatch_event(
+            pusher_frame(STREAM_HOST_EVENT, data),
+            received_timestamp=123,
+        )
+        is None
+    )
+
+
+def test_compact_host_non_object_remains_malformed() -> None:
+    assert (
+        dispatch_event(
+            pusher_frame(STREAM_HOST_EVENT, []),
+            received_timestamp=123,
+        )
+        is None
+    )
+
+
+def test_existing_wrapped_host_is_unchanged_with_receive_time() -> None:
+    frame = pusher_frame(STREAM_HOST_EVENT, load_fixture("stream_host_event.json"))
+    assert dispatch_event(frame, received_timestamp=123) == dispatch_event(frame)

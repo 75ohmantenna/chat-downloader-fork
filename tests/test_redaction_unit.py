@@ -891,3 +891,53 @@ def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
     assert json.loads(Path(retry_path).read_text(encoding="utf-8")) == {
         "value": "sample"
     }
+
+
+def test_debug_sample_preflight_is_inert_without_both_opt_ins(tmp_path, monkeypatch):
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", raising=False)
+    dbg.logger.setLevel(logging.DEBUG)
+    red.preflight_debug_samples()
+    assert not sample_dir.exists()
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    dbg.logger.setLevel(logging.INFO)
+    red.preflight_debug_samples()
+    assert not sample_dir.exists()
+
+
+def test_preflight_stops_before_session_and_allows_corrected_retry(
+    tmp_path, monkeypatch
+):
+    from chat_downloader.models import ChatRequest
+    from chat_downloader.runtime.site_dispatch import dispatch_chat
+
+    sample_dir = tmp_path / "samples"
+    sample_dir.mkdir(mode=0o755)
+    sample_dir.chmod(0o755)
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    dbg.logger.setLevel(logging.DEBUG)
+
+    class Owner:
+        def create_session(self, *args, **kwargs):
+            pytest.fail("preflight must precede session creation")
+
+    with pytest.raises(OSError, match="permissions 0700"):
+        dispatch_chat(Owner(), ChatRequest(url="https://kick.com/example"))
+    assert list(sample_dir.iterdir()) == []
+    sample_dir.chmod(0o700)
+    red.preflight_debug_samples()
+    assert red.capture_debug_sample("preflight-retry", {"ok": True}, sample_limit=1)
+
+
+def test_preflight_does_not_cache_directory_safety(tmp_path, monkeypatch):
+    sample_dir = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    dbg.logger.setLevel(logging.DEBUG)
+    red.preflight_debug_samples()
+    assert stat.S_IMODE(sample_dir.stat().st_mode) == 0o700
+    sample_dir.chmod(0o755)
+    assert red.capture_debug_sample("unsafe-after-preflight", {"x": 1}) is None
+    assert list(sample_dir.iterdir()) == []

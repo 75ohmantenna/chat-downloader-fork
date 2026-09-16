@@ -116,7 +116,7 @@ module names.
 | `cli.py` | Argument parsing entry point (`main()`), signal handler, arg-parser builder |
 | `cli_args.py` | Parser-construction machinery: `_ParamRegistrar`, all `_add_*_args` helpers, `splitter`/`parse_header`/`str2bool` converters |
 | `debugging.py` | Logging setup (colorlog/plain handler), testing modes, color detection |
-| `redaction.py` | Recursive secret and authentication-header redaction (`sanitize_for_log`, `REDACTED`), opt-in debug-sample capture (`capture_debug_sample`) |
+| `redaction.py` | Recursive secret and authentication-header redaction (`sanitize_for_log`, `REDACTED`), opt-in debug-sample preflight and capture (`preflight_debug_samples`, `capture_debug_sample`) |
 | `errors.py` | Public exception hierarchy |
 | `metadata.py` | `__version__`, `__program__`, `__summary__` |
 | `request_profiles.py` | Canonical named HTTP request-profile presets used by validation and session setup |

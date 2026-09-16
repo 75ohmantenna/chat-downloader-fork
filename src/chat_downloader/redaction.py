@@ -295,8 +295,28 @@ def _require_private_sample_entry(
     """Reject sample entries that could expose or redirect captured data."""
     if not _is_private_sample_entry(entry, directory=directory):
         kind = "directory" if directory else "file"
-        message = f"Unsafe debug sample {kind}: {path}"
+        mode = "0700" if directory else "0600"
+        message = (
+            f"Unsafe debug sample {kind}: {path}. "
+            f"Use an owned, non-symlink {kind} with permissions {mode}."
+        )
         raise OSError(message)
+
+
+def _sample_directory() -> Path:
+    """Resolve the configured diagnostic directory consistently."""
+    default = Path(tempfile.gettempdir()) / "chat_downloader_debug_samples"
+    return Path(os.environ.get(_DEBUG_SAMPLE_DIR_ENV, str(default)))
+
+
+def preflight_debug_samples() -> None:
+    """Fail before retrieval if explicitly enabled sampling cannot start safely.
+
+    Capture calls still validate each write; preflight is not a replacement for
+    the descriptor-based checks against directory replacement during a run.
+    """
+    if _debug_sample_capture_enabled():
+        os.close(_prepare_sample_directory(_sample_directory()))
 
 
 def _prepare_sample_directory(sample_dir: Path) -> int:
@@ -468,12 +488,7 @@ def capture_debug_sample(
         digest = hashlib.sha1(
             serialized.encode("utf-8"), usedforsecurity=False
         ).hexdigest()[:12]
-        default_sample_dir = str(
-            Path(tempfile.gettempdir()) / "chat_downloader_debug_samples"
-        )
-        sample_dir = Path(
-            os.environ.get(_DEBUG_SAMPLE_DIR_ENV, default_sample_dir),
-        )
+        sample_dir = _sample_directory()
         if sample_group is not None and group_limit is not None:
             group_digest = hashlib.sha1(
                 f"{slugify_debug_label(label)}:{digest}".encode(),

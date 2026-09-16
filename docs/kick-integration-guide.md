@@ -176,7 +176,7 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   `_PARSER_DISPATCH`. Decodes Kick's double-encoded `data` field. Control
   frames are omitted from output; unknown events are captured when explicitly
   enabled, debug-logged by name, and skipped; a `pusher:error` frame raises
-  `KickError`. Live-only compact subscription and empty-array pin-clear shapes
+  `KickError`. Live-only compact subscription/host and empty-array pin-clear shapes
   plus ID-less poll state events are expanded with namespaced receive-time IDs
   before normal parsing.
 - `parsing/messages.py`: chat-message normalization for both live
@@ -526,7 +526,12 @@ chat_downloader "https://kick.com/xqc" --logging debug
 ```
 
 Set `CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR` to retain samples in a chosen private
-directory. Most anomaly labels capture at most ten unique payloads per process
+directory. With debug sampling enabled, CLI and public API retrieval preflight
+this directory before opening a provider session. Existing directories must be
+owned by the current user, have mode `0700`, and not be symlinks; an unsafe
+directory stops retrieval with an actionable error before sampling quotas are
+consumed. Missing directories are created privately. Each write still checks
+directory and file safety. Most anomaly labels capture at most ten unique payloads per process
 and directory. Unsupported event names use isolated three-sample labels plus a
 ten-sample aggregate cap, so a noisy event cannot hide a different event name.
 Successful frame capture attempts at most three payloads per normalized event
@@ -535,6 +540,25 @@ without opening every file. The shared sanitizer redacts
 credential-bearing fields and sensitive URL or labeled values before secure
 `0600` files are written. Samples can still contain public chat content, so
 review them before sharing or promoting one into `tests/fixtures/kick/`.
+
+Compact live `StreamHostEvent` payloads carry `host_username`, `number_viewers`,
+`chatroom_id`, and optional `optional_message` without an event ID. Valid shapes
+receive a namespaced `kick-stream-host:` ID based on monotonic receive-time
+microseconds. JSONL preserves host/viewer metadata and a separate
+`received_timestamp`; no provider timestamp is invented. TXT includes the host,
+viewer count, and any optional message. Existing wrapped host payloads keep
+their provider IDs and timestamps. Blank IDs are rejected rather than repaired.
+
+For offline inspection of a completed all-groups live capture, run:
+
+```bash
+uv run python scripts/inspect_kick_capture.py capture.jsonl --debug-log debug.log
+```
+
+This detects recorded parser drops as well as output/diagnostic count gaps;
+it supplements exact TXT/JSONL parity. See the
+[capture inspection workflow](development-workflow-guide.md#kick-capture-inspection)
+for report and exit-code semantics.
 
 ## Testing
 

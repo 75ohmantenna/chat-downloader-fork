@@ -118,7 +118,9 @@ numeric strings use the normal template. `omit_if_false: true` suppresses the
 field's complete rendered fragment for false, zero, empty, or null values.
 
 Kick's default text format labels subscription, pin, host, and moderation
-events. Events without ordinary message text render a bracketed notice instead
+events. Host notices include the host name, viewer count, and optional message,
+including compact live host payloads without provider IDs or timestamps.
+Events without ordinary message text render a bracketed notice instead
 of a blank line; JSONL retains their structured identifiers and metadata. When
 a user sends a Kick subscription-renewal celebration, it remains an ordinary
 `text_message` so message-only captures preserve the chat text. JSONL also

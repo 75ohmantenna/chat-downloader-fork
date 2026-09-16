@@ -303,7 +303,7 @@
         },
         {
             "matching": "stream_host",
-            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name|metadata.host_username}{metadata.number_viewers}{message|metadata.optional_message}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Stream host]",
@@ -313,6 +313,9 @@
                 },
                 "author.display_name": " {}",
                 "author.name": " {}",
+                "metadata.host_username": " {}",
+                "metadata.number_viewers": " ({} viewers)",
+                "metadata.optional_message": " — {}",
                 "message": " — {}"
             }
         },
