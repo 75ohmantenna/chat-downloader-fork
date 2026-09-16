@@ -28,9 +28,15 @@ class _MessageSource(Protocol):
 class _MessageLimitIterator:
     """Limit an iterator while preserving its explicit close lifecycle."""
 
-    def __init__(self, source: _MessageSource, limit: int) -> None:
+    def __init__(
+        self,
+        source: _MessageSource,
+        limit: int,
+        diagnostics: dict[str, object] | None = None,
+    ) -> None:
         self._source = source
         self._remaining = limit
+        self._diagnostics = diagnostics
         self._closed = False
 
     def __iter__(self) -> _MessageLimitIterator:
@@ -46,6 +52,8 @@ class _MessageLimitIterator:
             self.close()
             raise
         self._remaining -= 1
+        if self._remaining == 0 and self._diagnostics is not None:
+            self._diagnostics["termination_reason"] = "message_limit"
         return item
 
     def close(self) -> None:
@@ -60,7 +68,7 @@ class _MessageLimitIterator:
 def _apply_message_limit(chat: Chat, max_messages: int | None) -> None:
     """Apply maximum message limit to a chat generator."""
     if max_messages is not None and chat.chat is not None:
-        chat.chat = _MessageLimitIterator(chat.chat, max_messages)
+        chat.chat = _MessageLimitIterator(chat.chat, max_messages, chat.diagnostics)
 
 
 def _configure_timeouts(

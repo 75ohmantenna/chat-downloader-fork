@@ -77,7 +77,8 @@ behavior, finalizes attached writers, and closes resources.
 Use `run()` when embedding CLI-like behavior.
 
 `run()` also accepts runtime controls such as `quiet`, `exit_on_debug`,
-`pause_on_debug`, `resume`, `verify_output`, and `max_seen_message_ids`. These fields are defined by
+`pause_on_debug`, `resume`, `verify_output`, `require_complete`,
+`run_manifest`, and `max_seen_message_ids`. These fields are defined by
 `RunConfig` in `chat_downloader.models`; `quiet`, `exit_on_debug`, and
 `pause_on_debug` are exposed on the CLI.
 
@@ -244,6 +245,8 @@ chat = downloader.get_chat_request(request)
 | `quiet` | `False` | Suppress formatted chat output to stdout |
 | `resume` | `None` | Path to a validated replay shutdown checkpoint |
 | `verify_output` | `False` | Verify one JSONL/TXT output pair after successful retrieval |
+| `require_complete` | `False` | Fail unless the selected completed replay is exhausted without known record loss |
+| `run_manifest` | `None` | New filename for a JSON outcome, recording, and output-hash report |
 | `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |
 | `exit_on_debug` | `False` | Exit when unexpected debug conditions are hit |
 | `pause_on_debug` | `False` | Pause when selected debug conditions are hit |
@@ -525,3 +528,12 @@ for shutdown semantics, immutable settings, and recovery limits.
 Kick VOD and clip messages now include `time_in_seconds` and `time_text`,
 relative to the recording or clip origin even when selecting a later start.
 Absolute provider timestamps remain available in `timestamp`.
+
+
+`run(require_complete=True, run_manifest="run.json", ...)` opts into replay
+completion enforcement and a content-free run report. Manifest names must be
+new and distinct from output/checkpoint paths. Reaching a message limit, timing
+out, or retaining known malformed-record loss fails completion even if output
+parity passes. Checkpointed loss survives resume. See
+[completion and manifests](cli-usage.md#replay-completion-and-run-manifests) for
+empty-window, append, and compatibility semantics.

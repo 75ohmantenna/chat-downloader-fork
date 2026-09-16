@@ -26,10 +26,8 @@ from .constants import (
     is_video_id,
 )
 from .errors import KickCountryBlocked, KickError
-from .replay_service import (
-    ReplaySource,
-    _apply_request_window,
-)
+from .replay_service import ReplaySource
+from .replay_window import _apply_request_window
 from .request_retry import fetch_with_retry
 from .vod_metadata import _resolve_vod_window, fetch_vod_metadata
 

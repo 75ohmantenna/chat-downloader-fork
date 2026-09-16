@@ -284,7 +284,7 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
     monkeypatch.setattr(
         replay_service,
         "_classify_message",
-        lambda raw, _start, _end: (raw, False),
+        lambda raw, _start, _end, _state: (raw, False),
     )
     api_client = Mock()
     api_client.fetch_message_page.side_effect = [
@@ -417,7 +417,7 @@ def test_iter_vod_messages_has_no_silent_page_ceiling(
     monkeypatch.setattr(
         replay_service,
         "_classify_message",
-        lambda raw, _start, _end: (raw, False),
+        lambda raw, _start, _end, _state: (raw, False),
     )
     api_client = Mock()
     api_client.fetch_message_page.side_effect = [
@@ -969,3 +969,87 @@ def test_replay_source_close_does_not_hide_other_generator_errors() -> None:
     next(source)
     with pytest.raises(ValueError, match="different error"):
         source.close()
+
+
+def test_replay_reports_skip_reasons_and_progress_with_real_parser(monkeypatch):
+    client = Mock()
+    client.fetch_message_page.return_value = {
+        "data": {
+            "messages": [
+                None,
+                _make_raw_msg("before", "2025-12-31T23:59:59Z"),
+                _make_raw_msg("after", "2026-01-01T00:00:11Z"),
+                _make_raw_msg("invalid", "bad date"),
+                _make_raw_msg("wrong_type", 42),
+                {"created_at": "2026-01-01T00:00:01Z"},
+                _make_raw_msg("valid", "2026-01-01T00:00:02Z"),
+            ]
+        }
+    }
+    ticks = iter([0, 6, 7])
+    monkeypatch.setattr(replay_service, "monotonic", lambda: next(ticks))
+    logs = []
+    monkeypatch.setattr(
+        replay_service, "log", lambda level, text: logs.append((level, text))
+    )
+    state = {}
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    rows = list(
+        replay_service._iter_vod_messages(
+            "1",
+            start,
+            start + timedelta(seconds=10),
+            ChatRequest(),
+            api_client=client,
+            diagnostics=state,
+        )
+    )
+    assert [item["message_id"] for item in rows] == ["valid"]
+    assert {
+        key: state[key]
+        for key in (
+            "before_start",
+            "after_end",
+            "malformed_timestamp",
+            "malformed_object",
+            "parse_error",
+        )
+    } == {
+        "before_start": 1,
+        "after_end": 1,
+        "malformed_timestamp": 2,
+        "malformed_object": 1,
+        "parse_error": 1,
+    }
+    assert state["skipped_records"] == 6
+    assert state["selected_records"] == 1
+    assert len(logs) == 3
+    assert all(level == "info" for level, _ in logs)
+    assert "1 pages" in logs[1][1]
+    assert "writing chronological" in logs[-1][1]
+
+
+def test_progress_continues_through_empty_history_pages(monkeypatch):
+    client = Mock()
+    client.fetch_message_page.side_effect = [
+        {"data": {"messages": [], "cursor": "older"}},
+        {"data": {"messages": []}},
+    ]
+    ticks = iter([0, 6, 7, 8])
+    monkeypatch.setattr(replay_service, "monotonic", lambda: next(ticks))
+    logs = []
+    monkeypatch.setattr(replay_service, "log", lambda level, text: logs.append(text))
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    assert (
+        list(
+            replay_service._iter_vod_messages(
+                "1",
+                start,
+                start + timedelta(seconds=10),
+                ChatRequest(),
+                api_client=client,
+            )
+        )
+        == []
+    )
+    assert "1 pages, 0 records" in logs[1]

@@ -496,6 +496,8 @@ def test_run_config_cli_flags_match_metadata() -> None:
         "exit_on_debug",
         "resume",
         "verify_output",
+        "require_complete",
+        "run_manifest",
     }
 
 

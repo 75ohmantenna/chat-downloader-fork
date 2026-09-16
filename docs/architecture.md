@@ -91,13 +91,14 @@ text append mode also terminates an existing final line before appending. Output
 path aliases resolving to the same file are attached only once. Writer targets
 are compared after `{title}`/`{id}` expansion; existing hard links are compared
 by device and inode.
-Kick VOD and clip replay pages forward from the selected start time, so
-chronological output streams without buffering later history. Exact cursor
-advancement is paired with bounded ID deduplication because Kick's visible
-message timestamps have lower precision than its pagination cursors. A
-first-page 400/422 validation body naming `start_time` can activate the prior
-reverse/spooled compatibility path without converting unrelated client errors
-into an expensive replay crawl.
+Kick VOD and clip replay traverses reverse cursors and buffers the selected
+history in a temporary spool before chronological output. Five-second forward
+windows are reserved for reconnect backfill; their cursor is not a forward
+continuation. Progress reporting exposes collection before emission, and skip
+reasons distinguish replay boundaries from malformed records. Optional replay
+completion enforcement remains independent of file parity; known record loss
+persists across shutdown checkpoints.
+
 
 ---
 
@@ -138,6 +139,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, and replay overlap suppression |
+| `capture_manifest.py` | Exclusive JSON run manifests, artifact hashes, and replay completeness policy |
 | `capture_verification.py` | Optional post-shutdown verification using the resolved production formatter |
 | `cli_bridge.py` | Categorize `run()` kwargs into init / chat / run param groups |
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
@@ -256,6 +258,7 @@ module names.
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
 | `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, clock/latency-safe reconnect backfill, bounded diagnostics, and rejected-key recovery |
+| `replay_window.py` | Pure Kick replay bounds, reverse cursor, and skip classification |
 | `replay_service.py` | VOD metadata, reverse history spooling, replay-relative timestamps, filtering, and completion diagnostics |
 | `vod_metadata.py` | Legacy video lookup and validated, origin-isolated current website metadata fallback |
 | `clip_service.py` | Web/mobile clip metadata validation, clip-relative bounds, and source-VOD or absolute-time replay assembly |

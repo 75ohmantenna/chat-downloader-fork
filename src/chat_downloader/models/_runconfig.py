@@ -40,6 +40,18 @@ class RunConfig:
             "cli": _cli("Verify exact JSONL/TXT parity after capture", group="output")
         },
     )
+    require_complete: bool = field(
+        default=False,
+        metadata={
+            "cli": _cli("Fail unless the selected replay completes", group="output")
+        },
+    )
+    run_manifest: str | None = field(
+        default=None,
+        metadata={
+            "cli": _cli("Write a JSON run manifest to a new file", group="output")
+        },
+    )
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS
     exit_on_debug: bool = field(
         default=False,

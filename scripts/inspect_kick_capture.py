@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Content-free, offline inspection of one Kick live JSONL capture."""
+"""Content-free, offline inspection of Kick live or replay JSONL captures."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ import sqlite3
 import stat
 import tempfile
 from contextlib import closing, contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
@@ -189,9 +190,10 @@ def _type_counts(value: object) -> dict[str, int]:
     return {key: _counter(value, key) for key in value}
 
 
-def _frame_accounting(path: Path, inspection: _Inspection) -> dict[str, int]:
+def _frame_accounting(
+    summary: dict[str, object], inspection: _Inspection
+) -> dict[str, int]:
     """Reconcile decoded frames and emitted records; expose only fixed keys."""
-    summary = _run_summary(path)
     counters = get_dict(summary, "provider_diagnostics")
     result = {key: _counter(counters, key) for key in _FRAME_KEYS}
     if type(summary.get("success")) is not bool:
@@ -237,6 +239,165 @@ def _frame_accounting(path: Path, inspection: _Inspection) -> dict[str, int]:
     return result
 
 
+def _replay_accounting(  # noqa: C901 - validate and reconcile one replay ledger
+    summaries: list[dict[str, object]], inspection: _Inspection
+) -> dict[str, object]:
+    """Reconcile replay runs without interpreting file parity as completeness."""
+    totals = dict.fromkeys(
+        (
+            "pages",
+            "raw_records",
+            "emitted_records",
+            "skipped_records",
+            "filtered_records",
+            "duplicate_records",
+            "checkpoint_overlap_suppressed",
+            "message_count",
+        ),
+        0,
+    )
+    reported: dict[str, int] = {}
+    reasons: list[str] = []
+    parities: list[str] = []
+    statuses: dict[str, int] = {}
+    bounds: list[tuple[int, int]] = []
+    needs_review = bool(inspection.backsteps or inspection.missing_timestamps)
+    raw_gap = 0
+    for index, summary in enumerate(summaries):
+        state = get_dict(summary, "provider_diagnostics")
+        if (
+            state.get("protocol") != "reverse"
+            or type(summary.get("success")) is not bool
+        ):
+            raise ValueError(_INVALID_SUMMARY)
+        reason, parity = summary.get("termination_reason"), summary.get("parity_status")
+        if reason not in {
+            "completed",
+            "empty_window",
+            "message_limit",
+            "timeout",
+            "inactivity_timeout",
+            "interrupted",
+            "error",
+        } or parity not in {"passed", "failed", "not_run", "not_requested"}:
+            raise ValueError(_INVALID_SUMMARY)
+        reasons.append(str(reason))
+        parities.append(str(parity))
+        needs_review |= (
+            not summary["success"]
+            or (
+                index == len(summaries) - 1
+                and reason not in {"completed", "empty_window"}
+            )
+            or reason == "error"
+            or parity in {"failed", "not_run"}
+        )
+        if "history_complete" in state and type(state["history_complete"]) is not bool:
+            raise ValueError(_INVALID_SUMMARY)
+        needs_review |= (
+            state.get("history_complete") is not True and reason != "empty_window"
+        )
+        for key in totals:
+            source = summary if key == "message_count" else state
+            required = key in {
+                "pages",
+                "raw_records",
+                "emitted_records",
+                "message_count",
+            }
+            totals[key] += _counter(
+                source if required or key in source else {key: 0}, key
+            )
+        for key, count in _type_counts(summary.get("message_type_counts")).items():
+            reported[key] = reported.get(key, 0) + count
+        for key in ("malformed_timestamp", "malformed_object", "parse_error"):
+            needs_review |= _counter(state, key) > 0 if key in state else False
+        selected = (
+            _counter(state, "selected_records")
+            if "selected_records" in state
+            else _counter(state, "emitted_records")
+        )
+        if reason == "completed" or "selected_records" in state:
+            page_gap = (
+                _counter(state, "raw_records")
+                - selected
+                - sum(
+                    _counter(state, key) if key in state else 0
+                    for key in (
+                        "skipped_records",
+                        "filtered_records",
+                        "duplicate_records",
+                    )
+                )
+            )
+            raw_gap += page_gap
+            needs_review |= page_gap != 0
+        needs_review |= sum(
+            _type_counts(summary.get("message_type_counts")).values()
+        ) != _counter(summary, "message_count")
+        prior_loss = state.get("prior_record_loss", False)
+        if type(prior_loss) is not bool:
+            raise ValueError(_INVALID_SUMMARY)
+        needs_review |= prior_loss
+        needs_review |= _counter(state, "emitted_records") - (
+            _counter(state, "checkpoint_overlap_suppressed")
+            if "checkpoint_overlap_suppressed" in state
+            else 0
+        ) != _counter(summary, "message_count")
+        start, end = state.get("requested_start"), state.get("requested_end")
+        if not isinstance(start, str) or not isinstance(end, str):
+            raise TypeError(_INVALID_SUMMARY)
+        dates = [datetime.fromisoformat(value) for value in (start, end)]
+        if any(value.tzinfo is None for value in dates):
+            raise ValueError(_INVALID_SUMMARY)
+        bounds.append(
+            (
+                int(dates[0].timestamp() * 1_000_000),
+                int(dates[1].timestamp() * 1_000_000),
+            )
+        )
+        transport = get_dict(state, "transport")
+        for key, count in _type_counts(transport.get("http_status_counts", {})).items():
+            if key != "transport_error" and (
+                len(key) != 3 or not key.isascii() or not key.isdigit()
+            ):
+                raise ValueError(_INVALID_SUMMARY)
+            statuses[key] = statuses.get(key, 0) + count
+    observed = (inspection.minimum_timestamp, inspection.maximum_timestamp)
+    outside = any(
+        value is not None
+        and not min(a for a, _ in bounds) <= value <= max(b for _, b in bounds)
+        for value in observed
+    )
+    actual = {key: count for key, count in inspection.types.items() if count}
+    type_gap = sum(
+        reported.get(key, 0) != actual.get(key, 0)
+        for key in reported.keys() | actual.keys()
+    )
+    count_gap = totals["message_count"] - inspection.records
+    emitted_gap = (
+        totals["emitted_records"]
+        - totals["checkpoint_overlap_suppressed"]
+        - totals["message_count"]
+    )
+    return {
+        **totals,
+        "termination_reasons": reasons,
+        "parity_statuses": parities,
+        "http_status_counts": statuses,
+        "requested_bounds_microseconds": bounds,
+        "observed_bounds_microseconds": observed,
+        "raw_accounting_gap": raw_gap,
+        "summary_minus_records": count_gap,
+        "emitted_minus_written": emitted_gap,
+        "message_type_count_mismatches": type_gap,
+        "outside_requested_bounds": outside,
+        "needs_review": bool(
+            needs_review or raw_gap or count_gap or emitted_gap or type_gap or outside
+        ),
+    }
+
+
 class _Inspection:
     """Retain bounded diagnostics; exact ID membership lives in temporary SQLite."""
 
@@ -248,6 +409,8 @@ class _Inspection:
         self.types = dict.fromkeys(sorted(_KNOWN_TYPES), 0)
         self.issues: dict[str, dict[str, int]] = {}
         self.previous_timestamp: int | None = None
+        self.minimum_timestamp: int | None = None
+        self.maximum_timestamp: int | None = None
         self.backsteps = 0
         self.max_backstep = 0
         self.first_backstep: int | None = None
@@ -308,6 +471,16 @@ class _Inspection:
         if type(timestamp) is not int or timestamp < 0:
             self.issue("invalid_timestamp")
             return
+        self.minimum_timestamp = (
+            min(self.minimum_timestamp, timestamp)
+            if self.minimum_timestamp is not None
+            else timestamp
+        )
+        self.maximum_timestamp = (
+            max(self.maximum_timestamp, timestamp)
+            if self.maximum_timestamp is not None
+            else timestamp
+        )
         if self.previous_timestamp is not None and timestamp < self.previous_timestamp:
             self.backsteps += 1
             self.max_backstep = max(
@@ -347,7 +520,9 @@ class _Inspection:
         }
 
 
-def inspect_capture(path: Path, debug_log: Path | None = None) -> dict[str, object]:
+def inspect_capture(
+    path: Path, debug_log: Path | list[Path] | None = None
+) -> dict[str, object]:
     """Inspect one run without retaining message bodies or printing identifiers."""
     with (
         tempfile.TemporaryDirectory(prefix="kick-inspection-") as directory,
@@ -356,13 +531,28 @@ def inspect_capture(path: Path, debug_log: Path | None = None) -> dict[str, obje
         inspection = _Inspection(database)
         inspection.read(path)
         report = inspection.report()
-    accounting = (
-        _frame_accounting(debug_log, inspection) if debug_log is not None else None
+    paths = (
+        debug_log if isinstance(debug_log, list) else [debug_log] if debug_log else []
     )
+    summaries = [_run_summary(path) for path in paths]
+    replay = bool(
+        summaries
+        and get_dict(summaries[0], "provider_diagnostics").get("protocol") == "reverse"
+    )
+    if len(summaries) > 1 and not replay:
+        raise ValueError(_INVALID_SUMMARY)
+    accounting = (
+        _frame_accounting(summaries[0], inspection)
+        if summaries and not replay
+        else None
+    )
+    replay_accounting = _replay_accounting(summaries, inspection) if replay else None
+    report["replay_accounting"] = replay_accounting
     report["frame_accounting"] = accounting
     report["status"] = (
         "review"
         if inspection.issues
+        or (replay_accounting and replay_accounting["needs_review"])
         or (
             accounting
             and any(accounting[key] != 0 for key in (*_ANOMALIES, *_GAPS, "run_failed"))
@@ -376,14 +566,19 @@ def main(argv: list[str] | None = None) -> int:
     """Print only aggregate findings; use exit 1 for review and 2 for input errors."""
     parser = _Parser(description=__doc__, allow_abbrev=False)
     parser.add_argument("jsonl", type=Path)
-    parser.add_argument("--debug-log", type=Path)
+    parser.add_argument(
+        "--debug-log",
+        type=Path,
+        action="append",
+        help="One log per capture run, in append order; repeat for resumed replay",
+    )
     args = parser.parse_args(argv)
     try:
         report = inspect_capture(args.jsonl, args.debug_log)
     except (OSError, sqlite3.Error):
         print('{"error": "input_or_temporary_storage_io"}')
         return 2
-    except (ValueError, TypeError, SyntaxError, RecursionError):
+    except (ValueError, TypeError, SyntaxError, RecursionError, OverflowError):
         print('{"error": "invalid_run_summary"}')
         return 2
     print(json.dumps(report, sort_keys=True))

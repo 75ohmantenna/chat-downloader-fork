@@ -426,3 +426,136 @@ def test_malformed_type_names_are_bounded_and_content_free(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "PRIVATE_SENTINEL" not in output
     assert json.loads(output)["frame_accounting"]["malformed_stream_host"] == 1
+
+
+def _replay_log(path, count=1, **changes):
+    state = {
+        "protocol": "reverse",
+        "pages": 1,
+        "raw_records": count + 1,
+        "emitted_records": count,
+        "skipped_records": 1,
+        "history_complete": True,
+        "requested_start": "1970-01-01T00:00:00Z",
+        "requested_end": "1970-01-01T00:00:10Z",
+        "transport": {"http_status_counts": {"200": 1, "404": 1}},
+    }
+    state.update(changes)
+    summary = {
+        "success": True,
+        "termination_reason": "completed",
+        "parity_status": "passed",
+        "message_count": count,
+        "message_type_counts": {"text_message": count},
+        "provider_diagnostics": state,
+    }
+    path.write_text("[DEBUG] Run summary: " + repr(summary) + "\n")
+    return path
+
+
+def test_replay_summary_reconciles_legacy_capture_without_live_counters(tmp_path):
+    report = inspect_capture(
+        _write(tmp_path / "chat.jsonl", [_text()]), _replay_log(tmp_path / "debug.log")
+    )
+    assert report["status"] == "ok"
+    assert report["frame_accounting"] is None
+    assert report["replay_accounting"]["raw_accounting_gap"] == 0
+    assert report["replay_accounting"]["http_status_counts"] == {"200": 1, "404": 1}
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"parse_error": 1},
+        {"malformed_timestamp": 1},
+        {"history_complete": False},
+        {"raw_records": 99},
+        {"emitted_records": 0},
+        {"skipped_records": 0},
+        {"requested_end": "1970-01-01T00:00:00Z"},
+    ],
+)
+def test_replay_accounting_reports_loss_and_inconsistent_counts(tmp_path, changes):
+    report = inspect_capture(
+        _write(tmp_path / "chat.jsonl", [_text()]),
+        _replay_log(tmp_path / "debug.log", **changes),
+    )
+    assert report["status"] == "review"
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"pages": True},
+        {"history_complete": "yes"},
+        {"requested_start": "PRIVATE_SENTINEL"},
+        {"requested_end": None},
+        {"requested_start": "1970-01-01T00:00:00"},
+        {"transport": {"http_status_counts": {"PRIVATE_SENTINEL": 1}}},
+    ],
+)
+def test_malformed_replay_summary_does_not_echo_input(tmp_path, capsys, changes):
+    path = _write(tmp_path / "chat.jsonl", [_text()])
+    log = _replay_log(tmp_path / "debug.log", **changes)
+    assert main([str(path), "--debug-log", str(log)]) == 2
+    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
+
+
+def test_replay_resumed_logs_reconcile_overlap_and_full_output(tmp_path):
+    import ast
+
+    first = _replay_log(tmp_path / "first.log", selected_records=2, raw_records=3)
+    summary = ast.literal_eval(first.read_text().removeprefix("[DEBUG] Run summary: "))
+    summary["termination_reason"] = "message_limit"
+    first.write_text("[DEBUG] Run summary: " + repr(summary))
+    second = _replay_log(
+        tmp_path / "second.log",
+        emitted_records=2,
+        checkpoint_overlap_suppressed=1,
+        raw_records=3,
+    )
+    report = inspect_capture(
+        _write(tmp_path / "chat.jsonl", [_text(), _text("two", 2000)]), [first, second]
+    )
+    assert report["status"] == "ok"
+    assert report["replay_accounting"]["message_count"] == 2
+
+
+def test_multiple_live_logs_are_rejected(tmp_path):
+    with pytest.raises(ValueError, match="invalid_run_summary"):
+        inspect_capture(
+            _write(tmp_path / "chat.jsonl", []),
+            [_log(tmp_path / "one"), _log(tmp_path / "two")],
+        )
+
+
+def test_opposite_raw_accounting_errors_cannot_cancel_across_runs(tmp_path):
+    first = _replay_log(tmp_path / "first", raw_records=3)
+    second = _replay_log(tmp_path / "second", raw_records=1)
+    report = inspect_capture(
+        _write(tmp_path / "capture", [_text(), _text("second")]), [first, second]
+    )
+    assert report["replay_accounting"]["raw_accounting_gap"] == 0
+    assert report["status"] == "review"
+
+
+def test_prior_loss_cannot_be_hidden_by_clean_resumed_pages(tmp_path):
+    path = _write(tmp_path / "capture", [_text()])
+    log = _replay_log(tmp_path / "log", prior_record_loss=True)
+    assert inspect_capture(path, log)["status"] == "review"
+
+
+@pytest.mark.parametrize(
+    "reason", ["timeout", "inactivity_timeout", "message_limit", "interrupted", "error"]
+)
+def test_parity_pass_does_not_certify_incomplete_replay(tmp_path, reason):
+    import ast
+
+    log = _replay_log(tmp_path / "log")
+    summary = ast.literal_eval(log.read_text().removeprefix("[DEBUG] Run summary: "))
+    summary["termination_reason"] = reason
+    log.write_text("[DEBUG] Run summary: " + repr(summary))
+    assert (
+        inspect_capture(_write(tmp_path / "capture", [_text()]), log)["status"]
+        == "review"
+    )

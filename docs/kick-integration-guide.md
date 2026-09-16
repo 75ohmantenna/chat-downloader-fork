@@ -144,6 +144,7 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `extractor.py`: `KickChatDownloader`, URL matching, public site methods
 - `live_service.py`: live chat orchestration (metadata, chatroom resolution,
   preloaded history, WebSocket loop, deduplication, reconnect)
+- `replay_window.py`: pure replay bounds, cursor construction, and record classification
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
 - `clip_service.py`: web/mobile clip metadata validation and source-VOD or
   absolute-time replay assembly
@@ -577,3 +578,28 @@ To add coverage for a new event type:
 3. Write the parser under `parsing/` and register it in
    `events.py::_PARSER_DISPATCH`.
 4. Add a parser unit test and run `make ci`.
+
+
+## Replay audit diagnostics
+
+Replay summaries retain the aggregate `skipped_records` counter and add
+`before_start`, `after_end`, `malformed_timestamp`, `malformed_object`, and
+`parse_error` reason counts. `selected_records` counts eligible buffered records
+before message limits or checkpoint overlap suppression. Expected boundary
+exclusions do not imply parser loss. Collection progress is emitted at info
+level, with page/record counts, elapsed time, and the earliest timestamp on the
+current page; no message content is logged.
+
+`scripts/inspect_kick_capture.py capture.jsonl --debug-log run.log` detects replay
+summaries and reconciles raw, skipped, filtered, duplicate, selected, emitted,
+and written counts independently of live Pusher accounting. It reports transport
+statuses, selected/observed time bounds, termination and parity. For appended
+replay output, repeat `--debug-log` with every run log in append order. Each log
+must contain exactly one summary. Missing runs cause accounting mismatches;
+incomplete captures require review even when their JSONL/TXT parity passed.
+Logs alone cannot authenticate archive provenance or provider completeness.
+
+The generic `--require_complete` and `--run_manifest` controls are documented in
+[CLI usage](cli-usage.md#replay-completion-and-run-manifests). Reverse pagination
+and duration-derived VOD cutoffs remain authoritative; progress and metadata
+notices do not change traversal behavior.

@@ -15,22 +15,22 @@ from __future__ import annotations
 import hashlib
 import json
 import tempfile
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from functools import partial
 from threading import Event
+from time import monotonic
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
-from chat_downloader.errors import ParsingError
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
-from chat_downloader.utils.time_utils import ensure_seconds, seconds_to_time
+from chat_downloader.utils.time_utils import seconds_to_time
 
 from .constants import MESSAGE_GROUPS
 from .errors import KickError
 from .history import _message_timestamp, fetch_validated_page
-from .parsing.messages import parse_chat_message
+from .replay_window import _apply_request_window, _classify_message, _cursor_after
 from .request_retry import fetch_with_retry
 from .vod_metadata import _resolve_vod_window, fetch_vod_metadata
 
@@ -145,66 +145,6 @@ def get_vod_chat(
     )
 
 
-def _apply_request_window(
-    vod_start_dt: datetime,
-    vod_end_dt: datetime,
-    request: ChatRequest,
-) -> tuple[datetime, datetime]:
-    """Apply request-relative offsets to a VOD's absolute time window."""
-    duration = max(0.0, (vod_end_dt - vod_start_dt).total_seconds())
-    start_offset = cast("float", ensure_seconds(request.start_time, 0.0))
-    end_offset = cast("float", ensure_seconds(request.end_time, duration))
-
-    bounded_start = min(max(start_offset, 0.0), duration)
-    bounded_end = min(max(end_offset, 0.0), duration)
-    return (
-        vod_start_dt + timedelta(seconds=bounded_start),
-        vod_start_dt + timedelta(seconds=bounded_end),
-    )
-
-
-def _classify_message(
-    raw: dict[str, Any], start_dt: datetime, end_dt: datetime
-) -> tuple[dict[str, Any] | None, bool]:
-    """Classify one newest-first record against the selected replay window."""
-    created_raw = raw.get("created_at", "")
-    if not isinstance(created_raw, str):
-        return None, False
-    try:
-        msg_dt = datetime.fromisoformat(created_raw)
-    except (ValueError, TypeError):
-        return None, False
-
-    if msg_dt.tzinfo is None:
-        msg_dt = msg_dt.replace(tzinfo=UTC)
-
-    if msg_dt < start_dt:
-        return None, True
-    if msg_dt > end_dt:
-        return None, False
-
-    try:
-        parsed = parse_chat_message(raw)
-    except ParsingError:
-        return None, False
-    return parsed, False
-
-
-def _cursor_after(timestamp: datetime) -> str:
-    """Return a reverse cursor after the inclusive, second-granular end."""
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=UTC)
-    timestamp = timestamp.astimezone(UTC)
-    epoch = datetime(1970, 1, 1, tzinfo=UTC)
-    delta = timestamp - epoch
-    microseconds = (
-        (delta.days * 86_400 + delta.seconds) * 1_000_000
-        + delta.microseconds
-        + 1_000_000
-    )
-    return str(microseconds)
-
-
 def _iter_vod_messages(
     channel_id: str,
     start_dt: datetime,
@@ -271,6 +211,8 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
     if msg_filter is None:
         msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
 
+    started = last_progress = monotonic()
+    log("info", "Collecting Kick replay history before chronological output.")
     cursor: str | None = _cursor_after(end_dt)
     done = False
     page_offsets: list[int] = []
@@ -313,6 +255,25 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
             ):
                 msg = "Kick reverse history cursor did not move backwards."
                 raise KickError(msg)
+            now = monotonic()
+            if now - last_progress >= 5:
+                earliest = min(
+                    (
+                        stamp
+                        for raw in raw_messages
+                        if isinstance(raw, dict)
+                        if (stamp := _message_timestamp(raw)) is not None
+                    ),
+                    default=None,
+                )
+                log(
+                    "info",
+                    f"Kick replay: {state.get('pages', 0)} pages, "
+                    f"{state.get('raw_records', 0)} records collected "
+                    f"in {now - started:.1f}s; "
+                    f"earliest page timestamp: {earliest}.",
+                )
+                last_progress = now
             if not raw_messages:
                 state["empty_pages"] = cast("int", state.get("empty_pages", 0)) + 1
                 if cursor:
@@ -342,8 +303,13 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
                 + len(raw_messages)
                 - len(ordered)
             )
+            state["malformed_object"] = (
+                cast("int", state.get("malformed_object", 0))
+                + len(raw_messages)
+                - len(ordered)
+            )
             for raw in ordered:
-                parsed, msg_done = _classify_message(raw, start_dt, end_dt)
+                parsed, msg_done = _classify_message(raw, start_dt, end_dt, state)
                 if msg_done:
                     done = True
                 if parsed is None:
@@ -361,6 +327,9 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
                 else:
                     page_messages.append(cast("JSONDict", parsed))
 
+            state["selected_records"] = cast(
+                "int", state.get("selected_records", 0)
+            ) + len(page_messages)
             if page_messages:
                 page_offsets.append(spool.tell())
                 spool.write(json.dumps(page_messages).encode("utf-8") + b"\n")
@@ -368,6 +337,11 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
                 break
 
         state["history_complete"] = True
+        log(
+            "info",
+            f"Kick replay history collected in {monotonic() - started:.1f}s; "
+            "writing chronological output.",
+        )
         emitted = 0
         last_timestamp: int | None = None
         for page_offset in reversed(page_offsets):

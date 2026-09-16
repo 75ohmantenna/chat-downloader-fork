@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING, Any, cast
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.models import ChatRequest
 
+from .capture_manifest import has_record_loss
+
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
 
@@ -148,6 +150,7 @@ class CaptureCheckpoint:
         self.chat_id: str | None = None
         self.completed = False
         self.loaded = False
+        self.record_loss = False
         self.limit = request.max_messages
         self._prior_offset: float | None = None
         self._prior_ids: set[str] = set()
@@ -177,6 +180,7 @@ class CaptureCheckpoint:
         if state.get("artifacts") != self._initial_signatures:
             msg = "Capture files changed since the checkpoint; refusing to append."
             raise ValueError(msg)
+        self.record_loss = state.get("record_loss", False)
         offset, ids, total = state.get("offset"), state.get("ids"), state.get("total")
         if (
             (
@@ -187,6 +191,7 @@ class CaptureCheckpoint:
                     or offset < 0
                 )
             )
+            or type(self.record_loss) is not bool
             or not isinstance(ids, list)
             or len(ids) > _BOUNDARY_LIMIT
             or any(not isinstance(item, str) for item in ids)
@@ -221,6 +226,8 @@ class CaptureCheckpoint:
             raise ValueError(msg)
         self.chat_id = chat.id
         chat.diagnostics["checkpoint_overlap_suppressed"] = 0
+        chat.diagnostics["prior_message_count"] = self.total
+        chat.diagnostics["prior_record_loss"] = self.record_loss
         source = chat.chat
 
         def remaining() -> Generator[JSONDict, None, None]:
@@ -314,7 +321,8 @@ class CaptureCheckpoint:
                 "ids": sorted(self.ids),
                 "total": self.total,
                 "resets": self.resets,
-                "completed": self.completed,
+                "completed": self.completed and not has_record_loss(chat.diagnostics),
+                "record_loss": has_record_loss(chat.diagnostics),
                 "artifacts": [_file_signature(path) for path in self.outputs],
             },
         )

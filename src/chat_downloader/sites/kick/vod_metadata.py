@@ -8,6 +8,7 @@ import math
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
+from chat_downloader.debugging import log
 from chat_downloader.utils.json_types import JSONDict, get_dict, get_str
 
 from .constants import is_numeric_id, is_video_id
@@ -37,7 +38,7 @@ def fetch_vod_metadata(
             lambda: api_client.fetch_video_metadata(video_id), request
         )
     except KickVideoNotFound:
-        pass
+        log("info", "Kick legacy video metadata returned 404; trying website metadata.")
     else:
         returned_id = get_str(legacy, "uuid")
         owner = get_dict(get_dict(legacy, "livestream"), "channel")
@@ -83,6 +84,7 @@ def fetch_vod_metadata(
     ):
         msg = "Kick web video has no finite positive duration."
         raise KickError(msg)
+    _log_end_disagreement(video, duration)
     return {
         "uuid": video_id,
         "livestream": {
@@ -171,3 +173,20 @@ def _resolve_vod_window(
         raise KickError(msg) from error
 
     return channel_id, chatroom_id, title, start_dt, end_dt
+
+
+def _log_end_disagreement(video: JSONDict, duration: float) -> None:
+    """Explain inconsistent optional end metadata without changing the window."""
+    try:
+        start = datetime.fromisoformat(get_str(video, "start_time"))
+        end = datetime.fromisoformat(get_str(video, "end_time"))
+        difference = (end - start).total_seconds() - duration
+    except (ValueError, TypeError):
+        return
+    if abs(difference) > 1:
+        log(
+            "info",
+            "Kick metadata end_time differs from start + duration "
+            f"by {difference:.1f}s; "
+            "using duration for the replay cutoff.",
+        )

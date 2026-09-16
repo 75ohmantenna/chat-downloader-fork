@@ -469,6 +469,8 @@ def test_run_config_as_dict_contains_only_run_fields() -> None:
         "quiet": True,
         "resume": None,
         "verify_output": False,
+        "require_complete": False,
+        "run_manifest": None,
         "max_seen_message_ids": 50,
         "exit_on_debug": True,
         "pause_on_debug": False,

@@ -336,3 +336,40 @@ Kick replay TXT now shows recording-relative time, matching the accompanying
 `time_in_seconds` and `time_text` JSONL fields. Absolute timestamps remain in
 JSONL. Replay diagnostics report HTTP statuses and latency, pages, raw and
 emitted records, selected and observed time bounds, and the termination reason.
+
+
+## Replay completion and run manifests
+
+Add `--require_complete` to fail the command unless a completed recording's
+selected window is exhausted without known record loss. Timeouts, inactivity
+timeouts, interrupts, and message limits do not qualify, even when file parity
+passes. Reaching exactly `--max_messages` is conservatively treated as limited:
+exhaustion has not been observed. Live and unknown recording states are rejected
+before writing. Explicit empty windows may complete normally. Completion means
+provider history traversal, not proof that the provider retained every event.
+
+`--run_manifest run.json` writes a JSON report after shutdown with program
+version, recording identity/window, success, completion, termination, parity,
+current/prior run message counts, and output writer counts and SHA-256 hashes.
+It contains no chat messages, request headers, cookies, or input URL. Hashes cover
+whole files; writer counts cover the current run. Unopened pre-existing files
+are not hashed unless a resume checkpoint verified them. The manifest must be
+a new path distinct from outputs, checkpoint, and checkpoint lock. Use a new
+manifest filename on every resume. Failure to write the manifest fails the run.
+
+```bash
+chat_downloader "https://kick.com/examplechannel/videos/VIDEO_ID" \
+  --output capture.jsonl --output capture.txt \
+  --resume capture.checkpoint.json --verify_output \
+  --require_complete --run_manifest run.json
+```
+
+A message-limited or interrupted run still saves its valid shutdown checkpoint.
+Known malformed-record loss is retained in the checkpoint and prevents a later
+resume from certifying the archive complete. Start a fresh capture after the
+provider or parser issue is resolved. Existing checkpoints without this field
+have no recorded loss history; this is not a retroactive integrity audit.
+
+Kick replay emits collection progress at info level at most every five seconds
+between pages, then announces chronological output. Metadata fallback
+and material end-time/duration disagreements are also explained at info level.

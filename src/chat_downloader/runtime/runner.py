@@ -28,6 +28,7 @@ from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
 
 from .capture_checkpoint import CaptureCheckpoint, checkpoint_lock
+from .capture_manifest import RunManifest, replay_complete, validate_complete_request
 from .capture_verification import capture_paths, validate_verification, verify_capture
 from .cli_bridge import categorize_parameters
 
@@ -224,12 +225,15 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     chat = None
     primary_error = False
     checkpoint = None
+    manifest = None
     checkpoint_resources = ExitStack()
     checkpoint_bound = False
     if run_config.verify_output:
         result.parity_status = "not_run"
 
     try:
+        if run_config.run_manifest:
+            manifest = RunManifest(run_config.run_manifest, run_config.resume)
         if run_config.verify_output:
             validate_verification(chat_params, resume=bool(run_config.resume))
         if run_config.resume:
@@ -237,6 +241,10 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
             checkpoint = CaptureCheckpoint(run_config.resume, chat_params)
         downloader = downloader_cls(**init_params)
         chat = downloader.get_chat(**chat_params)
+        if manifest is not None:
+            manifest.bind(chat)
+        if run_config.require_complete:
+            validate_complete_request(chat)
         if run_config.verify_output:
             capture_paths(chat)
         if checkpoint is not None:
@@ -323,6 +331,29 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 log("error", result.error_message)
 
         result.message_type_counts = dict(sorted(message_type_counts.items()))
+        if (
+            run_config.require_complete
+            and result.success
+            and not replay_complete(chat, result)
+        ):
+            result.success = False
+            result.error_message = (
+                "Selected replay did not complete without record loss."
+            )
+            log("error", result.error_message)
+        try:
+            if manifest is not None:
+                manifest.write(
+                    chat,
+                    result,
+                    verified_existing=checkpoint is not None
+                    and checkpoint.loaded
+                    and checkpoint_bound,
+                )
+        except (OSError, ValueError) as error:
+            result.success = False
+            result.error_message = f"Unable to write run manifest: {error}"
+            log("error", result.error_message)
         _log_run_summary(chat, result.message_count, result.message_type_counts, result)
 
     return result

@@ -162,3 +162,23 @@ def test_web_endpoint_rejects_path_injection_and_redirects() -> None:
     with pytest.raises(KickError, match="302"):
         client.fetch_web_video_metadata("12345", VIDEO)
     assert session.calls[0][1]["allow_redirects"] is False
+
+
+@pytest.mark.parametrize(
+    "end", ["2026-09-11T23:24:00Z", "bad", None, "2026-09-11T23:24:00"]
+)
+def test_metadata_explains_disagreement_without_changing_cutoff(monkeypatch, end):
+    from chat_downloader.sites.kick import vod_metadata
+
+    payload = deepcopy(load_fixture("video_metadata_web.json"))
+    payload["data"]["end_time"] = end
+    client = Mock()
+    client.fetch_video_metadata.side_effect = KickVideoNotFound("missing")
+    client.fetch_channel.return_value = {"id": 12345, "slug": "examplechannel"}
+    client.fetch_web_video_metadata.return_value = payload
+    logs = []
+    monkeypatch.setattr(vod_metadata, "log", lambda level, text: logs.append(text))
+    result = fetch_vod_metadata(client, "examplechannel", VIDEO, REQUEST)
+    assert result["livestream"]["duration"] == payload["data"]["duration"] * 1000
+    assert "trying website metadata" in logs[0]
+    assert len(logs) == (2 if end == "2026-09-11T23:24:00Z" else 1)
