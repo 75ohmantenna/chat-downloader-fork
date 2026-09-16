@@ -234,3 +234,15 @@ def test_manifest_hash_rejects_replaced_fifo_without_blocking(tmp_path):
     assert not result.success
     assert "regular files" in result.error_message
     assert not manifest.exists()
+
+
+def test_manifest_uses_configured_provider_name(tmp_path):
+    class Named(Downloader):
+        def get_chat(self, **kwargs):
+            chat = super().get_chat(**kwargs)
+            chat.site._NAME = "Twitch.tv"
+            return chat
+
+    path = tmp_path / "manifest.json"
+    assert execute_run(Named, quiet=True, run_manifest=str(path)).success
+    assert json.loads(path.read_text())["recording"]["site_name"] == "Twitch.tv"

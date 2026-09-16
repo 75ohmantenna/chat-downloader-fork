@@ -116,20 +116,18 @@ class RunManifest:
             "replay_complete": replay_complete(chat, result),
             "termination_reason": result.termination_reason,
             "parity_status": result.parity_status,
+            "provider_inspection": result.provider_inspection,
             "message_count": result.message_count,
             "prior_message_count": getattr(chat, "diagnostics", {}).get(
                 "prior_message_count", 0
             ),
             "message_type_counts": result.message_type_counts,
             "recording": {
-                key: getattr(chat, key, None)
-                for key in (
-                    "site_name",
-                    "id",
-                    "start_time",
-                    "duration",
-                    "status",
-                )
+                "site_name": getattr(getattr(chat, "site", None), "_NAME", None),
+                **{
+                    key: getattr(chat, key, None)
+                    for key in ("id", "start_time", "duration", "status")
+                },
             },
             "outputs": artifacts,
         }

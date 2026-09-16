@@ -256,3 +256,15 @@ def test_directory_input_is_an_io_error(tmp_path, capsys):
     assert json.loads(capsys.readouterr().out) == {
         "error": "input_or_temporary_storage_io"
     }
+
+
+def test_inspection_ignores_unrelated_debug_lines_without_echoing_them(
+    tmp_path, capsys
+):
+    capture = _write(tmp_path / "chat.jsonl", [_text()])
+    log = _log(tmp_path / "debug.log", received=1, benign=0, parsed=1)
+    log.write_bytes(b"[DEBUG] PRIVATE_SENTINEL \xff\n" + log.read_bytes())
+    assert main([str(capture), "--debug-log", str(log)]) == 0
+    output = capsys.readouterr().out
+    assert "PRIVATE_SENTINEL" not in output
+    assert json.loads(output)["frame_accounting"]["unaccounted_frames"] == 0

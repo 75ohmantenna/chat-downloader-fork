@@ -20,6 +20,7 @@ from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_str
 
+from .capture_inspection import inspect_capture
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
 from .irc_diagnostics import (
     _EventDiverseIrcFrameCapture,
@@ -285,7 +286,7 @@ def get_chat_by_stream_id(
     else:
         downloader._update_badge_info(stream_id)
 
-    return Chat(
+    chat = Chat(
         downloader._get_chat_messages_by_stream_id(
             stream_id,
             request,
@@ -298,3 +299,7 @@ def get_chat_by_stream_id(
         id=stream_id,
         diagnostics=diagnostics.summary,
     )
+    chat._capture_inspector = lambda path: inspect_capture(
+        path, diagnostics=diagnostics.summary
+    )
+    return chat

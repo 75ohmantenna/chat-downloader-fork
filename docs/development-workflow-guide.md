@@ -121,7 +121,9 @@ dedup reset boundaries are audit failures.
 
 ### Twitch capture inspection
 
-Inspect a single live retrieval run alongside the parity audit:
+Live Twitch captures using `--verify_output` automatically include these
+diagnostics in `provider_inspection` on the run result, debug summary, and run
+manifest. To inspect a previously closed single live retrieval run offline:
 
 ```bash
 uv run python scripts/inspect_twitch_capture.py capture.jsonl \

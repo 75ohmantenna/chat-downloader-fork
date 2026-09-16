@@ -101,6 +101,7 @@ these fields:
 | `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error, and messages without a string type use the `<missing>` key |
 | `parity_status` | `not_requested`, `not_run`, `passed`, or `failed`; parity verifies artifacts, not provider completeness |
 | `termination_reason` | Completion, message limit, timeout, interruption, or error; successful retrieval may be intentionally bounded |
+| `provider_inspection` | Content-free Twitch live inspection report when output verification runs; otherwise `None` |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.
@@ -244,7 +245,7 @@ chat = downloader.get_chat_request(request)
 | --- | --- | --- |
 | `quiet` | `False` | Suppress formatted chat output to stdout |
 | `resume` | `None` | Path to a validated replay shutdown checkpoint |
-| `verify_output` | `False` | Verify one JSONL/TXT output pair after successful retrieval |
+| `verify_output` | `False` | Verify one JSONL/TXT output pair and supported provider diagnostics after successful retrieval |
 | `require_complete` | `False` | Fail unless the selected completed replay is exhausted without known record loss |
 | `run_manifest` | `None` | New filename for a JSON outcome, recording, and output-hash report |
 | `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |

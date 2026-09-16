@@ -316,7 +316,8 @@ def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
         "debug",
         (
             "Run summary: {'success': True, 'termination_reason': 'completed', "
-            "'parity_status': 'not_requested', 'message_count': 2, "
+            "'parity_status': 'not_requested', 'provider_inspection': None, "
+            "'message_count': 2, "
             "'message_type_counts': {'paid_message': 1, "
             "'ticker_paid_message_item': 1}, "
             "'formatted_duplicates_suppressed': 1, "
@@ -452,7 +453,8 @@ def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> 
         "Lazy output file was not created because no records were retrieved: empty.txt",
         (
             "Run summary: {'success': True, 'termination_reason': 'completed', "
-            "'parity_status': 'not_requested', 'message_count': 0, "
+            "'parity_status': 'not_requested', 'provider_inspection': None, "
+            "'message_count': 0, "
             "'message_type_counts': {}, 'formatted_duplicates_suppressed': 0, "
             "'prefetched_after_deadline_count': 0, "
             "'deadline_prefetch_count_complete': True, "

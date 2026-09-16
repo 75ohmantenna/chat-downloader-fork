@@ -37,7 +37,10 @@ class RunConfig:
     verify_output: bool = field(
         default=False,
         metadata={
-            "cli": _cli("Verify exact JSONL/TXT parity after capture", group="output")
+            "cli": _cli(
+                "Verify JSONL/TXT parity and supported provider diagnostics",
+                group="output",
+            )
         },
     )
     require_complete: bool = field(

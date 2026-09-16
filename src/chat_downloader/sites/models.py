@@ -14,6 +14,7 @@ from chat_downloader.utils.console_utils import safe_print
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
+    from pathlib import Path
 
     from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.sites.output_dispatch import (
@@ -87,6 +88,10 @@ class Chat:
         self.start_time = start_time
         self.id = id
         self.diagnostics = diagnostics if diagnostics is not None else {}
+
+        self._capture_inspector: Callable[[Path | None], dict[str, object]] | None = (
+            None
+        )
 
         # Site object that produced this chat — set by configure_chat().
         self.site: BaseChatDownloader | None = None

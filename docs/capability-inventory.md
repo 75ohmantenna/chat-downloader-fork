@@ -44,3 +44,7 @@ large refactors, parser reshaping, or tooling changes.
 - Reopen closed maintenance deferrals only with new evidence, such as a third
   site, a failing capability, or an organic threshold breach during feature
   work.
+
+Twitch live `--verify_output` combines exact parity with content-free provider
+inspection from `sites/twitch/capture_inspection.py`; the report is shared by the
+run result, debug summary, and run manifest.
