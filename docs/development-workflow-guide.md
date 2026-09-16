@@ -221,6 +221,16 @@ uv run pytest -v -m network --run-network
 `v10.1.0` by full commit SHA. Use the same uv version locally when validating
 tooling changes; standalone installations can run `uv self update 0.12.15`.
 
+## Dependency refreshes
+
+Run `uv lock --upgrade` to refresh dependencies within the version constraints
+in `pyproject.toml`, then `uv sync --locked` and `make ci`. Review the resolved
+versions and release notes, especially for networking libraries. Commit the
+generated `uv.lock` when intentionally updating dependencies. Wheel installers
+use the requirements in `pyproject.toml`, not this lockfile. Raise minimum
+versions there when a fix must reach installed users; urllib3 requires at least
+2.8.0 for HTTPS proxy TLS and streamed response security fixes.
+
 ## Architecture and test guardrails
 
 [`AGENTS.md`](../AGENTS.md) defines the binding rules;

@@ -40,8 +40,7 @@ def test_default_connector_invokes_create_connection(monkeypatch: Any) -> None:
     captured: dict[str, Any] = {}
 
     def fake_create(url: str, timeout: float | None, **kwargs: Any) -> str:
-        captured["url"] = url
-        captured["timeout"] = timeout
+        captured.update(url=url, timeout=timeout, **kwargs)
         return "connection"
 
     monkeypatch.setattr(wt, "create_connection", fake_create)

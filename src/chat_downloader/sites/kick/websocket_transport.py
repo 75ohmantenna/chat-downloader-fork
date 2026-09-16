@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import time
 from contextlib import suppress
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, TypedDict, cast
 from urllib.parse import urlparse
 
 from websocket import (
@@ -43,7 +43,14 @@ from .pusher_discovery import _HttpClient, get_pusher_ws_url
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
+    from chat_downloader.sites.proxy import _ProxySocket
     from chat_downloader.utils.json_types import JSONDict
+
+
+class _ConnectionOptions(TypedDict, total=False):
+    """Optional socket supplied to the WebSocket connection factory."""
+
+    socket: _ProxySocket
 
 
 class _WebSocketConnection(Protocol):
@@ -112,7 +119,9 @@ def _default_connector(
             proxy_url=proxy_url,
         )
     try:
-        connection_options = {"socket": proxy_socket} if proxy_socket else {}
+        connection_options: _ConnectionOptions = (
+            {"socket": proxy_socket} if proxy_socket else {}
+        )
         return cast(
             "_WebSocketConnection",
             create_connection(

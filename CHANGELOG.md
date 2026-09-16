@@ -8,6 +8,11 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Dependencies
+
+- Require urllib3 2.8.0 or newer to include fixes for HTTPS proxy TLS settings
+  and streamed response handling in package installations.
+
 ## 2.2.1 — 2026-08-31
 
 ### Documentation / tooling
