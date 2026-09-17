@@ -27,7 +27,7 @@ from chat_downloader.sites.kick.parsing.emotes import parse_emotes
 from chat_downloader.utils.json_types import get_dict, get_int, get_str
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Iterator
 
     from chat_downloader.utils.json_types import JSONDict
 
@@ -175,20 +175,19 @@ def parse_chat_message(raw: object) -> dict[str, Any]:
     return info
 
 
-def parse_preloaded_messages(raw_messages: Iterable[object]) -> list[dict[str, Any]]:
-    """Normalize a batch of preloaded history messages, skipping bad entries.
+def iter_preloaded_messages(raw_messages: Iterable[object]) -> Iterator[dict[str, Any]]:
+    """Yield normalized preloaded history messages, skipping bad entries.
 
     Args:
         raw_messages: Raw preloaded message objects.
 
-    Returns:
+    Yields:
         Normalized message dictionaries; entries that fail to parse are
         skipped.
     """
-    parsed: list[dict[str, Any]] = []
     for raw in raw_messages:
         try:
-            parsed.append(parse_chat_message(raw))
+            yield parse_chat_message(raw)
         except ParsingError as error:
             capture_debug_sample(
                 "kick-malformed-preloaded-message",
@@ -196,4 +195,3 @@ def parse_preloaded_messages(raw_messages: Iterable[object]) -> list[dict[str, A
                 sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
             )
             continue
-    return parsed

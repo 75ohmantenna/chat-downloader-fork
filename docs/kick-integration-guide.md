@@ -186,7 +186,7 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   metadata. Subscription-renewal `celebration` payloads remain text messages
   while retaining their provider ID, kind, total-month count, and normalized
   event timestamp under `metadata.celebration`. Entry points `parse_chat_message` /
-  `parse_preloaded_messages`. Sender badges merge Kick's legacy `badges` and
+  `iter_preloaded_messages`. Sender badges merge Kick's legacy `badges` and
   image-backed `badges_v2` arrays in stable provider order. Structured output
   retains v2 image URLs, selection state, badge type, provider metadata, and
   sort order without applying the mobile client's display-count limit.

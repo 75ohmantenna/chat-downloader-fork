@@ -9,8 +9,8 @@ import pytest
 from chat_downloader.errors import ParsingError
 from chat_downloader.sites.kick.parsing import messages
 from chat_downloader.sites.kick.parsing.messages import (
+    iter_preloaded_messages,
     parse_chat_message,
-    parse_preloaded_messages,
 )
 from tests.kick_helpers import load_fixture, raw_message
 
@@ -203,7 +203,7 @@ def test_invalid_payload_raises(payload):
 
 
 def test_malformed_preloaded_message_is_captured(captured):
-    assert parse_preloaded_messages([{"content": "missing id"}]) == []
+    assert list(iter_preloaded_messages([{"content": "missing id"}])) == []
     assert captured[0][0][0] == "kick-malformed-preloaded-message"
     assert captured[0][0][1]["raw"] == {"content": "missing id"}
 
@@ -380,4 +380,4 @@ def test_modern_badges_require_nonempty_name(badge):
     ],
 )
 def test_preloaded_skips_invalid_messages_and_coerces_numeric_ids(rows, expected):
-    assert [m["message_id"] for m in parse_preloaded_messages(rows)] == expected
+    assert [m["message_id"] for m in iter_preloaded_messages(rows)] == expected

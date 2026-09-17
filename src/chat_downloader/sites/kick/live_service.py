@@ -45,7 +45,7 @@ from .parsing.events import (
     MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX,
     dispatch_event,
 )
-from .parsing.messages import parse_preloaded_messages
+from .parsing.messages import iter_preloaded_messages
 from .parsing.pins import parse_pinned_message_created_event
 from .pusher_discovery import _HttpClient, _RequestsHttpClient
 from .websocket_transport import (
@@ -349,7 +349,7 @@ def _iter_preloaded_chat(
     preloaded = _fetch_preloaded_state(downloader, channel_id, username)
     if preloaded is None:
         return
-    for message in reversed(parse_preloaded_messages(preloaded.messages)):
+    for message in reversed(list(iter_preloaded_messages(preloaded.messages))):
         if emit(message):
             if record_diagnostic is not None:
                 record_diagnostic("preloaded_emitted_count")
@@ -445,7 +445,7 @@ def _iter_reconnect_backfill(
     try:
         try:
             for record_count, raw_message in enumerate(raw_history, start=1):
-                forward_messages.extend(parse_preloaded_messages([raw_message]))
+                forward_messages.extend(iter_preloaded_messages((raw_message,)))
                 if record_count >= _RECONNECT_BACKFILL_RECORD_LIMIT:
                     log(
                         "warning",
@@ -473,7 +473,9 @@ def _iter_reconnect_backfill(
         }
         fallback_messages = (
             message
-            for message in reversed(parse_preloaded_messages(preloaded.messages))
+            for message in reversed(
+                list(iter_preloaded_messages(preloaded.messages))
+            )
             if _is_in_timestamp_window(
                 message,
                 start_timestamp,
