@@ -46,6 +46,8 @@ class TwitchChatDownloader(BaseChatDownloader):
 
     _NAME = "twitch.tv"
 
+    _COMPLETED_REPLAY_STATUSES: ClassVar[frozenset[str]] = frozenset({"past"})
+
     _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "format": "twitch",
     }

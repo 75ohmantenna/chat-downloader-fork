@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any, TypeGuard, cast
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.models import ChatRequest
 
-from .capture_manifest import has_record_loss
+from .capture_manifest import has_record_loss, is_completed_replay
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
@@ -219,7 +219,7 @@ class CaptureCheckpoint:
 
     def bind(self, chat: Chat) -> None:  # noqa: C901 — replay boundary validation and source lifecycle
         """Validate metadata and filter already committed overlap before output."""
-        if chat.status != "completed" or not chat.id or chat.chat is None:
+        if not is_completed_replay(chat) or not chat.id or chat.chat is None:
             msg = "Resume requires a completed replay with stable identity."
             raise ValueError(msg)
         if self.chat_id is not None and chat.id != self.chat_id:

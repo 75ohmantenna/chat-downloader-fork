@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
+from types import SimpleNamespace
 
 import pytest
 
+from chat_downloader.runtime.capture_manifest import is_completed_replay
 from chat_downloader.runtime.runner import execute_run
+from chat_downloader.sites.models import Chat
 from tests.test_capture_checkpoint_unit import (
     Downloader,
     capture_params,  # noqa: F401 - pytest discovers this imported fixture
@@ -60,6 +64,50 @@ def test_manifest_certifies_closed_files_and_completed_run(
         artifact = tmp_path / item["file_name"].split("/")[-1]
         assert item["sha256"] == hashlib.sha256(artifact.read_bytes()).hexdigest()
     assert "Record 1" not in (tmp_path / "run.json").read_text()
+
+
+def test_provider_completed_status_enables_resume_and_certification(
+    tmp_path, monkeypatch, params
+):
+    original = Downloader.get_chat
+
+    def get_chat(self, **kwargs):
+        chat = original(self, **kwargs)
+        chat.status = "was_live"
+        chat.site = SimpleNamespace(
+            _NAME="youtube.com",
+            is_completed_replay_status=lambda status: status in {"past", "was_live"},
+        )
+        return chat
+
+    monkeypatch.setattr(Downloader, "get_chat", get_chat)
+    first = execute_run(Downloader, **params, max_messages=2)
+    assert first.success
+
+    manifest = tmp_path / "run.json"
+    second = execute_run(
+        Downloader,
+        **params,
+        require_complete=True,
+        run_manifest=str(manifest),
+    )
+    assert second.success
+    report = json.loads(manifest.read_text())
+    assert report["replay_complete"] is True
+    assert report["recording"]["status"] == "was_live"
+
+
+def test_completed_replay_preserves_legacy_adapter_fallback() -> None:
+    assert is_completed_replay(None) is False
+
+    chat = Chat(status="completed")
+    assert is_completed_replay(chat) is True
+
+    chat.site = SimpleNamespace()
+    assert is_completed_replay(chat) is True
+
+    chat.status = "was_live"
+    assert is_completed_replay(chat) is False
 
 
 @pytest.mark.parametrize("checkpoint", [False, True], ids=["plain", "checkpointed"])

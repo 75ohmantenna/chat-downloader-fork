@@ -416,6 +416,10 @@ Invalid or negative continuation delay values from the InnerTube response use
 the five-second polling fallback unless a completed replay has an explicit
 `youtube_replay_poll_interval` override.
 
+Strict completion and replay checkpoints accept stable `past` and `was_live`
+recordings. The transitional `post_live` state remains ineligible until YouTube
+finishes finalizing the replay archive.
+
 When debugging YouTube breakage, inspect modules in this order:
 
 1. `video_initialization.py`

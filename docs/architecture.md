@@ -45,7 +45,7 @@ For behavior-preservation coverage see
 | `youtube` ⊥ `twitch` ⊥ `kick` | Independence — no site package imports another |
 | `utils` is a leaf | No imports from `sites`, `runtime`, `output`, `formatting`, or `models` |
 | `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, or `sites` |
-| Generic layers stay provider-neutral | `runtime`, `output`, and `formatting` must not import a concrete site package (`sites.youtube`/`twitch`/`kick`). The lone exception is the site registry `runtime.site_dispatch`, which imports the `sites` aggregate to enumerate downloaders. Provider-specific behavior (e.g. live-status classification, live-format overrides) lives behind capability methods on `BaseChatDownloader` (`is_live_status`, `resolve_live_format`) that sites override. |
+| Generic layers stay provider-neutral | `runtime`, `output`, and `formatting` must not import a concrete site package (`sites.youtube`/`twitch`/`kick`). The lone exception is the site registry `runtime.site_dispatch`, which imports the `sites` aggregate to enumerate downloaders. Provider-specific behavior (e.g. live and completed-replay status classification, live-format overrides) lives behind capability methods on `BaseChatDownloader` (`is_live_status`, `is_completed_replay_status`, `resolve_live_format`) that sites override. |
 
 ### Core interfaces
 

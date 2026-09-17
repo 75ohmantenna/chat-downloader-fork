@@ -34,6 +34,11 @@ class BaseChatDownloader:
     # empty so the generic runtime never needs site-specific knowledge.
     _LIVE_STATUSES: ClassVar[frozenset[str]] = frozenset()
 
+    # Status values that identify a stable, completed replay. Providers with
+    # their own status vocabulary override this so generic capture policy does
+    # not need provider-specific knowledge.
+    _COMPLETED_REPLAY_STATUSES: ClassVar[frozenset[str]] = frozenset({"completed"})
+
     _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "message_groups": ["messages"],
         "format": "default",
@@ -191,6 +196,10 @@ class BaseChatDownloader:
         the generic runtime calls this hook.
         """
         return status in self._LIVE_STATUSES
+
+    def is_completed_replay_status(self, status: str | None) -> bool:
+        """Return whether ``status`` identifies a stable completed replay."""
+        return status in self._COMPLETED_REPLAY_STATUSES
 
     def resolve_live_format(self, format_name: str) -> str:
         """Map to a live-stream format variant; the base returns format_name unchanged.

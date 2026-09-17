@@ -23,9 +23,21 @@ if TYPE_CHECKING:
     from .runner import RunResult
 
 
+def is_completed_replay(chat: Chat | None) -> bool:
+    """Ask the owning provider whether the chat is a stable completed replay."""
+    if chat is None:
+        return False
+    classifier = getattr(chat.site, "is_completed_replay_status", None)
+    if classifier is None:
+        # Preserve compatibility for direct Chat use and third-party site
+        # adapters that predate the provider capability.
+        return chat.status == "completed"
+    return bool(classifier(chat.status))
+
+
 def replay_complete(chat: Chat | None, result: RunResult) -> bool:
     """Require successful exhaustion, excluding known provider parsing loss."""
-    if chat is None or chat.status != "completed" or not result.success:
+    if chat is None or not is_completed_replay(chat) or not result.success:
         return False
     state = chat.diagnostics
     return (
@@ -146,6 +158,6 @@ class RunManifest:
 
 def validate_complete_request(chat: Chat) -> None:
     """Reject live and unknown replay states before lazy output opens."""
-    if chat.status != "completed":
+    if not is_completed_replay(chat):
         msg = "Complete capture requires a completed replay."
         raise ValueError(msg)

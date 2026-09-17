@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from chat_downloader.sites.youtube import extractor as yt_extractor
 from chat_downloader.sites.youtube import helpers as yt_helpers
 from chat_downloader.sites.youtube.helpers import (
@@ -172,6 +174,20 @@ def test_is_live_status_recognizes_live_and_post_live() -> None:
     assert downloader.is_live_status("post_live") is True
     assert downloader.is_live_status("past") is False
     assert downloader.is_live_status(None) is False
+
+
+@pytest.mark.parametrize("status", ["past", "was_live"])
+def test_completed_replay_status_recognizes_stable_replays(status: str) -> None:
+    downloader = object.__new__(yt_extractor.YouTubeChatDownloader)
+
+    assert downloader.is_completed_replay_status(status) is True
+
+
+@pytest.mark.parametrize("status", ["live", "post_live", "upcoming", None])
+def test_completed_replay_status_rejects_unstable_states(status: str | None) -> None:
+    downloader = object.__new__(yt_extractor.YouTubeChatDownloader)
+
+    assert downloader.is_completed_replay_status(status) is False
 
 
 def test_resolve_live_format_maps_base_names_to_live_variants() -> None:

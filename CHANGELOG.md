@@ -13,6 +13,11 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Require urllib3 2.8.0 or newer to include fixes for HTTPS proxy TLS settings
   and streamed response handling in package installations.
 
+### Fixes
+
+- Allow strict completion, run manifests, and replay checkpoints to recognize
+  stable YouTube and Twitch replay statuses through provider capabilities.
+
 ## 2.2.1 — 2026-08-31
 
 ### Documentation / tooling

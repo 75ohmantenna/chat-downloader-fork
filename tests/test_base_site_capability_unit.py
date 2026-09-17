@@ -2,9 +2,9 @@
 
 """Provider-neutral live-format capability defaults on BaseChatDownloader.
 
-The generic runtime asks the site — via ``is_live_status`` and
-``resolve_live_format`` — instead of sniffing site names. These tests pin the
-base defaults that non-overriding sites (Twitch, Kick) rely on.
+The generic runtime asks the site via capability methods instead of sniffing
+site names. These tests pin the base defaults that non-overriding sites
+(Twitch, Kick) rely on.
 """
 
 from __future__ import annotations
@@ -23,6 +23,15 @@ def test_is_live_status_defaults_to_false() -> None:
     assert site.is_live_status("live") is False
     assert site.is_live_status("past") is False
     assert site.is_live_status(None) is False
+
+
+def test_completed_replay_status_defaults_to_completed() -> None:
+    site = _BareSite()
+
+    assert site.is_completed_replay_status("completed") is True
+    assert site.is_completed_replay_status("live") is False
+    assert site.is_completed_replay_status("past") is False
+    assert site.is_completed_replay_status(None) is False
 
 
 def test_resolve_live_format_defaults_to_identity() -> None:

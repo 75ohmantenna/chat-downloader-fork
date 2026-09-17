@@ -50,7 +50,14 @@ class Downloader:
                 raise self.failure
 
         chat = Chat(source(), id="video", status=self.status)
-        configure_chat(chat, request, SimpleNamespace(is_live_status=lambda _: False))
+        configure_chat(
+            chat,
+            request,
+            SimpleNamespace(
+                is_live_status=lambda _: False,
+                is_completed_replay_status=lambda status: status == "completed",
+            ),
+        )
         return chat
 
     def close(self):
@@ -310,6 +317,9 @@ def test_checkpoint_source_preserves_deadline_summary_and_unstarted_close(
 
     source = Source()
     chat = Chat(source, status="completed", id="id")
+    chat.site = SimpleNamespace(
+        is_completed_replay_status=lambda status: status == "completed"
+    )
     checkpoint = CaptureCheckpoint(
         str(tmp_path / "checkpoint"), {"output": str(tmp_path / "chat.jsonl")}
     )
@@ -347,7 +357,14 @@ def test_verifier_expands_lazy_paths_and_reports_text_mismatch(tmp_path, corrupt
         output=[str(tmp_path / "{title}.jsonl"), str(tmp_path / "{title}.txt")],
         format="kick",
     )
-    configure_chat(chat, request, SimpleNamespace(is_live_status=lambda _: False))
+    configure_chat(
+        chat,
+        request,
+        SimpleNamespace(
+            is_live_status=lambda _: False,
+            is_completed_replay_status=lambda status: status == "completed",
+        ),
+    )
     list(chat)
     if corrupted:
         (tmp_path / "{literal}.txt").write_text("corrupted\n")

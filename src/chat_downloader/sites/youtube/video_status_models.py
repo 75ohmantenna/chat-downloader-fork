@@ -11,6 +11,10 @@ from dataclasses import dataclass, field
 # status vocabularies — see BaseChatDownloader.is_live_status).
 REPLAY_STATUSES: frozenset[str] = frozenset({"past", "was_live", "post_live"})
 
+# ``post_live`` can expose the replay endpoint while YouTube is still finalizing
+# the archive, so strict completion and resume accept only stable replay states.
+COMPLETED_REPLAY_STATUSES: frozenset[str] = frozenset({"past", "was_live"})
+
 
 @dataclass(slots=True)
 class VideoDetails:

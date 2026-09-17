@@ -275,3 +275,12 @@ def test_extractor_generate_urls_delegates_to_url_generation(monkeypatch):
         lambda owner, livestream, vod, clip: iter([owner._NAME, livestream, vod, clip]),
     )
     assert list(TwitchChatDownloader().generate_urls(1, 2, 3)) == ["twitch.tv", 1, 2, 3]
+
+
+def test_completed_replay_status_recognizes_past_vods_and_clips() -> None:
+    downloader = object.__new__(TwitchChatDownloader)
+
+    assert downloader.is_completed_replay_status("past") is True
+    assert downloader.is_completed_replay_status("completed") is False
+    assert downloader.is_completed_replay_status("live") is False
+    assert downloader.is_completed_replay_status(None) is False

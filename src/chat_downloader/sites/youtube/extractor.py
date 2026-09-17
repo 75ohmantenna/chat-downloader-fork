@@ -21,6 +21,7 @@ from .discovery import YouTubeDiscoveryMixin
 from .discovery_playlists import YouTubePlaylistDiscoveryMixin
 from .video_initialization import YouTubeVideoInitializationMixin
 from .video_metadata import YouTubeVideoMetadataCoreMixin
+from .video_status_models import COMPLETED_REPLAY_STATUSES
 
 # Live-stream format overrides: when a live YouTube broadcast is requested with
 # one of these base format names, prefer the timestamp-aware variant. Owned here
@@ -69,6 +70,7 @@ class YouTubeChatDownloader(
 
     # Ongoing/recently-ended broadcast statuses (see playability classification).
     _LIVE_STATUSES: ClassVar[frozenset[str]] = frozenset({"live", "post_live"})
+    _COMPLETED_REPLAY_STATUSES: ClassVar[frozenset[str]] = COMPLETED_REPLAY_STATUSES
 
     _SITE_DEFAULT_PARAMS: ClassVar[dict[str, Any]] = {
         "format": "youtube",
