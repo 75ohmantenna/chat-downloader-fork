@@ -66,38 +66,22 @@ class ChatDownloader:
     ) -> None:
         """Initialize a new ChatDownloader session.
 
-        Creates a session manager that can instantiate site-specific
-        downloaders on demand. The provided parameters are applied to
-        all subsequent site sessions.
+        The provided parameters are applied to all subsequent site
+        sessions.
 
-        :param headers: Custom HTTP headers for requests, defaults to
-            None
-        :type headers: dict, optional
-        :param cookies: Path to Netscape-format cookies file, defaults
-            to None
-        :type cookies: str, optional
-        :param proxy: Proxy URL (supports HTTP/HTTPS/SOCKS). Examples:
-            - HTTP: "http://proxy.example.com:8080"
-            - SOCKS5: "socks5://127.0.0.1:1080"
-            - Direct connection: "" (empty string)
-            Defaults to None (system proxy settings)
-        :type proxy: str, optional
-        :param connect_timeout: TCP connect timeout in seconds,
-            defaults to 10
-        :type connect_timeout: float, optional
-        :param read_timeout: HTTP read timeout in seconds, defaults
-            to 30
-        :type read_timeout: float, optional
-        :param request_profile: Optional preset request profile
-            (youtube_web/youtube_android/youtube_ios/twitch_web)
-        :type request_profile: str, optional
-        :param auto_profile_fallback: Whether to automatically rotate
-            YouTube request profiles after generic initial playability
-            failures or repeated incomplete continuation responses. Defaults
-            to True.
-        :type auto_profile_fallback: bool, optional
-        :param twitch_client_id: Optional Twitch Client-ID override.
-        :type twitch_client_id: str, optional
+        Args:
+            headers: Custom HTTP headers for requests.
+            cookies: Path to a Netscape-format cookies file.
+            proxy: Proxy URL (HTTP/HTTPS/SOCKS); "" forces a direct
+                connection. Defaults to None (system proxy settings).
+            connect_timeout: TCP connect timeout in seconds (default 10).
+            read_timeout: HTTP read timeout in seconds (default 30).
+            request_profile: Optional preset request profile
+                (youtube_web/youtube_android/youtube_ios/twitch_web).
+            auto_profile_fallback: Automatically rotate YouTube request
+                profiles after generic initial playability failures or
+                repeated incomplete continuation responses (default True).
+            twitch_client_id: Optional Twitch Client-ID override.
         """
         check_proxy_cookie_safety(proxy, cookies)
 
@@ -205,96 +189,48 @@ class ChatDownloader:
     ) -> Chat:
         """Retrieve chat messages from a stream, video, clip or broadcast.
 
-        This is the main entry point for chat retrieval. It automatically
-        detects the streaming platform from the URL, creates the
-        appropriate site session, and returns a Chat object containing
-        a generator of messages.
+        Main entry point: detects the platform from the URL, creates the
+        appropriate site session, and returns a Chat object containing a
+        message generator.
 
-        :param url: URL of the stream/video (required)
-        :type url: str
+        Args:
+            url: URL of the stream/video (required).
+            start_time: Start time in seconds or hh:mm:ss (None = beginning).
+            end_time: End time in seconds or hh:mm:ss (None = until end).
+            timeout: Maximum duration to retrieve messages in seconds.
+            inactivity_timeout: Stop after this many seconds without messages.
+            max_attempts: Maximum retry attempts (default 15).
+            retry_timeout: Seconds to wait before retry; None uses
+                exponential backoff, negative waits for user input.
+            interruptible_retry: Allow skipping the wait to retry
+                immediately (default True).
+            max_messages: Maximum number of messages (None = unlimited).
+            message_groups: Predefined site-specific message groups to
+                include.
+            message_types: Specific message types (overrides message_groups).
+            output: Output file path or list of paths (None = stdout); each
+                extension selects its format (.jsonl/.txt only).
+            overwrite: Overwrite an existing output file (default True).
+            sort_keys: Sort JSON keys in output (default True).
+            format: Message format template name (site-specific default).
+            format_file: Path to a custom format definition file.
+            chat_type: YouTube chat type ('live' or 'top', default 'live').
+            ignore: List of YouTube video IDs to ignore.
+            youtube_replay_poll_interval: Explicit YouTube replay polling
+                interval (0.5-8 s); None respects the provider delay hint.
+            message_receive_timeout: Live socket receive-poll timeout in
+                seconds (default 1.0; Twitch and Kick enforce a minimum of 1).
+            buffer_size: Twitch buffer size for message retrieval
+                (default 4096).
 
-        Time filtering:
-        :param start_time: Start time in seconds or hh:mm:ss
-            (None = from beginning)
-        :type start_time: float or str, optional
-        :param end_time: End time in seconds or hh:mm:ss
-            (None = until end)
-        :type end_time: float or str, optional
-        :param timeout: Maximum duration to retrieve messages in
-            seconds
-        :type timeout: float, optional
-        :param inactivity_timeout: Stop if no messages received for
-            this many seconds
-        :type inactivity_timeout: float, optional
+        Raises:
+            URLNotProvided: No URL provided.
+            ChatGeneratorError: No valid generator found for the site.
+            SiteNotSupported: The URL's site is not supported.
+            InvalidURL: Invalid URL format.
 
-        Retry behavior:
-        :param max_attempts: Maximum retry attempts (default: 15)
-        :type max_attempts: int, optional
-        :param retry_timeout: Seconds to wait before retry
-            (None = exponential backoff, negative = wait for user
-            input)
-        :type retry_timeout: float, optional
-        :param interruptible_retry: Allow skipping wait to retry
-            immediately (default: True)
-        :type interruptible_retry: bool, optional
-
-        Message filtering:
-        :param max_messages: Maximum number of messages to retrieve
-            (None = unlimited)
-        :type max_messages: int, optional
-        :param message_groups: Predefined message groups to include
-            (site-specific)
-        :type message_groups: SiteDefault or list[str], optional
-        :param message_types: Specific message types to include
-            (overrides message_groups)
-        :type message_types: list, optional
-
-        Output options:
-        :param output: Output file path or list of paths (None = print to
-            stdout). Each extension determines its format (.jsonl/.txt).
-            Other extensions are not supported.
-        :type output: str or list[str], optional
-        :param overwrite: Overwrite existing output file
-            (default: True)
-        :type overwrite: bool, optional
-        :param sort_keys: Sort JSON keys in output (default: True)
-        :type sort_keys: bool, optional
-
-        Formatting:
-        :param format: Message format template name
-            (site-specific default)
-        :type format: SiteDefault or str, optional
-        :param format_file: Path to custom format definition file
-        :type format_file: str, optional
-
-        Site-specific (YouTube):
-        :param chat_type: Chat type ('live' or 'top')
-            (default: 'live')
-        :type chat_type: str, optional
-        :param ignore: List of video IDs to ignore
-        :type ignore: list, optional
-        :param youtube_replay_poll_interval: Explicit YouTube replay polling
-            interval in seconds from 0.5 through 8. None respects the
-            provider's delay hint (default: None)
-        :type youtube_replay_poll_interval: float, optional
-
-        Live transport (Twitch and Kick):
-        :param message_receive_timeout: Live socket receive-poll timeout in
-            seconds (default: 1.0; Twitch and Kick enforce a minimum of 1)
-        :type message_receive_timeout: float, optional
-
-        Site-specific (Twitch):
-        :param buffer_size: Buffer size for message retrieval
-            (default: 4096)
-        :type buffer_size: int, optional
-
-        :raises URLNotProvided: No URL provided
-        :raises ChatGeneratorError: No valid generator found for site
-        :raises SiteNotSupported: URL's site not supported
-        :raises InvalidURL: Invalid URL format
-
-        :return: Chat object with message generator
-        :rtype: Chat
+        Returns:
+            Chat object with the message generator.
         """
         params = locals()
         params = {k: v for k, v in params.items() if k != "self"}
@@ -313,11 +249,12 @@ class ChatDownloader:
     ) -> BaseChatDownloader:
         """Create or retrieve a session for a chat downloader class.
 
-        :param chat_downloader_class: The ChatDownloader class to create
-            session for
-        :param overwrite: Whether to overwrite existing session
-        :return: The session instance
-        :raises TypeError: if class is invalid
+        Args:
+            chat_downloader_class: The downloader class to create a session for.
+            overwrite: Whether to overwrite an existing session.
+
+        Raises:
+            TypeError: The class is not a valid downloader class.
         """
         return self._session_pool.create(chat_downloader_class, overwrite=overwrite)
 
@@ -325,11 +262,7 @@ class ChatDownloader:
         self,
         chat_downloader_class: type[BaseChatDownloader],
     ) -> BaseChatDownloader | None:
-        """Get existing session for a chat downloader class.
-
-        :param chat_downloader_class: The ChatDownloader class
-        :return: The session instance or None if not found
-        """
+        """Get an existing session for a downloader class, or None."""
         return self._session_pool.get(chat_downloader_class)
 
     def close(self) -> None:
@@ -343,30 +276,21 @@ class ChatDownloader:
 def run(*, propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
     """Execute a complete chat download session with error handling.
 
-    This is a convenience function that creates a ChatDownloader
-    instance, retrieves chat messages, and handles common errors. It
-    automatically:
-    - Separates downloader, request, and run parameters
-    - Iterates through all chat messages
-    - Logs messages unless quiet=True
-    - Handles and logs errors appropriately
-    - Cleans up resources via downloader.close()
+    Creates a ChatDownloader, iterates through all chat messages (logging
+    them unless quiet=True), handles and logs errors, and cleans up via
+    downloader.close().
 
-    :param propagate_interrupt: If True, re-raise KeyboardInterrupt
-        instead of catching it. Useful when embedding in other
-        applications. (default: False)
-    :type propagate_interrupt: bool, optional
-    :param kwargs: Combined fields from :class:`DownloaderConfig`,
-        :class:`ChatRequest`, and :class:`RunConfig`. They are separated by
-        the typed CLI bridge before execution.
-    :type kwargs: dict
+    Args:
+        propagate_interrupt: Re-raise KeyboardInterrupt instead of catching
+            it; useful when embedding in other applications (default False).
+        **kwargs: Combined fields from DownloaderConfig, ChatRequest, and
+            RunConfig; separated by the typed CLI bridge before execution.
 
-    :return: Structured execution summary.
-    :rtype: RunResult
+    Returns:
+        Structured execution summary.
 
     Example:
-        >>> run(url='https://www.youtube.com/watch?v=...',
-        ...     max_messages=100)
+        >>> run(url='https://www.youtube.com/watch?v=...', max_messages=100)
     """
     return execute_run(
         ChatDownloader,
