@@ -351,45 +351,6 @@ def _open_subscribed_transport(
     raise RuntimeError(msg)
 
 
-def _recover_pusher_transport(
-    downloader: KickChatDownloader,
-    transport: KickPusherTransport,
-    chatroom_id: str,
-    request: ChatRequest,
-    transport_factory: Callable[[], KickPusherTransport],
-    error: KickError,
-    recovery_count: int,
-    *,
-    proxy_url: str | None,
-    pusher_http_client: _HttpClient | None,
-) -> KickPusherTransport:
-    """Reconnect once with a freshly discovered Pusher application key."""
-    transport.close()
-    if recovery_count > 1:
-        raise error
-    wait_for_reconnect(
-        recovery_count,
-        error=error,
-        request=request,
-        provider="Kick Pusher protocol",
-    )
-    refreshed = _open_subscribed_transport(
-        downloader,
-        chatroom_id,
-        request,
-        transport_factory,
-        proxy_url=proxy_url,
-        pusher_http_client=pusher_http_client,
-        force_discover=True,
-    )
-    log(
-        "warning",
-        "Kick Pusher rejected the cached application key; "
-        "reconnected with a freshly discovered key.",
-    )
-    return refreshed
-
-
 def _fetch_preloaded_state(
     downloader: KickChatDownloader,
     channel_id: str,
@@ -642,7 +603,8 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         if session is not None
         else None
     )
-    transport = _open_subscribed_transport(
+    open_transport = partial(
+        _open_subscribed_transport,
         downloader,
         chatroom_id,
         request,
@@ -650,6 +612,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         proxy_url=proxy_url,
         pusher_http_client=pusher_http_client,
     )
+    transport = open_transport()
     consecutive_connection_failures = 0
     pusher_error_recoveries = 0
     last_provider_timestamp: int | None = None
@@ -754,40 +717,33 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                         if emit(live_message):
                             diagnostics.increment("live_emitted_count")
                             yield live_message
-            except ConnectionError as error:
-                logger.debug("Kick WebSocket disconnected; reconnecting: %s", error)
+            except (ConnectionError, KickError) as error:
                 transport.close()
-                consecutive_connection_failures += 1
+                force_discover = isinstance(error, KickError)
+                if force_discover:
+                    pusher_error_recoveries += 1
+                    if pusher_error_recoveries > 1:
+                        raise
+                    failure_count = pusher_error_recoveries
+                    provider = "Kick Pusher protocol"
+                    counter = "pusher_key_recovery_count"
+                else:
+                    logger.debug("Kick WebSocket disconnected; reconnecting: %s", error)
+                    consecutive_connection_failures += 1
+                    failure_count = consecutive_connection_failures
+                    provider = "Kick WebSocket"
+                    counter = "websocket_reconnect_count"
                 wait_for_reconnect(
-                    consecutive_connection_failures,
-                    error=error,
-                    request=request,
-                    provider="Kick WebSocket",
+                    failure_count, error=error, request=request, provider=provider
                 )
-                transport = _open_subscribed_transport(
-                    downloader,
-                    chatroom_id,
-                    request,
-                    transport_factory,
-                    proxy_url=proxy_url,
-                    pusher_http_client=pusher_http_client,
-                )
-                diagnostics.increment("websocket_reconnect_count")
-                pending_reconnect_backfill = True
-            except KickError as error:
-                pusher_error_recoveries += 1
-                transport = _recover_pusher_transport(
-                    downloader,
-                    transport,
-                    chatroom_id,
-                    request,
-                    transport_factory,
-                    error,
-                    pusher_error_recoveries,
-                    proxy_url=proxy_url,
-                    pusher_http_client=pusher_http_client,
-                )
-                diagnostics.increment("pusher_key_recovery_count")
+                transport = open_transport(force_discover=force_discover)
+                if force_discover:
+                    log(
+                        "warning",
+                        "Kick Pusher rejected the cached application key; "
+                        "reconnected with a freshly discovered key.",
+                    )
+                diagnostics.increment(counter)
                 pending_reconnect_backfill = True
             else:
                 break
