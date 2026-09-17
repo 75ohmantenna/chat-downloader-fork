@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from contextlib import ExitStack
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol
@@ -192,6 +191,91 @@ def _log_run_summary(
     log("debug", f"Run summary: {summary}")
 
 
+def _verify_capture_outputs(
+    chat: Chat | None,
+    run_config: RunConfig,
+    result: RunResult,
+    checkpoint: CaptureCheckpoint | None,
+    *,
+    checkpoint_bound: bool,
+    verification_bound: bool,
+) -> None:
+    """Run provider inspection, parity verification, and checkpoint save."""
+    try:
+        if verification_bound and chat is not None:
+            result.provider_inspection = inspect_provider_capture(chat)
+        if run_config.verify_output and result.success and chat is not None:
+            resets = (
+                tuple(
+                    checkpoint.resets
+                    + (
+                        [checkpoint.total + 1]
+                        if checkpoint.total and result.message_count
+                        else []
+                    )
+                )
+                if checkpoint is not None
+                else ()
+            )
+            result.parity_status = "failed"
+            verify_capture(
+                chat,
+                resets=resets,
+                allow_existing=checkpoint is not None and checkpoint.loaded,
+            )
+            result.parity_status = "passed"
+            if (
+                result.provider_inspection is not None
+                and result.provider_inspection["status"] != "ok"
+            ):
+                msg = "Provider capture inspection requires review."
+                result.success = False
+                result.error_message = msg
+                log("error", msg)
+        if checkpoint is not None and checkpoint_bound and chat is not None:
+            checkpoint.save(chat, result.message_count)
+    except (ChatDownloaderError, OSError, ValueError) as error:
+        result.success = False
+        result.termination_reason = "error"
+        result.error_message = str(error)
+        log("error", result.error_message)
+
+
+def _complete_run_record(
+    chat: Chat | None,
+    run_config: RunConfig,
+    result: RunResult,
+    manifest: RunManifest | None,
+    checkpoint: CaptureCheckpoint | None,
+    *,
+    checkpoint_bound: bool,
+) -> None:
+    """Finalize counts, completeness, manifest writing, and the summary log."""
+    result.message_type_counts = dict(sorted(result.message_type_counts.items()))
+    if (
+        run_config.require_complete
+        and result.success
+        and not replay_complete(chat, result)
+    ):
+        result.success = False
+        result.error_message = "Selected replay did not complete without record loss."
+        log("error", result.error_message)
+    try:
+        if manifest is not None:
+            manifest.write(
+                chat,
+                result,
+                verified_existing=checkpoint is not None
+                and checkpoint.loaded
+                and checkpoint_bound,
+            )
+    except (OSError, ValueError) as error:
+        result.success = False
+        result.error_message = f"Unable to write run manifest: {error}"
+        log("error", result.error_message)
+    _log_run_summary(chat, result.message_count, result.message_type_counts, result)
+
+
 def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     downloader_cls: type,
     *,
@@ -209,7 +293,6 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     _configure_testing_mode(run_config)
     downloader = None
     result = RunResult()
-    message_type_counts: Counter[str] = Counter()
     chat = None
     primary_error = False
     checkpoint = None
@@ -252,7 +335,9 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 checkpoint.observe(message)
             message_type = message.get("message_type")
             counter_key = message_type if isinstance(message_type, str) else "<missing>"
-            message_type_counts[counter_key] += 1
+            result.message_type_counts[counter_key] = (
+                result.message_type_counts.get(counter_key, 0) + 1
+            )
             callback(message)
 
         result.success = True
@@ -291,69 +376,22 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 result.error_message = (
                     "One or more output writers reported errors during close"
                 )
-            try:
-                if verification_bound and chat is not None:
-                    result.provider_inspection = inspect_provider_capture(chat)
-                if run_config.verify_output and result.success and chat is not None:
-                    resets = (
-                        tuple(
-                            checkpoint.resets
-                            + (
-                                [checkpoint.total + 1]
-                                if checkpoint.total and result.message_count
-                                else []
-                            )
-                        )
-                        if checkpoint is not None
-                        else ()
-                    )
-                    result.parity_status = "failed"
-                    verify_capture(
-                        chat,
-                        resets=resets,
-                        allow_existing=checkpoint is not None and checkpoint.loaded,
-                    )
-                    result.parity_status = "passed"
-                    if (
-                        result.provider_inspection is not None
-                        and result.provider_inspection["status"] != "ok"
-                    ):
-                        msg = "Provider capture inspection requires review."
-                        result.success = False
-                        result.error_message = msg
-                        log("error", msg)
-                if checkpoint is not None and checkpoint_bound and chat is not None:
-                    checkpoint.save(chat, result.message_count)
-            except (ChatDownloaderError, OSError, ValueError) as error:
-                result.success = False
-                result.termination_reason = "error"
-                result.error_message = str(error)
-                log("error", result.error_message)
-
-        result.message_type_counts = dict(sorted(message_type_counts.items()))
-        if (
-            run_config.require_complete
-            and result.success
-            and not replay_complete(chat, result)
-        ):
-            result.success = False
-            result.error_message = (
-                "Selected replay did not complete without record loss."
+            _verify_capture_outputs(
+                chat,
+                run_config,
+                result,
+                checkpoint,
+                checkpoint_bound=checkpoint_bound,
+                verification_bound=verification_bound,
             )
-            log("error", result.error_message)
-        try:
-            if manifest is not None:
-                manifest.write(
-                    chat,
-                    result,
-                    verified_existing=checkpoint is not None
-                    and checkpoint.loaded
-                    and checkpoint_bound,
-                )
-        except (OSError, ValueError) as error:
-            result.success = False
-            result.error_message = f"Unable to write run manifest: {error}"
-            log("error", result.error_message)
-        _log_run_summary(chat, result.message_count, result.message_type_counts, result)
+
+        _complete_run_record(
+            chat,
+            run_config,
+            result,
+            manifest,
+            checkpoint,
+            checkpoint_bound=checkpoint_bound,
+        )
 
     return result
