@@ -44,6 +44,9 @@ class ContinuationParseResult:
     :param is_end: ``True`` when no continuation token was found and the
         stream is considered finished.
     :type is_end: bool
+    :param click_tracking_params: Click-tracking params for the next
+        request, or ``None`` when absent.
+    :type click_tracking_params: str | None
     :param debug_info: Small dictionary of diagnostic fields preserved for
         logging (continuation key, raw continuation entry). Not intended
         for programmatic use.
@@ -54,6 +57,7 @@ class ContinuationParseResult:
     next_continuation: str | None = None
     timeout_ms: int | None = None
     is_end: bool = False
+    click_tracking_params: str | None = None
     debug_info: dict[str, object] = field(default_factory=dict)
 
 
@@ -102,7 +106,7 @@ _POLL_DELAY_FIELDS = (
 
 def _extract_next_continuation(
     info: JSONDict,
-) -> tuple[str | None, JSONAny, object, dict[str, object]]:
+) -> tuple[str | None, str | None, object, dict[str, object]]:
     """Scan continuations and return the first chat continuation entry.
 
     Seek-only continuations are intentionally skipped.
@@ -129,8 +133,9 @@ def _extract_next_continuation(
             debug["unknown"] = True
         return (
             get_str(continuation_info, "continuation") or None,
-            continuation_info.get("clickTrackingParams")
-            or continuation_info.get("trackingParams"),
+            get_str(continuation_info, "clickTrackingParams")
+            or get_str(continuation_info, "trackingParams")
+            or None,
             _extract_raw_poll_delay_ms(continuation_info),
             debug,
         )
@@ -187,8 +192,7 @@ def parse_continuation_response(
         raise IncompleteContinuationError(
             msg,
         )
-
-    token, _click_tracking, raw_timeout, debug_info = _extract_next_continuation(info)
+    token, click_tracking, raw_timeout, debug_info = _extract_next_continuation(info)
     if debug_info:
         debug_info = {
             **debug_info,
@@ -200,6 +204,7 @@ def parse_continuation_response(
         next_continuation=token,
         timeout_ms=_extract_timeout_ms(raw_timeout),
         is_end=token is None,
+        click_tracking_params=click_tracking,
         debug_info=debug_info,
     )
 

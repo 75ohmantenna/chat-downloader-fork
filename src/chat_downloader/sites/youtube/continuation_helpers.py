@@ -129,17 +129,9 @@ def update_state_from_result(
     if cont_result.next_continuation is None:
         return state
 
-    raw_entry = cont_result.debug_info.get("continuation_entry")
-    # pragma: no cover — when next_continuation is set, debug_info always has
-    # continuation_entry; the else-branch is unreachable in normal operation.
-    cont_entry = raw_entry if isinstance(raw_entry, dict) else {}  # pragma: no cover
-    click_tracking = cont_entry.get("clickTrackingParams") or cont_entry.get(
-        "trackingParams",
-    )
-
     return ContinuationLoopState(
         continuation=cont_result.next_continuation,
-        click_tracking_params=click_tracking,
+        click_tracking_params=cont_result.click_tracking_params,
         offset_milliseconds=state.offset_milliseconds,
     )
 

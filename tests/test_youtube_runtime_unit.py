@@ -57,13 +57,19 @@ def _returns(monkeypatch, name, value):
 
 
 def _build_result(
-    *, debug_info=None, timeout_ms=None, is_end=True, next_continuation=None
+    *,
+    debug_info=None,
+    timeout_ms=None,
+    is_end=True,
+    next_continuation=None,
+    click_tracking_params=None,
 ):
     return SimpleNamespace(
         debug_info={} if debug_info is None else debug_info,
         timeout_ms=timeout_ms,
         is_end=is_end,
         next_continuation=next_continuation,
+        click_tracking_params=click_tracking_params,
     )
 
 
