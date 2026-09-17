@@ -97,6 +97,14 @@ def test_paid_pinned_chat_preserves_integer_monetary_components() -> None:
     assert isinstance(parsed["pinned_chat_paid_exponent"], int)
 
 
+def test_gif_tag_is_recognized_and_preserved_losslessly() -> None:
+    parsed = _parse_fixture("irc-privmsg-gif.json")
+
+    assert parsed["message_type"] == "text_message"
+    assert parsed["message"] == "[Example GIF]"
+    assert parsed["gifs"] == "0-12|example-gif|https://example.invalid/example.gif"
+
+
 def test_charity_and_gift_match_notice_fields_are_typed() -> None:
     charity = _parse_fixture("irc-usernotice-charity-donation.json")
     gift_match = _parse_fixture("irc-usernotice-gift-sub-base-match.json")

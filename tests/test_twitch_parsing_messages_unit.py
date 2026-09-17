@@ -347,6 +347,57 @@ def test_parse_captures_unknown_payloads(monkeypatch, kind, debug):
     )
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "0-12|example-gif|https://example.invalid/gif.gif?token=a=b&size=large",
+        r"0-12|example-gif|https://example.invalid/a\sb.gif",
+    ],
+)
+def test_parse_gif_tag_is_opaque_and_not_captured_as_unknown(
+    monkeypatch,
+    value,
+) -> None:
+    calls = []
+    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: True)
+    monkeypatch.setattr(
+        tw_messages,
+        "capture_debug_sample",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    parsed = _parse_irc(irc_frame(f"gifs={value}", text="[Example GIF]"))
+
+    assert parsed["gifs"] == value
+    assert not calls
+
+
+def test_parse_gif_tag_does_not_hide_other_unknown_tags(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: True)
+    monkeypatch.setattr(
+        tw_messages,
+        "capture_debug_sample",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    raw = irc_frame("gifs=0-4|gif-id|https://example.invalid/gif;future-tag=value")
+
+    parsed = _parse_irc(raw)
+
+    assert parsed["gifs"] == "0-4|gif-id|https://example.invalid/gif"
+    assert parsed["future_tag"] == "value"
+    assert calls == [
+        (
+            (
+                "twitch-unknown-irc-tag",
+                {"raw": raw, "unknown_tags": ["future-tag"]},
+            ),
+            {"sample_limit": 10},
+        )
+    ]
+
+
 def test_parse_item_defaults_to_text_message_and_drops_empty_badges() -> None:
     item = gql_comment(
         gql_message(userColor="#ffffff", userBadges=[{"setID": "subscriber"}]),

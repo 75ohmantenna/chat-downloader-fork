@@ -250,6 +250,10 @@ def build_irc_remapping() -> dict[str, Any]:
         "source-badge-info": "shared_chat_source_badge_info",
         "source-only": r("shared_chat_source_only", _parse_bool),
         "emotes": r("emotes", _parse_emotes),
+        # Twitch's native GIF tag currently carries a provider-defined,
+        # pipe-delimited range, identifier, and URL. Preserve the complete
+        # value until that undocumented shape has a stable public contract.
+        "gifs": "gifs",
         "flags": "flags",
         "first-msg": r("is_first_message", _parse_bool),
         "returning-chatter": r("is_returning_chatter", _parse_bool),

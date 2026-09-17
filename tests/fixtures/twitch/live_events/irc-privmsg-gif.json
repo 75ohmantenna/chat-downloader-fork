@@ -1,0 +1,3 @@
+{
+  "raw": "@badge-info=;badges=;color=#1E90FF;display-name=TestUser;emotes=;first-msg=0;flags=;gifs=0-12|example-gif|https://example.invalid/example.gif;id=gif-msg-1;mod=0;returning-chatter=0;room-id=999;subscriber=0;tmi-sent-ts=1700000000000;turbo=0;user-id=12345;user-type= :testuser!testuser@testuser.tmi.twitch.tv PRIVMSG #channel :[Example GIF]\r\n"
+}
