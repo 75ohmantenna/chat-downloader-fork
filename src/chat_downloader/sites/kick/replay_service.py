@@ -1,13 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick VOD (video-on-demand) chat replay.
+"""Replay channel history within a VOD (video-on-demand) time window.
 
-Fetches chat messages for a past broadcast by paginating through the
-channel's message history and filtering by the VOD's time window.
-
-Reverse cursor pages are buffered in a temporary spool before chronological
-emission. Forward start_time responses are short time windows and their cursor
-is not a forward continuation token; using it silently loses replay records.
+Reverse-cursor pages spool temporarily before chronological output. Forward
+start_time responses cover short windows; their cursor is not a forward
+continuation token and using it silently loses replay records.
 """
 
 from __future__ import annotations
@@ -98,20 +95,13 @@ def get_vod_chat(
     *,
     api_client: KickApiClient,
 ) -> Chat:
-    """Build a :class:`Chat` for VOD chat replay.
-
-    Paginates through the channel's message history, filters by the
-    VOD's time window, and returns messages in chronological order.
+    """Paginate channel history within the VOD window, yielding chronological messages.
 
     Args:
-        downloader: The Kick downloader.
         username: Channel username/slug.
         video_id: VOD UUID.
-        request: The active chat request.
+        request: Chat request window, pagination, and retry settings.
         api_client: Downloader-owned provider HTTP client.
-
-    Returns:
-        A configured :class:`Chat` whose generator yields message dicts.
     """
     video_data = fetch_vod_metadata(api_client, username, video_id, request)
     channel_id, _chatroom_id, title, vod_start_dt, vod_end_dt = _resolve_vod_window(

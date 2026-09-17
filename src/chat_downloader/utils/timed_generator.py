@@ -17,12 +17,7 @@ POLLING_TIME = 0.1
 
 
 class TimedGenerator:
-    """Add timing functionality to generator objects.
-
-    Used to create timed-generator objects as well as add inactivity
-    functionality (i.e. return if no items have been generated in a given time
-    period)
-    """
+    """Wrap generators with timers, stopping after the given inactivity period."""
 
     def __init__(
         self,
@@ -230,9 +225,8 @@ class TimedGenerator:
     def close(self) -> None:
         """Request bounded worker shutdown and close the iterator when safe.
 
-        If the worker is advancing the iterator, this method returns after a
-        short bounded join. The worker closes the iterator when that active
-        advancement returns or raises.
+        During advancement, return after a bounded join; the worker closes the
+        iterator once advancement returns or raises.
         """
         if self._closed:
             return
@@ -340,12 +334,7 @@ class TimedGenerator:
 
 
 def polling_sleep(secs: float, poll_time: float = POLLING_TIME) -> None:
-    """Sleep for ``secs`` seconds using short polling intervals.
-
-    Args:
-        secs: Total duration to sleep in seconds.
-        poll_time: Length of each polling interval in seconds.
-    """
+    """Sleep for secs seconds in polling intervals of poll_time seconds."""
     if secs <= 0:
         return
 

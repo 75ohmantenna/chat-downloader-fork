@@ -1,18 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick Pusher application-key selection and refresh.
+"""Select and refresh Kick's public Pusher key for anonymous read-only chat.
 
-Kick has historically published the Pusher app key in its public Next.js
-JavaScript bundle as ``NEXT_PUBLIC_PUSHER_KEY``. It is not a secret — it grants
-only anonymous, read-only subscription to public chatroom channels.
-
-This module uses a compiled-in key for the normal connection path. After an
-explicit refresh request, it fetches Kick's homepage, scans linked JS chunks
-for a replacement, caches the result for the process lifetime, and falls back
-to the compiled-in default when discovery fails or is unavailable. It is
-separate from :mod:`chat_downloader.sites.kick.constants` so that the constant
-module stays free of network I/O and so the discovery logic can be unit-tested
-with a fake HTTP client.
+Normal connections use a compiled-in key. Explicit refresh scans homepage-linked
+Next.js chunks for ``NEXT_PUBLIC_PUSHER_KEY``, caches it for the process lifetime,
+and falls back to the default on failure. Network I/O stays out of constants;
+an injectable HTTP client enables offline tests.
 """
 
 from __future__ import annotations
@@ -38,11 +31,9 @@ _PUSHER_WS_TEMPLATE = (
 
 
 class PusherKeyCache:
-    """Holder for a discovered Pusher app key.
+    """Injectable discovered-key cache; ``key`` is ``None`` until resolved.
 
-    Encapsulates the discovered-key cache so callers can inject an isolated
-    instance (tests) instead of mutating shared module state. ``key`` is
-    ``None`` until a key has been resolved.
+    Tests can inject isolated instances instead of mutating shared module state.
     """
 
     def __init__(self) -> None:
@@ -116,11 +107,7 @@ class _RequestsHttpClient:
 
 
 def _is_kick_origin(url: str) -> bool:
-    """Return True if *url* is an HTTPS URL on the ``kick.com`` domain.
-
-    Used to constrain which script URLs the Pusher-key discovery loop will
-    fetch, so a tampered homepage cannot redirect it to an arbitrary host.
-    """
+    """Restrict discovery scripts to Kick HTTPS origins to prevent arbitrary fetches."""
     from urllib.parse import urlparse
 
     parsed = urlparse(url)
@@ -131,13 +118,9 @@ def _is_kick_origin(url: str) -> bool:
 
 
 def _discover_pusher_key(http_client: _HttpClient) -> str | None:
-    """Scan Kick's homepage and JS bundles for the current Pusher key.
+    """Scan Kick's homepage and JS bundles for a Pusher key.
 
-    Args:
-        http_client: Client used to fetch the homepage and candidate bundles.
-
-    Returns:
-        The discovered key, or ``None`` if no bundle contained it.
+    Returns ``None`` when no key can be found.
     """
     deadline = time.monotonic() + _DISCOVERY_TOTAL_TIMEOUT_SECONDS
     try:
@@ -193,27 +176,16 @@ def resolve_pusher_key(
     http_client: _HttpClient | None = None,
     cache: PusherKeyCache | None = None,
 ) -> str:
-    """Return the current Pusher application key.
+    """Return the cached/compiled-in key without I/O, or discover on forced calls.
 
-    Kick has historically published the key in a Next.js JS bundle as
-    ``NEXT_PUBLIC_PUSHER_KEY``. Normal calls use the compiled-in default without
-    network I/O. Forced calls scan the live page for a replacement and fall
-    back to that default if discovery fails.
-
-    Discovery scans at most 15 JS bundles within a ten-second total budget and
-    a three-second per-request timeout. Once resolved the key is cached for the
-    process lifetime.
+    Discovery scans at most 15 JS bundles in ten seconds, with three seconds per
+    request; failure uses the default. Resolved keys are cached for the process.
 
     Args:
-        force_discover: If True, skip the cache and attempt discovery from the
-            live page. Useful when a ``pusher:error`` suggests the key rotated.
-        http_client: Optional HTTP client for dependency injection (tests
-            supply a fake). Defaults to a browser-like ``requests`` session.
-        cache: Optional key cache to read/populate. Defaults to the shared
-            process-wide cache.
-
-    Returns:
-        The Pusher app key string.
+        force_discover: Bypass cache and scan the live page, e.g. after a
+            ``pusher:error`` indicating key rotation.
+        http_client: Injectable client; defaults to a browser-like requests session.
+        cache: Cache to read/populate; defaults to the shared process-wide cache.
     """
     key_cache = cache if cache is not None else _pusher_key_cache
 
@@ -240,16 +212,12 @@ def get_pusher_ws_url(
     force_discover: bool = False,
     http_client: _HttpClient | None = None,
 ) -> str:
-    """Return the Pusher WebSocket URL with the current app key.
+    """Build the Pusher WebSocket URL from the current app key.
 
     Args:
-        force_discover: If True, attempt re-discovery of the app key from
-            Kick's live JS bundle before building the URL. Otherwise use the
-            cached or compiled-in key without network I/O.
-        http_client: Optional HTTP client carrying downloader session settings.
-
-    Returns:
-        The full Pusher WebSocket URL.
+        force_discover: Refresh from Kick's live JS; otherwise use cached/default
+            key without I/O.
+        http_client: HTTP client carrying downloader session settings.
     """
     key = resolve_pusher_key(
         force_discover=force_discover,

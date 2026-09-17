@@ -85,25 +85,16 @@ def _process_irc_buffer(
     readbuffer: str,
     pattern: re.Pattern[str],
 ) -> tuple[str, list[re.Match[str]]]:
-    r"""Run ``pattern`` over ``readbuffer`` and handle partial trailing matches.
-
-    The IRC stream is received in arbitrary chunks.  A match may be split
-    across two consecutive ``recv`` calls, so the last regex match is only
-    considered complete when the buffer ends with the IRC line terminator
-    ``\r\n``.  If the buffer ends mid-line the last incomplete match is
-    dropped from the returned list and the remainder of the buffer starting
-    at that match's position is returned so it can be prepended to the next
-    chunk.
+    r"""Match complete IRC lines, retaining a trailing partial match for next recv.
 
     Args:
-        readbuffer: The current accumulated receive buffer as a string.
-        pattern: Compiled regex used to find IRC message lines.
+        readbuffer: Accumulated receive buffer; chunks may split matches.
+        pattern: Compiled IRC message regex.
 
     Returns:
-        A 2-tuple of ``(remaining_buffer, matches)`` where
-        ``remaining_buffer`` is the unconsumed tail that must be carried
-        forward, and ``matches`` is the list of complete match objects ready
-        for parsing.
+        ``(remaining_buffer, matches)``: the tail to prepend to the next chunk
+        and complete matches ready to parse. Without a final ``\r\n``, retain
+        the incomplete last match from its start and exclude it from matches.
     """
     matches = list(pattern.finditer(readbuffer))
     if readbuffer.endswith("\r\n"):
@@ -189,43 +180,26 @@ class TwitchChatIRC:
             raise
 
     def send_raw(self, string: str) -> None:
-        """Send a raw IRC command followed by CRLF.
-
-        Args:
-            string: IRC command string without the trailing CRLF.
-        """
+        """Send a raw IRC command without trailing CRLF, appending CRLF."""
         self.socket.sendall((string + "\r\n").encode("utf-8"))
 
     def recv(self, buffer_size: int) -> str:
-        """Receive up to ``buffer_size`` bytes from the socket as a string.
+        """Receive up to ``buffer_size`` bytes as incremental UTF-8 text.
 
-        Args:
-            buffer_size: Maximum number of bytes to receive.
-
-        Returns:
-            Incrementally decoded UTF-8 text. Valid multibyte characters split
-            across network chunks are preserved; malformed bytes are ignored.
+        Preserve valid multibyte characters across chunks; ignore malformed bytes.
         """
         data = self.socket.recv(buffer_size)
         return self._decoder.decode(data, final=not data)
 
     def join_channel(self, channel_name: str) -> None:
-        """Join the given Twitch IRC channel if not already joined.
-
-        Args:
-            channel_name: Channel name (with or without leading ``#``).
-        """
+        """Join unless already joined; channel may include a leading ``#``."""
         channel_lower = channel_name.lower()
         if self.current_channel != channel_lower:
             self.send_raw(f"JOIN #{channel_lower}")
             self.current_channel = channel_lower
 
     def set_timeout(self, message_receive_timeout: float) -> None:
-        """Set the socket receive timeout.
-
-        Args:
-            message_receive_timeout: Positive timeout in seconds.
-        """
+        """Set the socket receive timeout to a positive number of seconds."""
         self.socket.settimeout(message_receive_timeout)
 
     def close_connection(self) -> None:

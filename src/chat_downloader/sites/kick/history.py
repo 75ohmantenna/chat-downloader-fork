@@ -103,11 +103,10 @@ def iter_forward_history(  # noqa: C901 — bounded history window traversal
     max_pages: int | None = None,
     max_records: int | None = None,
 ) -> Generator[JSONDict, None, None]:
-    """Read five-second history windows, as the Kick website does.
+    """Read website-style five-second windows for bounded reconnect recovery.
 
-    The returned cursor belongs to reverse history, not forward continuation.
-    Empty windows cannot establish exhaustion. This bounded traversal is used
-    for reconnect recovery; whole recordings use reverse pagination/spooling.
+    Cursors belong to reverse history, not forward continuation; empty windows
+    do not imply exhaustion. Whole recordings use reverse pagination/spooling.
     """
     start_dt, end_dt = _as_utc(start_dt), _as_utc(end_dt)
     if end_dt <= start_dt:

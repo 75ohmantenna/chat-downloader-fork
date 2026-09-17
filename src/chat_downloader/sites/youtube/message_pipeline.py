@@ -1,15 +1,8 @@
 # SPDX-License-Identifier: MIT
 
-"""YouTube chat message processing pipeline.
+"""Pure YouTube action processing: parse, validate/finalize, then type/time filters.
 
-Pure functions that take a raw action dict and run it through the full
-message pipeline: parse → validate/finalize → message-type filter →
-time-range filter.  No network calls or logging side effects.
-
-Public surface
---------------
-- :class:`PipelineResult` — typed outcome of processing one action.
-- :func:`process_pipeline_action` — main entry point.
+No network/logging side effects. process_pipeline_action returns a PipelineResult.
 """
 
 from __future__ import annotations
@@ -64,19 +57,13 @@ _SKIP_NON_EMISSION_REASONS = frozenset(
 
 @dataclass(frozen=True, slots=True)
 class PipelineResult:
-    """Outcome of processing a single raw action through the message pipeline.
+    """Typed outcome of processing one raw action.
 
-    :param disposition: What the caller should do with this action.
-
-        * ``"yield"`` — ``message`` is ready to be emitted to the consumer.
-        * ``"skip"`` — action was filtered out; move to the next one.
-        * ``"stop"`` — time-range filter signaled end of stream; the caller
-          should stop iterating.
-
-    :param message: Fully-parsed message dict when ``disposition == "yield"``,
-        otherwise ``None``.
-    :param non_emission_reason: Bounded diagnostic reason when the action was
-        processed but did not yield a message.
+    Attributes:
+        disposition: "yield" emits message; "skip" advances past a filtered action;
+            "stop" ends iteration when the time-range filter signals end of stream.
+        message: Fully parsed dict for "yield", otherwise None.
+        non_emission_reason: Bounded diagnostic reason for a processed non-yield.
     """
 
     disposition: Literal["yield", "skip", "stop"]
@@ -155,30 +142,19 @@ def process_pipeline_action(
     time_filter: TimeRangeFilter | None,
     paid_events: PaidEventCache | None = None,
 ) -> PipelineResult:
-    """Run a single raw action through the full message pipeline.
+    """Parse, validate/finalize, then type/group- and time-filter a raw API action.
 
-    Steps:
+    process_action ignores unknown/ignored actions;
+    validate_and_finalize_message checks required fields and post-processes,
+    rejecting malformed messages. MessageFilter.should_add excludes false results;
+    TimeRangeFilter.check skips on "skip" and ends the stream on "stop".
 
-    1. :func:`~.parsing.actions_router.process_action` — parse the raw action
-       dict into a typed message dict; returns ``None`` for ignored or unknown
-       actions.
-    2. :func:`~.parsing.actions_handlers_validation.validate_and_finalize_message`
-       — validate required fields and apply post-processing; returns ``None``
-       when the message is malformed.
-    3. :meth:`chat_downloader.sites.filters.MessageFilter.should_add` —
-       message-type / group filter; ``False`` means the message is excluded.
-    4. :meth:`chat_downloader.sites.filters.TimeRangeFilter.check` (when
-       *time_filter* is not ``None``) — time-range filter; ``"skip"`` skips
-       the message, ``"stop"`` signals end of stream.
-
-    :param action: Raw action dict from the YouTube live-chat API.
-    :param offset: Time offset in seconds for replay chat (passed to
-        :func:`~.parsing.actions_router.process_action`).
-    :param msg_filter: Message-type / group filter instance.
-    :param time_filter: Optional time-range filter; pass ``None`` for
-        live (non-replay) streams.
-    :return: :class:`PipelineResult` with ``disposition`` and optional
-        ``message``.
+    Args:
+        action: Raw YouTube API action to parse and filter.
+        offset: Replay offset in seconds, passed to process_action.
+        msg_filter: Message type/group inclusion filter.
+        time_filter: Optional range filter; None for live streams.
+        paid_events: Optional per-run cache enriching sparse paid tickers.
     """
     known_ignored_action = is_known_ignored_action(action)
     parsed_action = process_action(action, offset)

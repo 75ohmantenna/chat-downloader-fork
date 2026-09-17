@@ -42,12 +42,7 @@ class TwitchError(SiteError):
 
 
 class TwitchChatDownloader(BaseChatDownloader):
-    """Main Twitch chat downloader class.
-
-    This class provides methods for downloading chat messages from Twitch VODs,
-    clips, and live streams. It handles GraphQL API requests, IRC connections,
-    and badge information caching.
-    """
+    """Download Twitch VOD, clip, and live chat via GraphQL/IRC with badge caching."""
 
     _NAME = "twitch.tv"
 
@@ -64,24 +59,18 @@ class TwitchChatDownloader(BaseChatDownloader):
         self._channel_ids: dict[str, str] = {}
 
     def _client_id_kwargs(self) -> dict[str, str]:
-        """Return ``{'client_id': ...}`` when a custom client ID is configured.
-
-        Returns an empty dict otherwise so callers can unconditionally spread
-        ``**self._client_id_kwargs()`` into GQL and badge API calls.
-        """
+        """Return custom ``client_id`` kwargs for GQL/badge calls, or an empty dict."""
         client_id: str | None = getattr(self, "_twitch_client_id", None)
         return {"client_id": client_id} if client_id is not None else {}
 
     def _update_badge_info(self, channel: str, channel_id: str | None = None) -> None:
-        """Fetch badge data from the Twitch API and update the instance cache.
+        """Fetch badges into the instance cache, never parsing-module globals.
 
-        The instance-owned :attr:`badge_cache` is mutated in-place.  Parsing
-        module globals are intentionally **not** written; all parsing calls
-        receive badge data via the explicit ``badge_set`` parameter instead.
+        Parsers receive cached data through ``badge_set``.
 
         Args:
-            channel: Channel name to retrieve badges for.
-            channel_id: Numeric channel ID used by the current badge operation.
+            channel: Channel name.
+            channel_id: Numeric channel ID for this badge operation.
         """
         channel_ids: dict[str, str] = getattr(self, "_channel_ids", {})
         self._channel_ids = channel_ids
@@ -101,14 +90,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         )
 
     def _download_base_gql(self, ops: Any) -> Any:
-        """Download GraphQL data using base query.
-
-        Args:
-            ops: List of GraphQL operations to execute
-
-        Returns:
-            JSON response from GraphQL API
-        """
+        """Execute a list of base GraphQL operations and return the JSON response."""
         auth_token: str | None = self.get_cookie_value(GQL_AUTH_COOKIE_NAME)
         return _download_base_gql(
             self._session_post, ops, auth_token, **self._client_id_kwargs()
@@ -120,14 +102,11 @@ class TwitchChatDownloader(BaseChatDownloader):
         *,
         record_optional_degradation: Callable[[], None] | None = None,
     ) -> Any:
-        """Download GraphQL data using persisted query hashes.
+        """Execute a list of persisted GraphQL operations and return JSON.
 
         Args:
-            ops: List of GraphQL operations to execute
+            ops: GraphQL operations with names and variables.
             record_optional_degradation: Content-free live diagnostic callback.
-
-        Returns:
-            JSON response from GraphQL API
         """
         kwargs: dict[str, Any] = self._client_id_kwargs()
         if record_optional_degradation is not None:
@@ -145,15 +124,12 @@ class TwitchChatDownloader(BaseChatDownloader):
         vod_limit: int,
         clip_limit: int,
     ) -> Iterable[str]:
-        """Generate test URLs from top livestreams and their VODs/clips.
+        """Yield test URLs for top livestreams and their VODs/clips.
 
         Args:
-            livestream_limit: Number of top livestreams to retrieve.
-            vod_limit: Number of VODs to fetch per livestream.
-            clip_limit: Number of clips to fetch per livestream.
-
-        Yields:
-            URLs for livestreams, their VODs, and their clips.
+            livestream_limit: Number of top livestreams.
+            vod_limit: VODs per livestream.
+            clip_limit: Clips per livestream.
         """
         yield from generate_twitch_urls(self, livestream_limit, vod_limit, clip_limit)
 
@@ -164,16 +140,13 @@ class TwitchChatDownloader(BaseChatDownloader):
         max_duration: float | None,
         offset: float | None = None,
     ) -> Generator[dict[str, Any], None, None]:
-        """Get chat messages for a VOD or clip.
+        """Yield parsed VOD or clip chat messages.
 
         Args:
-            vod_id: VOD ID to retrieve messages for
-            params: Parameters dictionary
-            max_duration: Maximum duration of the video
-            offset: Time offset for clips (None for VODs)
-
-        Yields:
-            Parsed chat message dictionaries
+            vod_id: Twitch VOD ID containing the replay chat.
+            params: Replay request options, including time bounds and filters.
+            max_duration: Maximum video duration.
+            offset: Clip time offset; None for VODs.
         """
         request = self._coerce_chat_request(params)
 
@@ -192,15 +165,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Internal routing method for VOD chat retrieval.
-
-        Args:
-            match: Regex match object with 'id' group
-            params: Parameters dictionary
-
-        Returns:
-            Chat object
-        """
+        """Route VOD chat retrieval using the match's ``id`` group."""
         return self.get_chat_by_vod_id(match.group("id"), params)
 
     def get_chat_by_vod_id(
@@ -208,21 +173,14 @@ class TwitchChatDownloader(BaseChatDownloader):
         vod_id: str,
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Get chat messages for a VOD by ID.
-
-        This is a public API method for retrieving chat replay from a past
-        broadcast.
+        """Return a past broadcast's replay chat and message generator.
 
         Args:
-            vod_id: Twitch VOD ID (e.g., '87136772')
-            params: Parameters dictionary with optional start_time,
-                end_time, etc.
-
-        Returns:
-            Chat object with message generator
+            vod_id: Twitch VOD ID (e.g., '87136772').
+            params: Request options including start_time and end_time.
 
         Raises:
-            VideoUnavailable: If the VOD does not exist or is unavailable
+            VideoUnavailable: The VOD does not exist or is unavailable.
         """
         request = self._coerce_chat_request(params)
         return build_vod_chat(self, vod_id, request)
@@ -232,15 +190,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Internal routing method for clip chat retrieval.
-
-        Args:
-            match: Regex match object with 'id' group
-            params: Parameters dictionary
-
-        Returns:
-            Chat object
-        """
+        """Route clip chat retrieval using the match's ``id`` group."""
         return self.get_chat_by_clip_id(match.group("id"), params)
 
     def get_chat_by_clip_id(
@@ -248,21 +198,14 @@ class TwitchChatDownloader(BaseChatDownloader):
         clip_id: str,
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Get chat messages for a clip by ID.
-
-        This is a public API method for retrieving chat replay from a clip.
+        """Return a clip's replay chat and message generator.
 
         Args:
-            clip_id: Twitch clip slug (e.g., 'TrappedFrigidSeemsGood')
-            params: Parameters dictionary with optional start_time,
-                end_time, etc.
-
-        Returns:
-            Chat object with message generator
+            clip_id: Twitch clip slug (e.g., 'TrappedFrigidSeemsGood').
+            params: Request options including start_time and end_time.
 
         Raises:
-            NoChatReplay: If the clip's VOD has expired and chat is
-                unavailable
+            NoChatReplay: The clip's VOD has expired and chat is unavailable.
         """
         request = self._coerce_chat_request(params)
         return build_clip_chat(self, clip_id, request)
@@ -274,18 +217,14 @@ class TwitchChatDownloader(BaseChatDownloader):
         *,
         diagnostics: _TwitchLiveDiagnostics | None = None,
     ) -> Generator[dict[str, Any], None, None]:
-        """Get live chat messages for a stream via IRC.
+        """Yield parsed IRC frames in arrival order via anonymous live chat.
 
-        The transport connects anonymously, requests Twitch IRC tags and
-        commands, and yields parsed frames in arrival order.
+        Requests Twitch IRC tags and commands.
 
         Args:
-            stream_id: Channel name
-            params: Parameters dictionary
+            stream_id: Channel name.
+            params: Live request options, including filters and buffer size.
             diagnostics: Mutable counters for the owning live-chat run.
-
-        Yields:
-            Parsed IRC message dictionaries
         """
         request = self._coerce_chat_request(params)
         yield from iter_stream_chat_messages(
@@ -302,15 +241,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Internal routing method for stream chat retrieval.
-
-        Args:
-            match: Regex match object with 'id' group
-            params: Parameters dictionary
-
-        Returns:
-            Chat object
-        """
+        """Route stream chat retrieval using the match's ``id`` group."""
         return self.get_chat_by_stream_id(match.group("id"), params)
 
     def get_chat_by_stream_id(
@@ -318,21 +249,16 @@ class TwitchChatDownloader(BaseChatDownloader):
         stream_id: str,
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Get live chat messages for a stream by channel name.
+        """Return IRC-backed live chat and its message generator.
 
-        This public API method builds an IRC-backed chat for the channel. An
-        offline or upcoming channel remains open while it waits for messages.
+        Offline/upcoming channels remain open waiting for messages.
 
         Args:
-            stream_id: Twitch channel name (e.g., 'shroud')
-            params: Parameters dictionary with optional message_groups,
-                buffer_size, etc.
-
-        Returns:
-            Chat object with live message generator
+            stream_id: Twitch channel name (e.g., 'shroud').
+            params: Request options including message_groups and buffer_size.
 
         Raises:
-            UserNotFound: If the channel does not exist
+            UserNotFound: The channel does not exist.
         """
         request = self._coerce_chat_request(params)
         return build_stream_chat(self, stream_id, request)

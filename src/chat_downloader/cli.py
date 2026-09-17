@@ -30,14 +30,10 @@ if TYPE_CHECKING:
 
 
 def _install_cli_signal_handlers() -> None:
-    """Translate SIGTERM into KeyboardInterrupt so writers get flushed.
+    """Translate SIGTERM to KeyboardInterrupt so the runner's finally flushes writers.
 
-    The runner's finally block flushes writers on KeyboardInterrupt. A
-    second signal restores the default handler so a stuck shutdown can
-    still be force-killed.
-
-    SIGINT is already raised as KeyboardInterrupt by the Python runtime,
-    so we only wrap it to support the second-signal escape hatch.
+    SIGINT already raises KeyboardInterrupt. Wrap both to restore the default
+    handler on a second signal, allowing stuck shutdowns to be force-killed.
     """
     state = {"triggered": False}
 
@@ -79,11 +75,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(cli_args: Sequence[str] | None = None) -> None:
-    """Parse CLI arguments and run the chat downloader.
-
-    Args:
-        cli_args: Argument list to parse; defaults to ``sys.argv[1:]``.
-    """
+    """Parse cli_args (default sys.argv[1:]) and run the chat downloader."""
     _install_cli_signal_handlers()
 
     parser = _build_arg_parser()

@@ -1,14 +1,9 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick Pusher WebSocket transport.
+"""Kick Pusher framing/IO: connect, subscribe, recv, pong, and close.
 
-This is the *only* module that imports ``websocket-client``. It exposes a
-small, parsing-free interface (connect / subscribe / recv / pong / close) so
-the live-chat orchestration in :mod:`chat_downloader.sites.kick.live_service`
-can be unit-tested with an injected fake connector and never needs live access.
-
-The dependency is isolated here deliberately so it can be swapped without
-touching orchestration or parsing.
+Only this module imports ``websocket-client``; isolation lets live_service use
+fake connectors offline and swap dependencies without changing parsing or orchestration.
 """
 
 from __future__ import annotations
@@ -95,15 +90,12 @@ def _default_connector(
     *,
     proxy_url: str | None = None,
 ) -> _WebSocketConnection:
-    """Open a real Pusher WebSocket connection.
+    """Open a real ``websocket.WebSocket`` connection.
 
     Args:
-        url: The WebSocket URL to connect to.
+        url: WebSocket endpoint URL to connect to.
         timeout: Socket timeout in seconds, or ``None`` to block.
         proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
-
-    Returns:
-        A connected ``websocket.WebSocket`` instance.
     """
     socket_timeout = 10.0 if timeout is None else timeout
     proxy_socket = None
@@ -152,12 +144,9 @@ class KickPusherTransport:
         """Initialize the transport.
 
         Args:
-            connector: Callable that opens a WebSocket given ``(url, timeout)``
-                and an optional ``proxy_url`` keyword argument.
-                Defaults to a real ``websocket-client`` connection; tests inject
-                a fake.
-            url: Pusher WebSocket URL to connect to. Defaults to the cached or
-                compiled-in Pusher URL.
+            connector: Opens ``(url, timeout, proxy_url=...)``; defaults to
+                ``websocket-client``. Tests may inject a fake.
+            url: Defaults to the cached or compiled-in Pusher URL.
             proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
             pusher_http_client: HTTP client used to discover the Pusher key.
             diagnostic_callback: Optional counter callback for malformed frames.
@@ -184,8 +173,7 @@ class KickPusherTransport:
 
         Args:
             timeout: Initial socket timeout in seconds, or ``None`` to block.
-            force_discover: Attempt to refresh the cached Pusher key before
-                connecting.
+            force_discover: Refresh the cached Pusher key before connecting.
 
         Raises:
             ConnectionError: If the underlying connection attempt fails.
@@ -210,11 +198,7 @@ class KickPusherTransport:
         self._ws = websocket
 
     def set_timeout(self, timeout: float | None) -> None:
-        """Set the receive timeout on the open socket.
-
-        Args:
-            timeout: Timeout in seconds, or ``None`` to block.
-        """
+        """Set the open socket's receive timeout in seconds; ``None`` blocks."""
         if self._ws is not None:
             try:
                 self._ws.settimeout(timeout)
@@ -223,10 +207,7 @@ class KickPusherTransport:
                 raise ConnectionError(msg) from error
 
     def _send(self, payload: JSONDict) -> None:
-        """Serialize and send a Pusher frame.
-
-        Args:
-            payload: The frame to JSON-encode and send.
+        """JSON-encode and send a Pusher frame.
 
         Raises:
             ConnectionError: If the send fails.
@@ -241,11 +222,7 @@ class KickPusherTransport:
             raise ConnectionError(msg) from error
 
     def subscribe(self, chatroom_id: str) -> None:
-        """Subscribe to a public chatroom channel.
-
-        Args:
-            chatroom_id: The numeric chatroom id to subscribe to.
-        """
+        """Subscribe to a public channel by numeric chatroom ID."""
         channel = CHATROOM_CHANNEL_TEMPLATE.format(chatroom_id=chatroom_id)
         self._send(
             {"event": PUSHER_SUBSCRIBE, "data": {"auth": "", "channel": channel}}
@@ -256,11 +233,9 @@ class KickPusherTransport:
         self._send({"event": PUSHER_PONG, "data": {}})
 
     def recv(self) -> JSONDict | None:
-        """Receive and decode the next Pusher frame.
+        """Decode the next Pusher frame; return ``None`` on timeout or malformed input.
 
-        Returns:
-            The decoded frame as a dict, or ``None`` when the receive timed out
-            or the frame was malformed (both are skipped by the caller).
+        Callers skip both timeout and malformed reads.
 
         Raises:
             ConnectionError: If the connection is closed by the server.
@@ -323,23 +298,17 @@ def read_frames(
     *,
     idle_timeout: float = _IDLE_WATCHDOG_SECONDS,
 ) -> Generator[JSONDict, None, None]:
-    """Yield decoded Pusher frames, replying to pings transparently.
+    """Yield frames from a connected transport, answering pings before yielding.
 
-    This open-ended generator drives the live receive loop. It is separated
-    from orchestration so tests can inject a finite fake in its place.
+    This open-ended live loop is separate from orchestration for finite test fakes.
+    Keepalive frames reach diagnostics; timed-out and malformed reads are skipped.
 
     Args:
-        transport: A connected transport to read from.
-        idle_timeout: Maximum seconds without a decoded frame before the
-            connection is treated as stale.
-
-    Yields:
-        Decoded Pusher frames. Pings are answered before being yielded so live
-        diagnostics include keepalive traffic. Timed-out and malformed reads
-        are skipped.
+        transport: Connected Pusher transport supplying frames and sending pongs.
+        idle_timeout: Maximum seconds without a decoded frame before staleness.
 
     Raises:
-        ConnectionError: If the connection is closed (drives reconnect).
+        ConnectionError: If closed or stale (drives reconnect).
     """
     last_activity = time.monotonic()
     while True:

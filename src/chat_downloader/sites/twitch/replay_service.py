@@ -65,27 +65,20 @@ def _process_vod_edge(
     msg_filter: MessageFilter,
     logger_obj: Logger,
 ) -> tuple[JSONDict | None, str]:
-    """Process a single VOD comment edge from a GraphQL response page.
-
-    Validates the edge and node typename, applies time and message filters, and
-    returns a disposition string that the caller uses to decide next action.
+    """Validate a GraphQL VOD edge/node typename and apply time/message filters.
 
     Args:
-        edge: A single edge dict from the GraphQL ``edges`` list.
-        offset: Clip or segment offset in seconds to pass to ``_parse_item``.
-        creator_channel_id: Channel ID of the VOD creator, may be ``None``.
-        badge_set: Badge snapshot to pass to ``_parse_item``.
-        time_filter: Object with a ``check(data)`` method returning ``"yield"``,
-            ``"skip"``, or ``"stop"``.
-        msg_filter: Object with a ``should_add(data)`` method returning bool.
-        logger_obj: Logger-compatible object used for debug messages.
+        edge: Entry from GraphQL ``edges``.
+        offset: Clip/segment offset in seconds for ``_parse_item``.
+        creator_channel_id: VOD creator's channel ID, if known.
+        badge_set: Snapshot for ``_parse_item``.
+        time_filter: ``check(data)`` returns ``yield``, ``skip``, or ``stop``.
+        msg_filter: ``should_add(data)`` decides inclusion.
+        logger_obj: Debug logger.
 
     Returns:
-        A ``(data, disposition)`` tuple where disposition is one of:
-
-        - ``"yield"`` — caller should yield *data* to the consumer.
-        - ``"skip"`` — caller should skip to the next edge.
-        - ``"stop"`` — caller must ``return`` (end the generator).
+        ``(data, disposition)``: ``yield`` emits data, ``skip`` advances to the
+        next edge, and ``stop`` ends the generator.
     """
     unexpected_paths = (
         find_unexpected_vod_edge_paths(edge) if logger_obj.isEnabledFor(DEBUG) else []
@@ -159,11 +152,7 @@ def _fetch_gql_one[T](
     fetch_fn: Callable[[], T],
     request: ChatRequest,
 ) -> T:
-    """Fetch a single GQL result with retry handling.
-
-    Returns the result of ``fetch_fn()`` on success; raises on exhausted
-    retries.
-    """
+    """Return ``fetch_fn()`` with retries; raise when retries are exhausted."""
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
             return fetch_fn()
@@ -185,10 +174,7 @@ def _fetch_vod_page(
     content_offset: float,
     request: ChatRequest,
 ) -> tuple[JSONDict | None, JSONDict | None]:
-    """Fetch one page of VOD comments with retry handling.
-
-    Returns ``(comments, info)`` on success; raises on exhausted retries.
-    """
+    """Return a VOD page's ``(comments, info)`` with retries; raise on exhaustion."""
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
             return fetch_fn(

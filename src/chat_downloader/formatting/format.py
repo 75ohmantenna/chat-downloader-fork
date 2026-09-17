@@ -25,11 +25,7 @@ if TYPE_CHECKING:
 
 
 class _SafeFormatter(string.Formatter):
-    """Formatter that disallows attribute and index access in templates.
-
-    Prevents ``{0.attr}`` and ``{0[key]}`` patterns that could expose
-    internal object state when templates come from user-supplied files.
-    """
+    """Block {0.attr}/{0[key]} access that exposes state in user-supplied templates."""
 
     def get_field(self, field_name: str, args: Any, kwargs: Any) -> Any:
         if "." in field_name or "[" in field_name:
@@ -88,10 +84,10 @@ class ItemFormatter:
     )
 
     def __init__(self, path: str | None = None) -> None:
-        """Create an ItemFormatter object.
+        """Create an ItemFormatter.
 
-        Raises FormatFileNotFound if a custom format file path is given but
-        does not exist.
+        Raises:
+            FormatFileNotFound: The custom format file does not exist.
         """
         self.format_file = self._load_format_files(path)
 
@@ -120,7 +116,8 @@ class ItemFormatter:
     ) -> str:
         """Format a chat item according to a format specification.
 
-        Raises FormatNotFound if format_name is not found.
+        Raises:
+            FormatNotFound: format_name is not found.
         """
         format_object = self._resolve_format_object(format_name, format_object, item)
 

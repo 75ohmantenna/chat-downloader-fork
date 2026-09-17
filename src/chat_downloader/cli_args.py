@@ -34,25 +34,15 @@ class _ArgumentTarget(Protocol):
 
 
 def splitter(s: str) -> list[str]:
-    """Split a whitespace-, comma-, or semicolon-delimited string.
-
-    Returns a list of stripped tokens.
-    """
+    """Split on whitespace, commas, or semicolons, returning stripped tokens."""
     return [item.strip() for item in re.split(r"[\s,;]+", s)]
 
 
 def parse_header(value: str) -> tuple[str, str]:
-    """Parse a ``NAME:VALUE`` string into a (name, value) tuple.
-
-    Args:
-        value: Raw header string in ``NAME:VALUE`` format.
-
-    Returns:
-        A (name, value) tuple with whitespace stripped from both parts.
+    """Parse ``NAME:VALUE`` into a (name, value) tuple, stripping both parts.
 
     Raises:
-        argparse.ArgumentTypeError: If the format is invalid or the name
-            contains characters forbidden by RFC 7230.
+        argparse.ArgumentTypeError: Invalid format or name forbidden by RFC 7230.
     """
     key, sep, header_value = value.partition(":")
     if not sep:
@@ -84,17 +74,13 @@ def parse_header(value: str) -> tuple[str, str]:
 
 
 def str2bool(value: str | bool) -> bool:  # noqa: FBT001 — argparse converter; bool input is intentional
-    """Convert a CLI boolean string to a Python bool.
+    """Convert a CLI boolean string to bool; accept bool inputs unchanged.
 
     Args:
-        value: A bool or a string such as ``"true"``, ``"yes"``, ``"1"``,
-            ``"false"``, ``"no"``, or ``"0"``.
-
-    Returns:
-        The corresponding bool value.
+        value: E.g. "true", "yes", "1", "false", "no", or "0".
 
     Raises:
-        argparse.ArgumentTypeError: If the string is not a recognized boolean.
+        argparse.ArgumentTypeError: Unrecognized boolean string.
     """
     if isinstance(value, bool):
         return value
@@ -112,10 +98,7 @@ def str2bool(value: str | bool) -> bool:  # noqa: FBT001 — argparse converter;
 
 
 def _build_field_info(dc_class: type[Any]) -> dict[str, _CliFieldInfo]:
-    """Build ``{field_name: {help, default}}`` from dataclass fields.
-
-    Only fields with a ``"cli"`` key in their metadata are included.
-    """
+    """Build ``{field_name: {help, default}}`` for fields with ``cli`` metadata."""
     result: dict[str, _CliFieldInfo] = {}
     for f in dc_fields(dc_class):
         meta = f.metadata.get("cli")
@@ -155,12 +138,10 @@ def _rename_default_argument_groups(parser: argparse.ArgumentParser) -> None:
 
 
 def _build_request_headers(args_dict: dict[str, Any]) -> dict[str, str]:
-    """Assemble the request headers dict from parsed CLI args.
+    """Assemble explicit --user-agent/--header overrides (later wins).
 
-    Mutates ``args_dict`` to remove the CLI-only ``user_agent`` and
-    ``headers_list`` keys so they are not forwarded to :func:`run`. Request
-    profiles are applied by the session, leaving this helper responsible only
-    for explicit ``--user-agent`` and ``--header`` overrides (later wins).
+    Remove ``user_agent`` and ``headers_list`` from args_dict before forwarding
+    to :func:`run`. The session applies request profiles.
     """
     headers: dict[str, str] = {}
     user_agent = args_dict.pop("user_agent", None)

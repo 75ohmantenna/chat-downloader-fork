@@ -1,15 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick live chat orchestration.
+"""Fetch Kick metadata, resolve chatrooms, and emit history then Pusher chat.
 
-Fetches channel metadata, resolves the chatroom, emits preloaded history, then
-streams live chat from the Pusher WebSocket—deduplicating across the two
-sources and filtering by the requested message groups/types. The WebSocket
-transport and frame iterator are injectable so this module is fully testable
-without live Kick access.
-
-The chatroom is active even when the channel is offline; the Pusher WebSocket
-streams messages regardless of stream status.
+Deduplicate both sources and filter requested message groups/types. Injectable
+transport/frame iteration allows testing without Kick. Chatrooms and Pusher
+remain active offline.
 """
 
 from __future__ import annotations
@@ -150,18 +145,10 @@ def _fetch_channel_with_retry(
     username: str,
     request: ChatRequest,
 ) -> JSONDict:
-    """Fetch channel metadata, retrying transient failures.
+    """Fetch decoded channel metadata using the request's retry policy.
 
-    Terminal conditions (channel not found, Cloudflare challenge) propagate
-    immediately; only transient server/network/JSON errors are retried.
-
-    Args:
-        downloader: The Kick downloader.
-        username: Channel username/slug.
-        request: The active chat request (retry policy).
-
-    Returns:
-        The decoded channel metadata object.
+    Retry only transient server/network/JSON errors; missing channels and
+    Cloudflare challenges propagate immediately. ``username`` is the channel slug.
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
@@ -176,22 +163,12 @@ def _resolve_channel(
     data: JSONDict,
     username: str,
 ) -> tuple[str, str, str]:
-    """Resolve channel id, chatroom id, and title from metadata.
+    """Return ``(channel_id, chatroom_id, title)`` from channel metadata.
 
-    The chatroom is active even when the channel is offline — this function
-    does *not* reject offline channels.  If the channel is offline the title
-    falls back to the username.
-
-    Args:
-        data: Channel metadata object.
-        username: Channel username/slug.
-
-    Returns:
-        A ``(channel_id, chatroom_id, title)`` tuple.
+    Offline chatrooms remain active; their title falls back to ``username`` (slug).
 
     Raises:
-        KickError: If the channel id or chatroom id is missing, making chat
-            retrieval impossible.
+        KickError: Missing channel or chatroom id prevents chat retrieval.
     """
     raw_channel_id = data.get("id")
     if raw_channel_id is None:
@@ -229,21 +206,10 @@ def get_chat_by_channel(
     frame_iterator: Callable[[KickPusherTransport], Generator[JSONDict, None, None]]
     | None = None,
 ) -> Chat:
-    """Build a live :class:`Chat` for a Kick channel.
+    """Build a Chat yielding normalized messages for a channel username/slug.
 
-    Works for both live and offline channels — the chatroom is always active.
-
-    Args:
-        downloader: The Kick downloader.
-        username: Channel username/slug.
-        request: The active chat request.
-        transport_factory: Optional factory for the WebSocket transport
-            (tests inject a fake).
-        frame_iterator: Optional replacement for the live frame generator
-            (tests inject a finite generator).
-
-    Returns:
-        A configured :class:`Chat` whose generator yields normalized messages.
+    Chatrooms remain active offline. Tests may inject a WebSocket
+    ``transport_factory`` and finite ``frame_iterator`` in place of live frames.
     """
     if request.start_time is not None or request.end_time is not None:
         msg = (
@@ -286,19 +252,16 @@ def _open_subscribed_transport(
     pusher_http_client: _HttpClient | None = None,
     force_discover: bool = False,
 ) -> KickPusherTransport:
-    """Open a transport and subscribe to the chatroom, retrying failures.
+    """Open and subscribe a fresh transport using request retry/recv settings.
 
     Args:
-        downloader: The Kick downloader.
-        chatroom_id: Chatroom id to subscribe to.
-        request: The active chat request (retry policy and recv timeout).
+        downloader: Downloader supplying connect timeout and retry behavior.
+        chatroom_id: Numeric chatroom identifier to subscribe to.
+        request: Chat request carrying retry and receive-timeout settings.
         transport_factory: Factory producing a fresh transport.
         proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
-        pusher_http_client: HTTP client used for Pusher-key discovery.
-        force_discover: Whether to bypass the cached Pusher application key.
-
-    Returns:
-        A connected, subscribed transport.
+        pusher_http_client: HTTP client for Pusher-key discovery.
+        force_discover: Bypass the cached Pusher application key.
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         transport = transport_factory()

@@ -23,14 +23,7 @@ if TYPE_CHECKING:
 
 
 def _parse_moderator(raw_mod: object) -> dict[str, Any]:
-    """Extract a minimal moderator/user reference.
-
-    Args:
-        raw_mod: A dict with ``id`` and ``username`` keys.
-
-    Returns:
-        A dict containing ``id`` and ``username`` when present.
-    """
+    """Extract moderator/user ``id`` and ``username`` from a dict when present."""
     result: dict[str, Any] = {}
     if not isinstance(raw_mod, dict):
         return result
@@ -68,14 +61,7 @@ def _parse_ban_timing(raw: Mapping[str, object]) -> dict[str, object]:
 
 
 def parse_user_banned_event(raw: object) -> dict[str, Any]:
-    """Normalize a Kick user-banned event.
-
-    Args:
-        raw: The decoded ``UserBannedEvent`` payload.
-
-    Returns:
-        A normalized message dictionary with ``message_type`` set to
-        ``"user_banned"``.
+    """Normalize decoded ``UserBannedEvent`` with ``message_type="user_banned"``.
 
     Raises:
         ParsingError: If ``raw`` is not an object or lacks an ``id``.
@@ -118,14 +104,7 @@ def parse_user_banned_event(raw: object) -> dict[str, Any]:
 
 
 def parse_user_unbanned_event(raw: object) -> dict[str, Any]:
-    """Normalize a Kick user-unbanned event.
-
-    Args:
-        raw: The decoded ``UserUnbannedEvent`` payload.
-
-    Returns:
-        A normalized message dictionary with ``message_type`` set to
-        ``"user_unbanned"``.
+    """Normalize decoded ``UserUnbannedEvent`` with ``message_type="user_unbanned"``.
 
     Raises:
         ParsingError: If ``raw`` is not an object or lacks an ``id``.
@@ -166,14 +145,9 @@ def parse_user_unbanned_event(raw: object) -> dict[str, Any]:
 
 
 def parse_message_deleted_event(raw: object) -> dict[str, Any]:
-    """Normalize a Kick message-deleted event.
+    """Normalize a decoded ``MessageDeletedEvent``.
 
-    Args:
-        raw: The decoded ``MessageDeletedEvent`` payload.
-
-    Returns:
-        A normalized message dictionary with ``message_type`` set to
-        ``"message_deleted"``.
+    The result carries ``message_type="message_deleted"``.
 
     Raises:
         ParsingError: If ``raw`` is not an object or lacks an ``id``.
@@ -222,14 +196,7 @@ def parse_message_deleted_event(raw: object) -> dict[str, Any]:
 
 
 def parse_chat_clear_event(raw: object) -> dict[str, Any]:
-    """Normalize a Kick chat-clear event.
-
-    Args:
-        raw: The decoded ``ChatClearMessagesEvent`` payload.
-
-    Returns:
-        A normalized message dictionary with ``message_type`` set to
-        ``"chat_clear"``.
+    """Normalize decoded ``ChatClearMessagesEvent`` with ``message_type="chat_clear"``.
 
     Raises:
         ParsingError: If ``raw`` is not an object or lacks an ``id``.

@@ -1,13 +1,9 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick chat downloader extractor.
+"""Route Kick live, VOD replay, and bounded clip URLs to their service modules.
 
-Thin routing layer for Kick. URL matching and the public API live here; the
-actual work is delegated to the live, VOD replay, and clip service modules.
-
-Supports live chat (``kick.com/{username}``), VOD chat replay
-(``kick.com/{username}/videos/{uuid}``), and bounded clip replay
-(``kick.com/{username}/clips/{clip_id}``).
+Supports ``kick.com/{username}``, ``kick.com/{username}/videos/{uuid}``, and
+``kick.com/{username}/clips/{clip_id}``; URL matching and the public API live here.
 """
 
 from __future__ import annotations
@@ -34,13 +30,7 @@ __all__ = ["KickChatDownloader", "KickCountryBlocked", "KickError"]
 
 
 class KickChatDownloader(BaseChatDownloader):
-    """Download unauthenticated Kick live, VOD, or clip chat.
-
-    Supports:
-    - Live: ``https://kick.com/{username}``
-    - VOD:  ``https://kick.com/{username}/videos/{uuid}``
-    - Clip: ``https://kick.com/{username}/clips/{clip_id}``
-    """
+    """Download unauthenticated Kick live, VOD, or clip chat (URLs above)."""
 
     _NAME = "kick.com"
 
@@ -110,15 +100,7 @@ class KickChatDownloader(BaseChatDownloader):
         match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Route a channel URL match to the live chat builder.
-
-        Args:
-            match: Regex match with an ``id`` group (the channel username).
-            params: Chat request parameters.
-
-        Returns:
-            A :class:`Chat` streaming the channel's live chat.
-        """
+        """Stream live chat for the channel username in match group ``id``."""
         return self.get_chat_by_channel(match.group("id"), params)
 
     def _get_chat_by_video(
@@ -126,15 +108,7 @@ class KickChatDownloader(BaseChatDownloader):
         match: re.Match[str],
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        """Route a VOD URL match to the replay chat builder.
-
-        Args:
-            match: Regex match with ``id`` (username) and ``video_id`` groups.
-            params: Chat request parameters.
-
-        Returns:
-            A :class:`Chat` that yields historical chat messages for the VOD.
-        """
+        """Replay VOD chat for match groups ``id`` (username) and ``video_id``."""
         return self.get_chat_by_video(  # pragma: no cover — network-dependent VOD API
             match.group("id"), match.group("video_id"), params
         )
@@ -156,14 +130,7 @@ class KickChatDownloader(BaseChatDownloader):
         username: str,
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        r"""Get live chat for a Kick channel by username.
-
-        Args:
-            username: Kick channel username/slug (e.g. ``"xqc"``).
-            params: Chat request parameters.
-
-        Returns:
-            A :class:`Chat` with a live message generator.
+        r"""Stream live chat for a Kick username/slug (e.g. ``"xqc"``).
 
         Raises:
             UserNotFound: If the channel does not exist.
@@ -180,15 +147,7 @@ class KickChatDownloader(BaseChatDownloader):
         video_id: str,
         params: ChatRequest | dict[str, Any],
     ) -> Chat:
-        r"""Get chat replay for a Kick VOD by video UUID.
-
-        Args:
-            username: Kick channel username/slug.
-            video_id: VOD UUID (e.g. ``"4ef9b5aa-89f2-4aee-96c2-e72c1b5a8b4b"``).
-            params: Chat request parameters.
-
-        Returns:
-            A :class:`Chat` that yields historical chat messages.
+        r"""Replay historical chat for a channel username/slug and VOD UUID.
 
         Raises:
             KickCountryBlocked: If Kick blocks the request's country or region.

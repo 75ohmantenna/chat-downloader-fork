@@ -176,15 +176,7 @@ class BaseChatDownloader:
         return response
 
     def get_site_value(self, value: Any) -> Any:
-        """Resolve a ``SiteDefault`` marker to its concrete value.
-
-        Args:
-            value: A ``SiteDefault`` marker or a concrete value.
-
-        Returns:
-            The site-specific default if ``value`` is a ``SiteDefault``,
-            otherwise ``value`` unchanged.
-        """
+        """Resolve a ``SiteDefault`` to its site default; leave others unchanged."""
         if isinstance(value, SiteDefault):
             return self._SITE_DEFAULT_PARAMS.get(
                 value.name,
@@ -193,20 +185,17 @@ class BaseChatDownloader:
         return value
 
     def is_live_status(self, status: str | None) -> bool:
-        """Return whether ``status`` marks an ongoing/recent live broadcast.
+        """Test ongoing/recent live status without exposing provider vocabularies.
 
-        Provider-neutral hook: the generic runtime calls this instead of
-        inspecting site-specific status vocabularies. Sites that distinguish
-        live from replay override ``_LIVE_STATUSES``.
+        Sites distinguishing live from replay override ``_LIVE_STATUSES``;
+        the generic runtime calls this hook.
         """
         return status in self._LIVE_STATUSES
 
     def resolve_live_format(self, format_name: str) -> str:
-        """Map a requested format name to a live-stream variant, if any.
+        """Map to a live-stream format variant; the base returns format_name unchanged.
 
-        Provider-neutral hook: the generic runtime calls this so site-specific
-        live-format overrides live with the site. The base implementation
-        returns ``format_name`` unchanged.
+        Generic runtime hook keeping site-specific live-format overrides with the site.
         """
         return format_name
 
@@ -220,15 +209,7 @@ class BaseChatDownloader:
 
     @classmethod
     def matches(cls, url: str) -> tuple[str, re.Match[str]] | None:
-        """Return ``(function_name, match)`` if ``url`` matches a pattern.
-
-        Args:
-            url: The URL to test.
-
-        Returns:
-            A tuple of the handler function name and the regex match object,
-            or ``None`` if no pattern matches.
-        """
+        """Return ``(handler_function_name, regex_match)`` or None if unmatched."""
         for function_name, regex in cls._VALID_URLS.items():
             if isinstance(regex, str):
                 match = re.match(regex, url)
@@ -269,11 +250,9 @@ class BaseChatDownloader:
             attempt_number: Current 1-indexed attempt number.
             max_attempts: Total allowed attempts before giving up.
             error: The exception that triggered the retry, if any.
-            retry_timeout: Fixed sleep duration in seconds, or None for
-                exponential back-off.
+            retry_timeout: Sleep seconds; None uses exponential backoff.
             text: Extra context to include in log messages.
-            interruptible_retry: Allow the user to skip the sleep by pressing
-                Enter.
+            interruptible_retry: Allow Enter to skip the sleep.
             request: The active ``ChatRequest``, used for per-request overrides.
 
         Raises:

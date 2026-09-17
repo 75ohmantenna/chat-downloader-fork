@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""Twitch message parsing entry points (GraphQL VOD/clip and IRC live chat).
+"""Parse GraphQL VOD/clip comments and IRC messages.
 
-Orchestrates the sub-modules:
-- :mod:`message_emotes`: emote image generation and text resolution
-- :mod:`message_irc_resolve`: IRC action/message-type and room-state helpers
-
-Public entry points:
-- :func:`_parse_item`: parse a GraphQL VOD/clip comment node
-- :func:`_parse_irc_item`: parse an IRC chat message from a regex match
+``_parse_item`` handles comments; ``_parse_irc_item`` handles IRC messages.
+Delegates emote images/text to ``message_emotes`` and IRC action/message types
+and room state to ``message_irc_resolve``.
 """
 
 from __future__ import annotations
@@ -50,14 +46,7 @@ if TYPE_CHECKING:
 
 
 def _parse_message_info(message: dict[str, Any]) -> dict[str, Any]:
-    """Parse GraphQL comment message info (fragments, emotes, badges).
-
-    Args:
-        message: GraphQL message object with fragments
-
-    Returns:
-        Dictionary with parsed message information
-    """
+    """Parse GraphQL message fragments into text, emotes, and badge information."""
     message_info = {
         "author_colour": message.get("userColor"),
         "author_badges": message.get("userBadges") or [],
@@ -108,28 +97,14 @@ def _parse_message_info(message: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parse_user(item: dict[str, Any] | None) -> dict[str, Any]:
-    """Parse user information from GraphQL response.
-
-    Args:
-        item: User object or None
-
-    Returns:
-        Remapped user dictionary
-    """
+    """Remap GraphQL user information, accepting None."""
     if isinstance(item, dict):
         return r.remap_dict(item, build_user_remapping())
     return {}
 
 
 def _parse_game(item: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Parse game information from GraphQL response.
-
-    Args:
-        item: Game object or None
-
-    Returns:
-        Remapped game dictionary or None
-    """
+    """Remap GraphQL game information, returning None for absent data."""
     if isinstance(item, dict):
         return r.remap_dict(item, build_game_remapping())
     return None
@@ -141,18 +116,12 @@ def _parse_irc_tags(
     *,
     raw_payload: str | None,
 ) -> dict[str, Any]:
-    """Parse raw IRC tag string segments into a remapped info dictionary.
+    """Remap IRC tags to an info dictionary.
 
     Args:
-        split_info: List of ``key=value`` (or bare ``key``) tag segments,
-            produced by splitting the raw tag string on ``";"``.
-        irc_remapping: Remapping table produced by
-            :func:`~chat_downloader.sites.twitch.constants.build_irc_remapping`.
-        raw_payload: Original IRC line for unknown-tag capture when debug
-            logging is enabled.
-
-    Returns:
-        Dictionary of remapped tag key/value pairs.
+        split_info: ``key=value`` or bare ``key`` tags split on ``;``.
+        irc_remapping: Table from ``build_irc_remapping``.
+        raw_payload: Original IRC line for debug-only unknown-tag capture.
     """
     info: dict[str, Any] = {}
     unknown_tags: set[str] | None = set() if raw_payload is not None else None
@@ -189,17 +158,14 @@ def _parse_item(
     channel_id: str | None = None,
     badge_set: BadgeSet | None = None,
 ) -> dict[str, Any]:
-    """Parse VOD/Clip comment item from GraphQL response.
+    """Parse a GraphQL VOD/clip comment node.
 
     Args:
-        item: Comment node from GraphQL
-        offset: Time offset for clips
-        channel_id: Channel ID for badge lookup
-        badge_set: Optional snapshot used to enrich normalized badge names and
-            versions with channel or global badge metadata.
-
-    Returns:
-        Parsed comment dictionary
+        item: GraphQL comment node to normalize.
+        offset: Clip time offset.
+        channel_id: Channel ID for badge lookup.
+        badge_set: Snapshot enriching normalized badge names/versions with
+            channel or global metadata.
     """
     info = r.remap_dict(item, build_comment_remapping())
 
@@ -241,15 +207,12 @@ def _parse_irc_item(
     match: re.Match[str],
     badge_set: BadgeSet | None = None,
 ) -> dict[str, Any]:
-    """Parse IRC message from regex match.
+    """Parse an IRC message from a match with tags, action, and message groups.
 
     Args:
-        match: Regex match object with groups (tags, action, message)
-        badge_set: Optional snapshot used to enrich normalized badge names and
-            versions with channel or global badge metadata.
-
-    Returns:
-        Parsed IRC message dictionary
+        match: IRC regex match containing tags, action, and message groups.
+        badge_set: Snapshot enriching normalized badge names/versions with
+            channel or global metadata.
     """
     irc_remapping = build_irc_remapping()
     # MESSAGE_REGEX excludes the IRC line terminator; retain it in captured

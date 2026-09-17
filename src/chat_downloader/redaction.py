@@ -310,10 +310,9 @@ def _sample_directory() -> Path:
 
 
 def preflight_debug_samples() -> None:
-    """Fail before retrieval if explicitly enabled sampling cannot start safely.
+    """Preflight explicitly enabled sampling before retrieval.
 
-    Capture calls still validate each write; preflight is not a replacement for
-    the descriptor-based checks against directory replacement during a run.
+    Per-write descriptor checks still guard against directory replacement.
     """
     if _debug_sample_capture_enabled():
         os.close(_prepare_sample_directory(_sample_directory()))
@@ -450,18 +449,14 @@ def capture_debug_sample(
     sample_group: str | None = None,
     group_limit: int | None = None,
 ) -> str | None:
-    """Write a sanitized debug payload to a deterministic JSON file.
+    """Write sanitized payloads to deterministic JSON files with explicit opt-in.
 
-    This is opt-in and only active when:
+    Capture requires debug logging and a truthy
+    ``CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES`` environment variable.
 
-    - the logger is in debug mode
-    - ``CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES`` is set to a truthy value
-
-    When *sample_limit* is provided, at most that many unique payloads are
-    captured for the label and output directory during the current process.
-    *sample_group* and *group_limit* can additionally bound unique samples
-    across several labels without making those labels compete for their
-    individual limits.
+    ``sample_limit`` bounds unique payloads per label/directory in this process;
+    ``sample_group``/``group_limit`` additionally bound samples across labels
+    without making them compete for individual limits.
     """
     if not _debug_sample_capture_enabled():
         return None

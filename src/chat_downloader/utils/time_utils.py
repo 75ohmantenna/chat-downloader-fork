@@ -63,29 +63,16 @@ UTC = datetime.UTC
 
 
 def timestamp_to_microseconds(timestamp: str) -> int:
-    """Convert an RFC3339 timestamp to microseconds since the Unix epoch.
+    """Convert RFC3339 to Unix-epoch microseconds via :func:`parse_iso8601`.
 
-    Delegates to :func:`parse_iso8601`, which handles ``Z``, ``+hh:mm``/
-    ``-hh:mm`` offsets, and both ``.``/``,`` fractional-second separators.
-
-    Args:
-        timestamp: RFC3339 timestamp string (e.g.
-            ``"2024-01-01T00:00:00.123Z"``).
-
-    Returns:
-        Number of microseconds since the Unix epoch.
+    Supports Z, +hh:mm/-hh:mm offsets, and . or , fractional separators,
+    e.g. ``2024-01-01T00:00:00.123Z``.
     """
     return round(parse_iso8601(timestamp))
 
 
 def time_to_seconds(time: str) -> int:
-    """Convert timestamp string of the form 'hh:mm:ss' to seconds.
-
-    :param time: Timestamp of the form 'hh:mm:ss'
-    :type time: str
-    :return: The corresponding number of seconds
-    :rtype: int
-    """
+    """Convert an 'hh:mm:ss' timestamp to seconds."""
     if not time:
         return 0
 
@@ -109,18 +96,12 @@ def seconds_to_time(
     format: str = "{}:{:02}:{:02}",  # noqa: A002 — public API parameter; callers pass format= by name
     remove_leading_zeroes: bool = True,
 ) -> str:
-    """Convert seconds to timestamp.
+    """Convert seconds to a timestamp.
 
-    :param seconds: Number of seconds
-    :type seconds: int
-    :param format: The format string with elements representing hours, minutes
-        and seconds. Defaults to '{}:{:02}:{:02}'
-    :type format: str, optional
-    :param remove_leading_zeroes: Whether to remove leading zeroes when seconds
-        > 60, defaults to True
-    :type remove_leading_zeroes: bool, optional
-    :return: The corresponding timestamp string
-    :rtype: str
+    Args:
+        seconds: Seconds to convert (may be negative).
+        format: Format string with hours, minutes, and seconds elements.
+        remove_leading_zeroes: Remove leading zeroes when seconds > 60.
     """
     h, remainder = divmod(abs(int(seconds)), SECONDS_PER_HOUR)
     m, s = divmod(remainder, SECONDS_PER_MINUTE)
@@ -134,17 +115,12 @@ def microseconds_to_timestamp(
     microseconds: float,
     format: str = "%Y-%m-%d %H:%M:%S",  # noqa: A002 — public API parameter; callers pass format= by name
 ) -> str:
-    """Convert unix time to human-readable timestamp.
+    """Convert Unix microseconds to a human-readable timestamp.
 
-    :param microseconds: UNIX microseconds
-    :type microseconds: float
-    :param format: The format string, defaults to '%Y-%m-%d %H:%M:%S'. For
-        information on supported codes, see https://strftime.org/ and
-        https://docs.python.org/3/library/datetime.html#strftime-and-strptime-
-        format-codes
-    :type format: str, optional
-    :return: Human readable timestamp corresponding to the format
-    :rtype: str
+    Args:
+        microseconds: Unix time in microseconds to convert.
+        format: strftime format; codes: https://strftime.org/ and
+            https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes.
     """
     return datetime.datetime.fromtimestamp(
         microseconds // MICROSECONDS_PER_SECOND,
@@ -153,14 +129,11 @@ def microseconds_to_timestamp(
 
 
 def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any:
-    """Ensure time is returned in seconds.
+    """Return time in seconds, or default if it cannot be parsed.
 
-    :param time: The time, in seconds or 'hh:mm:ss'.
-    :type time: float | str
-    :param default: Returns this if unable to parse the time, defaults to None
-    :type default: object, optional
-    :return: The corresponding number of seconds
-    :rtype: float
+    Args:
+        time: Seconds or 'hh:mm:ss'.
+        default: Value returned when time is None or unparseable.
     """
     if time is None:
         return default
@@ -208,24 +181,16 @@ def parse_date(
     datestring: str,
     default_timezone: datetime.tzinfo | None = UTC,
 ) -> datetime.datetime:
-    """Parse an ISO 8601 date string into a datetime object.
-
-    The timezone is parsed from the date string.  It is common to receive
-    dates without a timezone (not strictly correct); in that case the
-    ``default_timezone`` is applied (UTC by default).
+    """Parse an ISO 8601 date string, using its timezone when present.
 
     Args:
-        datestring: The date string to parse.
-        default_timezone: A ``datetime.tzinfo`` instance used when no timezone
-            is present in ``datestring``.  Pass ``None`` to return a naive
-            datetime.
-
-    Returns:
-        A :class:`datetime.datetime` instance.
+        datestring: ISO 8601 date string to parse.
+        default_timezone: Used for commonly received timezone-less dates
+            (not strictly correct ISO 8601); defaults to UTC. None returns
+            a naive datetime.
 
     Raises:
-        ValueError: When the date string cannot be parsed or the datetime
-            object cannot be constructed.
+        ValueError: Date parsing or datetime construction fails.
     """
     try:
         m = ISO8601_REGEX.match(datestring)

@@ -1,13 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""YouTube chat continuation loop.
+"""Run YouTube continuation requests and message iteration.
 
-A single cohesive unit: :class:`_ContinuationLoop` owns the per-run state
-(downloader, context, progress) and drives setup, request/response handling, and
-iteration as methods. The genuinely pure helpers it composes live in
-:mod:`.continuation_helpers` and :mod:`.continuations`; the only functions kept
-at module scope here are the stateless ones that carry no downloader dependency
-(so they remain independently testable).
+Per-run downloader/context/progress state, setup, request/response handling,
+and iteration belong to _ContinuationLoop.
+Pure helpers live in .continuation_helpers and .continuations; module-level
+functions here are stateless and downloader-independent for isolated testing.
 """
 
 from __future__ import annotations
@@ -267,29 +265,23 @@ def _process_actions(
     is_replay: bool,
     paid_events: PaidEventCache | None = None,
 ) -> Generator[JSONDict, None, bool]:
-    """Walk *actions*, apply filters, and yield accepted messages.
+    """Filter raw ``liveChatContinuation`` actions and yield accepted messages.
 
-    Advances the nonnegative *loop_state.offset_milliseconds* in-place when a
-    live message carries a usable timestamp. Presentation timing remains signed
-    so initial-backlog messages retain their capture-relative ordering.
+    Update nonnegative ``loop_state.offset_milliseconds`` from usable live
+    timestamps; signed presentation timing preserves backlog capture ordering.
 
     Args:
-        actions: Raw action dicts from the ``liveChatContinuation`` payload.
-        offset: Clip or replay time offset in seconds (passed to the pipeline).
-        paid_events: Optional per-run cache for enriching sparse paid tickers.
-        msg_filter: Message-type inclusion filter.
-        time_filter: Optional time-range filter for replay captures.
-        loop_state: Mutable loop state; ``offset_milliseconds`` may be updated.
-        live_start_time_ms: Baseline epoch-ms for live offset calculation.
-        is_replay: ``True`` for replay streams; suppresses live-timing
-            enrichment.
-
-    Yields:
-        Accepted message dicts, one per qualifying action.
+        actions: Raw actions from a ``liveChatContinuation`` response.
+        offset: Clip/replay offset in seconds, passed to the pipeline.
+        msg_filter: Message type/group inclusion filter.
+        paid_events: Per-run cache enriching sparse paid tickers.
+        time_filter: Optional replay time-range filter.
+        loop_state: Mutable continuation state updated with live offsets.
+        live_start_time_ms: Epoch-ms baseline for live offsets.
+        is_replay: Suppress live-timing enrichment for replay streams.
 
     Returns:
-        ``True`` if a ``"stop"`` disposition was encountered (caller should
-        terminate the outer loop), ``False`` otherwise.
+        True on a "stop" disposition (terminate the outer loop), otherwise False.
     """
     processed_action_count = 0
     emitted_message_count = 0
@@ -380,11 +372,10 @@ def _advance_continuation_loop(
 
 
 class _ContinuationLoop:
-    """Owns one chat-retrieval run: setup, request/response, and iteration.
+    """Own one run's setup, request/response handling, and iteration.
 
-    Methods that touch the downloader/session use ``self.downloader`` directly,
-    so there is no free-function ``self``-threading and no wide structural
-    protocol to keep in sync.
+    Access the session via self.downloader, avoiding free-function self-threading
+    or a wide structural protocol.
     """
 
     def __init__(
@@ -425,15 +416,13 @@ class _ContinuationLoop:
         )
 
     def _build_context(self) -> _ChatContext:
-        """Assemble all pre-loop state from the downloader inputs.
+        """Validate message groups/types and update session headers for setup.
 
-        Validates message groups and types, updates session headers, and returns
-        a :class:`_ChatContext` the main loop uses without touching the
-        downloader again during setup.
+        Return context so setup no longer needs the downloader.
 
         Raises:
-            NoContinuation: When the requested chat type index is absent.
-            InvalidParameter: When an unknown message group is requested.
+            NoContinuation: Requested chat type index is absent.
+            InvalidParameter: Unknown message group.
         """
         initial_info = self.initial_info
         self.ytcfg = apply_request_profile_to_ytcfg(
@@ -568,11 +557,9 @@ class _ContinuationLoop:
     def _attempt_profile_fallback(
         self, reason: str = "repeated incomplete continuation responses"
     ) -> bool:
-        """Try switching to the next YouTube request profile on incomplete data.
+        """Try the next request profile on incomplete data; True means retry.
 
-        Returns True if a new profile was applied (caller should retry). Returns
-        False if fallback is disabled or no next profile is available (caller
-        should re-raise the original exception).
+        If disabled or exhausted, return False; callers re-raise the original error.
         """
         downloader = self.downloader
         if not downloader._auto_profile_fallback:
@@ -592,10 +579,10 @@ class _ContinuationLoop:
     def _recover_incomplete_continuation(
         self, reason: str = "repeated incomplete continuation responses"
     ) -> bool:
-        """Try profile fallback after an incomplete continuation.
+        """Try incomplete-continuation profile fallback.
 
-        Returns True if the loop should retry; False means the caller should
-        re-raise the active IncompleteContinuationError.
+        Return True to retry, or False to re-raise the active
+        IncompleteContinuationError.
         """
         previous_profile = getattr(self.downloader, "_request_profile", None)
         if self.progress.register_fallback():
@@ -630,10 +617,10 @@ class _ContinuationLoop:
         return True
 
     def _retry_rejected_initial_replay(self, response: JSONDict) -> bool:
-        """Try the next profile only for an initial replay INVALID_ARGUMENT.
+        """Try the next profile for an initial replay INVALID_ARGUMENT error.
 
-        Reuse the continuation and seek bounds. Once a response is accepted,
-        never restart or switch profiles on this terminal API error.
+        Reuse continuation/seek bounds. Never restart or switch on this terminal
+        error after an accepted response.
         """
         error = get_dict(response, "error")
         if (

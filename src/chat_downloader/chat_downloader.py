@@ -40,16 +40,10 @@ if TYPE_CHECKING:
 
 
 class ChatDownloader:
-    """Main class for downloading chat messages from streaming platforms.
+    """Retrieve YouTube, Twitch, and Kick chat through a unified interface.
 
-    ChatDownloader orchestrates the retrieval of chat messages from
-    various streaming services (YouTube, Twitch, Kick). It manages
-    sessions for each site, handles URL routing, and provides a unified
-    interface for chat retrieval with support for filtering, formatting,
-    and output options.
-
-    Thread-safety: Not thread-safe. Create separate instances for
-    concurrent use.
+    Manages site sessions, URL routing, filtering, formatting, and output.
+    Not thread-safe: create separate instances for concurrent use.
     """
 
     def __init__(
@@ -64,24 +58,18 @@ class ChatDownloader:
         auto_profile_fallback: bool = True,
         twitch_client_id: str | None = None,
     ) -> None:
-        """Initialize a new ChatDownloader session.
-
-        The provided parameters are applied to all subsequent site
-        sessions.
+        """Initialize options shared by all subsequent site sessions.
 
         Args:
-            headers: Custom HTTP headers for requests.
+            headers: Custom HTTP request headers.
             cookies: Path to a Netscape-format cookies file.
-            proxy: Proxy URL (HTTP/HTTPS/SOCKS); "" forces a direct
-                connection. Defaults to None (system proxy settings).
+            proxy: HTTP/HTTPS/SOCKS URL; "" forces direct, None uses system settings.
             connect_timeout: TCP connect timeout in seconds (default 10).
             read_timeout: HTTP read timeout in seconds (default 30).
-            request_profile: Optional preset request profile
-                (youtube_web/youtube_android/youtube_ios/twitch_web).
-            auto_profile_fallback: Automatically rotate YouTube request
-                profiles after generic initial playability failures or
-                repeated incomplete continuation responses (default True).
-            twitch_client_id: Optional Twitch Client-ID override.
+            request_profile: Preset: youtube_web/youtube_android/youtube_ios/twitch_web.
+            auto_profile_fallback: Rotate YouTube profiles after generic initial
+                playability failures or repeated incomplete continuation responses.
+            twitch_client_id: Twitch Client-ID override.
         """
         check_proxy_cookie_safety(proxy, cookies)
 
@@ -132,10 +120,9 @@ class ChatDownloader:
         discard: bool = False,
         rest: dict[str, Any] | None = None,
     ) -> None:
-        """Set a cookie value on this ChatDownloader and all existing sessions.
+        """Set a cookie on this downloader and all existing sessions.
 
-        This mirrors BaseChatDownloader.set_cookie_value so callers can set
-        cookies before any site session is created.
+        Mirrors BaseChatDownloader.set_cookie_value, including before session creation.
         """
         self._session_pool.set_cookie(
             domain=domain,
@@ -150,11 +137,7 @@ class ChatDownloader:
         )
 
     def get_cookie_value(self, name: str, default: Any = None) -> Any:
-        """Get a cookie value from the ChatDownloader cookie jar.
-
-        Falls back to checking existing sessions if the local jar doesn't have
-        it.
-        """
+        """Get a cookie from the local jar, falling back to existing sessions."""
         return self._session_pool.get_cookie(name, default)
 
     def get_chat(
@@ -187,50 +170,39 @@ class ChatDownloader:
         # Twitch
         buffer_size: int = DEFAULT_BUFFER_SIZE,
     ) -> Chat:
-        """Retrieve chat messages from a stream, video, clip or broadcast.
-
-        Main entry point: detects the platform from the URL, creates the
-        appropriate site session, and returns a Chat object containing a
-        message generator.
+        """Detect the URL's platform, create a session, and return a Chat.
 
         Args:
-            url: URL of the stream/video (required).
-            start_time: Start time in seconds or hh:mm:ss (None = beginning).
-            end_time: End time in seconds or hh:mm:ss (None = until end).
-            timeout: Maximum duration to retrieve messages in seconds.
+            url: Stream, video, clip, or broadcast URL (required).
+            start_time: Seconds or hh:mm:ss; None starts at the beginning.
+            end_time: Seconds or hh:mm:ss; None continues until the end.
+            timeout: Maximum retrieval duration in seconds.
             inactivity_timeout: Stop after this many seconds without messages.
             max_attempts: Maximum retry attempts (default 15).
-            retry_timeout: Seconds to wait before retry; None uses
-                exponential backoff, negative waits for user input.
-            interruptible_retry: Allow skipping the wait to retry
-                immediately (default True).
-            max_messages: Maximum number of messages (None = unlimited).
-            message_groups: Predefined site-specific message groups to
-                include.
-            message_types: Specific message types (overrides message_groups).
-            output: Output file path or list of paths (None = stdout); each
-                extension selects its format (.jsonl/.txt only).
-            overwrite: Overwrite an existing output file (default True).
-            sort_keys: Sort JSON keys in output (default True).
-            format: Message format template name (site-specific default).
+            retry_timeout: Seconds before retry; None uses exponential backoff,
+                negative waits for user input.
+            interruptible_retry: Allow skipping the wait to retry immediately.
+            max_messages: Maximum messages; None is unlimited.
+            message_groups: Predefined site-specific message groups to include.
+            message_types: Specific message types; overrides message_groups.
+            output: Path(s), or None for stdout; extensions select .jsonl/.txt only.
+            overwrite: Overwrite an existing output file.
+            sort_keys: Sort JSON output keys.
+            format: Template name; defaults per site.
             format_file: Path to a custom format definition file.
-            chat_type: YouTube chat type ('live' or 'top', default 'live').
-            ignore: List of YouTube video IDs to ignore.
-            youtube_replay_poll_interval: Explicit YouTube replay polling
-                interval (0.5-8 s); None respects the provider delay hint.
-            message_receive_timeout: Live socket receive-poll timeout in
-                seconds (default 1.0; Twitch and Kick enforce a minimum of 1).
-            buffer_size: Twitch buffer size for message retrieval
-                (default 4096).
+            chat_type: YouTube chat type.
+            ignore: YouTube video IDs to ignore.
+            youtube_replay_poll_interval: Explicit polling interval (0.5-8 s);
+                None respects the provider delay hint.
+            message_receive_timeout: Live socket receive-poll timeout in seconds
+                (default 1.0); Twitch and Kick enforce a minimum of 1.
+            buffer_size: Twitch message-retrieval buffer size (default 4096).
 
         Raises:
             URLNotProvided: No URL provided.
             ChatGeneratorError: No valid generator found for the site.
             SiteNotSupported: The URL's site is not supported.
             InvalidURL: Invalid URL format.
-
-        Returns:
-            Chat object with the message generator.
         """
         params = locals()
         params = {k: v for k, v in params.items() if k != "self"}
@@ -247,11 +219,7 @@ class ChatDownloader:
         *,
         overwrite: bool = False,
     ) -> BaseChatDownloader:
-        """Create or retrieve a session for a chat downloader class.
-
-        Args:
-            chat_downloader_class: The downloader class to create a session for.
-            overwrite: Whether to overwrite an existing session.
+        """Create a downloader-class session, reusing it unless overwrite=True.
 
         Raises:
             TypeError: The class is not a valid downloader class.
@@ -274,17 +242,14 @@ class ChatDownloader:
 
 
 def run(*, propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
-    """Execute a complete chat download session with error handling.
+    """Run a ChatDownloader session, handling/logging errors and closing it afterward.
 
-    Creates a ChatDownloader, iterates through all chat messages (logging
-    them unless quiet=True), handles and logs errors, and cleans up via
-    downloader.close().
+    Iterates all chat messages, logging them unless quiet=True.
 
     Args:
-        propagate_interrupt: Re-raise KeyboardInterrupt instead of catching
-            it; useful when embedding in other applications (default False).
-        **kwargs: Combined fields from DownloaderConfig, ChatRequest, and
-            RunConfig; separated by the typed CLI bridge before execution.
+        propagate_interrupt: Re-raise KeyboardInterrupt for embedding applications.
+        **kwargs: Combined DownloaderConfig, ChatRequest, and RunConfig fields;
+            separated by the typed CLI bridge before execution.
 
     Returns:
         Structured execution summary.
