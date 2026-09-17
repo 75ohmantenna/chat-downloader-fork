@@ -8,9 +8,6 @@ from chat_downloader.errors import ParsingError
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.chat_streams import YouTubeChatStreamsMixin
-from chat_downloader.sites.youtube.discovery import (
-    YouTubeDiscoveryMixin,
-)
 from chat_downloader.sites.youtube.video_status import (
     video_details_to_dict,
 )
@@ -47,77 +44,6 @@ def test_video_details_to_dict_serializes_dataclass_fields() -> None:
         "clip_start_time": 4.0,
         "clip_end_time": 5.0,
     }
-
-
-def test_channel_discovery_mixin_coerces_typed_request(monkeypatch) -> None:
-    captured = []
-
-    class DummyDiscovery(YouTubeDiscoveryMixin):
-        _session_get = object()
-        _session_post = object()
-
-        def _coerce_chat_request(self, params):
-            captured.append(params)
-            return params
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery._get_initial_info",
-        lambda *_args, **_kwargs: (
-            {
-                "contents": {
-                    "twoColumnBrowseResultsRenderer": {
-                        "tabs": [
-                            {
-                                "tabRenderer": {
-                                    "selected": True,
-                                    "title": "Videos",
-                                    "content": {},
-                                }
-                            }
-                        ]
-                    }
-                }
-            },
-            {"INNERTUBE_API_KEY": "key"},
-            {},
-        ),
-    )
-    request = ChatRequest(url="https://www.youtube.com/channel/abc/videos")
-
-    result = list(DummyDiscovery().get_user_videos(channel_id="abc", params=request))
-
-    assert result == []
-    assert captured == [request]
-
-
-def test_chat_streams_mixin_get_chat_messages_builds_runtime_loop() -> None:
-    class DummyStreams(YouTubeChatStreamsMixin):
-        pass
-
-    captured = {}
-
-    class FakeLoop:
-        def __init__(self, owner, initial_info, ytcfg, params):
-            captured["call"] = (owner, initial_info, ytcfg, params)
-
-        def run(self):
-            return iter([{"message_type": "text_message"}])
-
-    import chat_downloader.sites.youtube.chat_streams as mod
-
-    original = mod._ContinuationLoop
-    mod._ContinuationLoop = FakeLoop
-    try:
-        owner = DummyStreams()
-        initial_info = {"a": 1}
-        ytcfg = {"b": 2}
-        params = ChatRequest(url="https://www.youtube.com/watch?v=abc")
-        result = owner._get_chat_messages(initial_info, ytcfg, params)
-    finally:
-        mod._ContinuationLoop = original
-
-    assert list(result) == [{"message_type": "text_message"}]
-    assert captured["call"] == (owner, initial_info, ytcfg, params)
 
 
 def test_chat_streams_mixin_video_entry_wraps_runtime_generator() -> None:

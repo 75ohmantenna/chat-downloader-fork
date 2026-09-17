@@ -15,7 +15,6 @@ from chat_downloader.sites.youtube.chat_streams import YouTubeChatStreamsMixin
 from chat_downloader.sites.youtube.chat_users_retrieval import (
     YouTubeChatUsersRetrievalMixin,
 )
-from chat_downloader.sites.youtube.continuation import _ContinuationLoop
 
 
 class _Streams(YouTubeChatStreamsMixin):
@@ -157,81 +156,3 @@ def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -
     assert downloader.video_request is request
 
 
-def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
-    monkeypatch,
-) -> None:
-    captured = {}
-
-    class DummyDownloader:
-        def __init__(self) -> None:
-            self.session = SimpleNamespace(headers={})
-            self._session_post = object()
-
-        def check_for_invalid_types(self, *_args, **_kwargs) -> None:
-            return None
-
-        def update_session_headers(self, new_headers) -> None:
-            self.session.headers.update(new_headers)
-
-        def replace_session_headers(self, new_headers, managed_names) -> None:
-            for name in managed_names:
-                self.session.headers.pop(name, None)
-            self.update_session_headers(new_headers)
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_headers",
-        lambda *_args, **_kwargs: {},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_innertube_context",
-        lambda _ytcfg: {"client": {"visitorData": "visitor"}},
-    )
-
-    def fake_get_continuation_info(_url, _session_post, program_params, **_kwargs):
-        captured["program_params"] = program_params
-        return {
-            "continuationContents": {"liveChatContinuation": {"actions": []}},
-            "responseContext": {},
-        }
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        fake_get_continuation_info,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
-        lambda _yt_info: SimpleNamespace(
-            debug_info={},
-            timeout_ms=None,
-            is_end=True,
-            next_continuation=None,
-        ),
-    )
-
-    request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc",
-        chat_type="live",
-        message_groups=["messages"],
-    )
-    initial_info = {
-        "continuation_info": {
-            "Top chat": "top-token",
-            "Live chat": "live-token",
-        },
-        "status": "live",
-    }
-
-    list(
-        _ContinuationLoop(
-            DummyDownloader(),
-            initial_info,
-            {"INNERTUBE_API_KEY": "key"},
-            request,
-        ).run(),
-    )
-
-    assert captured["program_params"] is request

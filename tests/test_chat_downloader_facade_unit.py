@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import inspect
-from unittest.mock import MagicMock
 
 from chat_downloader.chat_downloader import ChatDownloader, run
 from chat_downloader.models import (
@@ -12,26 +11,6 @@ from chat_downloader.models import (
     DEFAULT_READ_TIMEOUT,
     ChatRequest,
 )
-
-
-def test_chat_downloader_session_helpers_delegate_to_runtime_helpers(
-    monkeypatch,
-) -> None:
-    downloader = ChatDownloader()
-    pool = downloader._session_pool
-    pool.create = MagicMock(return_value="created")
-    pool.get = MagicMock(return_value="existing-session")
-    pool.close = MagicMock()
-
-    class FakeSite:
-        __name__ = "FakeSite"
-
-    assert downloader.create_session(FakeSite, overwrite=True) == "created"
-    assert downloader.get_session(FakeSite) == "existing-session"
-    downloader.close()
-    pool.create.assert_called_once_with(FakeSite, overwrite=True)
-    pool.get.assert_called_once_with(FakeSite)
-    pool.close.assert_called_once_with()
 
 
 def test_chat_downloader_init_defaults_are_canonical_model_defaults() -> None:

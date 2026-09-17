@@ -27,7 +27,7 @@ from chat_downloader.sites.twitch import (
     irc_diagnostics,
     irc_transport,
 )
-from tests.twitch_third_helpers import irc_frame
+from tests.twitch_third_helpers import irc_control, irc_frame
 
 
 def _privmsg(message_id: str, text: str) -> str:
@@ -440,7 +440,7 @@ def test_successful_capture_modes_have_additive_fifteen_frame_limit(
         (
             [
                 "PING :tmi.twitch.tv\r",
-                "\n:tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n",
+                "\n" + irc_control("PONG tmi.twitch.tv :tmi.twitch.tv"),
                 "x" * 100 + "PING :tmi.twitch.tv\r\n",
             ],
             3,
@@ -449,14 +449,14 @@ def test_successful_capture_modes_have_additive_fifteen_frame_limit(
         (
             [
                 (
-                    ":tmi.twitch.tv 001 justinfan :Welcome\r\n"
-                    ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n"
-                    ":user!user@user.tmi.twitch.tv JOIN #example\r\n"
-                    "@badge-info=;badges= :user!user@user.tmi.twitch.tv "
+                    irc_control("001 justinfan :Welcome")
+                    + irc_control("CAP * ACK :twitch.tv/tags twitch.tv/commands")
+                    + irc_control("JOIN #example", "user!user@user.tmi.twitch.tv")
+                    + "@badge-info=;badges= :user!user@user.tmi.twitch.tv "
                     "PRIVMSG #example :JOIN #another-channel\r\n"
                     "@badge-info= :user!user@user.tmi.twitch.tv JOIN #example\r\n"
-                    ":tmi.twitch.tv 421 justinfan CAP :Unknown command\r\n"
-                    "UNKNOWN LINE\r\n"
+                    + irc_control("421 justinfan CAP :Unknown command")
+                    + "UNKNOWN LINE\r\n"
                 )
             ],
             7,
@@ -629,18 +629,15 @@ def test_twitch_chat_irc_registration_and_receive(irc_socket, split):
     [
         ("", True),
         ("PING :tmi.twitch.tv\r\nPONG :tmi.twitch.tv\r\n", True),
-        (":tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n", True),
-        (":user!user@user.tmi.twitch.tv JOIN #example\r\n", True),
-        (":user!user@user.tmi.twitch.tv PART #example\r\n", True),
-        (":tmi.twitch.tv 001 justinfan :Welcome\r\n", True),
-        (":tmi.twitch.tv 353 justinfan = #example :justinfan\r\n", True),
-        (":tmi.twitch.tv 421 justinfan CAP :Unknown command\r\n", False),
-        (":tmi.twitch.tv 433 * justinfan :Nickname in use\r\n", False),
-        (
-            ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n",
-            True,
-        ),
-        (":tmi.twitch.tv NOTICE * :hello\r\n", False),
+        (irc_control("PONG tmi.twitch.tv :tmi.twitch.tv"), True),
+        (irc_control("JOIN #example", "user!user@user.tmi.twitch.tv"), True),
+        (irc_control("PART #example", "user!user@user.tmi.twitch.tv"), True),
+        (irc_control("001 justinfan :Welcome"), True),
+        (irc_control("353 justinfan = #example :justinfan"), True),
+        (irc_control("421 justinfan CAP :Unknown command"), False),
+        (irc_control("433 * justinfan :Nickname in use"), False),
+        (irc_control("CAP * ACK :twitch.tv/tags twitch.tv/commands"), True),
+        (irc_control("NOTICE * :hello"), False),
         ("THIS IS NOT A TWITCH IRC HOUSEKEEPING LINE\r\n", False),
         (":notwitch.example PRIVMSG #example :hello\r\n", False),
     ],
@@ -776,7 +773,7 @@ def test_irc_transport_only_answers_completed_ping_frames(chunks, ping_count) ->
 @pytest.mark.parametrize(
     ("frame", "unknown"),
     [
-        (":tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n", False),
+        (irc_control("PONG tmi.twitch.tv :tmi.twitch.tv"), False),
         ("UNKNOWN LINE\r\n", True),
     ],
 )
@@ -853,11 +850,6 @@ def test_irc_stream_chunks(chunks, expected, times, counters, sent):
     log.assert_not_called()
 
 
-def test_irc_transport_maps_socket_receive_error_to_reconnect() -> None:
-    with pytest.raises(ConnectionError, match="receive failed"):
-        next(_stream_messages(_FakeIRC([OSError("network changed")])))
-
-
 def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
     irc = _FakeIRC([TimeoutError(), TimeoutError()])
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
@@ -873,14 +865,22 @@ def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
     assert diagnostics.summary["keepalive_ping_sent_count"] == 2
 
 
-@pytest.mark.parametrize("frame", ["PING :tmi.twitch.tv\r\n", "UNKNOWN LINE\r\n"])
-def test_irc_transport_keepalive_send_errors_trigger_reconnect(frame) -> None:
-    irc = _FakeIRC([frame], send_error=OSError("broken pipe"))
+@pytest.mark.parametrize(
+    ("responses", "send_error", "match"),
+    [
+        ([OSError("network changed")], None, "receive failed"),
+        (["PING :tmi.twitch.tv\r\n"], OSError("broken pipe"), None),
+        (["UNKNOWN LINE\r\n"], OSError("broken pipe"), None),
+    ],
+    ids=["receive-error", "pong-send-error", "keepalive-send-error"],
+)
+def test_irc_transport_socket_errors_trigger_reconnect(responses, send_error, match):
+    irc = _FakeIRC(responses, send_error=send_error)
     with (
         patch.object(irc_transport.time, "monotonic", side_effect=[0.0, 61.0]),
-        pytest.raises(ConnectionError),
+        pytest.raises(ConnectionError, match=match),
     ):
-        list(_stream_messages(irc))
+        next(_stream_messages(irc))
 
 
 def test_twitch_chat_irc_registration_failure_closes_socket(irc_socket):

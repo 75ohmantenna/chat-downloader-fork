@@ -15,28 +15,29 @@ def chat_request(**overrides):
     )
 
 
+def irc_control(command, prefix="tmi.twitch.tv"):
+    return f":{prefix} {command}\r\n"
+
+
 def irc_frame(
     tags="", action="PRIVMSG", text="hello", channel="channel", user="testuser"
 ):
-    defaults = dict(
-        item.split("=", 1)
-        for item in [
-            "badge-info=",
-            "badges=",
-            "color=",
-            "display-name=TestUser",
-            "emotes=",
-            "flags=",
-            "id=message-1",
-            "mod=0",
-            "room-id=999",
-            "subscriber=0",
-            "tmi-sent-ts=1",
-            "turbo=0",
-            "user-id=12345",
-            "user-type=",
-        ]
-    )
+    defaults = {
+        "badge-info": "",
+        "badges": "",
+        "color": "",
+        "display-name": "TestUser",
+        "emotes": "",
+        "flags": "",
+        "id": "message-1",
+        "mod": "0",
+        "room-id": "999",
+        "subscriber": "0",
+        "tmi-sent-ts": "1",
+        "turbo": "0",
+        "user-id": "12345",
+        "user-type": "",
+    }
     defaults.update(item.split("=", 1) for item in tags.split(";") if item)
     tag_text = ";".join(f"{key}={value}" for key, value in defaults.items())
     sender = f"{user}!{user}@{user}.tmi.twitch.tv" if user else "tmi.twitch.tv"

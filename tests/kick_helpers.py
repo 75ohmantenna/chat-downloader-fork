@@ -313,3 +313,24 @@ def recovery_session(messages, *, pin_response=None):
         FakeResponse(200, message_page(messages, cursor=None)),
         pin_response if pin_response is not None else empty_response(),
     )
+
+
+def recovery_clock(times=(5.5, 12, 13.5)):
+    return live_clock(
+        side_effect=[
+            1_767_225_600_000_000_000 + int(seconds * 1_000_000_000)
+            for seconds in times
+        ]
+    )
+
+
+def frame_series(event, count, payload):
+    return [pusher_frame(event, payload(index)) for index in range(count)]
+
+
+def successful_captures(captured, kind=""):
+    label = f"kick-websocket-frame-{kind}"
+    return [
+        call for call in captured
+        if (call[0][0] == label if kind else call[0][0].startswith(label))
+    ]
