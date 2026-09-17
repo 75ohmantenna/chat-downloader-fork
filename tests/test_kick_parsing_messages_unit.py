@@ -206,6 +206,7 @@ def test_malformed_preloaded_message_is_captured(captured):
     assert list(iter_preloaded_messages([{"content": "missing id"}])) == []
     assert captured[0][0][0] == "kick-malformed-preloaded-message"
     assert captured[0][0][1]["raw"] == {"content": "missing id"}
+    assert captured[0][1]["sample_limit"] == 10
 
 
 @pytest.mark.parametrize(

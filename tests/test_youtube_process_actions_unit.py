@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from unittest.mock import Mock
 
 import pytest
@@ -40,10 +41,32 @@ def _skip(reason):
     return PipelineResult(disposition="skip", non_emission_reason=reason)
 
 
+def _assert_poll_summary(log_calls, processed, emitted, non_emitted, reasons):
+    # Counts, reasons, severity and cardinality are the diagnostic contract.
+    assert len(log_calls) == 1
+    level, summary = log_calls[0]
+    assert level == "debug"
+    totals, _, breakdown = summary.partition(" (")
+    assert [int(value) for value in re.findall(r": (\d+)", totals)] == [
+        processed,
+        emitted,
+        non_emitted,
+    ]
+    assert {
+        reason.strip(): int(count)
+        for reason, count in re.findall(r"([^,:]+): (\d+)", breakdown.rstrip(")"))
+    } == reasons
+
+
 @pytest.mark.parametrize(
-    ("results", "expected", "stopped"),
+    ("results", "expected", "stopped", "diagnostics"),
     [
-        ([_yield("hello"), _yield("world")], ["hello", "world"], False),
+        (
+            [_yield("hello"), _yield("world")],
+            ["hello", "world"],
+            False,
+            (2, 2, 0, {}),
+        ),
         (
             [
                 _yield("first"),
@@ -55,8 +78,14 @@ def _skip(reason):
             ],
             ["first"],
             True,
+            (2, 1, 1, {"time-range stop": 1}),
         ),
-        ([_skip(NonEmissionReason.UNPARSED_ACTION), _yield("kept")], ["kept"], False),
+        (
+            [_skip(NonEmissionReason.UNPARSED_ACTION), _yield("kept")],
+            ["kept"],
+            False,
+            (2, 1, 1, {"unparsed actions": 1}),
+        ),
         (
             [
                 _skip(NonEmissionReason.MESSAGE_FILTERED),
@@ -65,11 +94,19 @@ def _skip(reason):
             ],
             ["kept"],
             False,
+            (
+                3,
+                1,
+                2,
+                {"known ignored/control actions": 1, "message type/group filtered": 1},
+            ),
         ),
-        ([], [], False),
+        ([], [], False, (0, 0, 0, {})),
     ],
 )
-def test_process_dispositions(monkeypatch, results, expected, stopped):
+def test_process_dispositions(monkeypatch, results, expected, stopped, diagnostics):
+    log_calls = []
+    patch(monkeypatch, "message_pipeline.log", lambda *args: log_calls.append(args))
     process = Mock(side_effect=results)
     patch(monkeypatch, "message_pipeline.process_pipeline_action", process)
     gen = _actions([{"id": index} for index in range(len(results))])
@@ -79,10 +116,10 @@ def test_process_dispositions(monkeypatch, results, expected, stopped):
             messages.append(next(gen))
     assert messages == [{"text": text} for text in expected]
     assert exc.value.value is stopped
-    assert process.call_count == (2 if stopped else len(results))
+    _assert_poll_summary(log_calls, *diagnostics)
 
 
-def test_process_composes_parser_and_filters():
+def test_process_composes_parser_filters_and_poll_diagnostics(monkeypatch):
     actions = [
         {"addInteractivityWidgetAction": {}},
         {},
@@ -94,6 +131,11 @@ def test_process_composes_parser_and_filters():
         },
         item_action("liveChatTextMessageRenderer", {"timestampUsec": "1"}),
     ]
+    log_calls: list[tuple] = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.message_pipeline.log",
+        lambda *args: log_calls.append(args),
+    )
     result = list(
         _actions(
             actions,
@@ -101,6 +143,17 @@ def test_process_composes_parser_and_filters():
         )
     )
     assert [message["message_type"] for message in result] == ["text_message"]
+    _assert_poll_summary(
+        log_calls,
+        4,
+        1,
+        3,
+        {
+            "known ignored/control actions": 1,
+            "unparsed actions": 1,
+            "message type/group filtered": 1,
+        },
+    )
 
 
 @pytest.mark.parametrize(
