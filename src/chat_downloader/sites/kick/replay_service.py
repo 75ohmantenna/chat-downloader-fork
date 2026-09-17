@@ -27,7 +27,12 @@ from chat_downloader.utils.time_utils import seconds_to_time
 from .constants import MESSAGE_GROUPS
 from .errors import KickError
 from .history import _message_timestamp, fetch_validated_page
-from .replay_window import _apply_request_window, _classify_message, _cursor_after
+from .replay_window import (
+    _apply_request_window,
+    _bump,
+    _classify_message,
+    _cursor_after,
+)
 from .request_retry import fetch_with_retry
 from .vod_metadata import _resolve_vod_window, fetch_vod_metadata
 
@@ -231,10 +236,8 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
             )
             if cancelled is not None and cancelled.is_set():
                 return
-            state["pages"] = cast("int", state.get("pages", 0)) + 1
-            state["raw_records"] = cast("int", state.get("raw_records", 0)) + len(
-                raw_messages
-            )
+            _bump(state, "pages")
+            _bump(state, "raw_records", len(raw_messages))
             if (
                 cursor is not None
                 and cursor.isascii()
@@ -265,7 +268,7 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
                 )
                 last_progress = now
             if not raw_messages:
-                state["empty_pages"] = cast("int", state.get("empty_pages", 0)) + 1
+                _bump(state, "empty_pages")
                 if cursor:
                     continue
                 break
@@ -288,38 +291,23 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
                 ),
                 reverse=True,
             )
-            state["skipped_records"] = (
-                cast("int", state.get("skipped_records", 0))
-                + len(raw_messages)
-                - len(ordered)
-            )
-            state["malformed_object"] = (
-                cast("int", state.get("malformed_object", 0))
-                + len(raw_messages)
-                - len(ordered)
-            )
+            malformed = len(raw_messages) - len(ordered)
+            _bump(state, "skipped_records", malformed)
+            _bump(state, "malformed_object", malformed)
             for raw in ordered:
                 parsed, msg_done = _classify_message(raw, start_dt, end_dt, state)
                 if msg_done:
                     done = True
                 if parsed is None:
-                    state["skipped_records"] = (
-                        cast("int", state.get("skipped_records", 0)) + 1
-                    )
+                    _bump(state, "skipped_records")
                 elif not msg_filter.should_add(parsed):
-                    state["filtered_records"] = (
-                        cast("int", state.get("filtered_records", 0)) + 1
-                    )
+                    _bump(state, "filtered_records")
                 elif not seen_messages.register(str(parsed["message_id"]))[0]:
-                    state["duplicate_records"] = (
-                        cast("int", state.get("duplicate_records", 0)) + 1
-                    )
+                    _bump(state, "duplicate_records")
                 else:
                     page_messages.append(cast("JSONDict", parsed))
 
-            state["selected_records"] = cast(
-                "int", state.get("selected_records", 0)
-            ) + len(page_messages)
+            _bump(state, "selected_records", len(page_messages))
             if page_messages:
                 page_offsets.append(spool.tell())
                 spool.write(json.dumps(page_messages).encode("utf-8") + b"\n")

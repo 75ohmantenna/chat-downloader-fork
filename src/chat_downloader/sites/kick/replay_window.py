@@ -17,6 +17,11 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
 
 
+def _bump(state: dict[str, object], key: str, count: int = 1) -> None:
+    """Increment a replay diagnostics counter."""
+    state[key] = cast("int", state.get(key, 0)) + count
+
+
 def _apply_request_window(
     vod_start_dt: datetime,
     vod_end_dt: datetime,
@@ -46,28 +51,28 @@ def _classify_message(
     reason = "malformed_timestamp"
     created_raw = raw.get("created_at", "")
     if not isinstance(created_raw, str):
-        state[reason] = cast("int", state.get(reason, 0)) + 1
+        _bump(state, reason)
         return None, False
     try:
         msg_dt = datetime.fromisoformat(created_raw)
     except (ValueError, TypeError):
-        state[reason] = cast("int", state.get(reason, 0)) + 1
+        _bump(state, reason)
         return None, False
 
     if msg_dt.tzinfo is None:
         msg_dt = msg_dt.replace(tzinfo=UTC)
 
     if msg_dt < start_dt:
-        state["before_start"] = cast("int", state.get("before_start", 0)) + 1
+        _bump(state, "before_start")
         return None, True
     if msg_dt > end_dt:
-        state["after_end"] = cast("int", state.get("after_end", 0)) + 1
+        _bump(state, "after_end")
         return None, False
 
     try:
         parsed = parse_chat_message(raw)
     except ParsingError:
-        state["parse_error"] = cast("int", state.get("parse_error", 0)) + 1
+        _bump(state, "parse_error")
         return None, False
     return parsed, False
 
