@@ -8,14 +8,14 @@ import pytest
 
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
-from chat_downloader.sites.youtube.continuation import (
+from chat_downloader.sites.youtube.continuation_helpers import (
     ContinuationLoopState,
-    _process_actions,
     enrich_live_message_timing,
 )
 from chat_downloader.sites.youtube.message_pipeline import (
     NonEmissionReason,
     PipelineResult,
+    _process_actions,
 )
 from tests.youtube_third_helpers import item_action, patch
 
@@ -71,7 +71,7 @@ def _skip(reason):
 )
 def test_process_dispositions(monkeypatch, results, expected, stopped):
     process = Mock(side_effect=results)
-    patch(monkeypatch, "continuation.process_pipeline_action", process)
+    patch(monkeypatch, "message_pipeline.process_pipeline_action", process)
     gen = _actions([{"id": index} for index in range(len(results))])
     messages = []
     with pytest.raises(StopIteration) as exc:
@@ -114,7 +114,7 @@ def test_signed_backlog_and_monotonic_polling(
     )
     patch(
         monkeypatch,
-        "continuation.process_pipeline_action",
+        "message_pipeline.process_pipeline_action",
         Mock(
             return_value=PipelineResult(
                 disposition="yield", message={"timestamp": 500_000}

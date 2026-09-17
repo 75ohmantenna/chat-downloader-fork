@@ -215,7 +215,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |
-| `continuation.py` | The cohesive continuation loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`) as methods; stateless composables (`_process_actions`, `_advance_continuation_loop`, `_raise_if_api_error`, `_profiled_innertube_context`) stay at module scope. `chat_streams.py` constructs the loop directly |
+| `continuation.py` | The cohesive continuation request loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`); delegates action pages to `message_pipeline.py`. `chat_streams.py` constructs the loop directly |
 | `continuation_helpers.py` | Pure, downloader-independent helpers: `ContinuationLoopState`, `build_continuation_params`, `update_state_from_result`, live-timing/poll-delay/URL/filter builders |
 | `continuations.py` | Continuation token-key definitions and response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
 
@@ -228,7 +228,7 @@ module names.
 | `discovery_playlists.py` | Playlist discovery and pagination |
 | `extractor.py` | YouTube site extractor class wiring mixins together |
 | `helpers.py` | YouTube payload/navigation helpers |
-| `message_pipeline.py` | Message filtering/remapping pipeline |
+| `message_pipeline.py` | Action parsing/filtering and page emission, including live timing updates and aggregate poll diagnostics; no downloader or request dependency |
 | `paid_events.py` | Bounded per-run enrichment of sparse paid tickers before filtering |
 | `parsing/` | Action routing and message content parsers |
 | `playability.py` | YouTube playability status classification |

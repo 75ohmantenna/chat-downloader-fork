@@ -29,6 +29,8 @@ from chat_downloader.sites.youtube.continuation import (
     _ContinuationProgress,
     _resolve_poll_delay_ms,
     build_continuation_params,
+)
+from chat_downloader.sites.youtube.continuation_helpers import (
     derive_live_offset_milliseconds,
     enrich_live_message_timing,
 )
@@ -39,6 +41,7 @@ from chat_downloader.sites.youtube.message_pipeline import (
 from tests.youtube_third_helpers import (
     Downloader as _DummyDownloader,
 )
+from tests.youtube_third_helpers import patch
 from tests.youtube_third_helpers import (
     response as _response,
 )
@@ -512,10 +515,14 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
         _response([], responseContext={}),
     ]
     _returns(monkeypatch, "get_live_start_time_ms", 1000)
-    _returns(
+    patch(
         monkeypatch,
-        "process_pipeline_action",
-        PipelineResult(disposition="yield", message={"timestamp": 6_000_000}),
+        "message_pipeline.process_pipeline_action",
+        Mock(
+            return_value=PipelineResult(
+                disposition="yield", message={"timestamp": 6_000_000}
+            )
+        ),
     )
     _patch(
         monkeypatch,
@@ -576,19 +583,16 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(monkeypatch, poll
             ([], "last-token"),
         ]
     ] + [_response(continuations=[], responseContext={})]
-    process = _patch(
-        monkeypatch,
-        "process_pipeline_action",
-        Mock(
-            side_effect=[
-                PipelineResult(
-                    disposition="skip",
-                    non_emission_reason=NonEmissionReason.TIME_RANGE_FILTERED,
-                ),
-                PipelineResult(disposition="yield", message={"message": "hi"}),
-            ]
-        ),
+    process = Mock(
+        side_effect=[
+            PipelineResult(
+                disposition="skip",
+                non_emission_reason=NonEmissionReason.TIME_RANGE_FILTERED,
+            ),
+            PipelineResult(disposition="yield", message={"message": "hi"}),
+        ]
     )
+    patch(monkeypatch, "message_pipeline.process_pipeline_action", process)
     assert list(
         _messages(
             polling.downloader,

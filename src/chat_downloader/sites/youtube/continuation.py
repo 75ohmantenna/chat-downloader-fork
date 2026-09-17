@@ -11,7 +11,6 @@ functions here are stateless and downloader-independent for isolated testing.
 from __future__ import annotations
 
 import math
-from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -53,8 +52,6 @@ from .continuation_helpers import (
     _resolve_poll_delay_ms,
     _select_initial_continuation,
     build_continuation_params,
-    derive_live_offset_milliseconds,
-    enrich_live_message_timing,
     extract_visitor_data,
     get_live_start_time_ms,
     update_state_from_result,
@@ -64,7 +61,7 @@ from .continuations import (
     summarize_continuation_payload,
 )
 from .helpers import require_innertube_api_key
-from .message_pipeline import NonEmissionReason, process_pipeline_action
+from .message_pipeline import _process_actions
 from .paid_events import PaidEventCache
 from .video_status_models import REPLAY_STATUSES
 
@@ -175,19 +172,6 @@ def _profiled_innertube_context(
     return apply_request_profile_to_innertube_context(context, profile_name)
 
 
-def _apply_live_timing(
-    message: JSONDict,
-    loop_state: ContinuationLoopState,
-    live_start_time_ms: int,
-) -> None:
-    """Add signed presentation timing and advance nonnegative polling state."""
-    live_offset = derive_live_offset_milliseconds(message, live_start_time_ms)
-    if live_offset is not None:
-        enrich_live_message_timing(message, live_offset)
-        current_poll_offset = loop_state.offset_milliseconds or 0
-        loop_state.offset_milliseconds = max(current_poll_offset, live_offset, 0)
-
-
 def _raise_if_api_error(yt_info: JSONDict) -> None:
     """Raise a typed exception when the YouTube API returns an error payload."""
     if "error" not in yt_info:
@@ -250,94 +234,6 @@ def _log_continuation_debug_info(cont_result: ContinuationParseResult) -> None:
         "debug",
         f"Continuation info: {cont_debug.get('continuation_entry')}",
     )
-
-
-def _process_actions(
-    actions: list[JSONDict],
-    offset: float | None,
-    msg_filter: MessageFilter,
-    time_filter: TimeRangeFilter | None,
-    loop_state: ContinuationLoopState,
-    live_start_time_ms: int,
-    *,
-    is_replay: bool,
-    paid_events: PaidEventCache | None = None,
-) -> Generator[JSONDict, None, bool]:
-    """Filter raw ``liveChatContinuation`` actions and yield accepted messages.
-
-    Updates nonnegative ``loop_state.offset_milliseconds`` from usable live
-    timestamps (signed presentation timing preserves backlog ordering).
-
-    Args:
-        actions: Raw actions from a ``liveChatContinuation`` response.
-        offset: Clip/replay offset in seconds, passed to the pipeline.
-        msg_filter: Message type/group inclusion filter.
-        time_filter: Optional replay time-range filter.
-        loop_state: Mutable continuation state updated with live offsets.
-        live_start_time_ms: Epoch-ms baseline for live offsets.
-        is_replay: Suppress live-timing enrichment for replay streams.
-        paid_events: Per-run cache enriching sparse paid tickers.
-
-    Returns:
-        True on a "stop" disposition (terminate the outer loop).
-    """
-    processed_action_count = 0
-    emitted_message_count = 0
-    non_emission_counts: Counter[NonEmissionReason] = Counter()
-    for action in actions:
-        pipeline_result = process_pipeline_action(
-            action,
-            offset or 0.0,
-            msg_filter,
-            time_filter,
-            paid_events,
-        )
-        processed_action_count += 1
-        if pipeline_result.non_emission_reason is not None:
-            non_emission_counts[pipeline_result.non_emission_reason] += 1
-        if pipeline_result.disposition == "skip":
-            continue
-        if pipeline_result.disposition == "stop":
-            _log_poll_action_diagnostics(
-                processed_action_count,
-                emitted_message_count,
-                non_emission_counts,
-            )
-            return True
-        if not is_replay and pipeline_result.message is not None:
-            _apply_live_timing(pipeline_result.message, loop_state, live_start_time_ms)
-        if pipeline_result.message is not None:
-            emitted_message_count += 1
-            yield pipeline_result.message
-
-    _log_poll_action_diagnostics(
-        processed_action_count,
-        emitted_message_count,
-        non_emission_counts,
-    )
-    return False
-
-
-def _log_poll_action_diagnostics(
-    processed_count: int,
-    emitted_count: int,
-    non_emission_counts: Counter[NonEmissionReason],
-) -> None:
-    """Log bounded aggregate action outcomes for one continuation poll."""
-    non_emitted_count = sum(non_emission_counts.values())
-    message = (
-        f"Processed actions in poll: {processed_count}; "
-        f"emitted messages: {emitted_count}; "
-        f"non-emitted actions: {non_emitted_count}"
-    )
-    reason_counts = ", ".join(
-        f"{reason.value}: {non_emission_counts[reason]}"
-        for reason in NonEmissionReason
-        if non_emission_counts[reason]
-    )
-    if reason_counts:
-        message += f" ({reason_counts})"
-    log("debug", message)
 
 
 def _advance_continuation_loop(
