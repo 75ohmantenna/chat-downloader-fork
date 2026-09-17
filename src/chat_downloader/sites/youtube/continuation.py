@@ -265,21 +265,21 @@ def _process_actions(
 ) -> Generator[JSONDict, None, bool]:
     """Filter raw ``liveChatContinuation`` actions and yield accepted messages.
 
-    Update nonnegative ``loop_state.offset_milliseconds`` from usable live
-    timestamps; signed presentation timing preserves backlog capture ordering.
+    Updates nonnegative ``loop_state.offset_milliseconds`` from usable live
+    timestamps (signed presentation timing preserves backlog ordering).
 
     Args:
         actions: Raw actions from a ``liveChatContinuation`` response.
         offset: Clip/replay offset in seconds, passed to the pipeline.
         msg_filter: Message type/group inclusion filter.
-        paid_events: Per-run cache enriching sparse paid tickers.
         time_filter: Optional replay time-range filter.
         loop_state: Mutable continuation state updated with live offsets.
         live_start_time_ms: Epoch-ms baseline for live offsets.
         is_replay: Suppress live-timing enrichment for replay streams.
+        paid_events: Per-run cache enriching sparse paid tickers.
 
     Returns:
-        True on a "stop" disposition (terminate the outer loop), otherwise False.
+        True on a "stop" disposition (terminate the outer loop).
     """
     processed_action_count = 0
     emitted_message_count = 0

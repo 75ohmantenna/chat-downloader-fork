@@ -44,23 +44,11 @@ def _parse_author_images(original_url: str) -> list[dict[str, Any]]:
 
 @lru_cache(maxsize=4096)
 def _generate_emote_image_list(emote_id: str) -> tuple[dict[str, Any], ...]:
-    """Generate the canonical image list for a Twitch emote ID.
+    """Generate the canonical, lru-cached image list for a Twitch emote ID.
 
-    The result is **cached** via :func:`functools.lru_cache` so repeated calls
-    with the same *emote_id* (common during long streams) avoid rebuilding the
-    six-entry image list each time.  A tuple is returned so the cached object
-    is immutable at the outer level; callers must not mutate the individual
-    image dicts.
-
-    Serialization note: Python's :mod:`json` module serializes tuples as JSON
-    arrays, so downstream JSON output is identical to the previous list-based
-    return value.
-
-    Args:
-        emote_id: Twitch emote ID (e.g. ``"25"`` for Kappa)
-
-    Returns:
-        Tuple of emote image dictionaries (six entries: three sizes by two themes).
+    Returns an immutable tuple of six image dicts (three sizes by two
+    themes); tuples serialize as JSON arrays so output is unchanged.
+    Callers must not mutate the individual dicts.
     """
     images = []
     for theme in _EMOTE_IMAGE_THEMES:

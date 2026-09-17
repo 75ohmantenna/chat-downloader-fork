@@ -65,7 +65,7 @@ def _process_vod_edge(
     msg_filter: MessageFilter,
     logger_obj: Logger,
 ) -> tuple[JSONDict | None, str]:
-    """Validate a GraphQL VOD edge/node typename and apply time/message filters.
+    """Validate a GraphQL VOD edge/node typename and apply filters.
 
     Args:
         edge: Entry from GraphQL ``edges``.
@@ -77,8 +77,8 @@ def _process_vod_edge(
         logger_obj: Debug logger.
 
     Returns:
-        ``(data, disposition)``: ``yield`` emits data, ``skip`` advances to the
-        next edge, and ``stop`` ends the generator.
+        ``(data, disposition)``: ``yield`` emits data, ``skip`` advances,
+        ``stop`` ends the generator.
     """
     unexpected_paths = (
         find_unexpected_vod_edge_paths(edge) if logger_obj.isEnabledFor(DEBUG) else []

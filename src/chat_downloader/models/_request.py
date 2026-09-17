@@ -300,24 +300,10 @@ class ChatRequest:
     def from_kwargs(cls, *, strict: bool = False, **kwargs: Any) -> Self:
         """Construct a :class:`ChatRequest` from keyword arguments.
 
-        Known keys are mapped to fields; unknown keys are silently ignored
-        by default. Internal callers that forward an opaque ``params`` dict
-        (where the dict may contain keys intended for other consumers) rely on
-        this lenient default. Pass ``strict=True`` to raise
-        :exc:`TypeError` when any unknown key is present; the public API
-        boundary (:func:`coerce_chat_request`) always uses ``strict=True``.
-
-        This is the canonical location for mapping keyword arguments to a
-        :class:`ChatRequest`; do not duplicate this logic elsewhere.
-
-        :param strict: When ``True``, raise :exc:`TypeError` listing all
-            unknown keys instead of silently ignoring them.  Defaults to
-            ``False`` to preserve the existing behavior.
-        :type strict: bool
-        :param kwargs: Keyword arguments matching :class:`ChatRequest` field
-            names.
-        :return: Populated :class:`ChatRequest` instance.
-        :raises TypeError: When ``strict=True`` and unknown keys are present.
+        This is the canonical keyword-argument mapping; do not duplicate it.
+        Unknown keys are silently ignored by default (internal callers forward
+        opaque dicts); pass ``strict=True`` to raise :exc:`TypeError` listing
+        them — the public API boundary always does.
         """
         known = {f.name for f in dc_fields(cls)}
         unknown = sorted(k for k in kwargs if k not in known)

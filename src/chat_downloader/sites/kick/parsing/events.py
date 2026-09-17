@@ -185,21 +185,18 @@ def dispatch_event(
     """Dispatch one decoded Pusher frame to its handler.
 
     Args:
-        frame: A decoded Pusher frame, expected to contain an ``event`` name
-            and a ``data`` payload.
-        record_diagnostic: Optional callback that increments a named live-run
-            diagnostic counter.
-        received_timestamp: UTC receive time in microseconds. Live-only compact
-            payloads use it to construct namespaced fallback event IDs.
+        frame: Decoded Pusher frame (``event`` name plus ``data`` payload).
+        record_diagnostic: Optional named live-run counter callback.
+        received_timestamp: UTC receive time in microseconds; live-only
+            compact payloads use it for namespaced fallback event IDs.
 
     Returns:
-        A normalized chat message dictionary for a recognized event, or
-        ``None`` for control frames, unknown/unsupported events, and
-        unparsable payloads (which are skipped, not raised).
+        Normalized chat message for a recognized event, or ``None`` for
+        control frames, unknown events, and unparsable payloads (skipped,
+        not raised).
 
     Raises:
-        KickError: If the frame is a ``pusher:error`` event, which indicates a
-            subscription or protocol failure.
+        KickError: The frame is a ``pusher:error`` event.
     """
     event_name = frame.get("event")
 

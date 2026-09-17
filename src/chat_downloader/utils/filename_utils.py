@@ -23,37 +23,14 @@ def sanitize_filename_component(
     replace_char: str = "_",
     max_length: int = _MAX_FILENAME_BYTES,
 ) -> str:
-    r"""Sanitize a string for use as a single filename component (not a path).
+    r"""Sanitize a string as one filename component (never a path).
 
-    Intended for building filenames from user-supplied content such as stream
-    titles or video IDs.
-
-    WARNING: This function is NOT a path-security tool.  Only pass a single
-    filename segment — never a full path — and always join the result with a
-    trusted base directory via ``os.path.join()``.  The function does not
-    strip ``..`` sequences because there is no base path to anchor against;
-    that is the caller's responsibility.
-
-    Replaces or removes:
-    - Windows-forbidden characters: ``/ \\ : * ? " < > |``
-    - ASCII control characters (0x00-0x1f, 0x7f)
-
-    Strips:
-    - Leading and trailing dots and spaces (cause issues on Windows/macOS)
-
-    Avoids:
-    - Reserved Windows device names (CON, PRN, AUX, NUL, COM0-COM9, LPT0-LPT9)
-      — prefixes result with ``replace_char`` when matched
-
-    Truncates to ``max_length`` UTF-8 bytes to prevent ENAMETOOLONG errors.
-    A ``max_length`` of 0 disables truncation.
-
-    :param text: Input string, or None (returns empty string).
-    :param replace_char: Replacement character for forbidden chars, defaults
-        to ``"_"``.
-    :param max_length: Maximum byte length of the result in UTF-8, defaults
-        to 200.  Pass 0 to disable.
-    :return: Sanitized filename component string.
+    Not a path-security tool: pass a single segment, never a full path;
+    ``..`` is not stripped (no base path to anchor against). Replaces
+    Windows-forbidden characters and ASCII control chars with
+    ``replace_char``, strips leading/trailing dots and spaces, prefixes
+    reserved Windows device names, and truncates to ``max_length`` UTF-8
+    bytes (0 disables truncation). ``None`` returns an empty string.
     """
     if text is None:
         return ""

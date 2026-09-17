@@ -172,31 +172,9 @@ class ChatDownloader:
     ) -> Chat:
         """Detect the URL's platform, create a session, and return a Chat.
 
-        Args:
-            url: Stream, video, clip, or broadcast URL (required).
-            start_time: Seconds or hh:mm:ss; None starts at the beginning.
-            end_time: Seconds or hh:mm:ss; None continues until the end.
-            timeout: Maximum retrieval duration in seconds.
-            inactivity_timeout: Stop after this many seconds without messages.
-            max_attempts: Maximum retry attempts (default 15).
-            retry_timeout: Seconds before retry; None uses exponential backoff,
-                negative waits for user input.
-            interruptible_retry: Allow skipping the wait to retry immediately.
-            max_messages: Maximum messages; None is unlimited.
-            message_groups: Predefined site-specific message groups to include.
-            message_types: Specific message types; overrides message_groups.
-            output: Path(s), or None for stdout; extensions select .jsonl/.txt only.
-            overwrite: Overwrite an existing output file.
-            sort_keys: Sort JSON output keys.
-            format: Template name; defaults per site.
-            format_file: Path to a custom format definition file.
-            chat_type: YouTube chat type.
-            ignore: YouTube video IDs to ignore.
-            youtube_replay_poll_interval: Explicit polling interval (0.5-8 s);
-                None respects the provider delay hint.
-            message_receive_timeout: Live socket receive-poll timeout in seconds
-                (default 1.0); Twitch and Kick enforce a minimum of 1.
-            buffer_size: Twitch message-retrieval buffer size (default 4096).
+        Args mirror :class:`ChatRequest` fields (seconds or ``hh:mm:ss`` times,
+        output paths, formatting, provider options); see that class for
+        defaults and semantics.
 
         Raises:
             URLNotProvided: No URL provided.
