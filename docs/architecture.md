@@ -215,7 +215,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |
-| `continuation.py` | The cohesive continuation loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`) as methods; stateless composables (`_process_actions`, `_advance_continuation_loop`, `_raise_if_api_error`, `_profiled_innertube_context`) stay at module scope. `_get_chat_messages` is the factory the mixin calls |
+| `continuation.py` | The cohesive continuation loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`) as methods; stateless composables (`_process_actions`, `_advance_continuation_loop`, `_raise_if_api_error`, `_profiled_innertube_context`) stay at module scope. `chat_streams.py` constructs the loop directly |
 | `continuation_helpers.py` | Pure, downloader-independent helpers: `ContinuationLoopState`, `build_continuation_params`, `update_state_from_result`, live-timing/poll-delay/URL/filter builders |
 | `continuations.py` | Continuation token-key definitions and response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
 

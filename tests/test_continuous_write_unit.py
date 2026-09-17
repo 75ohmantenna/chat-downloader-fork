@@ -138,6 +138,7 @@ def test_factory_selection_and_initialization(
         assert writer.is_initialised()
         assert writer.output_mode == output_mode
         assert writer.is_default() is (output_mode == "formatted")
+        assert writer.sort_keys is options.get("sort_keys")
     assert path.read_text(encoding="utf-8") == expected
 
 
