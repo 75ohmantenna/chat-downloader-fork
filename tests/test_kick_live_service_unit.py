@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -32,6 +33,7 @@ from chat_downloader.sites.kick.errors import (
     KickForwardHistoryRejected,
     KickServerError,
 )
+from chat_downloader.sites.proxy import resolve_session_proxy
 from tests.kick_helpers import (
     FakeDownloader,
     FakeKickSession,
@@ -164,15 +166,13 @@ def transports():
         ({"https": ""}, None),
     ],
 )
-def test_resolve_ws_proxy(proxies, expected) -> None:
-    downloader = MagicMock()
-    downloader.session.proxies = proxies
-    downloader.session.trust_env = False
-    assert live_service._resolve_ws_proxy(downloader) == expected
+def test_resolve_ws_proxy_uses_session_proxies(proxies, expected) -> None:
+    session = SimpleNamespace(proxies=proxies, trust_env=False)
+    assert resolve_session_proxy(session, "https://ws-us2.pusher.com") == expected
 
 
 def test_resolve_ws_proxy_returns_none_without_session() -> None:
-    assert live_service._resolve_ws_proxy(object()) is None
+    assert resolve_session_proxy(None, "https://ws-us2.pusher.com") is None
 
 
 # ── _resolve_channel ──────────────────────────────────────────────────────────

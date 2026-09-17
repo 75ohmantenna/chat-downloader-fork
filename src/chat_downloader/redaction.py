@@ -350,11 +350,6 @@ def _prepare_sample_directory(sample_dir: Path) -> int:
     return descriptor
 
 
-def _existing_sample_stat(path: Path, directory_fd: int) -> os.stat_result:
-    """Inspect an existing sample without following its final path component."""
-    return os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False)
-
-
 def _unlink_created_sample(path: Path, directory_fd: int) -> None:
     """Best-effort removal of a sample created by the current capture call."""
     with suppress(OSError):
@@ -372,7 +367,7 @@ def _write_or_validate_sample(
         descriptor = os.open(path.name, flags, 0o600, dir_fd=directory_fd)
     except FileExistsError:
         _require_private_sample_entry(
-            _existing_sample_stat(path, directory_fd),
+            os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False),
             path,
             directory=False,
         )

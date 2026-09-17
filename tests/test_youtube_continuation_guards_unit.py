@@ -15,7 +15,7 @@ from chat_downloader.errors import (
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.continuation import (
     ContinuationLoopState,
-    _get_chat_messages,
+    _ContinuationLoop,
 )
 
 
@@ -104,7 +104,7 @@ def test_continuation_loop_raises_after_repeated_empty_polls_with_stale_token(
 
     with pytest.raises(NoContinuation, match="No progress"):
         list(
-            _get_chat_messages(
+            _ContinuationLoop(
                 _DummyDownloader(),
                 {
                     "continuation_info": {"Live chat": "token"},
@@ -116,7 +116,7 @@ def test_continuation_loop_raises_after_repeated_empty_polls_with_stale_token(
                     chat_type="live",
                     message_groups=["messages"],
                 ),
-            )
+            ).run()
         )
 
 
@@ -162,7 +162,7 @@ def test_continuation_loop_bounded_profile_fallbacks(monkeypatch) -> None:
 
     with pytest.raises(IncompleteContinuationError, match="repeated"):
         list(
-            _get_chat_messages(
+            _ContinuationLoop(
                 _DummyDownloader(),
                 {
                     "continuation_info": {"Live chat": "token"},
@@ -174,7 +174,7 @@ def test_continuation_loop_bounded_profile_fallbacks(monkeypatch) -> None:
                     chat_type="live",
                     message_groups=["messages"],
                 ),
-            )
+            ).run()
         )
 
     # Three fallbacks were attempted (cap), then the fourth attempt

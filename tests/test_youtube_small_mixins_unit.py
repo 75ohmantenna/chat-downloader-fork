@@ -90,20 +90,23 @@ def test_channel_discovery_mixin_coerces_typed_request(monkeypatch) -> None:
     assert captured == [request]
 
 
-def test_chat_streams_mixin_get_chat_messages_delegates_runtime_helper() -> None:
+def test_chat_streams_mixin_get_chat_messages_builds_runtime_loop() -> None:
     class DummyStreams(YouTubeChatStreamsMixin):
         pass
 
     captured = {}
 
-    def fake_get_chat_messages(owner, initial_info, ytcfg, params):
-        captured["call"] = (owner, initial_info, ytcfg, params)
-        return iter([{"message_type": "text_message"}])
+    class FakeLoop:
+        def __init__(self, owner, initial_info, ytcfg, params):
+            captured["call"] = (owner, initial_info, ytcfg, params)
+
+        def run(self):
+            return iter([{"message_type": "text_message"}])
 
     import chat_downloader.sites.youtube.chat_streams as mod
 
-    original = mod._get_chat_messages
-    mod._get_chat_messages = fake_get_chat_messages
+    original = mod._ContinuationLoop
+    mod._ContinuationLoop = FakeLoop
     try:
         owner = DummyStreams()
         initial_info = {"a": 1}
@@ -111,7 +114,7 @@ def test_chat_streams_mixin_get_chat_messages_delegates_runtime_helper() -> None
         params = ChatRequest(url="https://www.youtube.com/watch?v=abc")
         result = owner._get_chat_messages(initial_info, ytcfg, params)
     finally:
-        mod._get_chat_messages = original
+        mod._ContinuationLoop = original
 
     assert list(result) == [{"message_type": "text_message"}]
     assert captured["call"] == (owner, initial_info, ytcfg, params)

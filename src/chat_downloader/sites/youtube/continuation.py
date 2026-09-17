@@ -732,13 +732,3 @@ class _ContinuationLoop:
         }
         if ctx.msg_filter.should_add(end_msg):
             yield end_msg
-
-
-def _get_chat_messages(
-    downloader: YouTubeDownloaderProto,
-    initial_info: dict[str, Any],
-    ytcfg: JSONDict,
-    params: ChatRequest,
-) -> Generator[JSONDict, None, None]:
-    """Yield chat messages from a YouTube continuation endpoint."""
-    return _ContinuationLoop(downloader, initial_info, ytcfg, params).run()

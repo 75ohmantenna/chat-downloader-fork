@@ -18,9 +18,9 @@ from chat_downloader.sites.kick.live_service import (
     _fetch_channel_with_retry,
     _open_subscribed_transport,
     _resolve_channel,
-    _resolve_ws_proxy,
 )
 from chat_downloader.sites.kick.websocket_transport import KickPusherTransport
+from chat_downloader.sites.proxy import resolve_session_proxy
 from tests.kick_helpers import request
 
 pytestmark = [pytest.mark.network, pytest.mark.network_live, pytest.mark.timeout(45)]
@@ -55,7 +55,9 @@ def test_live_channel_connects_and_subscribes():
             chatroom_id,
             options,
             KickPusherTransport,
-            proxy_url=_resolve_ws_proxy(downloader),
+            proxy_url=resolve_session_proxy(
+                getattr(downloader, "session", None), "https://ws-us2.pusher.com"
+            ),
         )
     except CaptchaChallengeRequired as error:
         pytest.skip(f"Kick challenge block: try a fresh VPN/proxy endpoint. ({error})")

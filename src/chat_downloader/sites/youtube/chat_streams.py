@@ -10,7 +10,7 @@ from chat_downloader.errors import ParsingError
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.time_utils import ensure_seconds
 
-from .continuation import _get_chat_messages
+from .continuation import _ContinuationLoop
 
 if TYPE_CHECKING:
     import re
@@ -32,9 +32,9 @@ class YouTubeChatStreamsMixin:
         params: ChatRequest,
     ) -> Generator[JSONDict, None, None]:
         """Yield chat messages from a YouTube continuation endpoint."""
-        return _get_chat_messages(
+        return _ContinuationLoop(
             cast("YouTubeDownloaderProto", self), initial_info, ytcfg, params
-        )
+        ).run()
 
     def _get_chat_by_clip_id(self, match: re.Match[str], params: ChatRequest) -> Chat:
         """Get chat by clip ID from regex match."""

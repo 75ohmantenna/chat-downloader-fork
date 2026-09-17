@@ -20,10 +20,7 @@ from typing import Any, cast
 import pytest
 
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.youtube.continuation import (
-    _ContinuationLoop,
-    _get_chat_messages,
-)
+from chat_downloader.sites.youtube.continuation import _ContinuationLoop
 
 
 class _DummyDownloader:
@@ -80,13 +77,13 @@ def _stub_setup_boundaries(monkeypatch) -> None:
 
 
 def test_get_chat_messages_factory_returns_generator() -> None:
-    """The factory wires a _ContinuationLoop and returns its run() generator."""
-    result = _get_chat_messages(
+    """The loop wires directly and returns its run() generator."""
+    result = _ContinuationLoop(
         cast("Any", _DummyDownloader()),
         {"continuation_info": {"Live chat": "token"}, "status": "live"},
         {"INNERTUBE_API_KEY": "key"},
         ChatRequest(url="https://www.youtube.com/watch?v=abc", chat_type="live"),
-    )
+    ).run()
     assert isinstance(result, Generator)
 
 

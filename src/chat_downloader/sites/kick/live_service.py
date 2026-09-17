@@ -220,12 +220,6 @@ def _resolve_channel(
     return channel_id, chatroom_id, title
 
 
-def _is_live_status(data: JSONDict) -> bool:
-    """Return ``True`` if the channel metadata indicates a live stream."""
-    livestream = data.get("livestream")
-    return isinstance(livestream, dict)
-
-
 def get_chat_by_channel(
     downloader: KickChatDownloader,
     username: str,
@@ -260,7 +254,7 @@ def get_chat_by_channel(
 
     data = _fetch_channel_with_retry(downloader, username, request)
     channel_id, chatroom_id, title = _resolve_channel(data, username)
-    status = "live" if _is_live_status(data) else "idle"
+    status = "live" if isinstance(data.get("livestream"), dict) else "idle"
     diagnostics = _KickLiveDiagnostics()
 
     return Chat(
@@ -279,14 +273,6 @@ def get_chat_by_channel(
         video_type="video",
         id=username,
         diagnostics=diagnostics.summary,
-    )
-
-
-def _resolve_ws_proxy(downloader: object) -> str | None:
-    """Return the effective proxy URL for Kick's secure WebSocket."""
-    return resolve_session_proxy(
-        getattr(downloader, "session", None),
-        "https://ws-us2.pusher.com",
     )
 
 
@@ -593,7 +579,9 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     )
 
     # 2. Live WebSocket feed with reconnect.
-    proxy_url = _resolve_ws_proxy(downloader)
+    proxy_url = resolve_session_proxy(
+        getattr(downloader, "session", None), "https://ws-us2.pusher.com"
+    )
     session = getattr(downloader, "session", None)
     pusher_http_client = (
         _RequestsHttpClient(

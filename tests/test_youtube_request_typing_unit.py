@@ -15,9 +15,7 @@ from chat_downloader.sites.youtube.chat_streams import YouTubeChatStreamsMixin
 from chat_downloader.sites.youtube.chat_users_retrieval import (
     YouTubeChatUsersRetrievalMixin,
 )
-from chat_downloader.sites.youtube.continuation import (
-    _get_chat_messages as iterate_chat_messages,
-)
+from chat_downloader.sites.youtube.continuation import _ContinuationLoop
 
 
 class _Streams(YouTubeChatStreamsMixin):
@@ -228,12 +226,12 @@ def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
     }
 
     list(
-        iterate_chat_messages(
+        _ContinuationLoop(
             DummyDownloader(),
             initial_info,
             {"INNERTUBE_API_KEY": "key"},
             request,
-        ),
+        ).run(),
     )
 
     assert captured["program_params"] is request

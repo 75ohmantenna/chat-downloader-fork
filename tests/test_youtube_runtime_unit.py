@@ -27,7 +27,6 @@ from chat_downloader.sites.youtube.continuation import (
     _advance_continuation_loop,
     _ContinuationLoop,
     _ContinuationProgress,
-    _get_chat_messages,
     _resolve_poll_delay_ms,
     build_continuation_params,
     derive_live_offset_milliseconds,
@@ -98,9 +97,9 @@ def _messages(owner, initial_info, **params):
             **params,
         }
     )
-    return _get_chat_messages(
+    return _ContinuationLoop(
         owner, initial_info, {"INNERTUBE_API_KEY": "key"}, request
-    )
+    ).run()
 
 
 @pytest.fixture(autouse=True)
