@@ -46,6 +46,16 @@ def test_close_oserror_is_logged_and_reraised(tmp_path: pathlib.Path) -> None:
         writer.close()
 
 
+def test_writer_sort_keys_property_reports_configuration(
+    tmp_path: pathlib.Path,
+) -> None:
+    path = str(tmp_path / "test.jsonl")
+    with ContinuousWriter(path, sort_keys=True) as writer:
+        assert writer.sort_keys is True
+    with ContinuousWriter(path) as writer:
+        assert writer.sort_keys is None
+
+
 def test_persist_after_write_flush_oserror_is_propagated(
     tmp_path: pathlib.Path,
 ) -> None:

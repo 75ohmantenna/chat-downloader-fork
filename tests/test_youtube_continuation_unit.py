@@ -67,7 +67,9 @@ def test_json_challenge_raises(policy) -> None:
         )
 
 
-@pytest.mark.parametrize(("handler", "payload"),[
+@pytest.mark.parametrize(
+    ("handler", "payload"),
+    [
         (_handle_http_error, _make_response(429)),
         (_handle_json_api_error, {"code": 429, "message": "Rate limit exceeded"}),
         (_handle_json_api_error, {"code": 0, "message": "Unknown error occurred"}),

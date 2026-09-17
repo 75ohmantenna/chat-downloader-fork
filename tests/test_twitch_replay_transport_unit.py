@@ -28,7 +28,9 @@ def _replay(download, *, cursor=None, offset=0, session_post=None):
     )
 
 
-@pytest.mark.parametrize(("cursor", "offset", "variables", "edges", "metadata"),[
+@pytest.mark.parametrize(
+    ("cursor", "offset", "variables", "edges", "metadata"),
+    [
         ("cursor-1", 99, {"cursor": "cursor-1"}, [], {"id": "vod"}),
         (None, None, {"contentOffsetSeconds": 0}, [1], {}),
     ],
@@ -59,7 +61,9 @@ def test_replay_returns_none_for_malformed_or_empty_payloads(payload) -> None:
     assert _replay(Mock(return_value=payload), offset=1.5) == (None, None)
 
 
-@pytest.mark.parametrize(("edges", "cursor", "offset", "variables", "has_next"),[
+@pytest.mark.parametrize(
+    ("edges", "cursor", "offset", "variables", "has_next"),
+    [
         (
             [{"cursor": "mobile-cursor", "node": {}}],
             "legacy-cursor",

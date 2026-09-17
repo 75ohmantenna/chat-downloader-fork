@@ -286,7 +286,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 continue
 
             message_count += 1
-            if data is None:
+            if data is None:  # pragma: no cover — _parse_item always returns a dict
                 msg = "Unexpected None data for non-skip edge"
                 raise ValueError(msg)
             yield data

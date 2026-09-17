@@ -119,7 +119,9 @@ def test_generate_headers_includes_user_agent_and_bootstrap_logged_in() -> None:
     assert headers["authorization"] == "AUTH"
 
 
-@pytest.mark.parametrize(("status", "payload", "typed_request"),[
+@pytest.mark.parametrize(
+    ("status", "payload", "typed_request"),
+    [
         pytest.param(
             429,
             {"error": {"code": 429, "message": "Too Many Requests"}},
@@ -158,7 +160,9 @@ def test_get_continuation_info_retries(
     assert len(calls) == 2
 
 
-@pytest.mark.parametrize(("status", "text", "title", "typed_request"),[
+@pytest.mark.parametrize(
+    ("status", "text", "title", "typed_request"),
+    [
         (500, "<html>server error</html>", "Server Error", False),
         (
             429,
@@ -211,7 +215,9 @@ def test_get_initial_info_raises_retries_exceeded_when_attempt_loop_exits(monkey
     assert "Retries exhausted after 0 attempt(s)" in str(exc_info.value)
 
 
-@pytest.mark.parametrize(("status", "payload", "attempts", "error", "fragments"),[
+@pytest.mark.parametrize(
+    ("status", "payload", "attempts", "error", "fragments"),
+    [
         pytest.param(
             429,
             {},
@@ -269,7 +275,9 @@ def test_get_continuation_info_handles_json_decode_before_response() -> None:
     assert "Unable to parse JSON" in str(exc_info.value)
 
 
-@pytest.mark.parametrize(("payload", "browse"),[
+@pytest.mark.parametrize(
+    ("payload", "browse"),
+    [
         pytest.param(
             {"error": {"code": 400, "message": "Replay disabled"}},
             False,
@@ -299,7 +307,9 @@ def test_get_continuation_info_returns_payload(
     )
 
 
-@pytest.mark.parametrize(("status", "payload", "response_kwargs"),[
+@pytest.mark.parametrize(
+    ("status", "payload", "response_kwargs"),
+    [
         pytest.param(
             429,
             {"error": {"code": 429, "message": "Too Many Requests"}},
@@ -328,7 +338,9 @@ def test_get_continuation_info_raises_challenge(
         assert "--request_profile" in str(exc_info.value)
 
 
-@pytest.mark.parametrize(("status", "text", "title", "fragments"),[
+@pytest.mark.parametrize(
+    ("status", "text", "title", "fragments"),
+    [
         (
             503,
             "<html>service unavailable</html>",

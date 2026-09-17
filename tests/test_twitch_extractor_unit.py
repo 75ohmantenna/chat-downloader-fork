@@ -55,7 +55,9 @@ def _vod_messages():
     )
 
 
-@pytest.mark.parametrize(("edge_type", "node_type"),[
+@pytest.mark.parametrize(
+    ("edge_type", "node_type"),
+    [
         ("VideoCommentEdge", "Comment"),
         (None, None),
         ("UnexpectedEdgeType", "Comment"),
@@ -312,7 +314,9 @@ def test_iter_vod_chat_messages_with_offset_branch() -> None:
     assert result == []
 
 
-@pytest.mark.parametrize(("payload", "error"),[
+@pytest.mark.parametrize(
+    ("payload", "error"),
+    [
         ({"errors": [{"message": "clip not found"}]}, VideoNotFound),
         ({"data": {"clip": None}}, ParsingError),
     ],
@@ -326,3 +330,53 @@ def test_clip_response_errors(payload, error) -> None:
     request = ChatRequest(url="https://www.twitch.tv/clip/test")
     with pytest.raises(error):
         get_chat_by_clip_id(downloader, "test_clip", request)
+
+
+def test_extractor_routing_wrappers_delegate(monkeypatch) -> None:
+    downloader = TwitchChatDownloader()
+    request = ChatRequest(url="https://www.twitch.tv/example")
+
+    class Match:
+        def __init__(self, value: str) -> None:
+            self.value = value
+
+        def group(self, _name: str) -> str:
+            return self.value
+
+    for name, item_id, public_method, wrapper_name in [
+        ("build_vod_chat", "v1", "get_chat_by_vod_id", "_get_chat_by_vod_id"),
+        ("build_clip_chat", "c1", "get_chat_by_clip_id", "_get_chat_by_clip_id"),
+        ("build_stream_chat", "s1", "get_chat_by_stream_id", "_get_chat_by_stream_id"),
+    ]:
+        seen: dict[str, object] = {}
+
+        def fake_build(owner, seen_id, params, _seen=seen):
+            _seen.update(owner=owner, item_id=seen_id, params=params)
+            return "chat"
+
+        monkeypatch.setattr(
+            f"chat_downloader.sites.twitch.extractor.{name}",
+            fake_build,
+        )
+        assert getattr(downloader, public_method)(item_id, request) == "chat"
+        assert seen["item_id"] == item_id
+        assert seen["params"] is request
+        match = Match(item_id + "2")
+        assert getattr(downloader, wrapper_name)(match, request) == "chat"
+        assert seen["item_id"] == match.value
+
+
+def test_extractor_generate_urls_delegates_to_url_generation(monkeypatch) -> None:
+    downloader = TwitchChatDownloader()
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.extractor.generate_twitch_urls",
+        lambda owner, livestream, vod, clip: iter(
+            [owner._NAME, livestream, vod, clip],
+        ),
+    )
+    assert list(downloader.generate_urls(1, 2, 3)) == [
+        "twitch.tv",
+        1,
+        2,
+        3,
+    ]

@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
+from unittest.mock import Mock
 
 import pytest
 
@@ -50,6 +51,28 @@ def test_jsonl_sort_keys_applied(
         writer.write({"z": 3, "a": 1, "m": 2})
     with open(jsonl_path, encoding="utf-8") as file:
         assert file.read() == expected + "\n"
+
+
+def test_writer_flush_and_periodic_fsync_paths(jsonl_path: str) -> None:
+    writer = JsonLinesContinuousWriter(jsonl_path)
+    writer.flush()  # base flush guard passes: file is open
+    writer.file = Mock()
+    writer.file.fileno.side_effect = ValueError("no fd")
+    writer._last_fsync_monotonic = float("-inf")
+    writer._persist_after_write()  # flush succeeds, fsync failure is logged
+    writer.file.fileno.side_effect = None
+    writer._last_fsync_monotonic = float("-inf")
+    writer._persist_after_write()  # real fsync path executes
+    writer.file = None
+    writer.flush()  # file None: base flush guard is a no-op
+
+
+def test_persist_after_write_without_file_returns() -> None:
+    writer = JsonLinesContinuousWriter.__new__(JsonLinesContinuousWriter)
+    writer.file = None
+    writer.file_name = "unused.jsonl"
+    writer._last_fsync_monotonic = 0.0
+    writer._persist_after_write()  # file None: early return, no exception
 
 
 def test_jsonl_overwrite_true_truncates_existing_file(jsonl_path: str) -> None:

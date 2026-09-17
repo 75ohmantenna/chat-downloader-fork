@@ -66,7 +66,9 @@ def _request() -> ChatRequest:
     return ChatRequest(url="https://www.youtube.com/watch?v=LLpNUqHVam8")
 
 
-@pytest.mark.parametrize(("reasons", "options", "profiles", "match"),[
+@pytest.mark.parametrize(
+    ("reasons", "options", "profiles", "match"),
+    [
         (
             [
                 "Video unavailable",

@@ -106,7 +106,9 @@ class _FakeSite:
         return self._overrides.get(format_name, format_name)
 
 
-@pytest.mark.parametrize(("status", "format_name", "has_site", "expected"),[
+@pytest.mark.parametrize(
+    ("status", "format_name", "has_site", "expected"),
+    [
         ("live", "default", True, "live-default:hello"),
         ("live", "custom", True, "live-custom:hello"),
         ("past", "default", True, "default:hello"),

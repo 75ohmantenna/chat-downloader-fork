@@ -329,6 +329,29 @@ def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
     )
 
 
+def test_live_service_raises_runtime_error_if_retry_returns() -> None:
+    downloader = _downloader()
+    with (
+        patch.object(live_service, "_attempt_numbers", return_value=iter([1])),
+        pytest.raises(RuntimeError, match="unreachable"),
+    ):
+        list(
+            live_service.iter_stream_chat_messages(
+                cast("Any", downloader),
+                "example",
+                _request(),
+                irc_factory=cast(
+                    "live_service._IRCFactory",
+                    Mock(side_effect=OSError("connection refused")),
+                ),
+                message_generator=cast(
+                    "live_service._MessageGenerator",
+                    Mock(return_value=iter(())),
+                ),
+            ),
+        )
+
+
 def test_live_service_logs_effective_clamped_receive_timeout() -> None:
     irc = Mock()
     downloader = _downloader()

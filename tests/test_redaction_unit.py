@@ -407,7 +407,7 @@ def test_capture_debug_sample_scrubs_inline_tokens_in_values(sample_dir):
     assert "hello world" in contents
 
 
-@pytest.mark.parametrize(("enabled", "level"),[(False, "debug"), (True, "info")])
+@pytest.mark.parametrize(("enabled", "level"), [(False, "debug"), (True, "info")])
 def test_sampling_requires_both_opt_ins(sample_dir, monkeypatch, enabled, level):
     if not enabled:
         monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", raising=False)
