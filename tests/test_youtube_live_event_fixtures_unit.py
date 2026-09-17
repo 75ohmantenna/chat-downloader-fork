@@ -29,6 +29,29 @@ def _load_payload(name: str) -> dict:
     return json.loads((_FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
+def _parse_actions(result, offset=0, *, allow_skipped=False):
+    all_filter = MessageFilter(
+        _MESSAGE_GROUPS, groups_to_add=["all"], types_to_add=None
+    )
+    parsed = []
+    for action in result.actions:
+        message = process_pipeline_action(action, offset, all_filter, None).message
+        if not allow_skipped:
+            assert message is not None
+        if message:
+            parsed.append(message)
+    return parsed
+
+
+def _assert_paid_ticker_timing(parsed, seconds, text):
+    assert [item["message_type"] for item in parsed] == [
+        "paid_message",
+        "ticker_paid_message_item",
+    ]
+    assert [item["time_in_seconds"] for item in parsed] == [seconds, seconds]
+    assert [item["time_text"] for item in parsed] == [text, text]
+
+
 def test_shu_live_event_fixture_covers_paid_membership_and_ticker_paths() -> None:
     items = _load_fixture("youtube-shu-pokopia-10m-events.json")
 
@@ -94,22 +117,7 @@ def test_crimson_live_event_fixture_covers_banner_moderation_and_engagement() ->
 def test_IzopCEgh2G8_first_live_poll_fixture_parses_text_and_summary_banner() -> None:
     payload = _load_payload("youtube-IzopCEgh2G8-live-chat-first.json")
     result = parse_continuation_response(payload)
-    all_filter = MessageFilter(
-        _MESSAGE_GROUPS,
-        groups_to_add=["all"],
-        types_to_add=None,
-    )
-
-    parsed = []
-    for action in result.actions:
-        pipeline_result = process_pipeline_action(
-            json.loads(json.dumps(action)),
-            0,
-            all_filter,
-            None,
-        )
-        if pipeline_result.message:
-            parsed.append(pipeline_result.message)
+    parsed = _parse_actions(result, allow_skipped=True)
 
     message_types = {item["message_type"] for item in parsed}
     assert result.next_continuation
@@ -125,85 +133,40 @@ def test_IzopCEgh2G8_first_live_poll_fixture_parses_text_and_summary_banner() ->
     assert "Chat summary" in summary["message"]
 
 
-def test_replay_paid_ticker_fixture_preserves_shared_precise_offset() -> None:
-    payload = _load_payload("youtube-replay-paid-ticker-shared-offset.json")
-    result = parse_continuation_response(payload)
-    all_filter = MessageFilter(
-        _MESSAGE_GROUPS,
-        groups_to_add=["all"],
-        types_to_add=None,
-    )
-
-    parsed = []
-    for action in result.actions:
-        pipeline_result = process_pipeline_action(action, 100, all_filter, None)
-        assert pipeline_result.message is not None
-        parsed.append(pipeline_result.message)
-
-    assert [item["message_type"] for item in parsed] == [
-        "paid_message",
-        "ticker_paid_message_item",
-    ]
-    assert [item["message_id"] for item in parsed] == ["paid-1", "paid-1"]
-    assert [item["time_in_seconds"] for item in parsed] == [1037.252, 1037.252]
-    assert [item["time_text"] for item in parsed] == ["17:17", "17:17"]
-
-
 @pytest.mark.parametrize(
-    ("clip_offset", "expected_time", "expected_text"),
-    [(0, -15, "-0:15"), (100, -115, "-1:55")],
+    ("preroll", "clip_offset", "expected_time", "expected_text"),
+    [
+        (False, 100, 1037.252, "17:17"),
+        (True, 0, -15, "-0:15"),
+        (True, 100, -115, "-1:55"),
+    ],
+    ids=["precise-wrapper-offset", "zero-wrapper-preroll", "clipped-preroll"],
 )
-def test_replay_paid_ticker_fixture_shares_zero_wrapper_preroll_timing(
+def test_replay_paid_ticker_fixture_shares_timing(
+    preroll,
     clip_offset,
     expected_time,
     expected_text,
 ) -> None:
     payload = _load_payload("youtube-replay-paid-ticker-shared-offset.json")
-    actions = payload["continuationContents"]["liveChatContinuation"]["actions"]
-    direct_renderer = actions[0]["replayChatItemAction"]["actions"][0][
-        "addChatItemAction"
-    ]["item"]["liveChatPaidMessageRenderer"]
-    ticker_renderer = actions[1]["replayChatItemAction"]["actions"][0][
-        "addLiveChatTickerItemAction"
-    ]["item"]["liveChatTickerPaidMessageItemRenderer"]["showItemEndpoint"][
-        "showLiveChatItemEndpoint"
-    ]["renderer"]["liveChatPaidMessageRenderer"]
-    for action in actions:
-        action["replayChatItemAction"]["videoOffsetTimeMsec"] = "0"
-    for renderer in (direct_renderer, ticker_renderer):
-        renderer["timestampText"]["simpleText"] = "-0:15"
+    if preroll:
+        actions = payload["continuationContents"]["liveChatContinuation"]["actions"]
+        direct_renderer = actions[0]["replayChatItemAction"]["actions"][0][
+            "addChatItemAction"
+        ]["item"]["liveChatPaidMessageRenderer"]
+        ticker_renderer = actions[1]["replayChatItemAction"]["actions"][0][
+            "addLiveChatTickerItemAction"
+        ]["item"]["liveChatTickerPaidMessageItemRenderer"]["showItemEndpoint"][
+            "showLiveChatItemEndpoint"
+        ]["renderer"]["liveChatPaidMessageRenderer"]
+        for action in actions:
+            action["replayChatItemAction"]["videoOffsetTimeMsec"] = "0"
+        for renderer in (direct_renderer, ticker_renderer):
+            renderer["timestampText"]["simpleText"] = "-0:15"
 
-    result = parse_continuation_response(payload)
-    all_filter = MessageFilter(
-        _MESSAGE_GROUPS,
-        groups_to_add=["all"],
-        types_to_add=None,
-    )
-
-    parsed = []
-    for action in result.actions:
-        pipeline_result = process_pipeline_action(
-            action,
-            clip_offset,
-            all_filter,
-            None,
-        )
-        assert pipeline_result.message is not None
-        parsed.append(pipeline_result.message)
-
-    assert [item["message_type"] for item in parsed] == [
-        "paid_message",
-        "ticker_paid_message_item",
-    ]
+    parsed = _parse_actions(parse_continuation_response(payload), clip_offset)
+    _assert_paid_ticker_timing(parsed, expected_time, expected_text)
     assert [item["message_id"] for item in parsed] == ["paid-1", "paid-1"]
-    assert [item["time_in_seconds"] for item in parsed] == [
-        expected_time,
-        expected_time,
-    ]
-    assert [item["time_text"] for item in parsed] == [
-        expected_text,
-        expected_text,
-    ]
 
 
 @pytest.mark.parametrize(
@@ -221,25 +184,10 @@ def test_replay_paid_ticker_fixture_rejects_invalid_wrapper_offset(
     )
     payload = _load_payload("youtube-replay-paid-ticker-shared-offset.json")
     result = parse_continuation_response(payload)
-    all_filter = MessageFilter(
-        _MESSAGE_GROUPS,
-        groups_to_add=["all"],
-        types_to_add=None,
-    )
-
-    parsed = []
     for action in result.actions:
         action["replayChatItemAction"]["videoOffsetTimeMsec"] = raw_offset
-        pipeline_result = process_pipeline_action(action, 1000, all_filter, None)
-        assert pipeline_result.message is not None
-        parsed.append(pipeline_result.message)
-
-    assert [item["message_type"] for item in parsed] == [
-        "paid_message",
-        "ticker_paid_message_item",
-    ]
-    assert [item["time_in_seconds"] for item in parsed] == [137, 137]
-    assert [item["time_text"] for item in parsed] == ["2:17", "2:17"]
+    parsed = _parse_actions(result, 1000)
+    _assert_paid_ticker_timing(parsed, 137, "2:17")
     assert len(debug_calls) == 2
 
 

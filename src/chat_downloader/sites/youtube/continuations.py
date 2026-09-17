@@ -12,7 +12,6 @@ from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
 from chat_downloader.utils.json_types import (
     JSONAny,
     JSONDict,
-    JSONList,
     get_list,
     get_str,
 )
@@ -93,11 +92,6 @@ def summarize_continuation_payload(payload: JSONDict) -> dict[str, object]:
     return summary
 
 
-def _extract_actions(info: JSONDict) -> JSONList:
-    """Return the ``actions`` list from a ``liveChatContinuation`` dict."""
-    return get_list(info, "actions")
-
-
 _POLL_DELAY_FIELDS = (
     "timeoutMs",
     "timeout_ms",
@@ -123,37 +117,22 @@ def _extract_next_continuation(
         if not isinstance(continuation_info, dict):
             continue
 
-        if continuation_key in _KNOWN_CHAT_CONTINUATIONS:
-            token = get_str(continuation_info, "continuation") or None
-            click_tracking = continuation_info.get(
-                "clickTrackingParams",
-            ) or continuation_info.get("trackingParams")
-            raw_poll_delay_ms = _extract_raw_poll_delay_ms(continuation_info)
-            debug: dict[str, object] = {
-                "continuation_key": continuation_key,
-                "continuation_entry": continuation_info,
-            }
-            return token, click_tracking, raw_poll_delay_ms, debug
-
         if continuation_key in _KNOWN_SEEK_CONTINUATIONS:
             # Seek-only continuation — not a chat token; keep searching.
             continue
 
-        # Unknown continuation key — extract token generically if available.
-        token = get_str(continuation_info, "continuation") or None
-        click_tracking = continuation_info.get(
-            "clickTrackingParams",
-        ) or continuation_info.get("trackingParams")
-        raw_poll_delay_ms = _extract_raw_poll_delay_ms(continuation_info)
+        debug: dict[str, object] = {
+            "continuation_key": continuation_key,
+            "continuation_entry": continuation_info,
+        }
+        if continuation_key not in _KNOWN_CHAT_CONTINUATIONS:
+            debug["unknown"] = True
         return (
-            token,
-            click_tracking,
-            raw_poll_delay_ms,
-            {
-                "continuation_key": continuation_key,
-                "continuation_entry": continuation_info,
-                "unknown": True,
-            },
+            get_str(continuation_info, "continuation") or None,
+            continuation_info.get("clickTrackingParams")
+            or continuation_info.get("trackingParams"),
+            _extract_raw_poll_delay_ms(continuation_info),
+            debug,
         )
 
     return None, None, None, {}
@@ -173,10 +152,7 @@ def _extract_timeout_ms(raw_timeout: object) -> int | None:
     """Return YouTube's raw continuation timeout hint in milliseconds."""
     if raw_timeout is None:
         return None
-    if isinstance(raw_timeout, bool):
-        log("debug", f"Ignoring invalid continuation timeout: {raw_timeout}")
-        return None
-    if not isinstance(raw_timeout, (str, int, float)):
+    if isinstance(raw_timeout, bool) or not isinstance(raw_timeout, (str, int, float)):
         log("debug", f"Ignoring invalid continuation timeout: {raw_timeout}")
         return None
     try:
@@ -184,11 +160,6 @@ def _extract_timeout_ms(raw_timeout: object) -> int | None:
     except (TypeError, ValueError):
         log("debug", f"Ignoring invalid continuation timeout: {raw_timeout}")
         return None
-
-
-def _detect_end(next_continuation: str | None) -> bool:
-    """Return ``True`` when there is no next continuation token."""
-    return next_continuation is None
 
 
 def parse_continuation_response(
@@ -217,7 +188,6 @@ def parse_continuation_response(
             msg,
         )
 
-    actions = _extract_actions(info)
     token, _click_tracking, raw_timeout, debug_info = _extract_next_continuation(info)
     if debug_info:
         debug_info = {
@@ -225,14 +195,11 @@ def parse_continuation_response(
             "payload_summary": summarize_continuation_payload(payload),
         }
 
-    timeout_ms = _extract_timeout_ms(raw_timeout)
-    is_end = _detect_end(token)
-
     return ContinuationParseResult(
-        actions=actions,
+        actions=get_list(info, "actions"),
         next_continuation=token,
-        timeout_ms=timeout_ms,
-        is_end=is_end,
+        timeout_ms=_extract_timeout_ms(raw_timeout),
+        is_end=token is None,
         debug_info=debug_info,
     )
 

@@ -164,10 +164,8 @@ class _SafeLogFilter(logging.Filter):
         record.msg = render_for_log(record.getMessage())
         record.args = ()
         if record.exc_info:
-            record.exc_text = render_for_log(
-                _exception_formatter.formatException(record.exc_info)
-            )
-        elif record.exc_text:
+            record.exc_text = _exception_formatter.formatException(record.exc_info)
+        if record.exc_text:
             record.exc_text = render_for_log(record.exc_text)
         if record.stack_info:
             record.stack_info = render_for_log(record.stack_info)

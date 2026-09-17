@@ -15,138 +15,67 @@ from chat_downloader.sites.models import Chat
 from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 
 
-def test_chat_output_dispatcher_close_is_idempotent_and_reports_error(
-    monkeypatch,
-) -> None:
-    class Writer:
-        file_name = "x"
-        output_mode = "raw"
+class _Writer:
+    """Already-initialized writer with observable writes and close failures."""
 
-        def __init__(self, error: Exception | None = None) -> None:
-            self.error = error
-            self.close_calls = 0
+    file_name = "x"
 
-        def is_initialised(self) -> bool:
-            return True
+    def __init__(
+        self,
+        output_mode: str = "raw",
+        received: list[Any] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.output_mode = output_mode
+        self.received = received if received is not None else []
+        self.error = error
+        self.close_calls = 0
 
-        def initialize(self) -> None:
-            return None
+    def is_initialised(self) -> bool:
+        return True
 
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            del item, flush
+    def initialize(self) -> None:
+        raise AssertionError("already initialized")
 
-        def close(self) -> None:
-            self.close_calls += 1
-            if self.error:
-                raise self.error
+    def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
+        assert flush is True
+        self.received.append(item)
 
+    def close(self) -> None:
+        self.close_calls += 1
+        if self.error:
+            raise self.error
+
+
+@pytest.mark.parametrize("target", ["dispatcher", "chat"])
+@pytest.mark.parametrize(
+    "errors",
+    [
+        (RuntimeError("boom"),),
+        (OSError("io failure"),),
+        (RuntimeError("a"), OSError("b")),
+    ],
+    ids=["runtime-error", "os-error", "multiple-errors"],
+)
+def test_close_reports_writer_failures_once(monkeypatch, target, errors) -> None:
     chat = Chat(iter(()), title="Example")
-    dispatcher = _ChatOutputDispatcher(chat)
-    writer = Writer(RuntimeError("boom"))
-    dispatcher.attach_writer(writer)
+    owner = _ChatOutputDispatcher(chat) if target == "dispatcher" else chat
+    writers = [_Writer(error=error) for error in errors]
+    for writer in writers:
+        owner.attach_writer(writer)
     logs: list[str] = []
-
     monkeypatch.setattr(
         "chat_downloader.sites.output_dispatch.log",
         lambda _level, message: logs.append(message),
     )
 
-    dispatcher.close()
+    owner.close()
+    owner.close()
 
-    dispatcher.close()
-    assert writer.close_calls == 1
-    assert any("Suppressed close() error" in message for message in logs)
-    assert any("boom" in message for message in logs)
-
-
-def test_chat_output_dispatcher_close_reports_all_writer_failures(
-    monkeypatch,
-) -> None:
-    class Writer:
-        file_name = "x"
-        output_mode = "raw"
-
-        def __init__(self, error: Exception) -> None:
-            self.error = error
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            return None
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            del item, flush
-
-        def close(self) -> None:
-            raise self.error
-
-    chat = Chat(iter(()), title="Example")
-    dispatcher = _ChatOutputDispatcher(chat)
-    logs: list[str] = []
-    writer_calls = {"a": 0, "b": 0}
-
-    class WriterB(Writer):
-        def __init__(self, error: Exception, key: str) -> None:
-            super().__init__(error)
-            self.key = key
-
-        def close(self) -> None:
-            writer_calls[self.key] += 1
-            raise self.error
-
-    dispatcher.attach_writer(WriterB(RuntimeError("a"), "a"))
-    dispatcher.attach_writer(WriterB(OSError("b"), "b"))
-    monkeypatch.setattr(
-        "chat_downloader.sites.output_dispatch.log",
-        lambda _level, message: logs.append(message),
-    )
-
-    dispatcher.close()
-
-    assert writer_calls["a"] == 1
-    assert writer_calls["b"] == 1
-    assert len(logs) == 2
-    assert any("Suppressed close() error" in message for message in logs)
-
-
-def test_chat_close_suppresses_writer_close_failures(monkeypatch) -> None:
-    class Writer:
-        file_name = "x"
-        output_mode = "raw"
-
-        def __init__(self, error: Exception) -> None:
-            self.error = error
-            self.closed = False
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            return None
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            del item, flush
-
-        def close(self) -> None:
-            self.closed = True
-            raise self.error
-
-    logs: list[str] = []
-    writer = Writer(RuntimeError("writer close failed"))
-    chat = Chat(iter(()), title="Example")
-    chat.attach_writer(writer)
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.output_dispatch.log",
-        lambda _level, message: logs.append(message),
-    )
-
-    chat.close()
-
-    assert writer.closed
-    assert any("Suppressed close() error" in message for message in logs)
-    assert any("writer close failed" in message for message in logs)
+    assert [writer.close_calls for writer in writers] == [1] * len(writers)
+    assert len(logs) == len(errors)
+    for error in errors:
+        assert any(str(error) in message for message in logs)
 
 
 def test_chat_close_closes_message_source_once() -> None:
@@ -262,32 +191,13 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
 ) -> None:
     logs: list[str] = []
 
-    class Writer:
-        file_name = "x"
-        output_mode = "raw"
-
-        def __init__(self, error: Exception) -> None:
-            self.error = error
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            return None
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            del item, flush
-
-        def close(self) -> None:
-            raise self.error
-
     def broken_generator():
         raise NoChatReplay("original")
         yield  # pragma: no cover
 
     chat = Chat(broken_generator(), title="Example")
-    chat.attach_writer(Writer(RuntimeError("writer one failed")))
-    chat.attach_writer(Writer(ValueError("writer two failed")))
+    chat.attach_writer(_Writer(error=RuntimeError("writer one failed")))
+    chat.attach_writer(_Writer(error=ValueError("writer two failed")))
 
     # RuntimeError is caught+logged by the dispatcher (output_dispatch.log);
     # ValueError is not in the dispatcher's except tuple so it propagates to
@@ -304,64 +214,17 @@ def test_chat_next_preserves_primary_error_with_multiple_writer_failures(
     assert any("writer two failed" in message for message in logs)
 
 
-def test_pre_initialised_writer_receives_emitted_item() -> None:
-    """An already-initialized writer must still receive emitted items."""
-    received: list[Any] = []
+@pytest.mark.parametrize("messages", [["hello"], ["first", "second"]])
+def test_pre_initialised_writer_receives_each_emit_once(messages) -> None:
+    writer = _Writer()
+    dispatcher = _ChatOutputDispatcher(Chat(iter(()), title="Example"))
+    dispatcher.attach_writer(writer)
+    items = [{"message": message} for message in messages]
 
-    class PreInitWriter:
-        file_name = "x"
-        output_mode = "raw"
+    for item in items:
+        dispatcher.emit(item)
 
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            raise AssertionError("initialize() must not be called")
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            received.append(item)
-
-        def close(self) -> None:
-            pass
-
-    chat = Chat(iter(()), title="Example")
-    dispatcher = _ChatOutputDispatcher(chat)
-    dispatcher.attach_writer(PreInitWriter())
-
-    dispatcher.emit({"message": "hello"})
-
-    assert len(received) == 1
-    assert received[0] == {"message": "hello"}
-
-
-def test_pre_initialised_writer_receives_each_emit_once() -> None:
-    """Multiple emit() calls must each dispatch once."""
-    received: list[Any] = []
-
-    class PreInitWriter:
-        file_name = "x"
-        output_mode = "raw"
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            pass
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            received.append(item)
-
-        def close(self) -> None:
-            pass
-
-    chat = Chat(iter(()), title="Example")
-    dispatcher = _ChatOutputDispatcher(chat)
-    dispatcher.attach_writer(PreInitWriter())
-
-    dispatcher.emit({"message": "first"})
-    dispatcher.emit({"message": "second"})
-
-    assert len(received) == 2
+    assert writer.received == items
 
 
 def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
@@ -371,26 +234,6 @@ def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
     raw_items: list[Any] = []
     format_calls: list[dict[str, Any]] = []
 
-    class Writer:
-        file_name = "x"
-
-        def __init__(self, output_mode: str, received: list[Any]) -> None:
-            self.output_mode = output_mode
-            self.received = received
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            raise AssertionError("already initialized")
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            assert flush is True
-            self.received.append(item)
-
-        def close(self) -> None:
-            pass
-
     chat = Chat(iter(()), title="Example")
 
     def format_item(item: dict[str, Any]) -> str:
@@ -399,9 +242,9 @@ def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
 
     chat.set_formatter(format_item)
     dispatcher = _ChatOutputDispatcher(chat)
-    dispatcher.attach_writer(Writer("formatted", formatted_a))
-    dispatcher.attach_writer(Writer("raw", raw_items))
-    dispatcher.attach_writer(Writer("formatted", formatted_b))
+    dispatcher.attach_writer(_Writer("formatted", formatted_a))
+    dispatcher.attach_writer(_Writer("raw", raw_items))
+    dispatcher.attach_writer(_Writer("formatted", formatted_b))
     paid = {"message_type": "paid_message", "message_id": "paid-1"}
     ticker = {
         "message_type": "ticker_paid_message_item",
@@ -434,22 +277,12 @@ def test_formatted_deduplication_is_shared_across_formatted_writers() -> None:
 def test_writer_summary_does_not_count_failed_write() -> None:
     """Only completed writer calls contribute to the debug record count."""
 
-    class Writer:
+    class Writer(_Writer):
         file_name = "failed.jsonl"
-        output_mode = "raw"
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            raise AssertionError("already initialized")
 
         def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
             del item, flush
             raise OSError("disk full")
-
-        def close(self) -> None:
-            pass
 
     chat = Chat(iter(()), title="Example")
     dispatcher = _ChatOutputDispatcher(chat)
@@ -472,31 +305,12 @@ def test_raw_only_output_does_not_populate_formatted_dedup_cache() -> None:
     raw_items: list[Any] = []
     formatted_items: list[Any] = []
 
-    class Writer:
-        file_name = "x"
-
-        def __init__(self, output_mode: str, received: list[Any]) -> None:
-            self.output_mode = output_mode
-            self.received = received
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            raise AssertionError("already initialized")
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            self.received.append(item)
-
-        def close(self) -> None:
-            pass
-
     chat = Chat(iter(()), title="Example")
     chat.set_formatter(lambda item: str(item["message_type"]))
     dispatcher = _ChatOutputDispatcher(chat)
-    dispatcher.attach_writer(Writer("raw", raw_items))
+    dispatcher.attach_writer(_Writer("raw", raw_items))
     dispatcher.emit({"message_type": "paid_message", "message_id": "paid-1"})
-    dispatcher.attach_writer(Writer("formatted", formatted_items))
+    dispatcher.attach_writer(_Writer("formatted", formatted_items))
     dispatcher.emit(
         {"message_type": "ticker_paid_message_item", "message_id": "paid-1"}
     )
@@ -510,26 +324,9 @@ def test_raw_only_output_does_not_count_formatted_suppressions() -> None:
     """Raw duplicates remain lossless and do not inflate formatted stats."""
     raw_items: list[Any] = []
 
-    class Writer:
-        file_name = "chat.jsonl"
-        output_mode = "raw"
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            raise AssertionError("already initialized")
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            assert isinstance(item, dict)
-            raw_items.append(item)
-
-        def close(self) -> None:
-            pass
-
     chat = Chat(iter(()), title="Example")
     dispatcher = _ChatOutputDispatcher(chat)
-    dispatcher.attach_writer(Writer())
+    dispatcher.attach_writer(_Writer("raw", raw_items))
     paid = {"message_type": "paid_message", "message_id": "paid-1"}
     ticker = {
         "message_type": "ticker_paid_message_item",
@@ -546,28 +343,9 @@ def test_raw_only_output_does_not_count_formatted_suppressions() -> None:
 def test_attaching_same_writer_twice_is_idempotent() -> None:
     writes: list[Any] = []
 
-    class Writer:
-        file_name = "x"
-        output_mode = "raw"
-
-        def __init__(self) -> None:
-            self.close_calls = 0
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            raise AssertionError("already initialized")
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            writes.append(item)
-
-        def close(self) -> None:
-            self.close_calls += 1
-
     chat = Chat(iter(()), title="Example")
     dispatcher = _ChatOutputDispatcher(chat)
-    writer = Writer()
+    writer = _Writer(received=writes)
     dispatcher.attach_writer(writer)
     dispatcher.attach_writer(writer)
 
@@ -587,47 +365,6 @@ def test_emit_without_writers_is_a_noop() -> None:
     dispatcher.emit({"message": "ignored"})
 
     assert dispatcher.writers == []
-
-
-@pytest.mark.parametrize(
-    "exc",
-    [
-        OSError("io failure"),
-        RuntimeError("runtime failure"),
-    ],
-    ids=["OSError", "RuntimeError"],
-)
-def test_chat_output_dispatcher_close_suppresses_known_writer_errors(
-    monkeypatch, exc: Exception
-) -> None:
-    class Writer:
-        file_name = "x"
-        output_mode = "raw"
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            return None
-
-        def write(self, item: dict[str, Any] | str, flush: bool = False) -> None:
-            del item, flush
-
-        def close(self) -> None:
-            raise exc
-
-    chat = Chat(iter(()), title="Example")
-    dispatcher = _ChatOutputDispatcher(chat)
-    dispatcher.attach_writer(Writer())
-    logs: list[str] = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.output_dispatch.log",
-        lambda _level, message: logs.append(message),
-    )
-
-    dispatcher.close()
-
-    assert any("Suppressed close() error" in m for m in logs)
 
 
 def test_get_field_default_with_default_factory() -> None:

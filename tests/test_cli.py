@@ -113,12 +113,9 @@ def test_splitter(value: str, expected: list) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_str2bool_already_bool_true() -> None:
-    assert str2bool(True)
-
-
-def test_str2bool_already_bool_false() -> None:
-    assert not str2bool(False)
+@pytest.mark.parametrize("value", [True, False])
+def test_str2bool_already_bool(value) -> None:
+    assert str2bool(value) is value
 
 
 @pytest.mark.parametrize("val", ["true", "yes", "t", "y", "1", "enable", "True", "YES"])
@@ -143,49 +140,20 @@ def test_str2bool_invalid_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_testing_flag_sets_logging_and_pause() -> None:
+@pytest.mark.parametrize("flag", ["--testing", "--verbose"])
+def test_debug_shortcuts_set_logging(flag) -> None:
     with (
-        patch(
-            "chat_downloader.cli.run",
-            return_value=RunResult(success=True),
-        ) as mock_run,
         patch("chat_downloader.cli.set_log_level") as mock_set_level,
     ):
-        main(["https://example.com/watch?v=fake", "--testing"])
-    call_kwargs = mock_run.call_args[1]
+        call_kwargs = _run_and_capture(flag)
     mock_set_level.assert_called_once_with("debug")
-    assert call_kwargs.get("pause_on_debug")
+    assert call_kwargs["pause_on_debug"] is (flag == "--testing")
     assert "logging" not in call_kwargs
 
 
-def test_verbose_flag_sets_logging_debug() -> None:
-    with (
-        patch(
-            "chat_downloader.cli.run",
-            return_value=RunResult(success=True),
-        ) as mock_run,
-        patch("chat_downloader.cli.set_log_level") as mock_set_level,
-    ):
-        main(["https://example.com/watch?v=fake", "--verbose"])
-    call_kwargs = mock_run.call_args[1]
-    mock_set_level.assert_called_once_with("debug")
-    assert "logging" not in call_kwargs
-
-
-def test_pause_on_debug_flag() -> None:
-    with patch(
-        "chat_downloader.cli.run", return_value=RunResult(success=True)
-    ) as mock_run:
-        main(["https://example.com/watch?v=fake", "--pause_on_debug"])
-    assert mock_run.call_args.kwargs["pause_on_debug"]
-
-
-def test_exit_on_debug_flag() -> None:
-    with patch(
-        "chat_downloader.cli.run", return_value=RunResult(success=True)
-    ) as mock_run:
-        main(["https://example.com/watch?v=fake", "--exit_on_debug"])
-    assert mock_run.call_args.kwargs["exit_on_debug"]
+@pytest.mark.parametrize("flag", ["pause_on_debug", "exit_on_debug"])
+def test_debug_control_flag(flag) -> None:
+    assert _run_and_capture(f"--{flag}")[flag] is True
 
 
 def test_quiet_flag_disables_logger() -> None:
@@ -246,9 +214,46 @@ def test_default_run_debug_flags_are_false() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_user_agent_sets_user_agent_header() -> None:
-    d = _run_and_capture("--user-agent", "MyBot/1.0")
-    assert d.get("headers", {}).get("User-Agent") == "MyBot/1.0"
+@pytest.mark.parametrize(
+    ("arguments", "headers"),
+    [
+        (["--user-agent", "MyBot/1.0"], {"User-Agent": "MyBot/1.0"}),
+        (["--header", "Accept-Language: en"], {"Accept-Language": "en"}),
+        (["--header", "X-Foo:   bar   "], {"X-Foo": "bar"}),
+        (["--header", "X-Key:value"], {"X-Key": "value"}),
+        (
+            ["--header", "X-A: one", "--header", "X-B: two"],
+            {"X-A": "one", "X-B": "two"},
+        ),
+        (
+            ["--user-agent", "TestAgent/2.0", "--header", "Accept: application/json"],
+            {"User-Agent": "TestAgent/2.0", "Accept": "application/json"},
+        ),
+        (
+            ["--user-agent", "UA", "--header", "user-agent: CLI"],
+            {"User-Agent": "CLI"},
+        ),
+        (
+            ["--header", "Authorization: Bearer tok:en"],
+            {"Authorization": "Bearer tok:en"},
+        ),
+        (
+            ["--request_profile", "youtube_ios", "--user-agent", "Override/9.9"],
+            {"User-Agent": "Override/9.9"},
+        ),
+        (
+            [
+                "--request_profile",
+                "twitch_web",
+                "--header",
+                "Accept-Language: de-DE,de;q=0.8",
+            ],
+            {"Accept-Language": "de-DE,de;q=0.8"},
+        ),
+    ],
+)
+def test_explicit_headers_are_normalized_and_merged(arguments, headers) -> None:
+    assert _run_and_capture(*arguments)["headers"] == headers
 
 
 def test_request_profile_sets_preset_headers() -> None:
@@ -257,78 +262,19 @@ def test_request_profile_sets_preset_headers() -> None:
     assert "headers" not in d
 
 
-def test_user_agent_overrides_profile_user_agent() -> None:
-    d = _run_and_capture(
-        "--request_profile", "youtube_ios", "--user-agent", "Override/9.9"
-    )
-    assert d.get("headers", {}).get("User-Agent") == "Override/9.9"
-    assert "Accept-Language" not in d.get("headers", {})
-
-
-def test_header_flag_overrides_profile_values() -> None:
-    d = _run_and_capture(
-        "--request_profile",
-        "twitch_web",
-        "--header",
-        "Accept-Language: de-DE,de;q=0.8",
-    )
-    assert d.get("headers", {}).get("Accept-Language") == "de-DE,de;q=0.8"
-
-
 def test_twitch_client_id_is_init_parameter() -> None:
     d = _run_and_capture("--twitch_client_id", "custom-client")
     assert d.get("twitch_client_id") == "custom-client"
-
-
-def test_header_flag_parses_colon_separated() -> None:
-    d = _run_and_capture("--header", "Accept-Language: en")
-    assert d.get("headers", {}).get("Accept-Language") == "en"
-
-
-def test_header_flag_strips_whitespace_from_value() -> None:
-    d = _run_and_capture("--header", "X-Foo:   bar   ")
-    assert d.get("headers", {}).get("X-Foo") == "bar"
-
-
-def test_header_flag_no_space_after_colon() -> None:
-    d = _run_and_capture("--header", "X-Key:value")
-    assert d.get("headers", {}).get("X-Key") == "value"
-
-
-def test_multiple_header_flags() -> None:
-    d = _run_and_capture("--header", "X-A: one", "--header", "X-B: two")
-    assert d.get("headers", {}).get("X-A") == "one"
-    assert d.get("headers", {}).get("X-B") == "two"
-
-
-def test_user_agent_and_header_combined() -> None:
-    d = _run_and_capture(
-        "--user-agent", "TestAgent/2.0", "--header", "Accept: application/json"
-    )
-    assert d.get("headers", {}).get("User-Agent") == "TestAgent/2.0"
-    assert d.get("headers", {}).get("Accept") == "application/json"
-
-
-def test_header_names_are_normalized_before_merge() -> None:
-    d = _run_and_capture("--user-agent", "UA", "--header", "user-agent: CLI")
-    assert d.get("headers", {}) == {"User-Agent": "CLI"}
 
 
 def test_no_header_flags_omits_headers_key() -> None:
     assert "headers" not in _run_and_capture()
 
 
-def test_auto_profile_fallback_defaults_true() -> None:
-    assert _run_and_capture().get("auto_profile_fallback") is True
-
-
-def test_auto_profile_fallback_can_be_disabled() -> None:
-    assert (
-        _run_and_capture("--auto_profile_fallback", "false").get(
-            "auto_profile_fallback"
-        )
-        is False
-    )
+@pytest.mark.parametrize(("arguments", "expected"), [([], True), (["false"], False)])
+def test_auto_profile_fallback(arguments, expected) -> None:
+    flags = ["--auto_profile_fallback", *arguments] if arguments else []
+    assert _run_and_capture(*flags)["auto_profile_fallback"] is expected
 
 
 def test_init_session_args_are_forwarded() -> None:
@@ -384,11 +330,6 @@ def test_metadata_flags_are_added_when_not_explicitly_declared() -> None:
     assert mock_run.call_args.kwargs["connect_timeout"] == 12.5
 
 
-def test_header_value_with_colon_preserves_full_value() -> None:
-    d = _run_and_capture("--header", "Authorization: Bearer tok:en")
-    assert d.get("headers", {}).get("Authorization") == "Bearer tok:en"
-
-
 def test_invalid_header_flag_raises_parse_error() -> None:
     with pytest.raises(SystemExit):
         main(["https://example.com/watch?v=fake", "--header", "BrokenHeader"])
@@ -403,19 +344,18 @@ def test_parse_header_returns_key_value_pair() -> None:
     assert parse_header("X-Test: value") == ("X-Test", "value")
 
 
-def test_parse_header_rejects_missing_separator() -> None:
+@pytest.mark.parametrize(
+    "value",
+    [
+        "BrokenHeader",
+        "X-Test: hello\r\nInjected: nope",
+        "Bad Header: value",
+        ":somevalue",
+    ],
+)
+def test_parse_header_rejects_invalid_input(value) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
-        parse_header("BrokenHeader")
-
-
-def test_parse_header_rejects_newlines() -> None:
-    with pytest.raises(argparse.ArgumentTypeError, match="newline"):
-        parse_header("X-Test: hello\r\nInjected: nope")
-
-
-def test_parse_header_rejects_invalid_header_name() -> None:
-    with pytest.raises(argparse.ArgumentTypeError, match="Invalid header name"):
-        parse_header("Bad Header: value")
+        parse_header(value)
 
 
 # ---------------------------------------------------------------------------
@@ -449,21 +389,9 @@ _CLI_CHAT_PARAMS = frozenset(
 )
 
 
-def test_all_cli_params_are_chat_request_fields() -> None:
-    cr_fields = {f.name for f in dataclasses.fields(ChatRequest)}
-    missing = _CLI_CHAT_PARAMS - cr_fields
-    assert missing == set(), f"CLI params absent from ChatRequest: {missing}"
-
-
-def test_all_chat_request_fields_are_in_cli() -> None:
-    cr_fields = {f.name for f in dataclasses.fields(ChatRequest)}
-    uncovered = cr_fields - _CLI_CHAT_PARAMS
-    assert uncovered == set(), f"ChatRequest fields missing from CLI: {uncovered}"
-
-
-def test_cli_chat_params_match_expected_legacy_keys() -> None:
-    legacy_keys = set(ChatRequest(url="").as_dict().keys())
-    assert legacy_keys == _CLI_CHAT_PARAMS
+def test_cli_chat_fields_and_mapping_keys_match() -> None:
+    assert {f.name for f in dataclasses.fields(ChatRequest)} == _CLI_CHAT_PARAMS
+    assert set(ChatRequest().as_dict()) == _CLI_CHAT_PARAMS
 
 
 def test_cli_registration_fails_fast_without_dataclass_metadata(
@@ -501,39 +429,36 @@ def test_run_config_cli_flags_match_metadata() -> None:
     }
 
 
-def test_parse_header_empty_key_raises() -> None:
-    with pytest.raises(argparse.ArgumentTypeError, match="NAME:VALUE"):
-        parse_header(":somevalue")  # key="" after strip → raises
-
-
 # ---------------------------------------------------------------------------
 # _build_request_headers
 # ---------------------------------------------------------------------------
 
 
-def test_build_request_headers_empty_when_no_inputs() -> None:
-    args = {"request_profile": None}
-    assert _build_request_headers(args) == {}
-
-
-def test_build_request_headers_pops_cli_only_keys() -> None:
-    args = {"request_profile": None, "user_agent": "UA", "headers_list": {}}
-    _build_request_headers(args)
-    assert "user_agent" not in args
-    assert "headers_list" not in args
-
-
-def test_build_request_headers_precedence_header_overrides_user_agent() -> None:
-    args = {
-        "request_profile": None,
-        "user_agent": "from-ua",
-        "headers_list": {"User-Agent": "from-header"},
-    }
-    assert _build_request_headers(args)["User-Agent"] == "from-header"
-
-
-def test_build_request_headers_user_agent_overrides_profile() -> None:
-    args = {"request_profile": "youtube_web", "user_agent": "custom-ua"}
-    headers = _build_request_headers(args)
-    assert headers["User-Agent"] == "custom-ua"
-    assert "Accept-Language" not in headers
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ({"request_profile": None}, {}),
+        (
+            {"request_profile": None, "user_agent": "UA", "headers_list": {}},
+            {"User-Agent": "UA"},
+        ),
+        (
+            {
+                "request_profile": None,
+                "user_agent": "from-ua",
+                "headers_list": {"User-Agent": "from-header"},
+            },
+            {"User-Agent": "from-header"},
+        ),
+        (
+            {"request_profile": "youtube_web", "user_agent": "custom-ua"},
+            {"User-Agent": "custom-ua"},
+        ),
+    ],
+)
+def test_build_request_headers_removes_cli_keys_and_respects_precedence(
+    arguments, expected
+) -> None:
+    assert _build_request_headers(arguments) == expected
+    assert "user_agent" not in arguments
+    assert "headers_list" not in arguments

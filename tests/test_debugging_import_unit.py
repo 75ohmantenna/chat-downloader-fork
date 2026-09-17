@@ -3,243 +3,133 @@
 from __future__ import annotations
 
 import importlib
+import io
 import logging
 import sys
+from contextlib import contextmanager
 from types import SimpleNamespace
-from typing import NoReturn
+
+import pytest
 
 import chat_downloader.debugging as dbg
 
 
-class _FakeTTY:
+class _TtyAwareStringIO(io.StringIO):
+    """Stream matching the tty decision under simulation."""
+
+    def __init__(self, tty: bool) -> None:
+        super().__init__()
+        self._tty = tty
+
     def isatty(self) -> bool:
-        return True
+        return self._tty
 
 
-def _reload_debugging(
-    monkeypatch,
-    *,
-    stdout=None,
-    colorama_module=None,
-    colorlog_module=None,
-):
-    original_stdout = sys.stdout
-    original_colorama = sys.modules.get("colorama")
-    original_colorlog = sys.modules.get("colorlog")
-    original_handlers = {logger: list(logger.handlers) for logger in dbg.loggers}
-
-    if stdout is not None:
-        monkeypatch.setattr(sys, "stdout", stdout)
-
-    if colorama_module is None:
-        sys.modules.pop("colorama", None)
-    else:
-        sys.modules["colorama"] = colorama_module
-
-    if colorlog_module is None:
-        sys.modules.pop("colorlog", None)
-    else:
-        sys.modules["colorlog"] = colorlog_module
-
-    module = importlib.reload(dbg)
-    return (
-        module,
-        original_stdout,
-        original_colorama,
-        original_colorlog,
-        original_handlers,
-    )
-
-
-def _restore_debugging(
-    original_stdout, original_colorama, original_colorlog, original_handlers
-) -> None:
-    sys.stdout = original_stdout
-
-    if original_colorama is None:
-        sys.modules.pop("colorama", None)
-    else:
-        sys.modules["colorama"] = original_colorama
-
-    if original_colorlog is None:
-        sys.modules.pop("colorlog", None)
-    else:
-        sys.modules["colorlog"] = original_colorlog
-
-    module = importlib.reload(dbg)
-    for logger, handlers in original_handlers.items():
-        logger.handlers = handlers
-    module.logger.disabled = False
-
-
-def test_supports_colour_uses_windows_registry_when_enabled(
-    monkeypatch,
-) -> None:
-    fake_winreg = SimpleNamespace(
-        HKEY_CURRENT_USER=object(),
-        OpenKey=lambda root, key: (root, key),
-        QueryValueEx=lambda key, name: (1, 0),
-    )
-
-    monkeypatch.setattr(dbg.sys, "platform", "win32")
-    monkeypatch.setattr(dbg, "HAS_COLORAMA", False)
-    monkeypatch.setattr(dbg.sys, "stdout", _FakeTTY())
-    monkeypatch.setattr(dbg.os, "environ", {})
-    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
-
-    assert dbg.supports_colour() is True
-
-
-def test_supports_colour_registry_missing_value_returns_false(
-    monkeypatch,
-) -> None:
-    def query_value_ex(_key, _name) -> NoReturn:
-        raise FileNotFoundError
-
-    fake_winreg = SimpleNamespace(
-        HKEY_CURRENT_USER=object(),
-        OpenKey=lambda root, key: (root, key),
-        QueryValueEx=query_value_ex,
-    )
-
-    monkeypatch.setattr(dbg.sys, "platform", "win32")
-    monkeypatch.setattr(dbg, "HAS_COLORAMA", False)
-    monkeypatch.setattr(dbg.sys, "stdout", _FakeTTY())
-    monkeypatch.setattr(dbg.os, "environ", {})
-    monkeypatch.setitem(sys.modules, "winreg", fake_winreg)
-
-    assert dbg.supports_colour() is False
-
-
-def test_supports_colour_registry_import_error_returns_false(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(dbg.sys, "platform", "win32")
-    monkeypatch.setattr(dbg, "HAS_COLORAMA", False)
-    monkeypatch.setattr(dbg.sys, "stdout", _FakeTTY())
-    monkeypatch.setattr(dbg.os, "environ", {})
-    monkeypatch.delitem(sys.modules, "winreg", raising=False)
-
-    original_import = __import__
-
-    def fake_import(name, *args, **kwargs):
-        if name == "winreg":
-            raise ImportError
-        return original_import(name, *args, **kwargs)
-
-    monkeypatch.setattr("builtins.__import__", fake_import)
-
-    assert dbg.supports_colour() is False
-
-
-def test_debugging_import_handles_colorama_init_oserror(monkeypatch) -> None:
-    fake_colorama = SimpleNamespace(init=lambda: (_ for _ in ()).throw(OSError("boom")))
-
-    (
-        module,
-        original_stdout,
-        original_colorama,
-        original_colorlog,
-        original_handlers,
-    ) = _reload_debugging(
-        monkeypatch,
-        colorama_module=fake_colorama,
-        colorlog_module=None,
-    )
-
-    try:
-        assert module.HAS_COLORAMA is False
-        assert isinstance(module.handler, logging.StreamHandler)
-    finally:
-        _restore_debugging(
-            original_stdout,
-            original_colorama,
-            original_colorlog,
-            original_handlers,
-        )
-
-
-def test_debugging_import_uses_colorlog_when_colour_supported(
-    monkeypatch,
-) -> None:
-    formatter_calls = []
-
-    class FakeColoredFormatter:
-        def __init__(self, fmt, log_colors) -> None:
-            formatter_calls.append((fmt, log_colors))
-
-    class FakeStreamHandler(logging.StreamHandler):
-        def __init__(self) -> None:
-            super().__init__()
-            self.formatter = None
-
-        def setFormatter(self, formatter) -> None:
-            self.formatter = formatter
-
-    fake_colorlog = SimpleNamespace(
-        StreamHandler=FakeStreamHandler,
-        ColoredFormatter=FakeColoredFormatter,
-        getLogger=logging.getLogger,
-    )
-    fake_colorama = SimpleNamespace(init=lambda: None)
-
-    (
-        module,
-        original_stdout,
-        original_colorama,
-        original_colorlog,
-        original_handlers,
-    ) = _reload_debugging(
-        monkeypatch,
-        stdout=_FakeTTY(),
-        colorama_module=fake_colorama,
-        colorlog_module=fake_colorlog,
-    )
-
-    try:
-        assert module.HAS_COLORAMA is True
-        assert isinstance(module.handler, FakeStreamHandler)
-        assert formatter_calls == [
-            (
-                "[%(log_color)s%(levelname)s%(reset)s] %(message)s",
-                {
-                    "DEBUG": "cyan",
-                    "INFO": "green",
-                    "WARNING": "yellow",
-                    "ERROR": "red",
-                    "CRITICAL": "bold_red",
-                },
-            ),
-        ]
-    finally:
-        _restore_debugging(
-            original_stdout,
-            original_colorama,
-            original_colorlog,
-            original_handlers,
-        )
-
-
-def test_debug_log_delegates_to_log(monkeypatch) -> None:
-    calls = []
-
-    monkeypatch.setattr(dbg, "log", lambda *args, **kw: calls.append((args, kw)))
-
-    dbg.debug_log("first", "second")
-
-    assert calls == [
-        (("debug", ("first", "second")), {"to_pause": True, "to_exit": True})
+@contextmanager
+def _reload_debugging(monkeypatch, *, colorama, tty=False):
+    state = [
+        (logger, list(logger.handlers), logger.level, logger.disabled)
+        for logger in dbg.loggers
     ]
+    mode = dbg.get_testing_mode()
+    stream = _TtyAwareStringIO(tty)
+    try:
+        with monkeypatch.context() as isolated:
+            isolated.setattr(sys, "stdout", SimpleNamespace(isatty=lambda: tty))
+            isolated.setattr(sys, "stderr", stream)
+            isolated.setattr(
+                dbg.os,
+                "environ",
+                {
+                    k: v
+                    for k, v in dbg.os.environ.items()
+                    if k not in {"NO_COLOR", "FORCE_COLOR"}
+                },
+            )
+            isolated.setitem(sys.modules, "colorama", colorama)
+            module = importlib.reload(dbg)
+            module.set_log_level("debug")
+            yield module, stream
+    finally:
+        importlib.reload(dbg)
+        dbg.set_testing_mode(mode)
+        for logger, handlers, level, disabled in state:
+            logger.handlers = handlers
+            logger.setLevel(level)
+            logger.disabled = disabled
 
 
-def test_set_log_level_updates_all_configured_loggers() -> None:
-    original_levels = [logger.level for logger in dbg.loggers]
+@pytest.mark.parametrize("registry", ["enabled", "missing-value", "missing-module"])
+def test_supports_colour_windows_registry(monkeypatch, registry):
+    def query_value_ex(_key, _name):
+        if registry == "missing-value":
+            raise FileNotFoundError
+        return (1, 0)
 
+    monkeypatch.setattr(dbg.sys, "platform", "win32")
+    monkeypatch.setattr(dbg, "HAS_COLORAMA", False)
+    monkeypatch.setattr(dbg.sys, "stdout", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(dbg.os, "environ", {})
+    monkeypatch.setitem(
+        sys.modules,
+        "winreg",
+        None
+        if registry == "missing-module"
+        else SimpleNamespace(
+            HKEY_CURRENT_USER=object(),
+            OpenKey=lambda root, key: (root, key),
+            QueryValueEx=query_value_ex,
+        ),
+    )
+    assert dbg.supports_colour() is (registry == "enabled")
+
+
+@pytest.mark.parametrize("colour", [False, True])
+def test_debugging_import_renders_with_available_colour(monkeypatch, colour):
+    def init():
+        if not colour:
+            raise OSError("boom")
+
+    # Exercise the real formatter and stream rather than pinning constructor calls.
+    with _reload_debugging(
+        monkeypatch, colorama=SimpleNamespace(init=init), tty=colour
+    ) as (module, stream):
+        module.log("warning", "visible token=PRIVATE")
+        output = stream.getvalue()
+        assert "visible" in output
+        assert "PRIVATE" not in output
+        assert ("\x1b[" in output) is colour
+        assert module.supports_colour() is colour
+
+
+def test_debug_log_applies_testing_controls(caplog):
+    mode = dbg.get_testing_mode()
+    levels = [logger.level for logger in dbg.loggers]
+    try:
+        dbg.set_log_level("debug")
+        dbg.set_testing_mode(dbg.TestingModes.EXIT_ON_DEBUG)
+        with (
+            caplog.at_level(logging.DEBUG, logger=dbg.logger.name),
+            pytest.raises(dbg.TestingException),
+        ):
+            dbg.debug_log("first", "second")
+        assert [record.getMessage() for record in caplog.records] == ["first", "second"]
+    finally:
+        dbg.set_testing_mode(mode)
+        for logger, level in zip(dbg.loggers, levels, strict=True):
+            logger.setLevel(level)
+
+
+def test_set_log_level_filters_all_configured_loggers(caplog):
+    levels = [logger.level for logger in dbg.loggers]
     try:
         dbg.set_log_level("error")
-        assert [logger.level for logger in dbg.loggers] == [logging.ERROR] * len(
-            dbg.loggers,
-        )
+        for logger in dbg.loggers:
+            logger.warning("hidden")
+            logger.error("visible")
+        assert [(record.name, record.getMessage()) for record in caplog.records] == [
+            (logger.name, "visible") for logger in dbg.loggers
+        ]
     finally:
-        for logger, original_level in zip(dbg.loggers, original_levels, strict=True):
-            logger.setLevel(original_level)
+        for logger, level in zip(dbg.loggers, levels, strict=True):
+            logger.setLevel(level)

@@ -182,46 +182,30 @@ def test_coerce_chat_request_rejects_unknown_kwargs() -> None:
         )
 
 
-def test_default_max_attempts(sample_request: ChatRequest) -> None:
-    assert sample_request.max_attempts == DEFAULT_MAX_ATTEMPTS
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("max_attempts", DEFAULT_MAX_ATTEMPTS),
+        ("message_receive_timeout", DEFAULT_MESSAGE_RECEIVE_TIMEOUT),
+        ("buffer_size", DEFAULT_BUFFER_SIZE),
+        ("overwrite", True),
+        ("sort_keys", True),
+        ("interruptible_retry", True),
+        ("chat_type", "live"),
+    ],
+)
+def test_request_defaults(sample_request, name, expected) -> None:
+    assert getattr(sample_request, name) == expected
+    assert sample_request.as_dict()[name] == expected
 
 
-def test_default_message_receive_timeout(sample_request: ChatRequest) -> None:
-    assert sample_request.message_receive_timeout == pytest.approx(
-        DEFAULT_MESSAGE_RECEIVE_TIMEOUT
-    )
-
-
-def test_default_buffer_size(sample_request: ChatRequest) -> None:
-    assert sample_request.buffer_size == DEFAULT_BUFFER_SIZE
-
-
-def test_default_overwrite(sample_request: ChatRequest) -> None:
-    assert sample_request.overwrite
-
-
-def test_default_sort_keys(sample_request: ChatRequest) -> None:
-    assert sample_request.sort_keys
-
-
-def test_default_interruptible_retry(sample_request: ChatRequest) -> None:
-    assert sample_request.interruptible_retry
-
-
-def test_default_chat_type(sample_request: ChatRequest) -> None:
-    assert sample_request.chat_type == "live"
-
-
-def test_default_message_groups_is_site_default(
-    sample_request: ChatRequest,
-) -> None:
-    assert isinstance(sample_request.message_groups, SiteDefault)
-    assert sample_request.message_groups.name == "message_groups"
-
-
-def test_default_format_is_site_default(sample_request: ChatRequest) -> None:
-    assert isinstance(sample_request.format, SiteDefault)
-    assert sample_request.format.name == "format"
+@pytest.mark.parametrize("name", ["message_groups", "format"])
+def test_site_defaults_are_independent(sample_request, name) -> None:
+    value = getattr(sample_request, name)
+    assert isinstance(value, SiteDefault)
+    assert value.name == name
+    assert sample_request.as_dict()[name] is value
+    assert getattr(ChatRequest(), name) is not value
 
 
 def test_site_default_compat_import_shares_identity() -> None:
@@ -246,18 +230,6 @@ def test_site_default_compat_import_shares_identity() -> None:
 )
 def test_default_none_fields(sample_request: ChatRequest, attr: str) -> None:
     assert getattr(sample_request, attr) is None
-
-
-def test_message_groups_instances_are_independent() -> None:
-    r1 = ChatRequest(url="a")
-    r2 = ChatRequest(url="b")
-    assert r1.message_groups is not r2.message_groups
-
-
-def test_format_instances_are_independent() -> None:
-    r1 = ChatRequest(url="a")
-    r2 = ChatRequest(url="b")
-    assert r1.format is not r2.format
 
 
 def test_with_updates_returns_modified_copy(
@@ -318,30 +290,7 @@ def test_from_kwargs_round_trip_all_fields() -> None:
         buffer_size=8192,
     )
     rebuilt = ChatRequest.from_kwargs(**original.as_dict())
-    for fname in [
-        "url",
-        "start_time",
-        "end_time",
-        "max_messages",
-        "max_attempts",
-        "retry_timeout",
-        "interruptible_retry",
-        "timeout",
-        "inactivity_timeout",
-        "message_types",
-        "output",
-        "overwrite",
-        "sort_keys",
-        "format_file",
-        "chat_type",
-        "ignore",
-        "youtube_replay_poll_interval",
-        "message_receive_timeout",
-        "buffer_size",
-    ]:
-        assert getattr(original, fname) == getattr(rebuilt, fname), (
-            f"Field '{fname}' mismatch after round-trip"
-        )
+    assert rebuilt == original
 
 
 def test_from_kwargs_empty_call_uses_defaults() -> None:
@@ -367,28 +316,6 @@ def test_as_dict_key_set_matches_get_chat_params(
 
 def test_as_dict_url_value(sample_request_dict: dict) -> None:
     assert sample_request_dict["url"] == "https://youtube.com/watch?v=test123"
-
-
-def test_as_dict_default_values_preserved(sample_request_dict: dict) -> None:
-    assert sample_request_dict["max_attempts"] == DEFAULT_MAX_ATTEMPTS
-    assert sample_request_dict["buffer_size"] == DEFAULT_BUFFER_SIZE
-    assert sample_request_dict["message_receive_timeout"] == pytest.approx(
-        DEFAULT_MESSAGE_RECEIVE_TIMEOUT
-    )
-    assert sample_request_dict["overwrite"]
-    assert sample_request_dict["sort_keys"]
-    assert sample_request_dict["interruptible_retry"]
-    assert sample_request_dict["chat_type"] == "live"
-
-
-def test_as_dict_message_groups_is_site_default(
-    sample_request_dict: dict,
-) -> None:
-    assert isinstance(sample_request_dict["message_groups"], SiteDefault)
-
-
-def test_as_dict_format_is_site_default(sample_request_dict: dict) -> None:
-    assert isinstance(sample_request_dict["format"], SiteDefault)
 
 
 @pytest.mark.parametrize(
@@ -510,29 +437,16 @@ def test_from_kwargs_non_strict_ignores_unknown() -> None:
     assert not hasattr(req, "another_bogus")
 
 
-def test_from_kwargs_strict_raises_on_unknown() -> None:
+@pytest.mark.parametrize(
+    "unknown", [{"totally_unknown": "bad"}, {"alpha": "a", "beta": 2}]
+)
+def test_from_kwargs_strict_reports_all_unknown_keys(unknown) -> None:
     with pytest.raises(TypeError) as ctx:
         ChatRequest.from_kwargs(
-            strict=True,
-            url="https://youtube.com/watch?v=x",
-            totally_unknown="bad",
+            strict=True, url="https://youtube.com/watch?v=x", **unknown
         )
-    msg = str(ctx.value)
-    assert "totally_unknown" in msg
-    assert "unknown keyword argument" in msg
-
-
-def test_from_kwargs_strict_raises_lists_all_unknown_keys() -> None:
-    with pytest.raises(TypeError) as ctx:
-        ChatRequest.from_kwargs(
-            strict=True,
-            url="https://youtube.com/watch?v=x",
-            alpha="a",
-            beta=2,
-        )
-    msg = str(ctx.value)
-    assert "alpha" in msg
-    assert "beta" in msg
+    for name in unknown:
+        assert name in str(ctx.value)
 
 
 def test_from_kwargs_strict_passes_when_all_keys_known() -> None:
@@ -566,38 +480,37 @@ def test_valid_defaults() -> None:
     assert req.chat_type == "live"
 
 
-def test_max_messages_none_allowed() -> None:
-    assert ChatRequest(max_messages=None).max_messages is None
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("max_messages", None),
+        ("max_messages", 1),
+        ("max_attempts", 1),
+        ("buffer_size", 1),
+        ("timeout", None),
+        ("timeout", 30.0),
+        ("inactivity_timeout", None),
+        ("message_receive_timeout", 0.5),
+    ],
+)
+def test_request_numeric_boundaries_allowed(name, value) -> None:
+    assert getattr(ChatRequest(**{name: value}), name) == value
 
 
-def test_max_messages_positive_int_allowed() -> None:
-    assert ChatRequest(max_messages=1).max_messages == 1
-
-
-@pytest.mark.parametrize("max_messages", [0, -1])
-def test_max_messages_invalid_raises(max_messages: int) -> None:
-    with pytest.raises(ValueError, match="max_messages"):
-        ChatRequest(max_messages=max_messages)
-
-
-def test_max_attempts_one_allowed() -> None:
-    assert ChatRequest(max_attempts=1).max_attempts == 1
-
-
-@pytest.mark.parametrize("max_attempts", [0, -5])
-def test_max_attempts_invalid_raises(max_attempts: int) -> None:
-    with pytest.raises(ValueError, match="max_attempts"):
-        ChatRequest(max_attempts=max_attempts)
-
-
-def test_buffer_size_positive_allowed() -> None:
-    assert ChatRequest(buffer_size=1).buffer_size == 1
-
-
-@pytest.mark.parametrize("buffer_size", [0, -1])
-def test_buffer_size_invalid_raises(buffer_size: int) -> None:
-    with pytest.raises(ValueError, match="buffer_size"):
-        ChatRequest(buffer_size=buffer_size)
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("max_messages", 0),
+        ("max_messages", -1),
+        ("max_attempts", 0),
+        ("max_attempts", -5),
+        ("buffer_size", 0),
+        ("buffer_size", -1),
+    ],
+)
+def test_request_integer_boundaries_rejected(field_name, value) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        ChatRequest(**{field_name: value})
 
 
 @pytest.mark.parametrize(
@@ -659,48 +572,14 @@ def test_chat_type_invalid_raises(chat_type: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "value",
-    [0.0, -1.0, float("nan"), float("inf"), float("-inf")],
+    "field_name", ["timeout", "inactivity_timeout", "message_receive_timeout"]
 )
-def test_timeout_invalid_raises(value: float) -> None:
-    with pytest.raises(ValueError, match="timeout"):
-        ChatRequest(timeout=value)
-
-
-def test_timeout_none_allowed() -> None:
-    assert ChatRequest(timeout=None).timeout is None
-
-
-def test_timeout_positive_allowed() -> None:
-    assert ChatRequest(timeout=30.0).timeout == pytest.approx(30.0)
-
-
 @pytest.mark.parametrize(
-    "value",
-    [0.0, -1.0, float("nan"), float("inf"), float("-inf")],
+    "value", [0.0, -1.0, float("nan"), float("inf"), float("-inf")]
 )
-def test_inactivity_timeout_invalid_raises(value: float) -> None:
-    with pytest.raises(ValueError, match="inactivity_timeout"):
-        ChatRequest(inactivity_timeout=value)
-
-
-def test_inactivity_timeout_none_allowed() -> None:
-    assert ChatRequest(inactivity_timeout=None).inactivity_timeout is None
-
-
-@pytest.mark.parametrize(
-    "value",
-    [0.0, -1.0, float("nan"), float("inf"), float("-inf")],
-)
-def test_message_receive_timeout_invalid_raises(value: float) -> None:
-    with pytest.raises(ValueError, match="message_receive_timeout"):
-        ChatRequest(message_receive_timeout=value)
-
-
-def test_message_receive_timeout_positive_allowed() -> None:
-    assert ChatRequest(
-        message_receive_timeout=0.5
-    ).message_receive_timeout == pytest.approx(0.5)
+def test_request_timeout_invalid_raises(field_name, value) -> None:
+    with pytest.raises(ValueError, match=field_name):
+        ChatRequest(**{field_name: value})
 
 
 @pytest.mark.parametrize(

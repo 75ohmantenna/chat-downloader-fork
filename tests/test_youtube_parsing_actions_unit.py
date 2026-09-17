@@ -14,21 +14,10 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
 from chat_downloader.sites.youtube.constants_message import (
     build_video_remapping,
 )
-from chat_downloader.sites.youtube.parsing.actions_handlers_parser import (
-    _handle_add_banner_action,
-    _handle_interactivity_widget_action,
-    _handle_item_action,
-    _handle_poll_action,
-    _handle_remove_action,
-    _handle_remove_banner_action,
-    _handle_replace_action,
-    _handle_tooltip_action,
-)
 from chat_downloader.sites.youtube.parsing.actions_handlers_validation import (
     validate_and_finalize_message,
 )
 from chat_downloader.sites.youtube.parsing.actions_router import (
-    _ACTION_HANDLERS,
     process_action,
 )
 
@@ -66,24 +55,28 @@ def _finalize(result):
     )
 
 
+@pytest.fixture
+def diagnostics(monkeypatch):
+    def capture(module):
+        logs, samples = [], []
+        prefix = f"chat_downloader.sites.youtube.parsing.{module}"
+        monkeypatch.setattr(f"{prefix}.debug_log", lambda *parts: logs.append(parts))
+        monkeypatch.setattr(
+            f"{prefix}.capture_debug_sample",
+            lambda *parts, **kwargs: samples.append((*parts, kwargs)),
+        )
+        return logs, samples
+
+    return capture
+
+
+def _item_action(renderer, content):
+    return {"addChatItemAction": {"item": {renderer: content}}}
+
+
 def setup_module() -> None:
     # Ensure debug_log never escalates to TestingException during unit tests.
     dbg.set_testing_mode(dbg.TestingModes.NONE)
-
-
-def test_action_handlers_table_maps_families_in_order() -> None:
-    """Verify the dispatch table binds the right handler to each family."""
-    expected = [
-        _handle_item_action,
-        _handle_interactivity_widget_action,
-        _handle_remove_action,
-        _handle_replace_action,
-        _handle_tooltip_action,
-        _handle_add_banner_action,
-        _handle_remove_banner_action,
-        _handle_poll_action,
-    ]
-    assert [h for _, h in _ACTION_HANDLERS] == expected
 
 
 def test_build_video_remapping_returns_mapping_with_expected_keys() -> None:
@@ -94,66 +87,20 @@ def test_build_video_remapping_returns_mapping_with_expected_keys() -> None:
     assert "title" in mapping
 
 
-def test_process_action_replay_chat_item_action_rebases_time_and_action() -> None:
-    action = {
-        "replayChatItemAction": {
-            "videoOffsetTimeMsec": "2345",
-            "actions": [
-                {
-                    "addChatItemAction": {
-                        "item": {
-                            "liveChatTextMessageRenderer": _renderer_with_timestamp(),
-                        },
-                    },
-                },
-            ],
-        },
-    }
-
+@pytest.mark.parametrize("replay", [None, {}, {"videoOffsetTimeMsec": "2345"}])
+def test_process_action_add_chat_item_with_optional_replay(replay) -> None:
+    action = _item_action("liveChatTextMessageRenderer", _renderer_with_timestamp())
+    if replay is not None:
+        action = {"replayChatItemAction": {**replay, "actions": [action]}}
     finalized = _finalize(process_action(action))
     assert finalized is not None
     assert finalized["action_type"] == "add_chat_item"
     assert finalized["message_type"] == "text_message"
-    assert finalized["time_in_seconds"] == pytest.approx(2.345)
     assert finalized["timestamp"] == 1234567890
-
-
-def test_process_action_replay_chat_item_action_without_offset_uses_nested_action() -> (
-    None
-):
-    action = {
-        "replayChatItemAction": {
-            "actions": [
-                {
-                    "addChatItemAction": {
-                        "item": {
-                            "liveChatTextMessageRenderer": _renderer_with_timestamp(),
-                        },
-                    },
-                },
-            ],
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-
-    assert finalized["action_type"] == "add_chat_item"
-    assert finalized["message_type"] == "text_message"
-    assert "time_in_seconds" not in finalized
-
-
-def test_process_action_add_chat_item_action() -> None:
-    action = {
-        "addChatItemAction": {
-            "item": {"liveChatTextMessageRenderer": _renderer_with_timestamp("1")},
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "add_chat_item"
-    assert finalized["message_type"] == "text_message"
-    assert finalized["timestamp"] == 1
+    if replay:
+        assert finalized["time_in_seconds"] == pytest.approx(2.345)
+    else:
+        assert "time_in_seconds" not in finalized
 
 
 def test_process_action_empty_interactivity_widget_is_skipped() -> None:
@@ -206,17 +153,8 @@ def test_process_action_minimal_jewels_widget_omits_optional_fields() -> None:
     assert "combo_count" not in finalized
 
 
-def test_process_action_gift_message_view_model(monkeypatch) -> None:
-    logs = []
-    samples = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
-        lambda *parts: logs.append(parts),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda *parts: samples.append(parts),
-    )
+def test_process_action_gift_message_view_model(diagnostics) -> None:
+    logs, samples = diagnostics("actions_handlers_validation")
 
     action = {
         "addChatItemAction": {
@@ -247,17 +185,8 @@ def test_process_action_gift_message_view_model(monkeypatch) -> None:
     assert samples == []
 
 
-def test_process_action_product_item_renderer(monkeypatch) -> None:
-    logs = []
-    samples = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
-        lambda *parts: logs.append(parts),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda *parts: samples.append(parts),
-    )
+def test_process_action_product_item_renderer(diagnostics) -> None:
+    logs, samples = diagnostics("actions_handlers_validation")
 
     action = {
         "addChatItemAction": {
@@ -311,19 +240,8 @@ def test_process_action_product_item_renderer(monkeypatch) -> None:
     assert samples == []
 
 
-def test_process_action_restricted_participation_renderer(
-    monkeypatch,
-) -> None:
-    logs = []
-    samples = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
-        lambda *parts: logs.append(parts),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda *parts: samples.append(parts),
-    )
+def test_process_action_restricted_participation_renderer(diagnostics) -> None:
+    logs, samples = diagnostics("actions_handlers_validation")
 
     action = {
         "addChatItemAction": {
@@ -350,17 +268,8 @@ def test_process_action_restricted_participation_renderer(
     assert samples == []
 
 
-def test_process_action_auto_mod_message_renderer(monkeypatch) -> None:
-    logs = []
-    samples = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
-        lambda *parts: logs.append(parts),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda *parts: samples.append(parts),
-    )
+def test_process_action_auto_mod_message_renderer(diagnostics) -> None:
+    logs, samples = diagnostics("actions_handlers_validation")
 
     action = {
         "addChatItemAction": {
@@ -396,19 +305,8 @@ def test_process_action_auto_mod_message_renderer(monkeypatch) -> None:
     assert samples == []
 
 
-def test_process_action_ignores_interactivity_widget_action(
-    monkeypatch,
-) -> None:
-    logs = []
-    samples = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_router.debug_log",
-        lambda *parts: logs.append(parts),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_router.capture_debug_sample",
-        lambda *parts: samples.append(parts),
-    )
+def test_process_action_ignores_interactivity_widget_action(diagnostics) -> None:
+    logs, samples = diagnostics("actions_router")
 
     action = {
         "addInteractivityWidgetAction": {
@@ -427,34 +325,32 @@ def test_process_action_ignores_interactivity_widget_action(
     assert samples == []
 
 
-def test_process_action_remove_actions() -> None:
-    # removeChatItemAction -> banUser message type
-    action = {
-        "removeChatItemAction": {
-            "targetItemId": "abc",
-            "timestampUsec": "2",
-        },
-    }
-    finalized = _finalize(process_action(action))
+@pytest.mark.parametrize(
+    ("action_type", "target", "timestamp", "normalized", "message_type"),
+    [
+        ("removeChatItemAction", "abc", "2", "remove_chat_item", "ban_user"),
+        (
+            "markChatItemAsDeletedAction",
+            "def",
+            "3",
+            "mark_chat_item_as_deleted",
+            "deleted_message",
+        ),
+    ],
+)
+def test_process_action_remove_actions(
+    action_type, target, timestamp, normalized, message_type
+):
+    finalized = _finalize(
+        process_action(
+            {action_type: {"targetItemId": target, "timestampUsec": timestamp}}
+        )
+    )
     assert finalized is not None
-    assert finalized["action_type"] == "remove_chat_item"
-    assert finalized["message_type"] == "ban_user"
-    assert finalized["target_message_id"] == "abc"
-    assert finalized["timestamp"] == 2
-
-    # markChatItemAsDeletedAction -> deletedMessage message type
-    action2 = {
-        "markChatItemAsDeletedAction": {
-            "targetItemId": "def",
-            "timestampUsec": "3",
-        },
-    }
-    finalized2 = _finalize(process_action(action2))
-    assert finalized2 is not None
-    assert finalized2["action_type"] == "mark_chat_item_as_deleted"
-    assert finalized2["message_type"] == "deleted_message"
-    assert finalized2["target_message_id"] == "def"
-    assert finalized2["timestamp"] == 3
+    assert finalized["action_type"] == normalized
+    assert finalized["message_type"] == message_type
+    assert finalized["target_message_id"] == target
+    assert finalized["timestamp"] == int(timestamp)
 
 
 def test_process_action_remove_chat_item_by_author_action() -> None:
@@ -548,15 +444,7 @@ def test_process_action_add_and_remove_banner_actions() -> None:
     result = process_action(action_add_missing)
     assert result is not None
     assert result.message_type is None
-    assert (
-        validate_and_finalize_message(
-            result.parsed_data,
-            result.original_item,
-            result.message_type,
-            result.action_type,
-        )
-        is None
-    )
+    assert _finalize(result) is None
 
     action_remove = {
         "removeBannerForLiveChatCommand": {
@@ -599,36 +487,21 @@ def test_process_action_unknown_action_type_captures_debug_sample(
     ]
 
 
-def test_process_action_empty_dict_returns_none() -> None:
-    """Line 66: empty action has no action type key → return None."""
-    assert process_action({}) is None
-
-
-def test_process_action_only_tracking_params_returns_none() -> None:
-    """After popping clickTrackingParams, an empty action returns None."""
-    assert process_action({"clickTrackingParams": "abc"}) is None
-
-
-def test_process_action_known_ignore_action_type_returns_none() -> None:
-    """Actions in _KNOWN_IGNORE_ACTION_TYPES are silently dropped."""
-    action = {"liveChatReportModerationStateCommand": {"someData": True}}
+@pytest.mark.parametrize(
+    "action",
+    [
+        {},
+        {"clickTrackingParams": "abc"},
+        {"liveChatReportModerationStateCommand": {"someData": True}},
+    ],
+    ids=["empty", "tracking-only", "known-ignore"],
+)
+def test_process_action_ignores_empty_or_known_action(action) -> None:
     assert process_action(action) is None
 
 
-def test_process_action_creator_goal_ticker_chip_is_known_ignored(
-    monkeypatch,
-) -> None:
-    captures = []
-    logs = []
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_router.capture_debug_sample",
-        lambda label, payload: captures.append((label, payload)),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_router.debug_log",
-        lambda *parts: logs.append(parts),
-    )
+def test_process_action_creator_goal_ticker_chip_is_known_ignored(diagnostics) -> None:
+    logs, captures = diagnostics("actions_router")
 
     action = {
         "showCreatorGoalTickerChipCommand": {
@@ -772,71 +645,30 @@ def test_process_action_close_live_chat_action_panel() -> None:
     assert finalized["poll_id"] == "panel-123"
 
 
-def test_process_action_mode_change_slow_mode() -> None:
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "liveChatModeChangeMessageRenderer": {
-                    "id": "mode-1",
-                    "icon": {"iconType": "SLOW_MODE"},
-                    "timestampUsec": "9",
-                },
-            }
-        }
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["message_type"] == "slow_mode_message"
-
-
-def test_process_action_mode_change_members_only() -> None:
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "liveChatModeChangeMessageRenderer": {
-                    "id": "mode-2",
-                    "icon": {"iconType": "MEMBERS_ONLY"},
-                    "timestampUsec": "10",
-                },
-            }
-        }
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["message_type"] == "members_only_mode_message"
-
-
-def test_process_action_mode_change_unknown_icon_falls_back() -> None:
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "liveChatModeChangeMessageRenderer": {
-                    "id": "mode-3",
-                    "icon": {"iconType": "UNKNOWN_NEW_MODE"},
-                    "timestampUsec": "11",
-                },
-            }
-        }
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["message_type"] == "mode_change_message"
-
-
-def test_process_action_paid_sticker_with_pdg_logging_directives(
-    monkeypatch,
-) -> None:
-    captures = []
-    logs = []
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
+@pytest.mark.parametrize(
+    ("icon", "message_type"),
+    [
+        ("SLOW_MODE", "slow_mode_message"),
+        ("MEMBERS_ONLY", "members_only_mode_message"),
+        ("UNKNOWN_NEW_MODE", "mode_change_message"),
+    ],
+)
+def test_process_action_mode_change(icon, message_type) -> None:
+    action = _item_action(
+        "liveChatModeChangeMessageRenderer",
+        {
+            "id": "mode-1",
+            "icon": {"iconType": icon},
+            "timestampUsec": "9",
+        },
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
-        lambda *parts: logs.append(parts),
-    )
+    finalized = _finalize(process_action(action))
+    assert finalized is not None
+    assert finalized["message_type"] == message_type
+
+
+def test_process_action_paid_sticker_with_pdg_logging_directives(diagnostics) -> None:
+    logs, captures = diagnostics("actions_handlers_validation")
 
     action = {
         "addChatItemAction": {
@@ -882,27 +714,24 @@ def test_process_action_paid_sticker_with_pdg_logging_directives(
     assert logs == []
 
 
-def test_validate_and_finalize_message_empty_data_logs_and_continues() -> None:
-    """debug_log fires on an empty data dict, but result is returned."""
+@pytest.mark.parametrize(
+    ("data", "renderer"),
+    [({}, {}), ({"timestamp": 1}, {"unknownField2026XYZ": "value"})],
+    ids=["empty-data", "unknown-keys"],
+)
+def test_validate_and_finalize_message_continues_with_text_type(data, renderer) -> None:
     result = validate_and_finalize_message(
-        {},
-        {"liveChatTextMessageRenderer": {}},
+        data,
+        {"liveChatTextMessageRenderer": renderer},
         "liveChatTextMessageRenderer",
         "addChatItemAction",
     )
-    # data is empty but message_type is set; result is returned (not None)
     assert result is not None
     assert result.get("message_type") == "text_message"
 
 
-def test_validate_and_finalize_message_without_message_type_returns_none(
-    monkeypatch,
-) -> None:
-    logs = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.debug_log",
-        lambda *parts: logs.append(parts),
-    )
+def test_validate_and_finalize_message_without_message_type_returns_none(diagnostics):
+    logs, _ = diagnostics("actions_handlers_validation")
 
     result = validate_and_finalize_message(
         {"timestamp": 1},
@@ -913,19 +742,6 @@ def test_validate_and_finalize_message_without_message_type_returns_none(
 
     assert result is None
     assert logs == [("No message type", "Action type: addChatItemAction")]
-
-
-def test_validate_and_finalize_message_unknown_keys_logs_and_continues() -> None:
-    """Lines 203-207: debug_log fires when item has keys not in _KNOWN_KEYS."""
-    item = {"liveChatTextMessageRenderer": {"unknownField2026XYZ": "value"}}
-    result = validate_and_finalize_message(
-        {"timestamp": 1},
-        item,
-        "liveChatTextMessageRenderer",
-        "addChatItemAction",
-    )
-    assert result is not None
-    assert result.get("message_type") == "text_message"
 
 
 def test_validate_and_finalize_message_known_ignore_message_type_returns_none() -> None:
@@ -944,13 +760,7 @@ def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> 
         "replayChatItemAction": {
             "videoOffsetTimeMsec": "1",
             "actions": [
-                {
-                    "addChatItemAction": {
-                        "item": {
-                            "liveChatMadeUpRenderer": _renderer_with_timestamp("8"),
-                        },
-                    },
-                },
+                _item_action("liveChatMadeUpRenderer", _renderer_with_timestamp("8"))
             ],
         },
     }
@@ -961,14 +771,8 @@ def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> 
     assert finalized["message_type"] == "made_up"
 
 
-def test_validate_and_finalize_message_missing_keys_captures_debug_sample(
-    monkeypatch,
-) -> None:
-    captures = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
-    )
+def test_validate_and_finalize_message_missing_keys_captures_debug_sample(diagnostics):
+    _, captures = diagnostics("actions_handlers_validation")
 
     result = validate_and_finalize_message(
         {"timestamp": 1},
@@ -993,13 +797,9 @@ def test_validate_and_finalize_message_missing_keys_captures_debug_sample(
 
 
 def test_validate_and_finalize_message_unknown_message_type_captures_debug_sample(
-    monkeypatch,
-) -> None:
-    captures = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_handlers_validation.capture_debug_sample",
-        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
-    )
+    diagnostics,
+):
+    _, captures = diagnostics("actions_handlers_validation")
 
     result = validate_and_finalize_message(
         {"timestamp": 1},

@@ -100,6 +100,20 @@ def _emotes_valid(record: Mapping[str, object]) -> bool:
     return True
 
 
+def _account_frames(counters: Mapping[str, object]) -> dict[str, int]:
+    """Validate the fixed counter schema and calculate unaccounted frames."""
+    result = {}
+    for key in _FRAME_KEYS:
+        value = counters.get(key)
+        if type(value) is not int or value < 0:
+            raise ValueError(_INVALID_SUMMARY)
+        result[key] = value
+    result["unaccounted_frames"] = result[_FRAME_KEYS[0]] - sum(
+        result[key] for key in _FRAME_KEYS[1:]
+    )
+    return result
+
+
 def _frame_accounting(path: Path) -> dict[str, int]:
     """Read exactly one bounded Python-literal run summary from a debug log."""
     result: dict[str, int] | None = None
@@ -112,18 +126,9 @@ def _frame_accounting(path: Path) -> dict[str, int]:
             summary = ast.literal_eval(line[len(_SUMMARY_PREFIX) :].decode("utf-8"))
             if not isinstance(summary, dict):
                 raise TypeError(_INVALID_SUMMARY)
-            counters = get_dict(summary, "provider_diagnostics")
-            result = {}
-            for key in _FRAME_KEYS:
-                value = counters.get(key)
-                if type(value) is not int or value < 0:
-                    raise ValueError(_INVALID_SUMMARY)
-                result[key] = value
+            result = _account_frames(get_dict(summary, "provider_diagnostics"))
     if result is None:
         raise ValueError(_INVALID_SUMMARY)
-    result["unaccounted_frames"] = result[_FRAME_KEYS[0]] - sum(
-        result[key] for key in _FRAME_KEYS[1:]
-    )
     return result
 
 
@@ -244,15 +249,7 @@ def inspect_capture(
         report = inspection.report()
     accounting = _frame_accounting(debug_log) if debug_log is not None else None
     if diagnostics is not None:
-        accounting = {}
-        for key in _FRAME_KEYS:
-            value = diagnostics.get(key)
-            if type(value) is not int or value < 0:
-                raise ValueError(_INVALID_SUMMARY)
-            accounting[key] = value
-        accounting["unaccounted_frames"] = accounting[_FRAME_KEYS[0]] - sum(
-            accounting[key] for key in _FRAME_KEYS[1:]
-        )
+        accounting = _account_frames(diagnostics)
     report["frame_accounting"] = accounting
     report["status"] = (
         "review"

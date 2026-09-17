@@ -1,383 +1,74 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for superchat message deduplication feature.
-
-Tests that YouTube superchat messages that appear in both chat and ticker are
-properly deduplicated when writing to formatted output.
-"""
+"""Formatted deduplication never removes messages from the raw chat stream."""
 
 from __future__ import annotations
 
-import os
-import tempfile
+import pytest
 
 from chat_downloader.output.continuous_write import ContinuousWriter
-from chat_downloader.sites._message_dedup import (
-    SUPERCHAT_DEDUP_TYPES,
-    _FormattedMessageDeduplicator,
-)
+from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
 from chat_downloader.sites.models import Chat
 
 
-def test_superchat_dedup_types_constant() -> None:
-    """Test that SUPERCHAT_DEDUP_TYPES contains expected message types."""
-    expected_types = {
-        "paid_message",
-        "ticker_paid_message_item",
-        "paid_sticker",
-        "ticker_paid_sticker_item",
-        "membership_item",
-        "ticker_sponsor_item",
-    }
-    assert expected_types == SUPERCHAT_DEDUP_TYPES
-    # Verify it's a frozenset (immutable)
-    assert isinstance(SUPERCHAT_DEDUP_TYPES, frozenset)
-
-
-def test_formatted_deduplicator_ignores_missing_empty_and_non_string_ids() -> None:
+@pytest.mark.parametrize("message_id", [None, "", 123])
+def test_formatted_deduplicator_ignores_unusable_ids(message_id) -> None:
+    message = {"message_type": "paid_message"}
+    if message_id is not None:
+        message["message_id"] = message_id
     deduplicator = _FormattedMessageDeduplicator()
-
-    items = [
-        {"message_type": "paid_message"},
-        {"message_type": "paid_message", "message_id": ""},
-        {"message_type": "paid_message", "message_id": 123},
-        {"message_type": "paid_message", "message_id": 123},
-    ]
-
-    assert all(deduplicator.should_emit(item) for item in items)
-
-
-def test_deduplication_in_formatted_output() -> None:
-    """Test that duplicate superchat messages are not written to file."""
-    # Create test messages - a paid_message and its ticker counterpart
-    messages = [
-        {
-            "message_id": "msg123",
-            "message_type": "paid_message",
-            "message": "Test superchat",
-            "author": {"name": "TestUser"},
-            "time_in_seconds": 10,
-            "time_text": "0:10",
-        },
-        {
-            "message_id": "msg123",  # Same ID as above
-            "message_type": "ticker_paid_message_item",
-            "message": "Test superchat",
-            "author": {"name": "TestUser"},
-            "time_in_seconds": 10,
-            "time_text": "0:10",
-        },
-    ]
-
-    def message_generator():
-        yield from messages
-
-    # Create a Chat object with a simple format method
-    chat = Chat(chat=message_generator(), title="Test", id="test123")
-
-    # Override format method for testing
-    def simple_format(item) -> str:
-        return f"{item['message_type']}: {item['message_id']}"
-
-    chat.set_formatter(simple_format)
-
-    # Create a temp file for output
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        temp_file = f.name
-
-    try:
-        # Attach a writer with lazy initialization
-        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
-        chat.attach_writer(writer)
-
-        # Consume the chat
-        result_messages = list(chat)
-
-        # Verify we got both messages from the generator
-        assert len(result_messages) == 2
-
-        # Read the output file
-        with open(temp_file) as f:
-            content = f.read()
-
-        # Should only have ONE line (first message), not two
-        lines = [line for line in content.strip().split("\n") if line]
-        assert len(lines) == 1
-        assert "paid_message: msg123" in lines[0]
-
-    finally:
-        # Clean up
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-
-def test_no_deduplication_for_different_ids() -> None:
-    """Test that messages with different IDs are not deduplicated."""
-    messages = [
-        {
-            "message_id": "msg123",
-            "message_type": "paid_message",
-            "message": "First superchat",
-            "time_text": "0:10",
-        },
-        {
-            "message_id": "msg456",  # Different ID
-            "message_type": "paid_message",
-            "message": "Second superchat",
-            "time_text": "0:20",
-        },
-    ]
-
-    def message_generator():
-        yield from messages
-
-    chat = Chat(chat=message_generator(), title="Test", id="test123")
-
-    def simple_format(item) -> str:
-        return f"{item['message_type']}: {item['message_id']}"
-
-    chat.set_formatter(simple_format)
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        temp_file = f.name
-
-    try:
-        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
-        chat.attach_writer(writer)
-
-        list(chat)  # Consume
-
-        with open(temp_file) as f:
-            content = f.read()
-
-        # Should have TWO lines (both messages)
-        lines = [line for line in content.strip().split("\n") if line]
-        assert len(lines) == 2
-
-    finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-
-def test_no_deduplication_for_non_superchat_types() -> None:
-    """Test that non-superchat messages are never deduplicated."""
-    messages = [
-        {
-            "message_id": "msg123",
-            "message_type": "text_message",  # Not a superchat type
-            "message": "Regular message",
-            "time_text": "0:10",
-        },
-        {
-            "message_id": "msg123",  # Same ID, but not a superchat type
-            "message_type": "text_message",
-            "message": "Another regular message",
-            "time_text": "0:20",
-        },
-    ]
-
-    def message_generator():
-        yield from messages
-
-    chat = Chat(chat=message_generator(), title="Test", id="test123")
-
-    def simple_format(item) -> str:
-        return f"{item['message_type']}: {item['message_id']}"
-
-    chat.set_formatter(simple_format)
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        temp_file = f.name
-
-    try:
-        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
-        chat.attach_writer(writer)
-
-        list(chat)  # Consume
-
-        with open(temp_file) as f:
-            content = f.read()
-
-        # Should have TWO lines (both messages, no deduplication)
-        lines = [line for line in content.strip().split("\n") if line]
-        assert len(lines) == 2
-
-    finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-
-def test_deduplication_with_membership_and_ticker() -> None:
-    """Test deduplication of membership_item and ticker_sponsor_item."""
-    messages = [
-        {
-            "message_id": "member789",
-            "message_type": "membership_item",
-            "message": "New member!",
-            "time_text": "0:30",
-        },
-        {
-            "message_id": "member789",  # Same ID
-            "message_type": "ticker_sponsor_item",
-            "message": "New member!",
-            "time_text": "0:30",
-        },
-    ]
-
-    def message_generator():
-        yield from messages
-
-    chat = Chat(chat=message_generator(), title="Test", id="test123")
-
-    def simple_format(item) -> str:
-        return f"{item['message_type']}: {item['message_id']}"
-
-    chat.set_formatter(simple_format)
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        temp_file = f.name
-
-    try:
-        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
-        chat.attach_writer(writer)
-
-        list(chat)  # Consume
-
-        with open(temp_file) as f:
-            content = f.read()
-
-        # Should only have ONE line (deduplicated)
-        lines = [line for line in content.strip().split("\n") if line]
-        assert len(lines) == 1
-        assert "membership_item: member789" in lines[0]
-
-    finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-
-def test_messages_without_id_not_deduplicated() -> None:
-    """Test that messages without message_id are not deduplicated."""
-    messages = [
-        {
-            # No message_id
-            "message_type": "paid_message",
-            "message": "Superchat without ID",
-            "time_text": "0:10",
-        },
-        {
-            # No message_id
-            "message_type": "paid_message",
-            "message": "Another superchat without ID",
-            "time_text": "0:20",
-        },
-    ]
-
-    def message_generator():
-        yield from messages
-
-    chat = Chat(chat=message_generator(), title="Test", id="test123")
-
-    def simple_format(item) -> str:
-        return f"{item['message_type']}: {item.get('message_id', 'no-id')}"
-
-    chat.set_formatter(simple_format)
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        temp_file = f.name
-
-    try:
-        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
-        chat.attach_writer(writer)
-
-        list(chat)  # Consume
-
-        with open(temp_file) as f:
-            content = f.read()
-
-        # Should have TWO lines (no deduplication without message_id)
-        lines = [line for line in content.strip().split("\n") if line]
-        assert len(lines) == 2
-
-    finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-
-def test_superchat_dedup_cache_is_bounded() -> None:
-    """Dedup cache evicts oldest IDs when configured with a small max."""
-    messages = [
-        {
-            "message_id": "msg1",
-            "message_type": "paid_message",
-            "message": "First superchat",
-            "time_text": "0:10",
-        },
-        {
-            "message_id": "msg2",
-            "message_type": "paid_message",
-            "message": "Second superchat",
-            "time_text": "0:20",
-        },
-        {
-            # msg1 was evicted from cache and should be emitted again
-            "message_id": "msg1",
-            "message_type": "ticker_paid_message_item",
-            "message": "Duplicate of first superchat",
-            "time_text": "0:30",
-        },
-    ]
-
-    def message_generator():
-        yield from messages
-
-    chat = Chat(
-        chat=message_generator(),
-        title="Test",
-        id="test123",
-        max_seen_message_ids=1,
+    assert deduplicator.should_emit(message)
+    assert deduplicator.should_emit(message)
+
+
+@pytest.mark.parametrize(
+    ("events", "limit", "retained"),
+    [
+        ([("paid_message", "one"), ("ticker_paid_message_item", "one")], None, [0]),
+        ([("paid_sticker", "one"), ("ticker_paid_sticker_item", "one")], None, [0]),
+        ([("membership_item", "one"), ("ticker_sponsor_item", "one")], None, [0]),
+        ([("paid_message", "one"), ("paid_message", "two")], None, [0, 1]),
+        ([("text_message", "one"), ("text_message", "one")], None, [0, 1]),
+        ([("paid_message", None), ("paid_message", None)], None, [0, 1]),
+        (
+            [
+                ("paid_message", "one"),
+                ("paid_message", "two"),
+                ("ticker_paid_message_item", "one"),
+            ],
+            1,
+            [0, 1, 2],
+        ),
+    ],
+    ids=[
+        "paid",
+        "sticker",
+        "membership",
+        "distinct",
+        "ordinary",
+        "missing-id",
+        "eviction",
+    ],
+)
+def test_formatted_output_deduplicates_only_eligible_cached_ids(
+    tmp_path, events, limit, retained
+) -> None:
+    messages = []
+    for message_type, message_id in events:
+        message = {"message_type": message_type}
+        if message_id is not None:
+            message["message_id"] = message_id
+        messages.append(message)
+
+    def render(message):
+        return f"{message['message_type']}: {message.get('message_id', 'no-id')}"
+
+    chat = Chat(iter(messages), max_seen_message_ids=limit)
+    chat.set_formatter(render)
+    output = tmp_path / "chat.txt"
+    chat.attach_writer(
+        ContinuousWriter(str(output), overwrite=True, lazy_initialise=True)
     )
 
-    def simple_format(item) -> str:
-        return f"{item['message_type']}: {item.get('message_id', 'no-id')}"
-
-    chat.set_formatter(simple_format)
-
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        temp_file = f.name
-
-    try:
-        writer = ContinuousWriter(temp_file, overwrite=True, lazy_initialise=True)
-        chat.attach_writer(writer)
-
-        list(chat)  # Consume
-
-        with open(temp_file) as f:
-            content = f.read()
-
-        lines = [line for line in content.strip().split("\n") if line]
-        assert len(lines) == 3
-        assert any("paid_message: msg1" in line for line in lines)
-        assert any("paid_message: msg2" in line for line in lines)
-        assert any("ticker_paid_message_item: msg1" in line for line in lines)
-
-    finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-
-def test_superchat_dedup_cache_none_uses_default_limit() -> None:
-    """Passing None should preserve default bounded-cache behavior.
-
-    Dedup lives on the output dispatcher (its only consumer); Chat forwards the
-    configured size when the dispatcher is created.
-    """
-    deduplicator = _FormattedMessageDeduplicator(None)
-
-    assert deduplicator._seen_message_cache.limit > 0
-    assert deduplicator.should_emit(
-        {"message_type": "paid_message", "message_id": "msg1"}
-    )
-    assert not deduplicator.should_emit(
-        {"message_type": "ticker_paid_message_item", "message_id": "msg1"}
-    )
+    assert list(chat) == messages
+    assert output.read_text().splitlines() == [render(messages[i]) for i in retained]

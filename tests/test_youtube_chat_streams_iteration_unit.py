@@ -51,92 +51,59 @@ def test_raise_if_api_error_raises_chat_downloader_error_for_non_400(
         _raise_if_api_error({"error": {"code": code, "message": "error"}})
 
 
-def test_raise_if_api_error_non_dict_none_error_value() -> None:
-    with pytest.raises(ChatDownloaderError, match="Unknown error"):
-        _raise_if_api_error({"error": None})
-
-
-def test_raise_if_api_error_non_dict_string_error_value() -> None:
-    with pytest.raises(ChatDownloaderError):
-        _raise_if_api_error({"error": "some plain string error"})
+@pytest.mark.parametrize(
+    ("error", "match"),
+    [(None, "Unknown error"), ("some plain string error", None)],
+)
+def test_raise_if_api_error_non_dict_value(error, match) -> None:
+    with pytest.raises(ChatDownloaderError, match=match):
+        _raise_if_api_error({"error": error})
 
 
 # ── _select_initial_continuation ─────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("chat_type", ["top", "live"])
 @pytest.mark.parametrize(
-    ("info", "chat_type", "is_replay", "expected_label"),
-    [
-        (
-            {"Top chat replay": "tok1", "Top chat": "tok2"},
-            "top",
-            True,
-            "Top chat replay",
-        ),
-        (
-            {"Top chat": "tok2"},
-            "top",
-            True,
-            "Top chat",
-        ),
-        (
-            {"Top chat": "tok3"},
-            "top",
-            False,
-            "Top chat",
-        ),
-        (
-            {"Live chat replay": "tok4", "Live chat": "tok5"},
-            "live",
-            True,
-            "Live chat replay",
-        ),
-        (
-            {"Live chat": "tok5"},
-            "live",
-            True,
-            "Live chat",
-        ),
-        (
-            {"Live chat": "tok6"},
-            "live",
-            False,
-            "Live chat",
-        ),
-    ],
+    ("is_replay", "has_replay_label"),
+    [(True, True), (True, False), (False, False)],
+    ids=["replay-preferred", "replay-fallback", "live"],
 )
 def test_select_initial_continuation_returns_correct_label_and_token(
-    info: dict[str, str],
-    chat_type: str,
-    is_replay: bool,
-    expected_label: str,
+    chat_type,
+    is_replay,
+    has_replay_label,
 ) -> None:
+    live_label = f"{chat_type.title()} chat"
+    info = {live_label: "live-token"}
+    if has_replay_label:
+        info[f"{live_label} replay"] = "replay-token"
+    expected_label = f"{live_label} replay" if has_replay_label else live_label
     label, token = _select_initial_continuation(
-        info, chat_type=chat_type, is_replay=is_replay
+        info,
+        chat_type=chat_type,
+        is_replay=is_replay,
     )
     assert label == expected_label
     assert token == info[expected_label]
 
 
-def test_select_initial_continuation_raises_when_label_absent() -> None:
-    with pytest.raises(NoContinuation):
-        _select_initial_continuation(
-            {"Unrelated": "tok"}, chat_type="top", is_replay=False
-        )
-
-
-def test_select_initial_continuation_raises_with_empty_info() -> None:
-    with pytest.raises(NoContinuation):
-        _select_initial_continuation({}, chat_type="live", is_replay=True)
-
-
-def test_select_initial_continuation_error_message_lists_available() -> None:
-    with pytest.raises(NoContinuation, match="Live chat replay"):
-        _select_initial_continuation(
-            {"Live chat replay": "tok"},
-            chat_type="top",
-            is_replay=False,
-        )
+@pytest.mark.parametrize(
+    ("info", "chat_type", "is_replay", "match"),
+    [
+        ({"Unrelated": "tok"}, "top", False, None),
+        ({}, "live", True, None),
+        ({"Live chat replay": "tok"}, "top", False, "Live chat replay"),
+    ],
+)
+def test_select_initial_continuation_raises_when_label_absent(
+    info,
+    chat_type,
+    is_replay,
+    match,
+) -> None:
+    with pytest.raises(NoContinuation, match=match):
+        _select_initial_continuation(info, chat_type=chat_type, is_replay=is_replay)
 
 
 # ── _resolve_poll_delay_ms ───────────────────────────────────────────────────
@@ -170,6 +137,7 @@ def test_resolve_poll_delay_ms(timeout_ms: object, expected: int) -> None:
 @pytest.mark.parametrize(
     ("replay_poll_interval", "expected"),
     [
+        (None, 5000),
         (0.5, 500),
         (0.75, 750),
         (1.0, 1000),
@@ -189,60 +157,29 @@ def test_resolve_poll_delay_uses_explicit_replay_override(
     )
 
 
-def test_resolve_poll_delay_respects_provider_without_replay_override() -> None:
-    assert (
-        _resolve_poll_delay_ms(
-            5000,
-            replay_poll_interval=None,
-        )
-        == 5000
-    )
-
-
 # ── _attempt_profile_fallback ─────────────────────────────────────────────────
 
 
-def test_attempt_profile_fallback_returns_false_when_disabled() -> None:
-    self_ = SimpleNamespace(_auto_profile_fallback=False, _request_profile=None)
-    assert _attempt_profile_fallback(self_) is False
-
-
-def test_attempt_profile_fallback_returns_false_when_no_next_profile(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.parametrize(
+    ("enabled", "next_profile", "applied", "expected"),
+    [
+        (False, None, False, False),
+        (True, None, False, False),
+        (True, "youtube_android", True, True),
+        (True, "youtube_android", False, False),
+    ],
+    ids=["disabled", "exhausted", "applied", "apply-failed"],
+)
+def test_attempt_profile_fallback(
+    monkeypatch, enabled, next_profile, applied, expected
+):
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.get_next_request_profile",
-        lambda profile, site: None,
+        lambda profile, site: next_profile,
     )
-    self_ = SimpleNamespace(_auto_profile_fallback=True, _request_profile="default")
-    assert _attempt_profile_fallback(self_) is False
-
-
-def test_attempt_profile_fallback_returns_true_when_profile_applied(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.get_next_request_profile",
-        lambda profile, site: "youtube_android",
+    downloader = SimpleNamespace(
+        _auto_profile_fallback=enabled,
+        _request_profile="default" if enabled else None,
+        apply_request_profile=lambda profile: applied,
     )
-    self_ = SimpleNamespace(
-        _auto_profile_fallback=True,
-        _request_profile="default",
-        apply_request_profile=lambda p: True,
-    )
-    assert _attempt_profile_fallback(self_) is True
-
-
-def test_attempt_profile_fallback_returns_false_when_apply_profile_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.get_next_request_profile",
-        lambda profile, site: "youtube_android",
-    )
-    self_ = SimpleNamespace(
-        _auto_profile_fallback=True,
-        _request_profile="default",
-        apply_request_profile=lambda p: False,
-    )
-    assert _attempt_profile_fallback(self_) is False
+    assert _attempt_profile_fallback(downloader) is expected

@@ -261,45 +261,25 @@ def _extract_browse_continuation_token_from_response(
     early.
     """
     continuation_items_candidates = (
-        multi_get(
-            yt_info,
-            "onResponseReceivedActions",
-            0,
+        multi_get(yt_info, surface, 0, command, "continuationItems")
+        for surface in ("onResponseReceivedActions", "onResponseReceivedEndpoints")
+        for command in (
             "appendContinuationItemsAction",
-            "continuationItems",
-        ),
-        multi_get(
-            yt_info,
-            "onResponseReceivedActions",
-            0,
             "reloadContinuationItemsCommand",
-            "continuationItems",
-        ),
-        multi_get(
-            yt_info,
-            "onResponseReceivedEndpoints",
-            0,
-            "appendContinuationItemsAction",
-            "continuationItems",
-        ),
-        multi_get(
-            yt_info,
-            "onResponseReceivedEndpoints",
-            0,
-            "reloadContinuationItemsCommand",
-            "continuationItems",
-        ),
-        multi_get(
-            yt_info,
-            "continuationContents",
-            "playlistVideoListContinuation",
-            "contents",
-        ),
-        multi_get(yt_info, "continuationContents", "gridContinuation", "items"),
+        )
     )
 
     for candidate in continuation_items_candidates:
         token = _extract_browse_continuation_token(candidate)
+        if token:
+            return token
+    for renderer, key in (
+        ("playlistVideoListContinuation", "contents"),
+        ("gridContinuation", "items"),
+    ):
+        token = _extract_browse_continuation_token(
+            multi_get(yt_info, "continuationContents", renderer, key)
+        )
         if token:
             return token
     return None

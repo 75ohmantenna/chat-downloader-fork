@@ -15,22 +15,6 @@ from chat_downloader.sites.youtube.video_initialization import (
 )
 
 
-def _details(continuation: bool = False) -> dict[str, Any]:
-    return {
-        "continuation_info": {"Live chat": "token"} if continuation else {},
-        "status": "live",
-    }
-
-
-def _player(reason: str) -> dict[str, Any]:
-    return {
-        "playabilityStatus": {
-            "status": "UNPLAYABLE",
-            "reason": reason,
-        }
-    }
-
-
 class _Downloader(YouTubeVideoInitializationMixin):
     def __init__(
         self,
@@ -68,8 +52,11 @@ def _response(
     continuation: bool = False,
 ) -> tuple[dict[str, Any], ...]:
     return (
-        _details(continuation),
-        _player(reason),
+        {
+            "continuation_info": {"Live chat": "token"} if continuation else {},
+            "status": "live",
+        },
+        {"playabilityStatus": {"status": "UNPLAYABLE", "reason": reason}},
         {"_chat_downloader_continuation_info": True},
         {"profile": reason},
     )
@@ -79,19 +66,45 @@ def _request() -> ChatRequest:
     return ChatRequest(url="https://www.youtube.com/watch?v=LLpNUqHVam8")
 
 
-def test_initial_profile_fallback_surfaces_more_specific_error() -> None:
-    downloader = _Downloader(
-        [
-            _response("Video unavailable"),
-            _response("The uploader has not made this video available in your country"),
-        ]
-    )
-
-    with pytest.raises(VideoUnplayable, match="available in your country"):
+@pytest.mark.parametrize(("reasons", "options", "profiles", "match"),[
+        (
+            [
+                "Video unavailable",
+                "The uploader has not made this video available in your country",
+            ],
+            {},
+            ["youtube_android"],
+            "available in your country",
+        ),
+        (["Video unavailable"], {"auto_fallback": False}, [], "Video unavailable"),
+        (
+            ["The uploader has not made this video available in your country"],
+            {},
+            [],
+            "available in your country",
+        ),
+        (
+            ["Video unavailable"] * 3,
+            {},
+            ["youtube_android", "youtube_ios"],
+            "Video unavailable",
+        ),
+        (
+            ["Video unavailable"],
+            {"apply_result": False},
+            ["youtube_android"],
+            "Video unavailable",
+        ),
+    ],
+)
+def test_initial_profile_fallback_failure_policy(
+    reasons, options, profiles, match
+) -> None:
+    downloader = _Downloader([_response(reason) for reason in reasons], **options)
+    with pytest.raises(VideoUnplayable, match=match):
         downloader._get_initial_video_info("LLpNUqHVam8", _request())
-
-    assert downloader.applied_profiles == ["youtube_android"]
-    assert downloader.parse_calls == 2
+    assert downloader.applied_profiles == profiles
+    assert downloader.parse_calls == len(reasons)
 
 
 def test_initial_profile_fallback_can_recover_chat_continuation() -> None:
@@ -109,75 +122,19 @@ def test_initial_profile_fallback_can_recover_chat_continuation() -> None:
     assert downloader.applied_profiles == ["youtube_android"]
 
 
-@pytest.mark.parametrize(
-    ("auto_fallback", "reason"),
-    [
-        (False, "Video unavailable"),
-        (True, "The uploader has not made this video available in your country"),
-    ],
-)
-def test_initial_profile_fallback_skips_disabled_or_specific_failures(
-    auto_fallback: bool,
-    reason: str,
-) -> None:
-    downloader = _Downloader(
-        [_response(reason)],
-        auto_fallback=auto_fallback,
-    )
-
-    with pytest.raises(VideoUnplayable, match=reason):
-        downloader._get_initial_video_info("LLpNUqHVam8", _request())
-
-    assert downloader.applied_profiles == []
-    assert downloader.parse_calls == 1
-
-
-def test_initial_profile_fallback_exhausts_each_profile_once() -> None:
-    downloader = _Downloader(
-        [_response("Video unavailable") for _ in range(3)],
-    )
-
-    with pytest.raises(VideoUnplayable, match="Video unavailable"):
-        downloader._get_initial_video_info("LLpNUqHVam8", _request())
-
-    assert downloader.applied_profiles == ["youtube_android", "youtube_ios"]
-    assert downloader.parse_calls == 3
-
-
-def test_initial_profile_fallback_stops_when_profile_cannot_be_applied() -> None:
-    downloader = _Downloader(
-        [_response("Video unavailable")],
-        apply_result=False,
-    )
-
-    with pytest.raises(VideoUnplayable, match="Video unavailable"):
-        downloader._get_initial_video_info("LLpNUqHVam8", _request())
-
-    assert downloader.applied_profiles == ["youtube_android"]
-    assert downloader.parse_calls == 1
-
-
 def test_initial_profile_fallback_does_not_rotate_login_required() -> None:
-    downloader = _Downloader(
-        [
-            (
-                _details(),
-                {
-                    "playabilityStatus": {
-                        "status": "LOGIN_REQUIRED",
-                        "reason": "Please sign in",
-                        "errorScreen": {
-                            "playerErrorMessageRenderer": {
-                                "reason": {"simpleText": "Please sign in"}
-                            }
-                        },
-                    }
-                },
-                {"_chat_downloader_continuation_info": True},
-                {},
-            )
-        ]
+    details, player, data, _ = _response("Please sign in")
+    player["playabilityStatus"].update(
+        {
+            "status": "LOGIN_REQUIRED",
+            "errorScreen": {
+                "playerErrorMessageRenderer": {
+                    "reason": {"simpleText": "Please sign in"},
+                }
+            },
+        }
     )
+    downloader = _Downloader([(details, player, data, {})])
 
     with pytest.raises(LoginRequired, match="Please sign in"):
         downloader._get_initial_video_info("LLpNUqHVam8", _request())

@@ -153,8 +153,8 @@ def test_visitor_state_is_updated_without_logging_its_value(monkeypatch):
         lambda *args: logs.append(args),
     )
     try:
-        _loop(provider)._update_visitor_data(
-            {"responseContext": {"visitorData": "private-visitor-value"}}
+        _loop(provider)._handle_continuation_response(
+            {"responseContext": {"visitorData": "private-visitor-value"}}, {}
         )
         assert provider.session.headers["x-goog-visitor-id"] == "private-visitor-value"
     finally:

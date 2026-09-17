@@ -43,32 +43,23 @@ def _actions():
     ]["actions"]
 
 
+def _poll(actions, *, continuation=None):
+    chat = {"actions": actions}
+    if continuation is not None:
+        chat["continuations"] = [
+            {
+                "timedContinuationData": {
+                    "continuation": continuation,
+                    "timeoutMs": 500,
+                },
+            }
+        ]
+    return {"continuationContents": {"liveChatContinuation": chat}}
+
+
 def _replay(monkeypatch, groups=None):
     actions = _actions()
-    responses = iter(
-        [
-            {
-                "continuationContents": {
-                    "liveChatContinuation": {
-                        "actions": actions[:3],
-                        "continuations": [
-                            {
-                                "timedContinuationData": {
-                                    "continuation": "next",
-                                    "timeoutMs": 500,
-                                }
-                            }
-                        ],
-                    }
-                }
-            },
-            {
-                "continuationContents": {
-                    "liveChatContinuation": {"actions": actions[3:]}
-                }
-            },
-        ]
-    )
+    responses = iter([_poll(actions[:3], continuation="next"), _poll(actions[3:])])
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *a, **kw: next(responses),
@@ -213,6 +204,17 @@ def _attachment(start=0, length=1, label="wave"):
     }
 
 
+def _attachment_message(content, attachments):
+    return _parse_runs(
+        attributed_text(
+            {
+                "content": content,
+                "attachmentRuns": attachments,
+            }
+        )
+    )["message"]
+
+
 def test_emote_ranges_are_utf16_sorted_and_leave_other_unicode_intact():
     value = {
         "content": "😀□ café □!",
@@ -245,54 +247,52 @@ def test_invalid_attachment_ranges_preserve_original_text(start, length):
     assert _parse_runs(attributed_text(value))["message"] == "😀□"
 
 
-def test_attachment_overlap_unknown_image_and_missing_label_are_safe():
-    assert (
-        _parse_runs(
-            attributed_text(
-                {
-                    "content": "□□",
-                    "attachmentRuns": [
-                        _attachment(),
-                        _attachment(),
-                        _attachment(1, label=None),
-                    ],
-                }
-            )
-        )["message"]
-        == ":wave::emoji:"
-    )
+@pytest.mark.parametrize(
+    ("content", "attachments", "expected"),
+    [
+        (
+            "□□",
+            [_attachment(), _attachment(), _attachment(1, label=None)],
+            ":wave::emoji:",
+        ),
+        ("□", [None, {"startIndex": 0, "length": 1}], "□"),
+    ],
+    ids=["overlap-and-missing-label", "unknown-image"],
+)
+def test_attachment_overlap_unknown_image_and_missing_label_are_safe(
+    content,
+    attachments,
+    expected,
+):
+    assert _attachment_message(content, attachments) == expected
+
+
+def test_malformed_attributed_metadata_is_ignored():
     assert attributed_text({}) == {}
-    assert (
-        _parse_runs(
-            attributed_text(
-                {
-                    "content": "□",
-                    "attachmentRuns": [None, {"startIndex": 0, "length": 1}],
-                }
-            )
-        )["message"]
-        == "□"
-    )
     assert author_badges({"authorName": {"attachmentRuns": [None, {}]}}) == []
     assert image_thumbnails({"sources": [None, {}, {"url": " "}]}) == {}
 
 
+def _paid(message_id="a", **fields):
+    return {"message_id": message_id, "message_type": "paid_message", **fields}
+
+
+def _ticker(message_id="a", **fields):
+    return {
+        "message_id": message_id,
+        "message_type": "ticker_paid_message_item",
+        **fields,
+    }
+
+
 def test_paid_cache_is_bounded_and_does_not_alias_or_overwrite():
     cache = PaidEventCache(limit=1)
-    paid = {
-        "message_id": "a",
-        "message_type": "paid_message",
-        "message": "original",
-        "money": {"amount": 5},
-        "author": {"id": "u", "name": "name"},
-    }
+    paid = _paid(
+        message="original", money={"amount": 5}, author={"id": "u", "name": "name"}
+    )
     cache.enrich(paid)
     paid["money"]["amount"] = 99
-    ticker = {
-        "message_id": "a",
-        "message_type": "ticker_paid_message_item",
-        "author": {"id": "u"},
-    }
+    ticker = _ticker(author={"id": "u"})
     cache.enrich(ticker)
     assert ticker["money"]["amount"] == 5
     ticker["money"]["amount"] = 12
@@ -300,8 +300,8 @@ def test_paid_cache_is_bounded_and_does_not_alias_or_overwrite():
     cache.enrich(ticker)
     assert ticker["message"] == "ticker text"
     assert ticker["money"]["amount"] == 12
-    cache.enrich({"message_id": "b", "message_type": "paid_message"})
-    evicted = {"message_id": "a", "message_type": "ticker_paid_message_item"}
+    cache.enrich(_paid("b"))
+    evicted = _ticker()
     cache.enrich(evicted)
     assert "money" not in evicted
     cache.enrich({"message_type": "paid_message"})
@@ -312,32 +312,20 @@ def test_paid_cache_is_bounded_and_does_not_alias_or_overwrite():
 
 def test_paid_cache_rejects_conflicting_author_and_preserves_zero_timestamp():
     cache = PaidEventCache()
-    paid = {
-        "message_id": "a",
-        "message_type": "paid_message",
-        "money": {"amount": 5},
-        "author": {"id": "a", "name": "original"},
-        "timestamp": 123,
-    }
+    paid = _paid(
+        money={"amount": 5}, author={"id": "a", "name": "original"}, timestamp=123
+    )
     cache.enrich(paid)
-    conflict = {
-        "message_id": "a",
-        "message_type": "ticker_paid_message_item",
-        "author": {"id": "other"},
-    }
+    conflict = _ticker(author={"id": "other"})
     before = deepcopy(conflict)
     cache.enrich(conflict)
     assert conflict == before
-    ticker = {
-        "message_id": "a",
-        "message_type": "ticker_paid_message_item",
-        "timestamp": 0,
-    }
+    ticker = _ticker(timestamp=0)
     cache.enrich(ticker)
     assert ticker["timestamp"] == 0
     assert ticker["author"]["name"] == "original"
     ticker["author"]["name"] = "changed"
-    another = {"message_id": "a", "message_type": "ticker_paid_message_item"}
+    another = _ticker()
     cache.enrich(another)
     assert another["author"]["name"] == "original"
 
@@ -345,8 +333,8 @@ def test_paid_cache_rejects_conflicting_author_and_preserves_zero_timestamp():
 def test_zero_capacity_cache_and_unidentified_messages_do_not_enrich():
     cache = PaidEventCache(limit=0)
     cache.enrich({"message_type": [], "message_id": "a"})
-    cache.enrich({"message_type": "paid_message", "message_id": "a", "message": "body"})
-    ticker = {"message_type": "ticker_paid_message_item", "message_id": "a"}
+    cache.enrich(_paid(message="body"))
+    ticker = _ticker()
     cache.enrich(ticker)
     assert "message" not in ticker
 

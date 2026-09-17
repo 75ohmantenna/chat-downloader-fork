@@ -92,13 +92,10 @@ def _finalize_run(
     if chat is not None and hasattr(chat, "close"):
         try:
             chat.close()
-        except (OSError, ValueError) as e:
-            log("warning", f"Error finalizing chat output: {e}")
         except Exception as e:
-            if primary_error:
-                log("warning", f"Error finalizing chat output: {e}")
-            else:
+            if not primary_error and not isinstance(e, (OSError, ValueError)):
                 raise
+            log("warning", f"Error finalizing chat output: {e}")
 
     if chat is not None and not primary_error:
         write_error_count = getattr(chat, "write_error_count", 0)
@@ -157,40 +154,24 @@ def _log_run_summary(
 ) -> None:
     """Log status and final message/writer counts, including failed runs."""
     output_dispatcher = getattr(chat, "_output_dispatcher", None)
-    writer_summaries = (
-        output_dispatcher.writer_summaries if output_dispatcher is not None else []
+    writer_summaries = getattr(output_dispatcher, "writer_summaries", [])
+    deadline_summary = getattr(
+        getattr(chat, "chat", None), "deadline_prefetch_summary", None
     )
-    formatted_duplicates_suppressed = (
-        output_dispatcher.formatted_duplicates_suppressed
-        if output_dispatcher is not None
-        else 0
+    prefetched_after_deadline_count, deadline_prefetch_count_complete = (
+        deadline_summary() if callable(deadline_summary) else (0, True)
     )
-    chat_iterator = getattr(chat, "chat", None)
-    deadline_prefetch_summary = getattr(
-        chat_iterator,
-        "deadline_prefetch_summary",
-        None,
-    )
-    if callable(deadline_prefetch_summary):
-        prefetched_after_deadline_count, deadline_prefetch_count_complete = (
-            deadline_prefetch_summary()
-        )
-    else:
-        prefetched_after_deadline_count = 0
-        deadline_prefetch_count_complete = True
     summary = sanitize_for_log(
         {
-            "success": result.success if result is not None else True,
-            "termination_reason": result.termination_reason
-            if result is not None
-            else "completed",
-            "parity_status": result.parity_status
-            if result is not None
-            else "not_requested",
-            "provider_inspection": result.provider_inspection if result else None,
+            "success": getattr(result, "success", True),
+            "termination_reason": getattr(result, "termination_reason", "completed"),
+            "parity_status": getattr(result, "parity_status", "not_requested"),
+            "provider_inspection": getattr(result, "provider_inspection", None),
             "message_count": message_count,
             "message_type_counts": message_type_counts,
-            "formatted_duplicates_suppressed": formatted_duplicates_suppressed,
+            "formatted_duplicates_suppressed": getattr(
+                output_dispatcher, "formatted_duplicates_suppressed", 0
+            ),
             "prefetched_after_deadline_count": prefetched_after_deadline_count,
             "deadline_prefetch_count_complete": deadline_prefetch_count_complete,
             "provider_diagnostics": getattr(chat, "diagnostics", {}),

@@ -508,25 +508,18 @@ class _ContinuationLoop:
 
     # -- response handling --------------------------------------------------
 
-    def _update_visitor_data(self, yt_info: JSONDict) -> None:
-        """Propagate visitor-data from the response into session headers."""
+    def _handle_continuation_response(
+        self, yt_info: JSONDict, continuation_params: JSONDict
+    ) -> None:
+        """Refresh response credentials, log request context, and surface API errors."""
+        auth = _generate_sapisidhash_header(self.downloader, _YT_HOME, self.ytcfg)
         visitor_data = extract_visitor_data(yt_info)
         if visitor_data:
             self.downloader.update_session_headers({"x-goog-visitor-id": visitor_data})
             log("debug", "Updated visitor data")
-
-    def _apply_response_state_updates(
-        self, yt_info: JSONDict, auth: str | None = None
-    ) -> None:
-        """Apply response-driven session/header state updates in one place."""
-        self._update_visitor_data(yt_info)
         if auth:
             self.downloader.update_session_headers({"authorization": auth})
 
-    def _log_request_context(
-        self, yt_info: JSONDict, continuation_params: JSONDict
-    ) -> None:
-        """Log continuation parameters, session headers, and login state."""
         debug_info = {
             "click_tracking": multi_get(
                 continuation_params,
@@ -552,14 +545,6 @@ class _ContinuationLoop:
             0,
         )
         log("debug", f"Logged-in info: {logged_in_info}")
-
-    def _handle_continuation_response(
-        self, yt_info: JSONDict, continuation_params: JSONDict
-    ) -> None:
-        """Apply response-driven state, log request context, and raise errors."""
-        auth = _generate_sapisidhash_header(self.downloader, _YT_HOME, self.ytcfg)
-        self._apply_response_state_updates(yt_info, auth)
-        self._log_request_context(yt_info, continuation_params)
         _raise_if_api_error(yt_info)
 
     def _capture_successful_response(self, yt_info: JSONDict) -> None:

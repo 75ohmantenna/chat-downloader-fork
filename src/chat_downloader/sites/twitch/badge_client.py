@@ -12,13 +12,11 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import ChatDownloaderError, ParsingError
-from chat_downloader.utils.json_types import get_dict, get_list, get_str
+from chat_downloader.utils.json_types import get_str
 
 from .graphql_client import _PersistedQueryUnavailable
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from chat_downloader.utils.json_types import JSONDict, JSONList
 
     from ._protocols import _DownloadGQL, _SessionPost
@@ -38,32 +36,16 @@ def update_badge_info(
     client_id: str | None = None,
 ) -> None:
     """Update badge caches while isolating channel and global failures."""
-    sources: tuple[
-        tuple[str, Callable[[], tuple[JSONList, str | None]]],
-        ...,
-    ] = (
-        (
-            "channel",
-            lambda: _download_channel_badges(
-                session_post,
-                channel,
-                channel_id,
-                download_gql_func,
-                client_id,
-            ),
-        ),
-        (
-            "global",
-            lambda: _download_global_badges(
-                session_post,
-                download_gql_func,
-                client_id,
-            ),
-        ),
-    )
-    for source_name, fetch_badges in sources:
+    for source_name in ("channel", "global"):
         try:
-            badges, forced_channel_id = fetch_badges()
+            if source_name == "channel":
+                badges, forced_channel_id = _download_channel_badges(
+                    session_post, channel, channel_id, download_gql_func, client_id
+                )
+            else:
+                badges, forced_channel_id = _download_global_badges(
+                    session_post, download_gql_func, client_id
+                )
             _store_badges(
                 badges,
                 forced_channel_id,
@@ -158,7 +140,7 @@ def _get_response_data(response: JSONList) -> JSONDict:
     if not isinstance(raw_data, dict):
         msg = "badge response data is not an object"
         raise _BadgeShapeError(msg)
-    return get_dict(response[0], "data")
+    return raw_data
 
 
 def _get_badge_list(container: JSONDict, key: str) -> JSONList:
@@ -169,7 +151,7 @@ def _get_badge_list(container: JSONDict, key: str) -> JSONList:
     if not isinstance(raw_badges, list):
         msg = f"badge response {key} is not a list"
         raise _BadgeShapeError(msg)
-    return get_list(container, key)
+    return raw_badges
 
 
 def _get_user_badges(data: JSONDict) -> JSONList:
@@ -180,7 +162,7 @@ def _get_user_badges(data: JSONDict) -> JSONList:
     if not isinstance(raw_user, dict):
         msg = "badge response user is not an object"
         raise _BadgeShapeError(msg)
-    return _get_badge_list(get_dict(data, "user"), "broadcastBadges")
+    return _get_badge_list(raw_user, "broadcastBadges")
 
 
 def _store_badges(
@@ -221,11 +203,10 @@ def _store_badges(
             target = subscriber_badge_info.setdefault(effective_channel_id, {})
         else:
             target = badge_info
-        badge = {
+        target[badge_key] = {
             **target.get(badge_key, {}),
             **raw_badge,
             "image1x": raw_badge.get("image1x", raw_badge.get("imageUrlNormal")),
             "image2x": raw_badge.get("image2x", raw_badge.get("imageUrlDouble")),
             "image4x": raw_badge.get("image4x", raw_badge.get("imageUrlQuadruple")),
         }
-        target[badge_key] = badge

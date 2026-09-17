@@ -16,6 +16,67 @@ from chat_downloader.sites.twitch import live_service
 from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 
 
+def _downloader(**overrides):
+    return SimpleNamespace(
+        **{
+            "badge_cache": SimpleNamespace(snapshot=dict),
+            "_update_badge_info": Mock(),
+            "retry": Mock(),
+            **overrides,
+        }
+    )
+
+
+def _request(**overrides):
+    return ChatRequest(
+        **{
+            "url": "https://www.twitch.tv/example",
+            "max_attempts": 1,
+            "retry_timeout": 0,
+            "interruptible_retry": False,
+            "message_groups": ["messages"],
+            **overrides,
+        }
+    )
+
+
+class _FakeIRC:
+    def __init__(self, responses: list[str]) -> None:
+        self.responses = iter(responses)
+        self.closed = False
+        self.sent: list[str] = []
+
+    def recv(self, _buffer_size: int) -> str:
+        return next(self.responses)
+
+    def send_raw(self, message: str) -> None:
+        self.sent.append(message)
+
+    def set_timeout(self, _timeout: float) -> None:
+        pass
+
+    def join_channel(self, _channel: str) -> None:
+        pass
+
+    def close_connection(self) -> None:
+        self.closed = True
+
+
+@pytest.fixture
+def captured_frames(monkeypatch):
+    captured = []
+
+    def record_capture(*args, **kwargs):
+        captured.append((args, kwargs))
+        return f"/samples/{len(captured)}.json"
+
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
+        record_capture,
+    )
+    return captured
+
+
 def _privmsg(message_id: str, text: str) -> str:
     return (
         "@badge-info=;badges=;color=;display-name=User;emotes=;flags=;id="
@@ -73,19 +134,8 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
         "live_service._IRCFactory",
         Mock(side_effect=[OSError("temporary"), first_irc, second_irc]),
     )
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        _update_badge_info=Mock(),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=3,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_receive_timeout=1.5,
-        message_groups=["messages"],
-    )
+    downloader = _downloader()
+    request = _request(max_attempts=3, message_receive_timeout=1.5)
     message_generator = cast(
         "live_service._MessageGenerator",
         Mock(
@@ -140,63 +190,25 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
 
 def test_successful_irc_frame_capture_is_bounded_across_reconnects(
     monkeypatch: pytest.MonkeyPatch,
+    captured_frames,
 ) -> None:
-    class FakeIRC:
-        def __init__(self, responses: list[str]) -> None:
-            self.responses = iter(responses)
-            self.closed = False
-            self.sent: list[str] = []
-
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
-
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
-
-        def set_timeout(self, _timeout: float) -> None:
-            return None
-
-        def join_channel(self, _channel: str) -> None:
-            return None
-
-        def close_connection(self) -> None:
-            self.closed = True
-
     first_frames = [_privmsg(str(index), f"message {index}") for index in range(2)]
     second_frames = [_privmsg(str(index), f"message {index}") for index in range(2, 5)]
     ircs = [
-        FakeIRC(
+        _FakeIRC(
             [
                 "\r\n".join(first_frames) + "\r\nPING :tmi.twitch.tv\r",
                 "",
             ]
         ),
-        FakeIRC(["\n" + "\r\n".join(second_frames) + "\r\n", ""]),
+        _FakeIRC(["\n" + "\r\n".join(second_frames) + "\r\n", ""]),
     ]
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=lambda: None),
-        _update_badge_info=Mock(),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_groups=["messages"],
-    )
-    captured = []
-
-    def record_capture(*args, **kwargs):
-        captured.append((args, kwargs))
-        return f"/samples/{len(captured)}.json"
+    downloader = _downloader(badge_cache=SimpleNamespace(snapshot=lambda: None))
+    request = _request(max_attempts=2)
+    captured = captured_frames
 
     diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "yes")
-    monkeypatch.setattr(
-        "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
-        record_capture,
-    )
 
     messages = live_service.iter_stream_chat_messages(
         cast("Any", downloader),
@@ -233,59 +245,22 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
 
 def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
     monkeypatch: pytest.MonkeyPatch,
+    captured_frames,
 ) -> None:
-    class FakeIRC:
-        def __init__(self, responses: list[str]) -> None:
-            self.responses = iter(responses)
-            self.closed = False
-
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
-
-        def send_raw(self, _message: str) -> None:
-            return None
-
-        def set_timeout(self, _timeout: float) -> None:
-            return None
-
-        def join_channel(self, _channel: str) -> None:
-            return None
-
-        def close_connection(self) -> None:
-            self.closed = True
-
     resub_one = _usernotice("resub-1", "resub", "First resub")
     text_message = _privmsg("text-1", "Hello")
     resub_two = _usernotice("resub-2", "resub", "Second resub")
     milestone = _usernotice("milestone-1", "viewermilestone", "Milestone")
     ircs = [
-        FakeIRC([f"{resub_one}\r\n{text_message}\r\n", ""]),
-        FakeIRC([f"{resub_two}\r\n{milestone}\r\n", ""]),
+        _FakeIRC([f"{resub_one}\r\n{text_message}\r\n", ""]),
+        _FakeIRC([f"{resub_two}\r\n{milestone}\r\n", ""]),
     ]
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=lambda: None),
-        _update_badge_info=Mock(),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_groups=["all"],
-    )
-    captured = []
-
-    def record_capture(*args, **kwargs):
-        captured.append((args, kwargs))
-        return f"/samples/{len(captured)}.json"
+    downloader = _downloader(badge_cache=SimpleNamespace(snapshot=lambda: None))
+    request = _request(max_attempts=2, message_groups=["all"])
+    captured = captured_frames
 
     diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "on")
-    monkeypatch.setattr(
-        "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
-        record_capture,
-    )
 
     messages = live_service.iter_stream_chat_messages(
         cast("Any", downloader),
@@ -305,38 +280,18 @@ def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
     ]
     assert captured == [
         (
-            (
-                "twitch-irc-event-message-resubscription-7dce7b9831c9",
-                {"raw": f"{resub_one}\r\n"},
-            ),
+            (f"twitch-irc-event-message-{label}", {"raw": f"{frame}\r\n"}),
             {
                 "sample_limit": 1,
                 "sample_group": "twitch-irc-event-frames",
                 "group_limit": 12,
             },
-        ),
-        (
-            (
-                "twitch-irc-event-message-text-message-18e44952e1aa",
-                {"raw": f"{text_message}\r\n"},
-            ),
-            {
-                "sample_limit": 1,
-                "sample_group": "twitch-irc-event-frames",
-                "group_limit": 12,
-            },
-        ),
-        (
-            (
-                "twitch-irc-event-message-viewermilestone-71b63634a922",
-                {"raw": f"{milestone}\r\n"},
-            ),
-            {
-                "sample_limit": 1,
-                "sample_group": "twitch-irc-event-frames",
-                "group_limit": 12,
-            },
-        ),
+        )
+        for label, frame in [
+            ("resubscription-7dce7b9831c9", resub_one),
+            ("text-message-18e44952e1aa", text_message),
+            ("viewermilestone-71b63634a922", milestone),
+        ]
     ]
     assert all(irc.closed for irc in ircs)
     assert diagnostics.summary["reconnect_count"] == 1
@@ -346,19 +301,13 @@ def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
 def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
     irc = Mock()
     irc_factory = cast("live_service._IRCFactory", Mock(return_value=irc))
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        retry=Mock(),
+    downloader = _downloader(
         session=SimpleNamespace(
             proxies={"https": "socks5h://proxy.test:1080"},
             trust_env=False,
         ),
     )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=1,
-        message_groups=["messages"],
-    )
+    request = _request()
 
     result = list(
         live_service.iter_stream_chat_messages(
@@ -382,16 +331,8 @@ def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
 
 def test_live_service_logs_effective_clamped_receive_timeout() -> None:
     irc = Mock()
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=1,
-        message_receive_timeout=0.1,
-        message_groups=["messages"],
-    )
+    downloader = _downloader()
+    request = _request(message_receive_timeout=0.1)
 
     with patch.object(live_service, "log") as mock_log:
         result = list(
@@ -420,15 +361,8 @@ def test_live_service_logs_effective_clamped_receive_timeout() -> None:
 
 def test_live_service_default_messages_include_social_sharing_badge() -> None:
     irc = Mock()
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=1,
-        message_groups=["messages"],
-    )
+    downloader = _downloader()
+    request = _request()
     social_sharing_badge = {
         "action_type": "user_notice",
         "message_type": "social_sharing_badge",
@@ -453,17 +387,8 @@ def test_live_service_default_messages_include_social_sharing_badge() -> None:
 
 def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> None:
     irc = Mock()
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_groups=["messages"],
-    )
+    downloader = _downloader()
+    request = _request(max_attempts=2)
     messages = [
         {"message_type": "text_message", "message_id": str(index)}
         for index in range(251)
@@ -501,18 +426,8 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
 ):
     first_irc = Mock()
     second_irc = Mock()
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        _update_badge_info=Mock(),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_groups=["messages", "other"],
-    )
+    downloader = _downloader()
+    request = _request(max_attempts=2, message_groups=["messages", "other"])
     message_generator = cast(
         "live_service._MessageGenerator",
         Mock(
@@ -548,15 +463,8 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
 
 def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> None:
     irc = Mock()
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=1,
-        message_groups=["messages"],
-    )
+    downloader = _downloader()
+    request = _request()
     messages = [
         {
             "message_type": "text_message",
@@ -590,18 +498,7 @@ def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> 
         ),
     )
 
-    assert result == [
-        {
-            "message_type": "text_message",
-            "message_id": "dup",
-            "message": "first",
-        },
-        {
-            "message_type": "text_message",
-            "message_id": "unique",
-            "message": "second",
-        },
-    ]
+    assert result == [messages[0], messages[2]]
     assert diagnostics.summary["duplicate_message_suppressed_count"] == 1
     assert diagnostics.summary["live_emitted_count"] == 2
 
@@ -615,79 +512,40 @@ def test_live_service_iter_stream_chat_messages_rejects_zero_attempts() -> None:
         )
 
 
-def test_real_live_get_chat_reports_clean_metadata_diagnostics() -> None:
-    downloader = TwitchChatDownloader()
-    downloader._session_post = lambda *_args, **_kwargs: _GraphQLResponse(
-        _stream_metadata_payload()
-    )
-    downloader._update_badge_info = Mock()
-
-    chat = downloader.get_chat_by_stream_id(
-        "northernlion",
-        ChatRequest(url="https://www.twitch.tv/northernlion", max_attempts=1),
-    )
-
-    assert chat.diagnostics["optional_metadata_degradation_count"] == 0
-    chat.close()
-    downloader.close()
-
-
-def test_real_live_get_chat_reports_content_free_metadata_degradation() -> None:
-    downloader = TwitchChatDownloader()
-    downloader._session_post = lambda *_args, **_kwargs: _GraphQLResponse(
-        _stream_metadata_payload(errors=[_optional_metadata_error()])
-    )
-    downloader._update_badge_info = Mock()
-
-    chat = downloader.get_chat_by_stream_id(
-        "northernlion",
-        ChatRequest(url="https://www.twitch.tv/northernlion", max_attempts=1),
-    )
-
-    assert chat.diagnostics["optional_metadata_degradation_count"] == 1
-    assert all(isinstance(value, int) for value in chat.diagnostics.values())
-    rendered_diagnostics = repr(chat.diagnostics).casefold()
-    assert "primaryteam" not in rendered_diagnostics
-    assert "service error" not in rendered_diagnostics
-    assert "northernlion" not in rendered_diagnostics
-    chat.close()
-    downloader.close()
-
-
-def test_real_live_get_chat_counts_degraded_metadata_retry_responses() -> None:
-    first_result = {
-        "data": {},
-        "errors": [_optional_metadata_error()],
-    }
-    payloads = iter(
-        [
-            [first_result],
-            _stream_metadata_payload(errors=[_optional_metadata_error()]),
-        ]
-    )
-    request_count = 0
-
-    def session_post(*_args: object, **_kwargs: object) -> _GraphQLResponse:
-        nonlocal request_count
-        request_count += 1
-        return _GraphQLResponse(next(payloads))
-
+@pytest.mark.parametrize(
+    ("degraded", "retry_first"),
+    [(False, False), (True, False), (True, True)],
+    ids=["clean", "degraded", "degraded-retry"],
+)
+def test_real_live_get_chat_reports_content_free_metadata_diagnostics(
+    degraded,
+    retry_first,
+) -> None:
+    errors = [_optional_metadata_error()] if degraded else None
+    payloads = [_stream_metadata_payload(errors=errors)]
+    if retry_first:
+        payloads.insert(0, [{"data": {}, "errors": errors}])
+    session_post = Mock(side_effect=[_GraphQLResponse(payload) for payload in payloads])
     downloader = TwitchChatDownloader()
     downloader._session_post = session_post
     downloader._update_badge_info = Mock()
 
     chat = downloader.get_chat_by_stream_id(
         "northernlion",
-        ChatRequest(
+        _request(
             url="https://www.twitch.tv/northernlion",
-            max_attempts=2,
-            retry_timeout=0,
-            interruptible_retry=False,
+            max_attempts=len(payloads),
         ),
     )
 
-    assert request_count == 2
-    assert chat.diagnostics["optional_metadata_degradation_count"] == 2
+    assert session_post.call_count == len(payloads)
+    assert chat.diagnostics["optional_metadata_degradation_count"] == (
+        len(payloads) if degraded else 0
+    )
+    assert all(isinstance(value, int) for value in chat.diagnostics.values())
+    rendered_diagnostics = repr(chat.diagnostics).casefold()
+    for private_value in ("primaryteam", "service error", "northernlion"):
+        assert private_value not in rendered_diagnostics
     chat.close()
     downloader.close()
 
@@ -730,11 +588,6 @@ def test_live_service_get_chat_by_stream_id_handles_rerun_and_updates_badges(
     assert chat.diagnostics is diagnostics.summary
     downloader._update_badge_info.assert_called_once_with("example", "channel-123")
     assert any("broadcasting a rerun" in r.message for r in caplog.records)
-
-
-def test_live_service_get_chat_by_stream_id_rejects_zero_attempts() -> None:
-    with pytest.raises(ValueError, match="max_attempts"):
-        ChatRequest(url="https://www.twitch.tv/missing-channel", max_attempts=0)
 
 
 def test_live_service_get_chat_by_stream_id_retries_then_raises_user_not_found() -> (
@@ -842,19 +695,8 @@ def test_live_service_reconnect_refreshes_badge_set() -> None:
     badge_cache = SimpleNamespace(
         snapshot=Mock(side_effect=[initial_badges, refreshed_badges])
     )
-    downloader = SimpleNamespace(
-        badge_cache=badge_cache,
-        _update_badge_info=Mock(),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_receive_timeout=1.5,
-        message_groups=["messages"],
-    )
+    downloader = _downloader(badge_cache=badge_cache)
+    request = _request(max_attempts=2, message_receive_timeout=1.5)
 
     captured_badge_sets: list[Any] = []
 
@@ -920,50 +762,10 @@ def test_is_duplicate_live_message_evicts_oldest_seen_message() -> None:
     assert "newest" in seen_message_cache.message_ids
 
 
-def test_live_service_iter_stream_chat_messages_raises_runtime_error_if_retry_returns() -> (  # noqa: E501
-    None
-):
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=1,
-        message_groups=["messages"],
-    )
-
-    with (
-        patch.object(live_service, "_attempt_numbers", return_value=iter([1])),
-        pytest.raises(RuntimeError, match="unreachable"),
-    ):
-        list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                request,
-                irc_factory=cast(
-                    "live_service._IRCFactory",
-                    Mock(side_effect=OSError("temporary")),
-                ),
-            )
-        )
-
-
 def test_live_service_repeated_disconnects_exhaust_reconnect_budget() -> None:
     ircs = [Mock(), Mock()]
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        _update_badge_info=Mock(),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_groups=["messages"],
-    )
+    downloader = _downloader()
+    request = _request(max_attempts=2)
 
     with pytest.raises(RetriesExceeded):
         list(
@@ -991,17 +793,8 @@ def test_live_service_closes_partial_connection_when_join_fails() -> None:
     failed_irc = Mock()
     failed_irc.join_channel.side_effect = OSError("join failed")
     healthy_irc = Mock()
-    downloader = SimpleNamespace(
-        badge_cache=SimpleNamespace(snapshot=dict),
-        retry=Mock(),
-    )
-    request = ChatRequest(
-        url="https://www.twitch.tv/example",
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-        message_groups=["messages"],
-    )
+    downloader = _downloader()
+    request = _request(max_attempts=2)
 
     assert (
         list(

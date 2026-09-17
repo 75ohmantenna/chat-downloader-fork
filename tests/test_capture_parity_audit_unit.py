@@ -108,6 +108,14 @@ def _audit_direct(
     )
 
 
+def _audit_both(jsonl_path: Path, txt_path: Path, **options):
+    """Exercise the CLI privacy boundary and inspect the same audit's counters."""
+    return (
+        _run_audit(jsonl_path, txt_path, **options),
+        _audit_direct(jsonl_path, txt_path, **options),
+    )
+
+
 def test_auditor_matches_real_writer_composition_and_semantic_dedup(
     tmp_path: Path,
 ) -> None:
@@ -147,13 +155,7 @@ def test_auditor_matches_real_writer_composition_and_semantic_dedup(
     list(chat)
     chat.close()
 
-    result = _run_audit(
-        jsonl_path,
-        txt_path,
-        format_name="audit",
-        format_file=format_file,
-    )
-    direct = _audit_direct(
+    result, direct = _audit_both(
         jsonl_path,
         txt_path,
         format_name="audit",
@@ -191,8 +193,7 @@ def test_auditor_rejects_invalid_jsonl_records_without_echoing_them(
     jsonl_path.write_bytes(raw_jsonl)
     txt_path.write_bytes(b"")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert direct.jsonl_errors == 1
@@ -209,8 +210,7 @@ def test_auditor_scans_every_jsonl_line_after_an_invalid_record(
     jsonl_path.write_bytes(b"\xff\n{}\n\n")
     txt_path.write_bytes(b"\n")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert "jsonl_lines=3" in result.stdout
@@ -256,8 +256,7 @@ def test_auditor_rejects_deep_json_array_as_content_error(
     jsonl_path.write_bytes(raw_json + b"\n")
     txt_path.write_bytes(b"")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     # Decoder nesting limits vary across supported Python versions.
     assert direct.first_issue in {"jsonl_invalid_json", "jsonl_non_object"}
@@ -310,8 +309,7 @@ def test_auditor_contains_unhashable_dedup_fields_as_content_error(
     )
     txt_path.write_bytes(b"")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert result.stdout == _content_error_summary(
@@ -343,8 +341,7 @@ def test_auditor_reports_comparisons_skipped_after_render_error(
     )
     txt_path.write_bytes(b": private-after\n")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert "render_errors=1" in result.stdout
@@ -370,8 +367,7 @@ def test_auditor_reports_exact_mismatch_indices_and_count_without_content(
     )
     txt_path.write_text(": altered\n", encoding="utf-8")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert direct.text_mismatches == 2
@@ -394,8 +390,7 @@ def test_auditor_rejects_invalid_txt_utf8_and_missing_trailing_newline(
     )
     txt_path.write_bytes(b"\xff")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert direct.txt_utf8_errors == 1
@@ -431,13 +426,7 @@ def test_auditor_validates_capture_origin_newlines_and_sanitized_content(
     sanitized = b"cr\\rnel\\u0085ls\\u2028ps\\u2029end"
     txt_path.write_bytes(sanitized + txt_newline)
 
-    result = _run_audit(
-        jsonl_path,
-        txt_path,
-        format_name="audit",
-        format_file=format_file,
-    )
-    direct = _audit_direct(
+    result, direct = _audit_both(
         jsonl_path,
         txt_path,
         format_name="audit",
@@ -465,8 +454,7 @@ def test_auditor_requires_jsonl_final_newline(tmp_path: Path) -> None:
     jsonl_path.write_bytes(json.dumps(record).encode())
     txt_path.write_bytes(b": private\n")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert direct.jsonl_trailing_newline is False
@@ -485,8 +473,7 @@ def test_auditor_rejects_mixed_jsonl_newline_styles(tmp_path: Path) -> None:
     jsonl_path.write_bytes(first.encode() + b"\n" + second.encode() + b"\r\n")
     txt_path.write_bytes(b": one\n: two\n")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert direct.jsonl_mixed_newlines == 1
@@ -496,19 +483,22 @@ def test_auditor_rejects_mixed_jsonl_newline_styles(tmp_path: Path) -> None:
     assert result.stderr == ""
 
 
-@pytest.mark.parametrize("create_empty", [False, True])
+@pytest.mark.parametrize(
+    ("create_jsonl", "create_txt"), [(False, False), (True, True), (True, False)]
+)
 def test_auditor_accepts_empty_and_lazy_missing_artifacts(
     tmp_path: Path,
-    create_empty: bool,
+    create_jsonl: bool,
+    create_txt: bool,
 ) -> None:
     jsonl_path = tmp_path / "capture.jsonl"
     txt_path = tmp_path / "capture.txt"
-    if create_empty:
+    if create_jsonl:
         jsonl_path.write_bytes(b"")
+    if create_txt:
         txt_path.write_bytes(b"")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
     assert not direct.failed
@@ -517,25 +507,8 @@ def test_auditor_accepts_empty_and_lazy_missing_artifacts(
     assert "txt_lines=0" in result.stdout
     assert "jsonl_trailing_newline=empty" in result.stdout
     assert "txt_trailing_newline=empty" in result.stdout
-    missing = "no" if create_empty else "yes"
-    assert f"jsonl_missing={missing}" in result.stdout
-    assert f"txt_missing={missing}" in result.stdout
-
-
-def test_auditor_treats_one_lazy_missing_empty_artifact_as_empty(
-    tmp_path: Path,
-) -> None:
-    jsonl_path = tmp_path / "capture.jsonl"
-    txt_path = tmp_path / "capture.txt"
-    jsonl_path.write_bytes(b"")
-
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
-
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert not direct.failed
-    assert "jsonl_missing=no" in result.stdout
-    assert "txt_missing=yes" in result.stdout
+    assert f"jsonl_missing={'no' if create_jsonl else 'yes'}" in result.stdout
+    assert f"txt_missing={'no' if create_txt else 'yes'}" in result.stdout
 
 
 def test_auditor_rejects_an_extra_physical_txt_line(tmp_path: Path) -> None:
@@ -547,8 +520,7 @@ def test_auditor_rejects_an_extra_physical_txt_line(tmp_path: Path) -> None:
     )
     txt_path.write_text(": private\nextra\n", encoding="utf-8")
 
-    result = _run_audit(jsonl_path, txt_path)
-    direct = _audit_direct(jsonl_path, txt_path)
+    result, direct = _audit_both(jsonl_path, txt_path)
 
     assert result.returncode == 1
     assert direct.count_mismatch
@@ -579,14 +551,7 @@ def test_auditor_matches_production_dedup_cache_eviction(tmp_path: Path) -> None
         encoding="utf-8",
     )
 
-    result = _run_audit(
-        jsonl_path,
-        txt_path,
-        format_name="audit",
-        format_file=format_file,
-        max_seen_message_ids=1,
-    )
-    direct = _audit_direct(
+    result, direct = _audit_both(
         jsonl_path,
         txt_path,
         format_name="audit",
@@ -618,14 +583,7 @@ def test_auditor_normalizes_zero_dedup_limit_to_production_default(
     _write_jsonl(jsonl_path, records)
     txt_path.write_text("paid_message:a\n", encoding="utf-8")
 
-    result = _run_audit(
-        jsonl_path,
-        txt_path,
-        format_name="audit",
-        format_file=format_file,
-        max_seen_message_ids=0,
-    )
-    direct = _audit_direct(
+    result, direct = _audit_both(
         jsonl_path,
         txt_path,
         format_name="audit",
@@ -658,14 +616,7 @@ def test_auditor_resets_dedup_for_appended_logical_runs(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = _run_audit(
-        jsonl_path,
-        txt_path,
-        format_name="audit",
-        format_file=format_file,
-        dedup_reset_before_lines=(2, 3),
-    )
-    direct = _audit_direct(
+    result, direct = _audit_both(
         jsonl_path,
         txt_path,
         format_name="audit",

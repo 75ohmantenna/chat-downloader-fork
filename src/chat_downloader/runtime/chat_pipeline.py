@@ -138,20 +138,6 @@ def _configure_formatter(
     chat.set_formatter(format_callable)
 
 
-def _build_output_writer(
-    output_file: str,
-    request: ChatRequest,
-    writer_factory: Any = ContinuousWriter,
-) -> Any:
-    """Create an output writer from a request's writer-relevant settings."""
-    return writer_factory(
-        output_file,
-        sort_keys=request.sort_keys,
-        overwrite=request.overwrite,
-        lazy_initialise=True,
-    )
-
-
 def _configure_output_writer(
     chat: Chat,
     request: ChatRequest,
@@ -183,7 +169,14 @@ def _configure_output_writer(
             )
             continue
         seen.add(identity)
-        chat.attach_writer(_build_output_writer(output_file, request, writer_factory))
+        chat.attach_writer(
+            writer_factory(
+                output_file,
+                sort_keys=request.sort_keys,
+                overwrite=request.overwrite,
+                lazy_initialise=True,
+            )
+        )
 
 
 def configure_chat(

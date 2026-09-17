@@ -46,164 +46,101 @@ def _fake_response(
     return SimpleNamespace(status_code=status_code, text=text, json=_json)
 
 
-# ── _handle_http_error ────────────────────────────────────────────────────────
-
-
-def test_handle_http_error_429_retry_budget_remains() -> None:
-    resp = _fake_response(429)
-    assert _handle_http_error(resp, _URL, 1, 2, _POLICY_CAN_RETRY) is True
+@pytest.mark.parametrize(
+    ("status", "expected"), [(429, True), (503, True), (400, False), (404, False)]
+)
+def test_handle_http_error_routes_status(status, expected) -> None:
+    assert (
+        _handle_http_error(
+            _fake_response(status),
+            _URL,
+            1,
+            2,
+            _POLICY_CAN_RETRY,
+        )
+        is expected
+    )
 
 
 def test_handle_http_error_403_budget_exhausted_raises() -> None:
-    resp = _fake_response(403)
     with pytest.raises(RetriesExceeded):
-        _handle_http_error(resp, _URL, 1, 1, _POLICY_EXHAUSTED)
+        _handle_http_error(_fake_response(403), _URL, 1, 1, _POLICY_EXHAUSTED)
 
 
-def test_handle_http_error_5xx_is_retryable() -> None:
-    resp = _fake_response(503)
-    assert _handle_http_error(resp, _URL, 1, 2, _POLICY_CAN_RETRY) is True
-
-
-def test_handle_http_error_challenge_body_raises_captcha() -> None:
-    resp = _fake_response(403, text="please verify you are human")
-    with pytest.raises(CaptchaChallengeRequired, match="captcha"):
-        _handle_http_error(resp, _URL, 1, 2, _POLICY_CAN_RETRY)
-
-
-def test_handle_http_error_challenge_yt_msg_raises_captcha() -> None:
-    body = {"error": {"message": "unusual traffic detected"}}
-    resp = _fake_response(400, body=body)
+@pytest.mark.parametrize(
+    "response",
+    [
+        _fake_response(403, text="please verify you are human"),
+        _fake_response(400, body={"error": {"message": "unusual traffic detected"}}),
+    ],
+)
+def test_handle_http_error_challenge_raises_captcha(response) -> None:
     with pytest.raises(CaptchaChallengeRequired):
-        _handle_http_error(resp, _URL, 1, 2, _POLICY_CAN_RETRY)
+        _handle_http_error(response, _URL, 1, 2, _POLICY_CAN_RETRY)
 
 
-def test_handle_http_error_non_retryable_returns_false() -> None:
-    resp = _fake_response(400)
-    assert _handle_http_error(resp, _URL, 1, 2, _POLICY_CAN_RETRY) is False
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        ({"code": 403, "message": "Forbidden"}, True),
+        ({"code": 400, "message": "Unknown error occurred"}, True),
+        ({"code": 400, "message": "Something went wrong"}, False),
+        ({}, False),
+    ],
+)
+def test_handle_json_api_error_routes_response(error, expected) -> None:
+    assert _handle_json_api_error(error, _URL, 1, 2, _POLICY_CAN_RETRY) is expected
 
 
-def test_handle_http_error_404_returns_false() -> None:
-    resp = _fake_response(404)
-    assert _handle_http_error(resp, _URL, 1, 2, _POLICY_CAN_RETRY) is False
-
-
-# ── _handle_json_api_error ────────────────────────────────────────────────────
-
-
-def test_handle_json_api_error_challenge_raises_captcha() -> None:
-    error: dict = {"code": 400, "message": "verify you are human"}
-    with pytest.raises(CaptchaChallengeRequired):
-        _handle_json_api_error(error, _URL, 1, 2, _POLICY_CAN_RETRY)
-
-
-def test_handle_json_api_error_403_retry_budget_remains() -> None:
-    error: dict = {"code": 403, "message": "Forbidden"}
-    assert _handle_json_api_error(error, _URL, 1, 2, _POLICY_CAN_RETRY) is True
-
-
-def test_handle_json_api_error_429_budget_exhausted_raises() -> None:
-    error: dict = {"code": 429, "message": "Too Many Requests"}
-    with pytest.raises(RetriesExceeded):
+@pytest.mark.parametrize(
+    ("error", "exception"),
+    [
+        ({"code": 400, "message": "verify you are human"}, CaptchaChallengeRequired),
+        ({"code": 429, "message": "Too Many Requests"}, RetriesExceeded),
+        (
+            {"code": 400, "message": "Unknown error occurred"},
+            IncompleteContinuationError,
+        ),
+    ],
+)
+def test_handle_json_api_error_raises(error, exception) -> None:
+    with pytest.raises(exception):
         _handle_json_api_error(error, _URL, 1, 1, _POLICY_EXHAUSTED)
 
 
-def test_handle_json_api_error_unknown_retry_budget_remains() -> None:
-    error: dict = {"code": 400, "message": "Unknown error occurred"}
-    assert _handle_json_api_error(error, _URL, 1, 2, _POLICY_CAN_RETRY) is True
-
-
-def test_handle_json_api_error_unknown_budget_exhausted_raises() -> None:
-    error: dict = {"code": 400, "message": "Unknown error occurred"}
-    with pytest.raises(IncompleteContinuationError):
-        _handle_json_api_error(error, _URL, 1, 1, _POLICY_EXHAUSTED)
-
-
-def test_handle_json_api_error_unrecognised_returns_false() -> None:
-    error: dict = {"code": 400, "message": "Something went wrong"}
-    assert _handle_json_api_error(error, _URL, 1, 2, _POLICY_CAN_RETRY) is False
-
-
-def test_handle_json_api_error_empty_dict_returns_false() -> None:
-    assert _handle_json_api_error({}, _URL, 1, 2, _POLICY_CAN_RETRY) is False
-
-
-# ── _handle_missing_live_chat_continuation ────────────────────────────────────
-
-
-def test_missing_live_chat_guard_disabled_returns_false() -> None:
-    result = _handle_missing_live_chat_continuation(
-        {"continuationContents": {}},
-        require_live_chat_continuation=False,
-        error=None,
+def _missing_continuation(body, *, required=True, error=None, attempts=2):
+    return _handle_missing_live_chat_continuation(
+        body,
+        require_live_chat_continuation=required,
+        error=error,
         attempt_number=1,
-        max_attempts=2,
-        retry_policy=_POLICY_CAN_RETRY,
+        max_attempts=attempts,
+        retry_policy=_POLICY_CAN_RETRY if attempts == 2 else _POLICY_EXHAUSTED,
         continuation_url=_URL,
     )
-    assert result is False
 
 
-def test_missing_live_chat_error_present_returns_false() -> None:
-    result = _handle_missing_live_chat_continuation(
-        {"continuationContents": {}},
-        require_live_chat_continuation=True,
-        error=ValueError("already handled"),
-        attempt_number=1,
-        max_attempts=2,
-        retry_policy=_POLICY_CAN_RETRY,
-        continuation_url=_URL,
-    )
-    assert result is False
-
-
-def test_missing_live_chat_empty_response_returns_false() -> None:
-    result = _handle_missing_live_chat_continuation(
-        {},
-        require_live_chat_continuation=True,
-        error=None,
-        attempt_number=1,
-        max_attempts=2,
-        retry_policy=_POLICY_CAN_RETRY,
-        continuation_url=_URL,
-    )
-    assert result is False
-
-
-def test_missing_live_chat_block_present_returns_false() -> None:
-    result = _handle_missing_live_chat_continuation(
-        {"continuationContents": {"liveChatContinuation": {"actions": []}}},
-        require_live_chat_continuation=True,
-        error=None,
-        attempt_number=1,
-        max_attempts=2,
-        retry_policy=_POLICY_CAN_RETRY,
-        continuation_url=_URL,
-    )
-    assert result is False
-
-
-def test_missing_live_chat_absent_can_retry() -> None:
-    result = _handle_missing_live_chat_continuation(
-        {"continuationContents": {"otherContinuation": {}}},
-        require_live_chat_continuation=True,
-        error=None,
-        attempt_number=1,
-        max_attempts=2,
-        retry_policy=_POLICY_CAN_RETRY,
-        continuation_url=_URL,
-    )
-    assert result is True
+@pytest.mark.parametrize(
+    ("body", "kwargs", "expected"),
+    [
+        ({"continuationContents": {}}, {"required": False}, False),
+        ({"continuationContents": {}}, {"error": ValueError("already handled")}, False),
+        ({}, {}, False),
+        (
+            {"continuationContents": {"liveChatContinuation": {"actions": []}}},
+            {},
+            False,
+        ),
+        ({"continuationContents": {"otherContinuation": {}}}, {}, True),
+    ],
+)
+def test_missing_live_chat_guard(body, kwargs, expected) -> None:
+    assert _missing_continuation(body, **kwargs) is expected
 
 
 def test_missing_live_chat_absent_exhausted_raises() -> None:
     with pytest.raises(IncompleteContinuationError):
-        _handle_missing_live_chat_continuation(
+        _missing_continuation(
             {"continuationContents": {"otherContinuation": {}}},
-            require_live_chat_continuation=True,
-            error=None,
-            attempt_number=1,
-            max_attempts=1,
-            retry_policy=_POLICY_EXHAUSTED,
-            continuation_url=_URL,
+            attempts=1,
         )

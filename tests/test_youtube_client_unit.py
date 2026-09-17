@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from json import JSONDecodeError
 from types import SimpleNamespace
-from typing import NoReturn
 
 import pytest
 from requests.exceptions import ConnectionError as RequestsConnectionError
@@ -19,22 +18,64 @@ from chat_downloader.errors import (
 )
 from chat_downloader.models import ChatRequest
 
-# Convenience aliases that mirror the old ``client`` facade names.
-_get_innertube_context = _yt_context._get_innertube_context
-_generate_headers = _yt_context._generate_headers
-_get_continuation_info = _yt_continuation._get_continuation_info
-_get_initial_info = _yt_initial._get_initial_info
-
-
-class _PageResp:
-    def __init__(self, status_code, text) -> None:
-        self.status_code = status_code
-        self.text = text
-
-
 _SUCCESS_CONTINUATION_PAYLOAD = {
     "continuationContents": {"liveChatContinuation": {"actions": []}},
 }
+_WATCH_URL = "https://www.youtube.com/watch?v=test"
+
+
+def _initial(session_get, params):
+    return _yt_initial._get_initial_info(
+        _WATCH_URL,
+        session_get,
+        params,
+        r"ytInitialData",
+        r"ytcfg",
+        r"ytInitialPlayerResponse",
+    )
+
+
+def _continuation(session_post, params, *, browse=False):
+    endpoint = "browse" if browse else "live_chat/get_live_chat"
+    return _yt_continuation._get_continuation_info(
+        f"https://www.youtube.com/youtubei/v1/{endpoint}",
+        session_post,
+        params,
+        require_live_chat_continuation=not browse,
+        json={"continuation": "abc"},
+    )
+
+
+def _page(status, text):
+    return SimpleNamespace(status_code=status, text=text)
+
+
+def _sequence(*responses):
+    pending = iter(responses)
+    calls = []
+
+    def request(*args, **kwargs):
+        calls.append((args, kwargs))
+        response = next(pending)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    return request, calls
+
+
+def _patch_initial_parser(monkeypatch, title, *, valid=True):
+    monkeypatch.setattr(
+        _yt_initial, "regex_search", lambda *_a, **_k: "{}" if valid else None
+    )
+    monkeypatch.setattr(
+        _yt_initial,
+        "try_parse_json",
+        lambda _value, default=None: (
+            {"contents": {}} if valid and default is None else default
+        ),
+    )
+    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: title)
 
 
 def test_get_innertube_context_normalizes_without_mutating_input() -> None:
@@ -48,14 +89,11 @@ def test_get_innertube_context_normalizes_without_mutating_input() -> None:
             },
         },
     }
-
-    context = _get_innertube_context(ytcfg)
-
+    context = _yt_context._get_innertube_context(ytcfg)
     assert context["client"]["hl"] == "en"
     assert context["client"]["timeZone"] == "UTC"
     assert context["client"]["utcOffsetMinutes"] == 0
     assert context["client"]["visitorData"] == "visitor"
-
     assert ytcfg["INNERTUBE_CONTEXT"]["client"]["hl"] == "fr"
     assert ytcfg["INNERTUBE_CONTEXT"]["client"]["timeZone"] == "Europe/Paris"
 
@@ -66,574 +104,259 @@ def test_generate_headers_includes_user_agent_and_bootstrap_logged_in() -> None:
         "INNERTUBE_CLIENT_VERSION": "1.20260101.00.00",
         "LOGGED_IN": True,
         "INNERTUBE_CONTEXT": {
-            "client": {
-                "visitorData": "visitor123",
-                "userAgent": "TestYTUA/1.0",
-            },
+            "client": {"visitorData": "visitor123", "userAgent": "TestYTUA/1.0"},
         },
     }
-
-    headers = _generate_headers(
+    headers = _yt_context._generate_headers(
         ytcfg=ytcfg,
         session=object(),
         yt_home="https://www.youtube.com",
         sapisidhash_generator=lambda *_a, **_k: "AUTH",
     )
-
     assert headers["x-goog-visitor-id"] == "visitor123"
     assert headers["user-agent"] == "TestYTUA/1.0"
     assert headers["x-youtube-bootstrap-logged-in"] == "true"
     assert headers["authorization"] == "AUTH"
 
 
-def test_get_continuation_info_retries_on_429(make_fake_http_response) -> None:
-    calls = {"count": 0}
-
-    def session_post(_url, **_kwargs):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return make_fake_http_response(
-                429, {"error": {"code": 429, "message": "Too Many Requests"}}
-            )
-        return make_fake_http_response(200, _SUCCESS_CONTINUATION_PAYLOAD)
-
-    result = _get_continuation_info(
-        "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-        session_post,
-        {"max_attempts": 2},
-        json={"continuation": "abc"},
-    )
-
-    assert result == _SUCCESS_CONTINUATION_PAYLOAD
-    assert calls["count"] == 2
-
-
-def test_get_continuation_info_accepts_chat_request(
-    make_fake_http_response,
-) -> None:
-    calls = {"count": 0}
-
-    def session_post(_url, **_kwargs):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return make_fake_http_response(
-                429, {"error": {"code": 429, "message": "Too Many Requests"}}
-            )
-        return make_fake_http_response(200, _SUCCESS_CONTINUATION_PAYLOAD)
-
-    result = _get_continuation_info(
-        "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-        session_post,
-        ChatRequest(url="https://www.youtube.com/watch?v=abc", max_attempts=2),
-        json={"continuation": "abc"},
-    )
-
-    assert result == _SUCCESS_CONTINUATION_PAYLOAD
-    assert calls["count"] == 2
-
-
-def test_get_continuation_info_retries_on_incomplete_live_chat_continuation_body(
-    make_fake_http_response,
-) -> None:
-    calls = {"count": 0}
-
-    def session_post(_url, **_kwargs):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return make_fake_http_response(200, {"responseContext": {}})
-        return make_fake_http_response(
-            200,
-            {"continuationContents": {"liveChatContinuation": {"actions": []}}},
-        )
-
-    result = _get_continuation_info(
-        "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-        session_post,
-        {"max_attempts": 2, "retry_timeout": 0},
-        json={"continuation": "abc"},
-    )
-
-    assert result == {"continuationContents": {"liveChatContinuation": {"actions": []}}}
-    assert calls["count"] == 2
-
-
-def test_get_continuation_info_retries_on_unknown_error_in_200_ok_body(
-    make_fake_http_response,
-) -> None:
-    calls = {"count": 0}
-
-    def session_post(_url, **_kwargs):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return make_fake_http_response(
-                200, {"error": {"code": 500, "message": "Unknown error"}}
-            )
-        return make_fake_http_response(
-            200,
-            {"continuationContents": {"liveChatContinuation": {"actions": []}}},
-        )
-
-    result = _get_continuation_info(
-        "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-        session_post,
-        {"max_attempts": 2, "retry_timeout": 0},
-        json={"continuation": "abc"},
-    )
-
-    assert result == {"continuationContents": {"liveChatContinuation": {"actions": []}}}
-    assert calls["count"] == 2
-
-
-def test_get_initial_info_retries_on_5xx_with_one_based_attempts(
-    monkeypatch,
-) -> None:
-    calls = {"count": 0}
-
-    def session_get(_url):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return _PageResp(500, "<html>server error</html>")
-        return _PageResp(200, "<html>ok</html>")
-
-    monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: "{}")
-    monkeypatch.setattr(
-        _yt_initial,
-        "try_parse_json",
-        lambda _value, default=None: {"contents": {}} if default is None else default,
-    )
-    monkeypatch.setattr(
-        _yt_initial, "get_title_of_webpage", lambda _html: "Server Error"
-    )
-
-    yt_initial_data, ytcfg, player_response_info = _get_initial_info(
-        "https://www.youtube.com/watch?v=test",
-        session_get,
-        {"max_attempts": 2},
-        r"ytInitialData",
-        r"ytcfg",
-        r"ytInitialPlayerResponse",
-    )
-
-    assert calls["count"] == 2
-    assert yt_initial_data == {"contents": {}}
-    assert ytcfg == {}
-    assert player_response_info == {}
-
-
-def test_get_initial_info_retries_on_429(monkeypatch) -> None:
-    calls = {"count": 0}
-
-    def session_get(_url):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return _PageResp(429, "<html><title>Too Many Requests</title></html>")
-        return _PageResp(200, "<html>ok</html>")
-
-    monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: "{}")
-    monkeypatch.setattr(
-        _yt_initial,
-        "try_parse_json",
-        lambda _value, default=None: {"contents": {}} if default is None else default,
-    )
-    monkeypatch.setattr(
-        _yt_initial,
-        "get_title_of_webpage",
-        lambda _html: "Too Many Requests",
-    )
-
-    yt_initial_data, ytcfg, player_response_info = _get_initial_info(
-        "https://www.youtube.com/watch?v=test",
-        session_get,
-        {"max_attempts": 2, "retry_timeout": 0},
-        r"ytInitialData",
-        r"ytcfg",
-        r"ytInitialPlayerResponse",
-    )
-
-    assert calls["count"] == 2
-    assert yt_initial_data == {"contents": {}}
-    assert ytcfg == {}
-    assert player_response_info == {}
-
-
-def test_get_initial_info_raises_challenge_on_sorry_page(
-    monkeypatch,
-) -> None:
-    def session_get(_url):
-        response = _PageResp(
+@pytest.mark.parametrize(("status", "payload", "typed_request"),[
+        pytest.param(
             429,
-            "<html><body>Our systems have detected unusual traffic from your "
-            "computer network. <div class='g-recaptcha'></div></body></html>",
-        )
-        response.url = "https://www.google.com/sorry/index?continue=..."
-        return response
-
-    monkeypatch.setattr(
-        _yt_initial,
-        "get_title_of_webpage",
-        lambda _html: "https://www.youtube.com/watch?v=test",
+            {"error": {"code": 429, "message": "Too Many Requests"}},
+            False,
+            id="http-429",
+        ),
+        pytest.param(
+            429,
+            {"error": {"code": 429, "message": "Too Many Requests"}},
+            True,
+            id="chat-request",
+        ),
+        pytest.param(200, {"responseContext": {}}, False, id="incomplete-body"),
+        pytest.param(
+            200,
+            {"error": {"code": 500, "message": "Unknown error"}},
+            False,
+            id="json-error",
+        ),
+        pytest.param(None, OSError("network unreachable"), False, id="oserror"),
+    ],
+)
+def test_get_continuation_info_retries(
+    make_fake_http_response, status, payload, typed_request
+):
+    first = payload if status is None else make_fake_http_response(status, payload)
+    request, calls = _sequence(
+        first, make_fake_http_response(200, _SUCCESS_CONTINUATION_PAYLOAD)
     )
+    params = (
+        ChatRequest(url=_WATCH_URL, max_attempts=2)
+        if typed_request
+        else {"max_attempts": 2, "retry_timeout": 0}
+    )
+    assert _continuation(request, params) == _SUCCESS_CONTINUATION_PAYLOAD
+    assert len(calls) == 2
 
+
+@pytest.mark.parametrize(("status", "text", "title", "typed_request"),[
+        (500, "<html>server error</html>", "Server Error", False),
+        (
+            429,
+            "<html><title>Too Many Requests</title></html>",
+            "Too Many Requests",
+            False,
+        ),
+        (500, "<html>server error</html>", "Server Error", True),
+    ],
+    ids=["http-500", "http-429", "chat-request"],
+)
+def test_get_initial_info_retries(monkeypatch, status, text, title, typed_request):
+    request, calls = _sequence(_page(status, text), _page(200, "<html>ok</html>"))
+    _patch_initial_parser(monkeypatch, title)
+    params = (
+        ChatRequest(url=_WATCH_URL, max_attempts=2)
+        if typed_request
+        else {"max_attempts": 2, "retry_timeout": 0}
+    )
+    assert _initial(request, params) == ({"contents": {}}, {}, {})
+    assert len(calls) == 2
+
+
+def test_get_initial_info_raises_challenge_on_sorry_page(monkeypatch) -> None:
+    response = _page(
+        429,
+        "<html><body>Our systems have detected unusual traffic from your "
+        "computer network. <div class='g-recaptcha'></div></body></html>",
+    )
+    response.url = "https://www.google.com/sorry/index?continue=..."
+    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: _WATCH_URL)
     with pytest.raises(CaptchaChallengeRequired) as exc_info:
-        _get_initial_info(
-            "https://www.youtube.com/watch?v=test",
-            session_get,
-            {"max_attempts": 2, "retry_timeout": 0},
-            r"ytInitialData",
-            r"ytcfg",
-            r"ytInitialPlayerResponse",
-        )
-
-    msg = str(exc_info.value)
-    assert "captcha/challenge" in msg
-    assert "--request_profile" in msg
+        _initial(lambda _url: response, {"max_attempts": 2, "retry_timeout": 0})
+    assert "captcha/challenge" in str(exc_info.value)
+    assert "--request_profile" in str(exc_info.value)
 
 
-def test_get_initial_info_accepts_chat_request(monkeypatch) -> None:
-    calls = {"count": 0}
-
-    def session_get(_url):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            return _PageResp(500, "<html>server error</html>")
-        return _PageResp(200, "<html>ok</html>")
-
-    monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: "{}")
-    monkeypatch.setattr(
-        _yt_initial,
-        "try_parse_json",
-        lambda _value, default=None: {"contents": {}} if default is None else default,
-    )
-    monkeypatch.setattr(
-        _yt_initial, "get_title_of_webpage", lambda _html: "Server Error"
-    )
-
-    yt_initial_data, ytcfg, player_response_info = _get_initial_info(
-        "https://www.youtube.com/watch?v=test",
-        session_get,
-        ChatRequest(url="https://www.youtube.com/watch?v=test", max_attempts=2),
-        r"ytInitialData",
-        r"ytcfg",
-        r"ytInitialPlayerResponse",
-    )
-
-    assert calls["count"] == 2
-    assert yt_initial_data == {"contents": {}}
-    assert ytcfg == {}
-    assert player_response_info == {}
-
-
-def test_get_initial_info_raises_retries_exceeded_when_attempt_loop_exits(
-    monkeypatch,
-) -> None:
-    calls = {"count": 0}
-
-    def session_get(_url):
-        calls["count"] += 1
-        return _PageResp(200, "{}")
-
+def test_get_initial_info_raises_retries_exceeded_when_attempt_loop_exits(monkeypatch):
+    request, calls = _sequence()
     monkeypatch.setattr(
         ChatRequest,
         "from_kwargs",
         classmethod(
-            lambda _cls, **_kwargs: SimpleNamespace(
-                max_attempts=0,
-                retry_timeout=None,
-            ),
+            lambda _cls, **_kwargs: SimpleNamespace(max_attempts=0, retry_timeout=None)
         ),
     )
-
     with pytest.raises(RetriesExceeded) as exc_info:
-        _get_initial_info(
-            "https://www.youtube.com/watch?v=test",
-            session_get,
-            {},
-            r"ytInitialData",
-            r"ytcfg",
-            r"ytInitialPlayerResponse",
-        )
-
-    assert calls["count"] == 0
+        _initial(request, {})
+    assert calls == []
     assert "Retries exhausted after 0 attempt(s)" in str(exc_info.value)
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_exhausted_429(
-    make_fake_http_response,
-) -> None:
-    """HTTP 429 raises RetriesExceeded after all retries are exhausted."""
+@pytest.mark.parametrize(("status", "payload", "attempts", "error", "fragments"),[
+        pytest.param(
+            429,
+            {},
+            2,
+            RetriesExceeded,
+            ["Retries exhausted", "2 attempt(s)", "live_chat"],
+            id="http-429",
+        ),
+        pytest.param(
+            500,
+            {},
+            1,
+            RetriesExceeded,
+            ["Retries exhausted", "1 attempt(s)"],
+            id="http-500",
+        ),
+        pytest.param(
+            200,
+            {"error": {"code": 429, "message": "Rate limited"}},
+            2,
+            RetriesExceeded,
+            ["Retries exhausted", "Rate limited"],
+            id="json-429",
+        ),
+        pytest.param(
+            200,
+            {"responseContext": {}},
+            1,
+            IncompleteContinuationError,
+            [
+                "Missing continuationContents.liveChatContinuation",
+                "Summary:",
+                "top_level_keys",
+            ],
+            id="incomplete-body",
+        ),
+    ],
+)
+def test_get_continuation_info_exhausted(
+    make_fake_http_response, status, payload, attempts, error, fragments
+):
+    def request(_url, **_kwargs):
+        return make_fake_http_response(status, payload)
 
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(429, {})
-
-    with pytest.raises(RetriesExceeded) as exc_info:
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
-            {"max_attempts": 2},
-            json={"continuation": "abc"},
-        )
-
-    msg = str(exc_info.value)
-    assert "Retries exhausted" in msg
-    assert "2 attempt(s)" in msg
-    assert "live_chat" in msg
-
-
-def test_get_continuation_info_raises_retries_exceeded_on_exhausted_5xx(
-    make_fake_http_response,
-) -> None:
-    """HTTP 500 raises RetriesExceeded after all retries are exhausted."""
-
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(500, {})
-
-    with pytest.raises(RetriesExceeded) as exc_info:
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
-            {"max_attempts": 1},
-            json={"continuation": "abc"},
-        )
-
-    msg = str(exc_info.value)
-    assert "Retries exhausted" in msg
-    assert "1 attempt(s)" in msg
-
-
-def test_get_continuation_info_raises_retries_exceeded_on_exhausted_json_429(
-    make_fake_http_response,
-) -> None:
-    """HTTP 200 with JSON error 429 raises RetriesExceeded after retries."""
-
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(
-            200, {"error": {"code": 429, "message": "Rate limited"}}
-        )
-
-    with pytest.raises(RetriesExceeded) as exc_info:
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
-            {"max_attempts": 2},
-            json={"continuation": "tok"},
-        )
-
-    msg = str(exc_info.value)
-    assert "Retries exhausted" in msg
-    assert "Rate limited" in msg
+    with pytest.raises(error) as exc_info:
+        _continuation(request, {"max_attempts": attempts, "retry_timeout": 0})
+    for fragment in fragments:
+        assert fragment in str(exc_info.value)
 
 
 def test_get_continuation_info_handles_json_decode_before_response() -> None:
-    def session_post(_url, **_kwargs):
-        raise JSONDecodeError("bad json", "", 0)
-
+    request, _ = _sequence(JSONDecodeError("bad json", "", 0))
     with pytest.raises(RetriesExceeded) as exc_info:
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
-            {"max_attempts": 1},
-            json={"continuation": "abc"},
-        )
-
+        _continuation(request, {"max_attempts": 1})
     assert "Unable to parse JSON" in str(exc_info.value)
 
 
-def test_get_continuation_info_returns_non_retryable_json_api_error(
-    make_fake_http_response,
-) -> None:
-    payload = {"error": {"code": 400, "message": "Replay disabled"}}
-
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(200, payload)
-
+@pytest.mark.parametrize(("payload", "browse"),[
+        pytest.param(
+            {"error": {"code": 400, "message": "Replay disabled"}},
+            False,
+            id="non-retryable-api-error",
+        ),
+        pytest.param(
+            {
+                "onResponseReceivedActions": [
+                    {"appendContinuationItemsAction": {"continuationItems": []}}
+                ]
+            },
+            True,
+            id="browse",
+        ),
+    ],
+)
+def test_get_continuation_info_returns_payload(
+    make_fake_http_response, payload, browse
+):
     assert (
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
+        _continuation(
+            lambda _url, **_kwargs: make_fake_http_response(200, payload),
             {"max_attempts": 1, "retry_timeout": 0},
-            json={"continuation": "tok"},
+            browse=browse,
         )
         == payload
     )
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_exhausted_incomplete_body(
-    make_fake_http_response,
-) -> None:
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(200, {"responseContext": {}})
-
-    with pytest.raises(IncompleteContinuationError) as exc_info:
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
-            {"max_attempts": 1, "retry_timeout": 0},
-            json={"continuation": "tok"},
-        )
-
-    message = str(exc_info.value)
-    assert "Missing continuationContents.liveChatContinuation" in message
-    assert "Summary:" in message
-    assert "top_level_keys" in message
-
-
-def test_get_continuation_info_allows_browse_continuation_payload(
-    make_fake_http_response,
-) -> None:
-    payload = {
-        "onResponseReceivedActions": [
-            {"appendContinuationItemsAction": {"continuationItems": []}},
-        ],
-    }
-
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(200, payload)
-
-    assert (
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/browse",
-            session_post,
-            {"max_attempts": 1, "retry_timeout": 0},
-            require_live_chat_continuation=False,
-            json={"continuation": "tok"},
-        )
-        == payload
-    )
-
-
-def test_get_continuation_info_raises_captcha_challenge_required_on_http_challenge(
-    make_fake_http_response,
-) -> None:
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(
+@pytest.mark.parametrize(("status", "payload", "response_kwargs"),[
+        pytest.param(
             429,
             {"error": {"code": 429, "message": "Too Many Requests"}},
-            text="<html>captcha challenge required</html>",
-        )
-
-    with pytest.raises(CaptchaChallengeRequired) as exc_info:
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
-            {"max_attempts": 1, "retry_timeout": 0},
-            json={"continuation": "tok"},
-        )
-
-    assert "--request_profile" in str(exc_info.value)
-
-
-def test_get_continuation_info_raises_captcha_challenge_required_on_json_error_message(
-    make_fake_http_response,
-) -> None:
-    def session_post(_url, **_kwargs):
-        return make_fake_http_response(
+            {"text": "<html>captcha challenge required</html>"},
+            id="http-challenge",
+        ),
+        pytest.param(
             200,
             {"error": {"code": 403, "message": "Please verify you are human"}},
+            {},
+            id="json-challenge",
+        ),
+    ],
+)
+def test_get_continuation_info_raises_challenge(
+    make_fake_http_response, status, payload, response_kwargs
+):
+    with pytest.raises(CaptchaChallengeRequired) as exc_info:
+        _continuation(
+            lambda _url, **_kwargs: make_fake_http_response(
+                status, payload, **response_kwargs
+            ),
+            {"max_attempts": 1, "retry_timeout": 0},
         )
-
-    with pytest.raises(CaptchaChallengeRequired):
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            session_post,
-            {"max_attempts": 1},
-            json={"continuation": "tok"},
-        )
+    if response_kwargs:
+        assert "--request_profile" in str(exc_info.value)
 
 
-def test_get_initial_info_retries_on_5xx_then_raises_retries_exceeded(
-    monkeypatch,
-) -> None:
-    """_get_initial_info raises RetriesExceeded after exhausted 5xx retries."""
-    calls = {"count": 0}
-
-    def session_get(_url):
-        calls["count"] += 1
-        return _PageResp(503, "<html>service unavailable</html>")
-
-    # Simulate page that produces no parseable ytInitialData
-    monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: None)
-    monkeypatch.setattr(_yt_initial, "try_parse_json", lambda _v, default=None: default)
-    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _h: "503 Error")
-
+@pytest.mark.parametrize(("status", "text", "title", "fragments"),[
+        (
+            503,
+            "<html>service unavailable</html>",
+            "503 Error",
+            ["Last error: 503 Error"],
+        ),
+        (
+            429,
+            "<html><title>Too Many Requests</title></html>",
+            "Too Many Requests",
+            ["Retries exhausted", "Too Many Requests"],
+        ),
+    ],
+)
+def test_get_initial_info_exhausted(monkeypatch, status, text, title, fragments):
+    request, calls = _sequence(_page(status, text), _page(status, text))
+    if status == 503:
+        _patch_initial_parser(monkeypatch, title, valid=False)
+    else:
+        monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: title)
     with pytest.raises(RetriesExceeded) as exc_info:
-        _get_initial_info(
-            "https://www.youtube.com/watch?v=test",
-            session_get,
-            {"max_attempts": 2},
-            r"ytInitialData",
-            r"ytcfg",
-            r"ytInitialPlayerResponse",
-        )
-
-    assert calls["count"] == 2
-    assert "Last error: 503 Error" in str(exc_info.value)
+        _initial(request, {"max_attempts": 2, "retry_timeout": 0})
+    assert len(calls) == 2
+    for fragment in fragments:
+        assert fragment in str(exc_info.value)
 
 
-def test_get_initial_info_raises_retries_exceeded_on_exhausted_429(
-    monkeypatch,
-) -> None:
-    def session_get(_url):
-        return _PageResp(429, "<html><title>Too Many Requests</title></html>")
-
-    monkeypatch.setattr(
-        _yt_initial,
-        "get_title_of_webpage",
-        lambda _html: "Too Many Requests",
-    )
-
-    with pytest.raises(RetriesExceeded) as exc_info:
-        _get_initial_info(
-            "https://www.youtube.com/watch?v=test",
-            session_get,
-            {"max_attempts": 2, "retry_timeout": 0},
-            r"ytInitialData",
-            r"ytcfg",
-            r"ytInitialPlayerResponse",
-        )
-
-    msg = str(exc_info.value)
-    assert "Retries exhausted" in msg
-    assert "Too Many Requests" in msg
-
-
-def test_get_initial_info_raises_retries_exceeded_on_network_error(
-    monkeypatch,
-) -> None:
-    """_get_initial_info re-raises RequestException after all attempts."""
-
-    def session_get(_url) -> NoReturn:
-        msg = "connection refused"
-        raise RequestsConnectionError(msg)
-
+def test_get_initial_info_raises_retries_exceeded_on_network_error() -> None:
+    request, _ = _sequence(RequestsConnectionError("connection refused"))
     with pytest.raises(RequestsConnectionError):
-        _get_initial_info(
-            "https://www.youtube.com/watch?v=test",
-            session_get,
-            {"max_attempts": 1},
-            r"ytInitialData",
-            r"ytcfg",
-            r"ytInitialPlayerResponse",
-        )
-
-
-def test_get_continuation_info_catches_oserror_as_network_error(
-    make_fake_http_response,
-) -> None:
-    """_get_continuation_info treats OSError the same as RequestException."""
-    calls = {"count": 0}
-
-    def session_post(_url, **_kwargs):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            msg = "network unreachable"
-            raise OSError(msg)
-        return make_fake_http_response(200, _SUCCESS_CONTINUATION_PAYLOAD)
-
-    result = _get_continuation_info(
-        "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-        session_post,
-        {"max_attempts": 2},
-        json={"continuation": "abc"},
-    )
-    assert result == _SUCCESS_CONTINUATION_PAYLOAD
-    assert calls["count"] == 2
+        _initial(request, {"max_attempts": 1})

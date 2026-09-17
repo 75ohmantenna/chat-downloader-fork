@@ -21,62 +21,25 @@ def test_slugify_debug_label_normalizes_human_label() -> None:
     )
 
 
-def test_describe_debug_sample_returns_stable_fixture_hint() -> None:
-    hint = describe_debug_sample(
-        Path("youtube-unknown-continuation-heartbeat-abc123def456.json"),
-    )
-
-    assert hint.site == "youtube"
-    assert hint.group == "continuations"
-    assert hint.fixture_name == "youtube-unknown-continuation-heartbeat"
-
-
-def test_successful_continuation_sample_maps_to_continuation_fixtures() -> None:
-    hint = describe_debug_sample(
-        Path("youtube-continuation-response-abc123def456.json"),
-    )
-
-    assert hint.site == "youtube"
-    assert hint.group == "continuations"
-    assert hint.fixture_name == "youtube-continuation-response"
-
-
-def test_describe_debug_sample_falls_back_to_misc_for_unknown_label() -> None:
-    hint = describe_debug_sample(Path("label-abc123def456.json"))
-
-    assert hint.site == "label"
-    assert hint.group == "misc"
-    assert hint.fixture_name == "label"
-
-
-def test_shared_name_inference_helpers_match_promoter_behavior() -> None:
-    sample_path = Path("youtube-missing-keys-liveChatMadeUpRenderer-abc123def456.json")
-
-    assert infer_site_from_sample_name(sample_path) == "youtube"
-    assert infer_group_from_sample_name(sample_path) == "messages"
-    assert normalize_fixture_name(sample_path) == (
-        "youtube-missing-keys-liveChatMadeUpRenderer"
-    )
-
-
-def test_twitch_unknown_irc_shape_maps_to_message_fixtures() -> None:
-    sample_path = Path("twitch-unknown-irc-shape-abc123def456.json")
-
-    assert infer_group_from_sample_name(sample_path) == "messages"
-
-
-def test_twitch_irc_frame_maps_to_message_fixtures() -> None:
-    sample_path = Path("twitch-irc-frame-abc123def456.json")
-
-    assert infer_group_from_sample_name(sample_path) == "messages"
-
-
-def test_twitch_irc_event_frame_maps_to_message_fixtures() -> None:
-    sample_path = Path(
-        "twitch-irc-event-message-resubscription-7dce7b9831c9-abc123def456.json"
-    )
-
-    assert infer_group_from_sample_name(sample_path) == "messages"
+@pytest.mark.parametrize(
+    ("stem", "site", "group"),
+    [
+        ("youtube-unknown-continuation-heartbeat", "youtube", "continuations"),
+        ("youtube-continuation-response", "youtube", "continuations"),
+        ("label", "label", "misc"),
+        ("youtube-missing-keys-liveChatMadeUpRenderer", "youtube", "messages"),
+        ("twitch-unknown-irc-shape", "twitch", "messages"),
+        ("twitch-irc-frame", "twitch", "messages"),
+        ("twitch-irc-event-message-resubscription-7dce7b9831c9", "twitch", "messages"),
+    ],
+)
+def test_sample_name_inference(stem, site, group):
+    sample_path = Path(f"{stem}-abc123def456.json")
+    hint = describe_debug_sample(sample_path)
+    assert (hint.site, hint.group, hint.fixture_name) == (site, group, stem)
+    assert infer_site_from_sample_name(sample_path) == site
+    assert infer_group_from_sample_name(sample_path) == group
+    assert normalize_fixture_name(sample_path) == stem
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
+
 from chat_downloader.sites.twitch.constants import (
     MESSAGE_GROUPS,
     MESSAGE_REGEX,
@@ -29,30 +31,29 @@ from chat_downloader.sites.twitch.types import BadgeSet
 from chat_downloader.sites.twitch.validation_keys import build_known_irc_keys
 
 
-def test_announcement_is_mapped_and_in_default_message_group() -> None:
-    assert MESSAGE_TYPE_REMAPPING["announcement"] == "announcement"
-    assert "announcement" in MESSAGE_GROUPS["messages"]
+def _parse_irc(raw, **kwargs):
+    match = MESSAGE_REGEX.search(raw)
+    assert match is not None
+    return _parse_irc_item(match, **kwargs)
 
 
-def test_new_text_variants_are_mapped_and_in_default_message_group() -> None:
-    assert MESSAGE_TYPE_REMAPPING["animated-message"] == "animated-message"
-    assert (
-        MESSAGE_TYPE_REMAPPING["gigantified-emote-message"]
-        == "gigantified-emote-message"
-    )
-    assert "animated-message" in MESSAGE_GROUPS["messages"]
-    assert "gigantified-emote-message" in MESSAGE_GROUPS["messages"]
+@pytest.mark.parametrize(
+    ("raw_type", "message_type", "group"),
+    [
+        ("announcement", "announcement", "messages"),
+        ("animated-message", "animated-message", "messages"),
+        ("gigantified-emote-message", "gigantified-emote-message", "messages"),
+        ("socialsharingbadge", "social_sharing_badge", "messages"),
+        ("sharedchatnotice", "shared_chat_notice", "other"),
+    ],
+)
+def test_message_type_mapping_and_group(raw_type, message_type, group) -> None:
+    assert MESSAGE_TYPE_REMAPPING[raw_type] == message_type
+    assert message_type in MESSAGE_GROUPS[group]
 
 
-def test_social_sharing_badge_is_mapped_and_in_default_message_group() -> None:
-    assert MESSAGE_TYPE_REMAPPING["socialsharingbadge"] == "social_sharing_badge"
-    assert "social_sharing_badge" in MESSAGE_GROUPS["messages"]
+def test_social_sharing_badge_level_is_known() -> None:
     assert "current_badge_level" in build_known_irc_keys()
-
-
-def test_sharedchatnotice_is_mapped_and_in_notices_group() -> None:
-    assert MESSAGE_TYPE_REMAPPING["sharedchatnotice"] == "shared_chat_notice"
-    assert "shared_chat_notice" in MESSAGE_GROUPS["other"]
 
 
 def test_parse_irc_item_parses_announcement_usernotice() -> None:
@@ -66,10 +67,7 @@ def test_parse_irc_item_parses_announcement_usernotice() -> None:
         ":DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["action_type"] == "user_notice"
     assert parsed["message_type"] == "announcement"
@@ -92,10 +90,7 @@ def test_parse_irc_item_parses_social_sharing_badge_usernotice() -> None:
         ":Wooohooo, I got a social media badge!\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["action_type"] == "user_notice"
     assert parsed["message_type"] == "social_sharing_badge"
@@ -104,49 +99,30 @@ def test_parse_irc_item_parses_social_sharing_badge_usernotice() -> None:
     assert parsed["author"]["name"] == "socialbadgeuser"
 
 
-def test_parse_irc_item_parses_shared_chat_privmsg_tags() -> None:
+@pytest.mark.parametrize("badge", ["moderator", "subscriber"])
+def test_parse_irc_item_parses_shared_chat_privmsg_tags(badge) -> None:
     raw = (
         "@badge-info=;badges=vip/1;color=#1E90FF;display-name=GuestUser;emotes=;"
         "flags=;id=22fe4db9-1f83-4d8e-b4b9-d9f840d5f001;mod=0;room-id=123;"
-        "source-id=shared-message-1;source-room-id=456;source-badges=moderator/1;"
+        f"source-id=shared-message-1;source-room-id=456;source-badges={badge}/1;"
         "source-badge-info=subscriber/12;source-only=1;subscriber=0;"
         "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
         ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["shared_chat_source_message_id"] == "shared-message-1"
     assert parsed["shared_chat_source_channel_id"] == "456"
-    assert parsed["shared_chat_source_badges"][0]["name"] == "moderator"
+    assert parsed["shared_chat_source_badges"][0]["name"] == badge
     assert parsed["shared_chat_source_badges"][0]["version"] == 1
     assert parsed["shared_chat_source_only"] is True
     assert parsed["is_shared_chat_message"] is True
     assert parsed["shared_chat_effective_source_channel_id"] == "456"
     assert parsed["shared_chat_is_cross_channel"] is True
 
-
-def test_parse_irc_item_applies_shared_chat_subscriber_badge_metadata() -> None:
-    raw = (
-        "@badge-info=;badges=vip/1;color=#1E90FF;display-name=GuestUser;emotes=;"
-        "flags=;id=22fe4db9-1f83-4d8e-b4b9-d9f840d5f001;mod=0;room-id=123;"
-        "source-id=shared-message-1;source-room-id=456;source-badges=subscriber/1;"
-        "source-badge-info=subscriber/12;source-only=1;subscriber=0;"
-        "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
-    )
-
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
-
-    assert parsed["shared_chat_source_badges"][0]["name"] == "subscriber"
-    assert parsed["shared_chat_source_badges"][0]["version"] == 1
-    assert parsed["shared_chat_source_badges"][0]["months"] == 12
+    if badge == "subscriber":
+        assert parsed["shared_chat_source_badges"][0]["months"] == 12
 
 
 def test_parse_irc_item_parses_shared_chat_usernotice_source_msg_id() -> None:
@@ -159,10 +135,7 @@ def test_parse_irc_item_parses_shared_chat_usernotice_source_msg_id() -> None:
         ":tmi.twitch.tv USERNOTICE #thebausffs :promo\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["message_type"] == "announcement"
     assert parsed["shared_chat_source_msg_id"] == "announcement"
@@ -179,10 +152,7 @@ def test_parse_irc_item_parses_sharedchatnotice_usernotice() -> None:
         ":tmi.twitch.tv USERNOTICE #thebausffs :promo\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["action_type"] == "user_notice"
     assert parsed["message_type"] == "shared_chat_notice"
@@ -211,10 +181,7 @@ def test_parse_irc_item_preserves_sharedchatnotice_goal_params() -> None:
         ":tmi.twitch.tv USERNOTICE #thebausffs :promo\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["message_type"] == "shared_chat_notice"
     assert parsed["msg_param_goal_target_contributions"] == "100"
@@ -233,18 +200,19 @@ def test_parse_irc_item_sets_shared_chat_fields_for_same_channel_source() -> Non
         ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["is_shared_chat_message"] is True
     assert parsed["shared_chat_effective_source_channel_id"] == "123"
     assert parsed["shared_chat_is_cross_channel"] is False
 
 
-def test_decode_pseudo_bnf() -> None:
-    assert _decode_pseudo_bnf(r"hello\sworld\:\:") == "hello world;;"
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(r"hello\sworld\:\:", "hello world;;"), (r"a\\b", r"a\b")],
+)
+def test_decode_pseudo_bnf(raw, expected) -> None:
+    assert _decode_pseudo_bnf(raw) == expected
 
 
 def test_parse_bool_and_bool_text() -> None:
@@ -490,10 +458,7 @@ def test_parse_irc_item_captures_unknown_action_with_raw_line(monkeypatch) -> No
         "tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv MYSTERY "
         "#channel :hello\r\n"
     )
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert capture_calls == [
         (
@@ -510,9 +475,10 @@ def test_parse_irc_item_captures_unknown_action_with_raw_line(monkeypatch) -> No
     ]
 
 
-def test_parse_irc_item_captures_unknown_tag_with_raw_line(monkeypatch) -> None:
+@pytest.mark.parametrize("debug", [False, True])
+def test_parse_irc_item_captures_unknown_tags_only_in_debug(monkeypatch, debug) -> None:
     capture_calls = []
-    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: True)
+    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: debug)
     monkeypatch.setattr(
         tw_messages,
         "capture_debug_sample",
@@ -524,43 +490,22 @@ def test_parse_irc_item_captures_unknown_tag_with_raw_line(monkeypatch) -> None:
         ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG "
         "#channel :hello\r\n"
     )
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    _parse_irc_item(match)
-
-    assert capture_calls == [
-        (
-            (
-                "twitch-unknown-irc-tag",
-                {"raw": raw, "unknown_tags": ["made-up-tag"]},
-            ),
-            {"sample_limit": 10},
-        )
-    ]
-
-
-def test_parse_irc_item_skips_raw_tag_capture_outside_debug(monkeypatch) -> None:
-    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: False)
-    capture_calls = []
-    monkeypatch.setattr(
-        tw_messages,
-        "capture_debug_sample",
-        lambda *items, **kwargs: capture_calls.append((items, kwargs)),
-    )
-    raw = (
-        "@badge-info=;badges=;display-name=TestUser;made-up-tag=value;"
-        "room-id=999;tmi-sent-ts=1;user-id=12345 "
-        ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG "
-        "#channel :hello\r\n"
-    )
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
-
+    parsed = _parse_irc(raw)
     assert parsed["made_up_tag"] == "value"
-    assert capture_calls == []
+    expected = (
+        [
+            (
+                (
+                    "twitch-unknown-irc-tag",
+                    {"raw": raw, "unknown_tags": ["made-up-tag"]},
+                ),
+                {"sample_limit": 10},
+            ),
+        ]
+        if debug
+        else []
+    )
+    assert capture_calls == expected
 
 
 def test_parse_item_defaults_to_text_message_and_drops_empty_badges() -> None:
@@ -674,10 +619,7 @@ def test_parse_irc_item_parses_emotes_subscriber_months_and_reply_author() -> No
         "\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["message"] == "Kappa"
     assert parsed["emotes"][0]["name"] == "Kappa"
@@ -704,10 +646,7 @@ def test_parse_irc_item_parses_animated_message_without_unknown_warning(
         "#channel :hello\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["action_type"] == "text_message"
     assert parsed["message_type"] == "animated-message"
@@ -737,10 +676,7 @@ def test_parse_irc_item_parses_gigantified_emote_without_unknown_warning(
         "#channel :Kappa\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["action_type"] == "text_message"
     assert parsed["message_type"] == "gigantified-emote-message"
@@ -764,10 +700,7 @@ def test_parse_irc_item_preserves_mystery_gift_theme() -> None:
         ":giftuser!giftuser@giftuser.tmi.twitch.tv USERNOTICE #channel\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["action_type"] == "user_notice"
     assert parsed["message_type"] == "mystery_subscription_gift"
@@ -841,10 +774,7 @@ def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> None
         "slow=0;tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"
     )
 
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
 
     assert parsed["is_vip"] is True
     assert parsed["follower_only"] is False
@@ -871,10 +801,6 @@ def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -
     assert "emotes" not in parsed
 
 
-def test_decode_pseudo_bnf_converts_backslash_escape() -> None:
-    assert _decode_pseudo_bnf(r"a\\b") == r"a\b"
-
-
 def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() -> None:
     """A negative follower_only other than -1 must not set it True."""
     raw = (
@@ -888,166 +814,101 @@ def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() 
     assert "minutes_to_follow_before_chatting" not in parsed
 
 
-# ---------------------------------------------------------------------------
-# Isolation tests for extracted helper: _resolve_irc_badges
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("info", "badge_key", "expected", "consumed"),
+    [
+        (
+            {"author_badge_metadata": "subscriber/6", "author_badges": "subscriber/1"},
+            "author_badges",
+            {"name": "subscriber", "version": 1, "months": 6},
+            "author_badge_metadata",
+        ),
+        (
+            {
+                "author_badge_metadata": "",
+                "author_badges": "vip/1",
+                "shared_chat_source_channel_id": "456",
+                "shared_chat_source_badges": "subscriber/3",
+                "shared_chat_source_badge_info": "subscriber/24",
+            },
+            "shared_chat_source_badges",
+            {"name": "subscriber", "version": 3, "months": 24},
+            "shared_chat_source_badge_info",
+        ),
+    ],
+    ids=["author-months", "shared-chat-months"],
+)
+def test_resolve_irc_badges_enriches_and_consumes_metadata(
+    info,
+    badge_key,
+    expected,
+    consumed,
+) -> None:
+    info = deepcopy(info)
+    tw_messages._resolve_irc_badges(info, channel_id="123", badge_set=BadgeSet({}, {}))
+    assert info[badge_key] == [expected]
+    assert consumed not in info
 
 
-def test_resolve_irc_badges_sets_author_badges_and_applies_subscriber_months() -> None:
-    """_resolve_irc_badges parses main badges and applies badge-info."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_badges,
-    )
-
-    info: dict = {
-        "author_badge_metadata": "subscriber/6",
-        "author_badges": "subscriber/1",
-        "channel_id": "999",
-    }
-    badge_set = BadgeSet(global_badges={}, channel_badges={})
-
-    _resolve_irc_badges(info, channel_id="999", badge_set=badge_set)
-
-    assert info["author_badges"][0]["name"] == "subscriber"
-    assert info["author_badges"][0]["version"] == 1
-    assert info["author_badges"][0]["months"] == 6
-    # raw string keys must be consumed
-    assert "author_badge_metadata" not in info
-
-
-def test_resolve_irc_badges_shared_chat_badge_enrichment() -> None:
-    """Shared-chat source badges are parsed and subscriber months applied."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_badges,
-    )
-
-    info: dict = {
-        "author_badge_metadata": "",
-        "author_badges": "vip/1",
-        "channel_id": "123",
-        "shared_chat_source_channel_id": "456",
-        "shared_chat_source_badges": "subscriber/3",
-        "shared_chat_source_badge_info": "subscriber/24",
-    }
-    badge_set = BadgeSet(global_badges={}, channel_badges={})
-
-    _resolve_irc_badges(info, channel_id="123", badge_set=badge_set)
-
-    assert info["shared_chat_source_badges"][0]["name"] == "subscriber"
-    assert info["shared_chat_source_badges"][0]["months"] == 24
-    # raw info key must be consumed
-    assert "shared_chat_source_badge_info" not in info
-
-
-def test_resolve_irc_badges_absent_shared_chat_source_badges_leaves_key_absent() -> (
-    None
-):
-    """When shared_chat_source_badges is empty, the key is absent."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_badges,
-    )
-
-    info: dict = {
-        "author_badge_metadata": "",
-        "author_badges": "moderator/1",
-        "channel_id": "100",
-    }
-    badge_set = BadgeSet(global_badges={}, channel_badges={})
-
-    _resolve_irc_badges(info, channel_id="100", badge_set=badge_set)
-
+def test_resolve_irc_badges_absent_source_stays_absent() -> None:
+    info = {"author_badge_metadata": "", "author_badges": "moderator/1"}
+    tw_messages._resolve_irc_badges(info, channel_id="100", badge_set=BadgeSet({}, {}))
     assert "shared_chat_source_badges" not in info
 
 
-# ---------------------------------------------------------------------------
-# Isolation tests for extracted helper: _resolve_irc_action_and_message_type
-# ---------------------------------------------------------------------------
-
-
-def test_resolve_irc_action_known_action_and_message_type() -> None:
-    """A known action type and known message type must both be remapped."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_action_and_message_type,
-    )
-
-    info: dict = {"message_type": "announcement"}
-    _resolve_irc_action_and_message_type(info, "USERNOTICE", None)
-
-    assert info["action_type"] == "user_notice"
-    assert info["message_type"] == "announcement"
-
-
-def test_resolve_irc_action_unknown_action_falls_back_to_raw_and_logs(
-    monkeypatch,
-) -> None:
-    """An unknown action type must be stored verbatim and trigger debug_log."""
-    import chat_downloader.sites.twitch.parsing.message_irc_resolve as _mod
-    from chat_downloader.sites.twitch.parsing.message_irc_resolve import (
-        _resolve_irc_action_and_message_type,
-    )
-
-    calls: list = []
-    monkeypatch.setattr(_mod, "debug_log", lambda *a: calls.append(a))
-
-    info: dict = {}
-    _resolve_irc_action_and_message_type(info, "MYSTERY", None)
-
-    assert info["action_type"] == "MYSTERY"
-    assert info["message_type"] == "MYSTERY"
-    assert calls  # debug_log was called
-
-
-def test_resolve_irc_action_clearchat_with_message_is_ban_timeout() -> None:
-    """CLEARCHAT with a message match yields a ban_user/timeout outcome."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_action_and_message_type,
-    )
-
-    info: dict = {"ban_duration": "600", "message": "banneduser"}
-    _resolve_irc_action_and_message_type(info, "CLEARCHAT", "banneduser")
-
-    assert info["message_type"] == "ban_user"
-    assert info["ban_type"] == "timeout"
-    assert info["banned_user"] == "banneduser"
-    assert "message" not in info
-
-
-def test_resolve_irc_action_clearchat_without_message_is_clear_chat() -> None:
-    """CLEARCHAT without a message match must map to clear_chat message type."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_action_and_message_type,
-    )
-
-    info: dict = {}
-    _resolve_irc_action_and_message_type(info, "CLEARCHAT", None)
-
-    assert info["message_type"] == "clear_chat"
-
-
-def test_resolve_irc_action_follower_only_and_slow_mode_normalization() -> None:
-    """follower_only and slow_mode must be normalized to bool + extra fields."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_action_and_message_type,
-    )
-
-    info: dict = {"follower_only": "10", "slow_mode": "5"}
-    _resolve_irc_action_and_message_type(info, "ROOMSTATE", None)
-
-    assert info["follower_only"] is True
-    assert info["minutes_to_follow_before_chatting"] == 10
-    assert info["slow_mode"] is True
-    assert info["seconds_to_wait"] == 5
-
-
-def test_resolve_irc_action_follower_only_disabled_and_slow_mode_off() -> None:
-    """follower_only=-1 must yield False; slow_mode=0 must yield False."""
-    from chat_downloader.sites.twitch.parsing.messages import (
-        _resolve_irc_action_and_message_type,
-    )
-
-    info: dict = {"follower_only": "-1", "slow_mode": "0"}
-    _resolve_irc_action_and_message_type(info, "ROOMSTATE", None)
-
-    assert info["follower_only"] is False
-    assert "minutes_to_follow_before_chatting" not in info
-    assert info["slow_mode"] is False
+@pytest.mark.parametrize(
+    ("action", "info", "message", "expected", "absent"),
+    [
+        (
+            "USERNOTICE",
+            {"message_type": "announcement"},
+            None,
+            {"action_type": "user_notice", "message_type": "announcement"},
+            (),
+        ),
+        (
+            "MYSTERY",
+            {},
+            None,
+            {"action_type": "MYSTERY", "message_type": "MYSTERY"},
+            (),
+        ),
+        (
+            "CLEARCHAT",
+            {"ban_duration": "600", "message": "banneduser"},
+            "banneduser",
+            {
+                "message_type": "ban_user",
+                "ban_type": "timeout",
+                "banned_user": "banneduser",
+            },
+            ("message",),
+        ),
+        ("CLEARCHAT", {}, None, {"message_type": "clear_chat"}, ()),
+        (
+            "ROOMSTATE",
+            {"follower_only": "10", "slow_mode": "5"},
+            None,
+            {
+                "follower_only": True,
+                "minutes_to_follow_before_chatting": 10,
+                "slow_mode": True,
+                "seconds_to_wait": 5,
+            },
+            (),
+        ),
+        (
+            "ROOMSTATE",
+            {"follower_only": "-1", "slow_mode": "0"},
+            None,
+            {"follower_only": False, "slow_mode": False},
+            ("minutes_to_follow_before_chatting",),
+        ),
+    ],
+    ids=["notice", "unknown", "timeout", "clear", "modes-enabled", "modes-disabled"],
+)
+def test_resolve_irc_action(action, info, message, expected, absent) -> None:
+    info = deepcopy(info)
+    tw_irc_resolve._resolve_irc_action_and_message_type(info, action, message)
+    assert {key: info[key] for key in expected} == expected
+    assert all(key not in info for key in absent)

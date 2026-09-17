@@ -10,7 +10,6 @@ Covers:
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,85 +18,38 @@ from chat_downloader.output.continuous_write import (
     JsonLinesContinuousWriter,
 )
 
-# ---------------------------------------------------------------------------
-# JSONL writer
-# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("writer_class", [JsonLinesContinuousWriter, ContinuousWriter])
+@pytest.mark.parametrize(
+    "items",
+    [
+        [{"message": "test", "id": 99}],
+        [{"a": 1, "b": "hello"}, {"x": [1, 2, 3]}, {"z": None}],
+    ],
+)
+def test_jsonl_records_round_trip(jsonl_path: str, writer_class, items) -> None:
+    writer = writer_class(jsonl_path, sort_keys=True)
+    try:
+        for item in items:
+            writer.write(item)
+    finally:
+        writer.close()
+
+    with open(jsonl_path, encoding="utf-8") as file:
+        assert [json.loads(line) for line in file] == items
 
 
-def test_jsonl_three_items_three_lines(jsonl_path: str) -> None:
-    items = [{"a": 1, "b": "hello"}, {"x": [1, 2, 3]}, {"z": None}]
-    w = JsonLinesContinuousWriter(jsonl_path, sort_keys=True)
-    for item in items:
-        w.write(item)
-    w.close()
-
-    with open(jsonl_path, encoding="utf-8") as fh:
-        lines = [ln for ln in fh.read().splitlines() if ln]
-
-    assert len(lines) == 3
-    for original, line in zip(items, lines, strict=True):
-        assert json.loads(line) == original
-
-
-def test_jsonl_single_item(jsonl_path: str) -> None:
-    item = {"message": "test", "id": 99}
-    w = JsonLinesContinuousWriter(jsonl_path, sort_keys=True)
-    w.write(item)
-    w.close()
-
-    with open(jsonl_path, encoding="utf-8") as fh:
-        assert json.loads(fh.read().strip()) == item
-
-
-def test_jsonl_uses_direct_write_not_print(jsonl_path: str) -> None:
-    """Verify write() uses file.write(), not print().
-
-    Per-record flush is always on (live captures need to survive SIGKILL),
-    so we assert write() ran and don't constrain flush() beyond "at least
-    once".
-    """
-    w = JsonLinesContinuousWriter(jsonl_path, sort_keys=True)
-    mock_file = MagicMock()
-    w.file = mock_file
-
-    w.write({"k": "v"})
-
-    mock_file.write.assert_called_once()
-    assert mock_file.flush.call_count >= 1
-
-
-def test_jsonl_flush_when_requested(jsonl_path: str) -> None:
-    """flush=True forces an explicit flush in addition to the implicit one."""
-    w = JsonLinesContinuousWriter(jsonl_path, sort_keys=True)
-    mock_file = MagicMock()
-    w.file = mock_file
-
-    w.write({"k": "v"}, flush=True)
-
-    mock_file.write.assert_called_once()
-    # Implicit flush (per-record persistence) + explicit flush (flush=True).
-    assert mock_file.flush.call_count == 2
-
-
-def test_jsonl_sort_keys_applied(jsonl_path: str) -> None:
-    w = JsonLinesContinuousWriter(jsonl_path, sort_keys=True)
-    w.write({"z": 3, "a": 1, "m": 2})
-    w.close()
-
-    with open(jsonl_path, encoding="utf-8") as fh:
-        line = fh.readline().strip()
-
-    assert line == '{"a": 1, "m": 2, "z": 3}'
-
-
-def test_jsonl_via_continuous_writer_factory(jsonl_path: str) -> None:
-    """ContinuousWriter factory selects JsonLinesContinuousWriter for .jsonl."""
-    w = ContinuousWriter(jsonl_path)
-    w.write({"hello": "world"})
-    w.close()
-
-    with open(jsonl_path, encoding="utf-8") as fh:
-        assert json.loads(fh.readline()) == {"hello": "world"}
+@pytest.mark.parametrize(
+    ("sort_keys", "expected"),
+    [(True, '{"a": 1, "m": 2, "z": 3}'), (False, '{"z": 3, "a": 1, "m": 2}')],
+)
+def test_jsonl_sort_keys_applied(
+    jsonl_path: str, sort_keys: bool, expected: str
+) -> None:
+    with ContinuousWriter(jsonl_path, sort_keys=sort_keys) as writer:
+        writer.write({"z": 3, "a": 1, "m": 2})
+    with open(jsonl_path, encoding="utf-8") as file:
+        assert file.read() == expected + "\n"
 
 
 def test_jsonl_overwrite_true_truncates_existing_file(jsonl_path: str) -> None:

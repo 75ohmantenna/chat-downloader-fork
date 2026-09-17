@@ -107,14 +107,6 @@ def _create_chat_for_site(
     return chat
 
 
-def _match_site(owner: _SiteSessionOwner, request: ChatRequest) -> Chat | None:
-    for site in get_all_sites():
-        match_info = site.matches(request.url)
-        if match_info:
-            return _create_chat_for_site(owner, site, match_info, request)
-    return None
-
-
 def dispatch_chat(owner: _SiteSessionOwner, request: ChatRequest) -> Chat:
     """Resolve one request into a fully configured provider chat."""
     if not request.url:
@@ -128,9 +120,10 @@ def dispatch_chat(owner: _SiteSessionOwner, request: ChatRequest) -> Chat:
     elif not parsed.scheme:
         effective_request = request.with_updates(url="https://" + request.url)
 
-    chat = _match_site(owner, effective_request)
-    if chat is not None:
-        return chat
+    for site in get_all_sites():
+        match_info = site.matches(effective_request.url)
+        if match_info:
+            return _create_chat_for_site(owner, site, match_info, effective_request)
 
     parsed = urlparse(effective_request.url)
     if parsed.netloc:

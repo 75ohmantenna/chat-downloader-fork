@@ -2,51 +2,29 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
 
-from chat_downloader.models import ChatRequest
+from chat_downloader.models import ChatRequest, SiteDefault
 from chat_downloader.runtime import chat_pipeline
 from chat_downloader.sites.models import Chat
 
 apply_message_limit = chat_pipeline._apply_message_limit
-build_output_writer = chat_pipeline._build_output_writer
 configure_chat = chat_pipeline.configure_chat
 configure_formatter = chat_pipeline._configure_formatter
 configure_output_writer = chat_pipeline._configure_output_writer
 configure_timeouts = chat_pipeline._configure_timeouts
 
 
-class _FakeWriter:
-    def __init__(
-        self,
-        output_file: str,
-        *,
-        sort_keys: bool,
-        overwrite: bool,
-        lazy_initialise: bool,
-    ) -> None:
-        self.output_file = output_file
-        self.sort_keys = sort_keys
-        self.overwrite = overwrite
-        self.lazy_initialise = lazy_initialise
-
-
-def test_apply_message_limit_uses_islice_for_positive_integers() -> None:
+@pytest.mark.parametrize(("limit", "expected"), [(2, [0, 1]), (None, [0, 1, 2, 3, 4])])
+def test_message_limit_preserves_selected_items(limit, expected) -> None:
     chat = Chat(iter(range(5)), title="Example")
-
-    apply_message_limit(chat, 2)
-
-    assert list(cast("Any", chat.chat)) == [0, 1]
-
-
-def test_apply_message_limit_none_is_no_op() -> None:
-    chat = Chat(iter(range(5)), title="Example")
-    apply_message_limit(chat, None)
-    assert list(cast("Any", chat.chat)) == [0, 1, 2, 3, 4]
+    apply_message_limit(chat, limit)
+    assert list(cast("Any", chat.chat)) == expected
 
 
 def test_apply_message_limit_propagates_close_to_source() -> None:
@@ -75,144 +53,42 @@ def test_apply_message_limit_closes_source_when_iteration_raises() -> None:
     source.close.assert_called_once()
 
 
-def test_configure_timeouts_wraps_chat_and_installs_callbacks(
-    monkeypatch,
-) -> None:
-    callback_logs = []
-    time_values = iter([100.0, 103.5])
-
+@pytest.mark.parametrize(("timeout", "inactivity"), [(5, 7), (None, 7), (5, None)])
+def test_timeout_callbacks_record_termination(monkeypatch, timeout, inactivity) -> None:
     class FakeTimedGenerator:
-        def __init__(self, generator, timeout, inactivity_timeout) -> None:
-            self.source = generator
-            self.timeout = timeout
-            self.inactivity_timeout = inactivity_timeout
-            self.on_timeout = None
-            self.on_inactivity_timeout = None
+        on_timeout = None
+        on_inactivity_timeout = None
 
-    chat = SimpleNamespace(chat=iter([1, 2, 3]), diagnostics={})
+        def __init__(self, source, timeout, inactivity_timeout) -> None:
+            self.source = source
 
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.TimedGenerator",
-        FakeTimedGenerator,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.time.monotonic",
-        lambda: next(time_values),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.log",
-        lambda level, message: callback_logs.append((level, str(message))),
-    )
-
-    configure_timeouts(chat, timeout=5, inactivity_timeout=7)
-
-    assert isinstance(chat.chat, FakeTimedGenerator)
-    assert chat.chat.timeout == 5
-    assert chat.chat.inactivity_timeout == 7
-
-    assert chat.chat.on_timeout is not None
-    assert chat.chat.on_inactivity_timeout is not None
-    chat.chat.on_timeout()
-    chat.chat.on_inactivity_timeout()
-
-    assert callback_logs == [
-        ("debug", "Timeout occurred after 3.5 seconds."),
-        ("debug", "Inactivity timeout occurred after 7 seconds."),
-    ]
+    chat = Chat(iter(()))
+    monkeypatch.setattr(chat_pipeline, "TimedGenerator", FakeTimedGenerator)
+    configure_timeouts(chat, timeout, inactivity)
+    wrapped = cast("Any", chat.chat)
+    for callback, duration, reason in (
+        (wrapped.on_timeout, timeout, "timeout"),
+        (wrapped.on_inactivity_timeout, inactivity, "inactivity_timeout"),
+    ):
+        if duration is None:
+            assert callback is None
+        else:
+            callback()
+            assert chat.diagnostics["termination_reason"] == reason
 
 
-def test_configure_timeouts_noop_when_both_timeouts_are_none() -> None:
-    source = iter([1, 2, 3])
+@pytest.mark.parametrize("has_source", [True, False])
+def test_timeouts_leave_absent_source_or_disabled_deadlines_untouched(
+    has_source,
+) -> None:
+    source = iter(()) if has_source else None
     chat = SimpleNamespace(chat=source)
-
-    configure_timeouts(chat, timeout=None, inactivity_timeout=None)
-
+    configure_timeouts(chat, None if has_source else 30, None)
     assert chat.chat is source
 
 
-def test_configure_timeouts_chat_none() -> None:
-    chat = Chat()
-    chat.chat = None
-    configure_timeouts(chat, timeout=30.0, inactivity_timeout=None)
-    assert chat.chat is None  # Returns early — no TimedGenerator wrapping
-
-
-@pytest.mark.parametrize(
-    ("timeout", "inactivity_timeout", "timeout_callback", "inactivity_callback"),
-    [
-        (None, 7, False, True),
-        (5, None, True, False),
-    ],
-)
-def test_configure_timeouts_installs_only_numeric_timeout_callbacks(
-    monkeypatch,
-    timeout,
-    inactivity_timeout,
-    timeout_callback,
-    inactivity_callback,
-) -> None:
-    class FakeTimedGenerator:
-        def __init__(self, generator, timeout, inactivity_timeout) -> None:
-            self.source = generator
-            self.timeout = timeout
-            self.inactivity_timeout = inactivity_timeout
-            self.on_timeout = None
-            self.on_inactivity_timeout = None
-
-    chat = SimpleNamespace(chat=iter([1, 2, 3]), diagnostics={})
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.TimedGenerator",
-        FakeTimedGenerator,
-    )
-
-    configure_timeouts(chat, timeout=timeout, inactivity_timeout=inactivity_timeout)
-
-    assert isinstance(chat.chat, FakeTimedGenerator)
-    assert (chat.chat.on_timeout is not None) is timeout_callback
-    assert (chat.chat.on_inactivity_timeout is not None) is inactivity_callback
-
-
-def test_configure_formatter_installs_item_formatter_wrapper(
-    monkeypatch,
-) -> None:
-    formatter_calls = []
-
-    class FakeFormatter:
-        def __init__(self, format_file) -> None:
-            self.format_file = format_file
-
-        def format(self, message, format_name=None) -> str:
-            formatter_calls.append((self.format_file, message, format_name))
-            return f"formatted:{message['message_type']}:{format_name}"
-
-    installed: list = []
-    chat = SimpleNamespace(set_formatter=installed.append)
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.ItemFormatter",
-        FakeFormatter,
-    )
-
-    configure_formatter(chat, "formats/custom.txt", "youtube")
-
-    assert len(installed) == 1
-    format_callable = installed[0]
-    assert format_callable({"message_type": "text_message"}) == (
-        "formatted:text_message:youtube"
-    )
-    assert formatter_calls == [
-        ("formats/custom.txt", {"message_type": "text_message"}, "youtube"),
-    ]
-
-
 class _FakeSite:
-    """Minimal site exposing the live-format capability contract.
-
-    The pipeline is provider-neutral: it asks the site whether a status is live
-    and how to remap the format. This fake stands in for any site, so these
-    tests assert *delegation* rather than YouTube-specific values (those live in
-    the YouTube suite).
-    """
+    """Provider-neutral live-format capability."""
 
     def __init__(
         self,
@@ -230,108 +106,62 @@ class _FakeSite:
         return self._overrides.get(format_name, format_name)
 
 
-def test_configure_formatter_applies_site_live_override_for_live_status(
-    monkeypatch,
+@pytest.mark.parametrize(("status", "format_name", "has_site", "expected"),[
+        ("live", "default", True, "live-default:hello"),
+        ("live", "custom", True, "live-custom:hello"),
+        ("past", "default", True, "default:hello"),
+        ("live", "neutral", True, "neutral:hello"),
+        ("live", "default", False, "default:hello"),
+        ("live", SiteDefault("default"), True, "default:hello"),
+    ],
+)
+def test_formatter_resolves_live_overrides_and_custom_file(
+    tmp_path, status, format_name, has_site, expected
 ) -> None:
-    formatter_calls = []
-
-    class FakeFormatter:
-        def __init__(self, format_file) -> None:
-            self.format_file = format_file
-
-        def format(self, message, format_name=None) -> str:
-            formatter_calls.append((self.format_file, message, format_name))
-            return "formatted"
-
-    live_site = _FakeSite(
-        live_statuses=frozenset({"live"}),
-        overrides={"default": "live_default", "custom": "live_custom"},
+    formats = tmp_path / "formats.json"
+    formats.write_text(
+        json.dumps(
+            {
+                name: {"template": prefix + ":{message}"}
+                for name, prefix in (
+                    ("default", "default"),
+                    ("custom", "custom"),
+                    ("live_default", "live-default"),
+                    ("live_custom", "live-custom"),
+                    ("neutral", "neutral"),
+                )
+            }
+        )
     )
-    default_chat = Chat(iter(()), status="live")
-    default_chat.site = cast("Any", live_site)
-    custom_chat = Chat(iter(()), status="live")
-    custom_chat.site = cast("Any", live_site)
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.ItemFormatter",
-        FakeFormatter,
-    )
-
-    configure_formatter(default_chat, "formats/custom.txt", "default")
-    configure_formatter(custom_chat, "formats/custom.txt", "custom")
-
-    assert default_chat.format({"message_type": "text_message"}) == "formatted"
-    assert custom_chat.format({"message_type": "text_message"}) == "formatted"
-    assert formatter_calls == [
-        ("formats/custom.txt", {"message_type": "text_message"}, "live_default"),
-        ("formats/custom.txt", {"message_type": "text_message"}, "live_custom"),
-    ]
+    chat = Chat(iter(()), status=status)
+    if has_site:
+        chat.site = cast(
+            "Any",
+            _FakeSite(
+                live_statuses=frozenset({"live"}),
+                overrides={"default": "live_default", "custom": "live_custom"},
+            ),
+        )
+    configure_formatter(chat, str(formats), format_name)
+    assert chat.format({"message": "hello"}) == expected
 
 
-def test_configure_formatter_keeps_format_when_status_not_live(
-    monkeypatch,
+def test_output_options_preserve_append_sort_order_and_multiple_formats(
+    tmp_path,
 ) -> None:
-    formatter_calls = []
-
-    class FakeFormatter:
-        def __init__(self, format_file) -> None:
-            self.format_file = format_file
-
-        def format(self, message, format_name=None) -> str:
-            formatter_calls.append((self.format_file, message, format_name))
-            return "formatted"
-
-    live_site = _FakeSite(
-        live_statuses=frozenset({"live"}),
-        overrides={"default": "live_default"},
-    )
-    # Replay status: site declares override but the status is not live, so the
-    # pipeline must not remap.
-    replay_chat = Chat(iter(()), status="past")
-    replay_chat.site = cast("Any", live_site)
-    # A site with no overrides leaves the format untouched even when live.
-    neutral_chat = Chat(iter(()), status="live")
-    neutral_chat.site = cast("Any", _FakeSite(live_statuses=frozenset({"live"})))
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.chat_pipeline.ItemFormatter",
-        FakeFormatter,
-    )
-
-    configure_formatter(replay_chat, "formats/custom.txt", "default")
-    configure_formatter(neutral_chat, "formats/custom.txt", "24_hour")
-
-    assert replay_chat.format({"message_type": "text_message"}) == "formatted"
-    assert neutral_chat.format({"message_type": "text_message"}) == "formatted"
-    assert formatter_calls == [
-        ("formats/custom.txt", {"message_type": "text_message"}, "default"),
-        ("formats/custom.txt", {"message_type": "text_message"}, "24_hour"),
-    ]
-
-
-def test_configure_output_writer_supports_multiple_outputs() -> None:
-    attached = []
-
-    chat = SimpleNamespace(
-        status="live",
-        attach_writer=attached.append,
-    )
+    raw, formatted = tmp_path / "chat.jsonl", tmp_path / "chat.txt"
+    raw.write_text('{"existing": true}\n')
+    formatted.write_text("existing\n")
+    message = {"z": 1, "a": 2}
+    chat = Chat(iter([message]))
+    chat.set_formatter(lambda _: "hello")
     request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc",
-        output=["first.jsonl", "second.txt"],
-        sort_keys=False,
-        overwrite=False,
+        output=[str(raw), str(formatted)], sort_keys=False, overwrite=False
     )
-
-    configure_output_writer(chat, request, writer_factory=_FakeWriter)
-
-    assert [writer.output_file for writer in attached] == [
-        "first.jsonl",
-        "second.txt",
-    ]
-    assert attached[0].sort_keys is False
-    assert attached[0].overwrite is False
-    assert attached[0].lazy_initialise is True
+    configure_output_writer(chat, request)
+    assert list(chat) == [message]
+    assert raw.read_text() == '{"existing": true}\n{"z": 1, "a": 2}\n'
+    assert formatted.read_text() == "existing\nhello\n"
 
 
 def test_configure_output_writer_deduplicates_duplicate_paths(tmp_path) -> None:
@@ -400,21 +230,6 @@ def test_configure_output_writer_rejects_json_output(tmp_path) -> None:
 
     with pytest.raises(ValueError, match=r"Use a \.jsonl or \.txt output path"):
         configure_output_writer(chat, request)
-
-
-def test_build_output_writer_copies_request_output_settings() -> None:
-    request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc",
-        sort_keys=False,
-        overwrite=False,
-    )
-
-    writer = build_output_writer("chat.jsonl", request, writer_factory=_FakeWriter)
-
-    assert writer.output_file == "chat.jsonl"
-    assert writer.sort_keys is False
-    assert writer.overwrite is False
-    assert writer.lazy_initialise is True
 
 
 def test_configure_chat_composes_real_limit_formatter_and_writer(tmp_path) -> None:

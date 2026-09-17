@@ -189,55 +189,23 @@ def test_cookies() -> None:
     _get_one_message(cookies=None)
 
 
-def test_cookie_operations() -> None:
-    """Test cookie set/get operations."""
-    from chat_downloader import ChatDownloader
-
+@pytest.fixture
+def cookie_session():
     session = ChatDownloader()
+    try:
+        yield session
+    finally:
+        session.close()
 
-    # Test setting and getting cookies
-    session.set_cookie_value(
-        domain=".youtube.com",
-        name="test_cookie",
-        value="test_value",
+
+def test_cookie_operations(cookie_session) -> None:
+    cookie_session.set_cookie_value(".youtube.com", "test_cookie", "test_value")
+    assert cookie_session.get_cookie_value("test_cookie") == "test_value"
+    assert (
+        cookie_session.get_cookie_value("nonexistent", default="default") == "default"
     )
-
-    # Get cookie value
-    value = session.get_cookie_value("test_cookie")
-    assert value == "test_value"
-
-    # Get non-existent cookie
-    value = session.get_cookie_value("nonexistent", default="default")
-    assert value == "default"
-
-    session.close()
-
-
-def test_clear_cookies() -> None:
-    """Test clearing cookies."""
-    from chat_downloader import ChatDownloader
-
-    session = ChatDownloader()
-
-    # Set a cookie
-    session.set_cookie_value(
-        domain=".youtube.com",
-        name="test_cookie",
-        value="test_value",
-    )
-
-    # Verify it exists
-    value = session.get_cookie_value("test_cookie")
-    assert value == "test_value"
-
-    # Clear cookies
-    session.clear_cookies()
-
-    # Verify it's gone
-    value = session.get_cookie_value("test_cookie")
-    assert value is None
-
-    session.close()
+    cookie_session.clear_cookies()
+    assert cookie_session.get_cookie_value("test_cookie") is None
 
 
 def test_clear_cookies_disables_future_cookie_file_reloads() -> None:
@@ -274,65 +242,16 @@ def test_clear_cookies_disables_future_cookie_file_reloads() -> None:
         session.close()
 
 
-def test_cookie_with_expiry() -> None:
-    """Test setting cookie with expiry time."""
-    import time
-
-    from chat_downloader import ChatDownloader
-
-    session = ChatDownloader()
-
-    expire_time = int(time.time()) + 3600  # 1 hour from now
-
-    session.set_cookie_value(
-        domain=".youtube.com",
-        name="expiring_cookie",
-        value="expires_soon",
-        expire_time=expire_time,
+@pytest.mark.parametrize(
+    "options",
+    [{"expire_time": 4102444800}, {"path": "/watch"}, {"secure": True}],
+    ids=["expiry", "path", "secure"],
+)
+def test_cookie_options(cookie_session, options) -> None:
+    cookie_session.set_cookie_value(
+        ".youtube.com", "custom_cookie", "custom_value", **options
     )
-
-    value = session.get_cookie_value("expiring_cookie")
-    assert value == "expires_soon"
-
-    session.close()
-
-
-def test_cookie_with_path() -> None:
-    """Test setting cookie with custom path."""
-    from chat_downloader import ChatDownloader
-
-    session = ChatDownloader()
-
-    session.set_cookie_value(
-        domain=".youtube.com",
-        name="path_cookie",
-        value="custom_path",
-        path="/watch",
-    )
-
-    value = session.get_cookie_value("path_cookie")
-    assert value == "custom_path"
-
-    session.close()
-
-
-def test_secure_cookie() -> None:
-    """Test setting secure cookie."""
-    from chat_downloader import ChatDownloader
-
-    session = ChatDownloader()
-
-    session.set_cookie_value(
-        domain=".youtube.com",
-        name="secure_cookie",
-        value="secure_value",
-        secure=True,
-    )
-
-    value = session.get_cookie_value("secure_cookie")
-    assert value == "secure_value"
-
-    session.close()
+    assert cookie_session.get_cookie_value("custom_cookie") == "custom_value"
 
 
 # ── DownloaderConfig integration ──────────────────────────────────────────
@@ -354,39 +273,17 @@ def test_config_stores_init_kwargs() -> None:
     session.close()
 
 
-def test_removed_init_params_property_raises_attribute_error() -> None:
-    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
-    session = ChatDownloader(proxy="socks5://127.0.0.1:1080")
-    try:
-        with pytest.raises(AttributeError):
-            _ = session.init_params
-    finally:
-        session.close()
-
-
-def test_removed_init_params_property_does_not_expose_config() -> None:
-    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
-    session = ChatDownloader(headers={"X-Custom": "val"}, cookies=None)
-    try:
-        with pytest.raises(AttributeError):
-            _ = session.init_params
-    finally:
-        session.close()
-
-
-def test_removed_init_params_property_cannot_be_mutated() -> None:
-    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
-    session = ChatDownloader(proxy="http://p:8080")
-    try:
-        with pytest.raises(AttributeError):
-            _ = session.init_params
-    finally:
-        session.close()
-
-
-def test_removed_init_params_property_emits_no_deprecation_warning() -> None:
-    """Accessing init_params (removed in 0.3.0) must raise AttributeError."""
-    session = ChatDownloader()
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"proxy": "socks5://127.0.0.1:1080"},
+        {"headers": {"X-Custom": "val"}, "cookies": None},
+        {"proxy": "http://p:8080"},
+        {},
+    ],
+)
+def test_removed_init_params_property_raises_attribute_error(options) -> None:
+    session = ChatDownloader(**options)
     try:
         with pytest.raises(AttributeError):
             _ = session.init_params

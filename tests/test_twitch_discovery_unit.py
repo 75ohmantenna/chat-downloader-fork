@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock, patch
 
+import pytest
+
 from chat_downloader.sites.twitch import discovery, url_generation
 from chat_downloader.sites.twitch.graphql_client import (
     _download_gql as _gql_download_gql,
@@ -78,40 +80,6 @@ def test_discovery_get_user_clips_remaps_clip_fields() -> None:
     ]
 
 
-def test_discovery_get_user_clips_stops_for_zero_limit_and_empty_payload() -> None:
-    calls = []
-
-    def download_gql_func(_session_post, _query):
-        calls.append("called")
-        return []
-
-    assert (
-        list(
-            discovery.get_user_clips(
-                session_post=lambda *args, **kwargs: None,
-                download_gql_func=download_gql_func,
-                username="streamer",
-                limit=0,
-            ),
-        )
-        == []
-    )
-    assert calls == []
-
-    assert (
-        list(
-            discovery.get_user_clips(
-                session_post=lambda *args, **kwargs: None,
-                download_gql_func=download_gql_func,
-                username="streamer",
-                limit=5,
-            ),
-        )
-        == []
-    )
-    assert calls == ["called"]
-
-
 def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes() -> (
     None
 ):
@@ -127,6 +95,7 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
                             "id": "123",
                             "videos": {
                                 "edges": [
+                                    "not-a-dict",
                                     {"cursor": "cursor-1", "node": None},
                                     {
                                         "cursor": "cursor-2",
@@ -185,7 +154,7 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
             session_post=lambda *args, **kwargs: None,
             download_gql_func=download_gql_func,
             username="streamer",
-            limit=3,
+            limit=4,
         ),
     )
 
@@ -196,95 +165,32 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
     assert result[1]["resource_restriction"] == "restricted"
 
 
-def test_discovery_get_user_videos_skips_non_dict_edges() -> None:
-    """A malformed non-dict edge is skipped without aborting the page."""
-
-    def download_gql_func(_session_post, _query):
-        return [
-            {
-                "data": {
-                    "user": {
-                        "id": "123",
-                        "videos": {
-                            "edges": [
-                                "not-a-dict",
-                                {
-                                    "cursor": "cursor-1",
-                                    "node": {
-                                        "id": "9",
-                                        "owner": {"login": "streamer"},
-                                        "title": "Video 9",
-                                    },
-                                },
-                            ],
-                            "pageInfo": {"hasNextPage": False},
-                        },
-                    },
-                },
-            },
-        ]
-
-    result = list(
-        discovery.get_user_videos(
-            session_post=lambda *args, **kwargs: None,
-            download_gql_func=download_gql_func,
-            username="streamer",
-            limit=5,
+@pytest.mark.parametrize(
+    ("discover", "kwargs", "payload", "limit"),
+    [
+        (discovery.get_user_clips, {"username": "streamer"}, [], 0),
+        (discovery.get_user_clips, {"username": "streamer"}, [], 5),
+        (discovery.get_user_videos, {"username": "streamer"}, [], 0),
+        (discovery.get_user_videos, {"username": "streamer"}, [], 5),
+        (
+            discovery.get_user_videos,
+            {"username": "streamer"},
+            [{"data": {"user": {"id": "123", "videos": None}}}],
+            5,
         ),
-    )
-
-    assert [item["id"] for item in result] == ["9"]
-
-
-def test_discovery_get_user_videos_stops_for_zero_limit_empty_payload_and_missing_videos() -> (  # noqa: E501
-    None
+        (discovery.get_top_livestreams, {}, [{"data": {"streams": {"edges": []}}}], 0),
+        (discovery.get_top_livestreams, {}, [{"data": {"streams": {"edges": []}}}], 5),
+    ],
+)
+def test_discovery_stops_for_zero_limit_or_empty_result(
+    discover, kwargs, payload, limit
 ):
-    calls = []
-
-    def empty_download(_session_post, _query):
-        calls.append("empty")
-        return []
-
-    assert (
-        list(
-            discovery.get_user_videos(
-                session_post=lambda *args, **kwargs: None,
-                download_gql_func=empty_download,
-                username="streamer",
-                limit=0,
-            ),
-        )
-        == []
-    )
-    assert calls == []
-
-    assert (
-        list(
-            discovery.get_user_videos(
-                session_post=lambda *args, **kwargs: None,
-                download_gql_func=empty_download,
-                username="streamer",
-                limit=5,
-            ),
-        )
-        == []
-    )
-    assert calls == ["empty"]
-
-    def missing_videos_download(_session_post, _query):
-        return [{"data": {"user": {"id": "123", "videos": None}}}]
-
-    assert (
-        list(
-            discovery.get_user_videos(
-                session_post=lambda *args, **kwargs: None,
-                download_gql_func=missing_videos_download,
-                username="streamer",
-                limit=5,
-            ),
-        )
-        == []
-    )
+    download = Mock(return_value=payload)
+    result = list(discover(Mock(), download, limit=limit, **kwargs))
+    assert result == []
+    assert download.call_count == (1 if limit else 0)
+    if discover is discovery.get_top_livestreams and limit:
+        assert download.call_args.args[1][0]["variables"]["limit"] == 5
 
 
 def test_discovery_get_top_livestreams_logs_warning_when_streams_missing(
@@ -306,39 +212,6 @@ def test_discovery_get_top_livestreams_logs_warning_when_streams_missing(
     assert any(
         "Could not retrieve Twitch livestream data" in r.message for r in caplog.records
     )
-
-
-def test_discovery_get_top_livestreams_stops_for_zero_limit_and_empty_edges() -> None:
-    calls = []
-
-    def empty_edges_download(_session_post, query):
-        calls.append(query)
-        return [{"data": {"streams": {"edges": []}}}]
-
-    assert (
-        list(
-            discovery.get_top_livestreams(
-                session_post=lambda *args, **kwargs: None,
-                download_gql_func=empty_edges_download,
-                limit=0,
-            ),
-        )
-        == []
-    )
-    assert calls == []
-
-    assert (
-        list(
-            discovery.get_top_livestreams(
-                session_post=lambda *args, **kwargs: None,
-                download_gql_func=empty_edges_download,
-                limit=5,
-            ),
-        )
-        == []
-    )
-    assert calls
-    assert calls[0][0]["variables"]["limit"] == 5
 
 
 def test_discovery_get_top_livestreams_paginates_and_remaps_none_nodes() -> None:

@@ -121,8 +121,6 @@ def _describe_operation_names(operation_names: list[str] | None) -> str:
     """Return a compact operation-name description for error messages."""
     if not operation_names:
         return "unknown operation"
-    if len(operation_names) == 1:
-        return operation_names[0]
     return ", ".join(operation_names)
 
 
@@ -230,17 +228,16 @@ def _download_gql(
         {
             **op,
             "operationName": PERSISTED_OPERATION_NAMES.get(
-                str(op.get("operationName", "")),
-                str(op.get("operationName", "")),
+                operation_name, operation_name
             ),
             "extensions": {
                 "persistedQuery": {
                     "version": 1,
-                    "sha256Hash": OPERATION_HASHES[str(op.get("operationName", ""))],
+                    "sha256Hash": OPERATION_HASHES[operation_name],
                 },
             },
         }
-        for op in ops
+        for op, operation_name in zip(ops, operation_names, strict=True)
         if isinstance(op, dict)
     ]
     result = _download_base_gql(
@@ -280,18 +277,13 @@ def _handle_result_errors(
 ) -> None:
     """Raise mapped errors found in a GraphQL response."""
     optional_degradation_count = 0
-    if isinstance(result, list):
-        for item in result:
-            if isinstance(item, dict) and "errors" in item:
-                optional_degradation_count += _handle_gql_errors(
-                    cast("JSONList", item["errors"]),
-                    operation_names,
-                )
-    elif isinstance(result, dict) and "errors" in result:
-        optional_degradation_count += _handle_gql_errors(
-            cast("JSONList", result["errors"]),
-            operation_names,
-        )
+    items = result if isinstance(result, list) else (result,)
+    for item in items:
+        if isinstance(item, dict) and "errors" in item:
+            optional_degradation_count += _handle_gql_errors(
+                cast("JSONList", item["errors"]),
+                operation_names,
+            )
     if record_optional_degradation is not None:
         for _ in range(optional_degradation_count):
             record_optional_degradation()

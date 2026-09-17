@@ -13,7 +13,7 @@ from chat_downloader.models._base import (
     DEFAULT_BUFFER_SIZE,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
-    _cli,
+    _cli_metadata,
 )
 from chat_downloader.models._site_default import SiteDefault
 from chat_downloader.utils.time_utils import ensure_seconds
@@ -86,186 +86,158 @@ class ChatRequest:
     # ── Core ──────────────────────────────────────────────────────────────────
     url: str = field(
         default="",
-        metadata={"cli": _cli("URL of the stream/video", group="core")},
+        metadata=_cli_metadata("URL of the stream/video", group="core"),
     )
 
     # ── Time bounds ───────────────────────────────────────────────────────────
     start_time: float | str | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Start time in seconds or hh:mm:ss (None = from beginning)",
-                group="time",
-                flags=["-s"],
-            ),
-        },
+        metadata=_cli_metadata(
+            "Start time in seconds or hh:mm:ss (None = from beginning)",
+            group="time",
+            flags=["-s"],
+        ),
     )
     end_time: float | str | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "End time in seconds or hh:mm:ss (None = until end)",
-                group="time",
-                flags=["-e"],
-            ),
-        },
+        metadata=_cli_metadata(
+            "End time in seconds or hh:mm:ss (None = until end)",
+            group="time",
+            flags=["-e"],
+        ),
     )
 
     # ── Retry ─────────────────────────────────────────────────────────────────
     max_attempts: int = field(
         default=DEFAULT_MAX_ATTEMPTS,
-        metadata={"cli": _cli("Maximum retry attempts", group="retry")},
+        metadata=_cli_metadata("Maximum retry attempts", group="retry"),
     )
     retry_timeout: float | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Seconds to wait before retry"
-                " (None = exponential backoff, negative = wait for user input)",
-                group="retry",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Seconds to wait before retry"
+            " (None = exponential backoff, negative = wait for user input)",
+            group="retry",
+        ),
     )
     interruptible_retry: bool = field(
         default=True,
-        metadata={
-            "cli": _cli(
-                "Allow skipping wait to retry immediately",
-                group="retry",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Allow skipping wait to retry immediately",
+            group="retry",
+        ),
     )
 
     # ── Timeouts ──────────────────────────────────────────────────────────────
     timeout: float | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Maximum duration to retrieve messages in seconds",
-                group="termination",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Maximum duration to retrieve messages in seconds",
+            group="termination",
+        ),
     )
     inactivity_timeout: float | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Stop if no messages received for this many seconds",
-                group="termination",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Stop if no messages received for this many seconds",
+            group="termination",
+        ),
     )
 
     # ── Filtering ─────────────────────────────────────────────────────────────
     max_messages: int | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Maximum number of messages to retrieve (None = unlimited)",
-                group="termination",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Maximum number of messages to retrieve (None = unlimited)",
+            group="termination",
+        ),
     )
     message_groups: SiteDefault | list[str] = field(
         default_factory=lambda: SiteDefault("message_groups"),
-        metadata={
-            "cli": _cli(
-                "Predefined message groups to include as one comma-separated "
-                "argument (site-specific)",
-                group="type",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Predefined message groups to include as one comma-separated "
+            "argument (site-specific)",
+            group="type",
+        ),
     )
     message_types: list[str] | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Specific message types to include as one comma-separated "
-                "argument (overrides message_groups)",
-                group="type",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Specific message types to include as one comma-separated "
+            "argument (overrides message_groups)",
+            group="type",
+        ),
     )
 
     # ── Output ────────────────────────────────────────────────────────────────
     output: str | list[str] | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Output file path (None = print to stdout). Extension "
-                "determines"
-                " format (.jsonl/.txt). Other extensions are not supported;"
-                " use .jsonl for structured output.",
-                group="output",
-                flags=["-o"],
-            ),
-        },
+        metadata=_cli_metadata(
+            "Output file path (None = print to stdout). Extension "
+            "determines"
+            " format (.jsonl/.txt). Other extensions are not supported;"
+            " use .jsonl for structured output.",
+            group="output",
+            flags=["-o"],
+        ),
     )
     overwrite: bool = field(
         default=True,
-        metadata={"cli": _cli("Overwrite existing output file", group="output")},
+        metadata=_cli_metadata("Overwrite existing output file", group="output"),
     )
     sort_keys: bool = field(
         default=True,
-        metadata={"cli": _cli("Sort JSON keys in output", group="output")},
+        metadata=_cli_metadata("Sort JSON keys in output", group="output"),
     )
 
     # ── Formatting ────────────────────────────────────────────────────────────
     format: SiteDefault | str = field(
         default_factory=lambda: SiteDefault("format"),
-        metadata={
-            "cli": _cli(
-                "Message format template name (site-specific default)",
-                group="format",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Message format template name (site-specific default)",
+            group="format",
+        ),
     )
     format_file: str | None = field(
         default=None,
-        metadata={"cli": _cli("Path to custom format definition file", group="format")},
+        metadata=_cli_metadata("Path to custom format definition file", group="format"),
     )
 
     # ── YouTube-specific ──────────────────────────────────────────────────────
     chat_type: Literal["live", "top"] = field(
         default="live",
-        metadata={
-            "cli": _cli(
-                "Chat type ('live' or 'top')",
-                group="youtube",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Chat type ('live' or 'top')",
+            group="youtube",
+        ),
     )
     ignore: list[str] | None = field(
         default=None,
-        metadata={"cli": _cli("List of video IDs to ignore", group="youtube")},
+        metadata=_cli_metadata("List of video IDs to ignore", group="youtube"),
     )
     youtube_replay_poll_interval: float | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Override YouTube replay polling interval in seconds "
-                "(0.5-8; None = respect provider delay)",
-                group="youtube",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Override YouTube replay polling interval in seconds "
+            "(0.5-8; None = respect provider delay)",
+            group="youtube",
+        ),
     )
 
     # ── Live transport ────────────────────────────────────────────────────────
     message_receive_timeout: float = field(
         default=DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
-        metadata={
-            "cli": _cli(
-                "Live socket receive polling timeout in seconds "
-                "(minimum 1 for Twitch and Kick)",
-                group="live_transport",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Live socket receive polling timeout in seconds "
+            "(minimum 1 for Twitch and Kick)",
+            group="live_transport",
+        ),
     )
 
     # ── Twitch-specific ───────────────────────────────────────────────────────
     buffer_size: int = field(
         default=DEFAULT_BUFFER_SIZE,
-        metadata={"cli": _cli("Buffer size for message retrieval", group="twitch")},
+        metadata=_cli_metadata("Buffer size for message retrieval", group="twitch"),
     )
 
     # ── Constructors ──────────────────────────────────────────────────────────

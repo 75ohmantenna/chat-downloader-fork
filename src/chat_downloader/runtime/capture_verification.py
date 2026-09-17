@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.output.capture_parity import audit_capture
-from chat_downloader.sites.output_dispatch import _expand_output_file_name
+
+from .capture_manifest import _capture_outputs
 
 if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
@@ -25,26 +26,18 @@ class _ChatFormatter:
         return self.chat.format(item)
 
 
-def capture_paths(chat: Chat) -> dict[str, Path]:
-    """Resolve a distinct pair before output starts and after it closes."""
-    dispatcher = chat._output_dispatcher
-    if dispatcher is None:
-        msg = "Output verification requires one JSONL and one TXT file."
-        raise ValueError(msg)
-    paths = [
-        Path(
-            item["file_name"]
-            if item["file_created"]
-            else _expand_output_file_name(
-                item["file_name"], title=chat.title, video_id=chat.id
-            )
-        )
-        for item in dispatcher.writer_summaries
-    ]
+def _verification_pair(paths: list[Path]) -> dict[str, Path]:
     by_suffix = {path.suffix.lower(): path for path in paths}
     if len(paths) != 2 or set(by_suffix) != {".jsonl", ".txt"}:
         msg = "Output verification requires one JSONL and one TXT file."
         raise ValueError(msg)
+    return by_suffix
+
+
+def capture_paths(chat: Chat) -> dict[str, Path]:
+    """Resolve a distinct pair before output starts and after it closes."""
+    paths = _capture_outputs(chat, keep_created=True)
+    by_suffix = _verification_pair(paths)
     first, second = paths
     if first.resolve() == second.resolve() or (
         first.exists() and second.exists() and first.samefile(second)
@@ -87,13 +80,12 @@ def verify_capture(
 def validate_verification(parameters: dict[str, Any], *, resume: bool) -> None:
     """Reject invalid pairs before lazy outputs can open or truncate anything."""
     outputs = parameters.get("output")
-    if (
-        not isinstance(outputs, list)
-        or len(outputs) != 2
-        or {Path(name).suffix.lower() for name in outputs} != {".jsonl", ".txt"}
-    ):
-        msg = "Output verification requires one JSONL and one TXT file."
-        raise ValueError(msg)
+    paths = (
+        [Path(name) for name in outputs]
+        if isinstance(outputs, list) and len(outputs) == 2
+        else []
+    )
+    _verification_pair(paths)
     if parameters.get("overwrite") is False and not resume:
         msg = "Append verification requires a resume checkpoint."
         raise ValueError(msg)

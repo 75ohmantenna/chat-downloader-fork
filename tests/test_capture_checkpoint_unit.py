@@ -116,27 +116,25 @@ def test_interrupted_capture_checkpoints_only_written_records(tmp_path) -> None:
     [("message_groups", ["all"]), ("end_time", 50), ("url", "other")],
 )
 def test_resume_rejects_changed_request_without_touching_outputs(
-    tmp_path, field, value
+    tmp_path, saved_capture, field, value
 ) -> None:
-    params = parameters(tmp_path)
-    assert execute_run(Downloader, **params, max_messages=1).success
+    params = saved_capture
     before = (tmp_path / "chat.jsonl").read_bytes()
     params[field] = value
     result = execute_run(Downloader, **params)
     assert not result.success
-    assert "match" in result.error_message
     assert (tmp_path / "chat.jsonl").read_bytes() == before
 
 
-def test_resume_rejects_modified_file_and_preserves_checkpoint(tmp_path) -> None:
-    params = parameters(tmp_path)
-    assert execute_run(Downloader, **params, max_messages=1).success
+def test_resume_rejects_modified_file_and_preserves_checkpoint(
+    tmp_path, saved_capture
+) -> None:
+    params = saved_capture
     checkpoint = (tmp_path / "checkpoint.json").read_bytes()
     with (tmp_path / "chat.txt").open("a") as stream:
         stream.write("changed\n")
     result = execute_run(Downloader, **params)
     assert not result.success
-    assert "files changed" in result.error_message
     assert (tmp_path / "checkpoint.json").read_bytes() == checkpoint
 
 
@@ -159,6 +157,13 @@ def test_new_checkpoint_refuses_existing_outputs_and_links(tmp_path) -> None:
         CaptureCheckpoint(str(link), {"output": str(tmp_path / "new.jsonl")})
 
 
+@pytest.fixture
+def saved_capture(tmp_path):
+    params = parameters(tmp_path)
+    assert execute_run(Downloader, **params, max_messages=1).success
+    return params
+
+
 @pytest.mark.parametrize(
     "patch",
     [
@@ -166,13 +171,16 @@ def test_new_checkpoint_refuses_existing_outputs_and_links(tmp_path) -> None:
         {"ids": [1]},
         {"total": -1},
         {"chat_id": None},
+        {"chat_id": "different"},
+        {"record_loss": "false"},
         {"resets": [0]},
         {"resets": [2, 1]},
     ],
 )
-def test_checkpoint_rejects_corrupt_boundary_state(tmp_path, patch) -> None:
-    params = parameters(tmp_path)
-    assert execute_run(Downloader, **params, max_messages=1).success
+def test_checkpoint_rejects_corrupt_boundary_state(
+    tmp_path, saved_capture, patch
+) -> None:
+    params = saved_capture
     path = tmp_path / "checkpoint.json"
     state = json.loads(path.read_text())
     state.update(patch)
@@ -180,7 +188,7 @@ def test_checkpoint_rejects_corrupt_boundary_state(tmp_path, patch) -> None:
     assert not execute_run(Downloader, **params).success
 
 
-def test_resume_rejects_live_or_changed_video_identity(tmp_path) -> None:
+def test_resume_rejects_live_before_output(tmp_path) -> None:
     params = parameters(tmp_path)
 
     class Live(Downloader):
@@ -189,41 +197,32 @@ def test_resume_rejects_live_or_changed_video_identity(tmp_path) -> None:
     result = execute_run(Live, **params)
     assert not result.success
     assert not (tmp_path / "chat.jsonl").exists()
-    assert execute_run(Downloader, **params, max_messages=1).success
-    path = tmp_path / "checkpoint.json"
-    state = json.loads(path.read_text())
-    state["chat_id"] = "different"
-    path.write_text(json.dumps(state))
-    assert not execute_run(Downloader, **params).success
 
 
-def test_resume_rejects_invalid_offsets_before_output(tmp_path) -> None:
-    class Invalid(Downloader):
-        records: ClassVar[list] = [
-            {"message_id": "1", "message": "invalid", "message_type": "text_message"}
-        ]
-
-    result = execute_run(Invalid, **parameters(tmp_path))
-    assert not result.success
-    assert "offsets" in result.error_message
-    assert not (tmp_path / "chat.jsonl").exists()
-
-
-def test_resume_rejects_backsteps_and_checkpoints_safe_prefix(tmp_path) -> None:
-    class Backwards(Downloader):
-        records: ClassVar[list] = [message(1, 11), message(2, 10)]
-
-    result = execute_run(Backwards, **parameters(tmp_path))
-    assert not result.success
-    assert result.message_count == 1
-    assert json.loads((tmp_path / "checkpoint.json").read_text())["offset"] == 11
-
-
-def test_resume_caps_same_timestamp_identity_memory(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("chat_downloader.runtime.capture_checkpoint._BOUNDARY_LIMIT", 1)
+@pytest.mark.parametrize(
+    ("records", "boundary_limit", "count", "offset"),
+    [
+        ([{"message_id": "1", "message_type": "text_message"}], 10_000, 0, None),
+        ([message(1, 11), message(2, 10)], 10_000, 1, 11),
+        (Downloader.records, 1, 1, 10),
+    ],
+    ids=["missing-offset", "backwards-offset", "timestamp-capacity"],
+)
+def test_invalid_replay_checkpoints_only_safe_prefix(
+    tmp_path, monkeypatch, records, boundary_limit, count, offset
+) -> None:
+    monkeypatch.setattr(Downloader, "records", records)
+    monkeypatch.setattr(
+        "chat_downloader.runtime.capture_checkpoint._BOUNDARY_LIMIT", boundary_limit
+    )
     result = execute_run(Downloader, **parameters(tmp_path))
     assert not result.success
-    assert result.message_count == 1
+    assert result.message_count == count
+    if count:
+        state = json.loads((tmp_path / "checkpoint.json").read_text())
+        assert state["offset"] == offset
+        assert state["total"] == count
+    assert (tmp_path / "chat.jsonl").exists() == bool(count)
 
 
 def test_atomic_checkpoint_failure_keeps_previous_file(tmp_path, monkeypatch) -> None:

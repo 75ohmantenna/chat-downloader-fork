@@ -43,15 +43,22 @@ def _optional_metadata_error() -> dict[str, object]:
     return {"message": "service error", "path": ["user", "primaryTeam"]}
 
 
-def test_handle_result_errors_clean_response_does_not_record_degradation() -> None:
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"data": {"user": {}}},
+        {"errors": [{"message": "service error", "path": ["video", "comments"]}]},
+        {"errors": _optional_metadata_error()},
+    ],
+    ids=["clean", "warning", "malformed-errors"],
+)
+def test_handle_result_errors_does_not_record_degradation(payload) -> None:
     record_degradation = Mock()
-
     _handle_result_errors(
-        [{"data": {"user": {}}}],
+        [payload],
         ["StreamMetadata"],
         record_optional_degradation=record_degradation,
     )
-
     record_degradation.assert_not_called()
 
 
@@ -77,37 +84,6 @@ def test_handle_result_errors_counts_once_per_degraded_result_item() -> None:
     assert all(
         call.args == () and call.kwargs == {} for call in record_degradation.mock_calls
     )
-
-
-def test_handle_result_errors_does_not_count_warning_service_error() -> None:
-    record_degradation = Mock()
-
-    _handle_result_errors(
-        [{"errors": [{"message": "service error", "path": ["video", "comments"]}]}],
-        ["StreamMetadata"],
-        record_optional_degradation=record_degradation,
-    )
-
-    record_degradation.assert_not_called()
-
-
-def test_handle_result_errors_ignores_malformed_errors_dict_without_counting() -> None:
-    record_degradation = Mock()
-
-    _handle_result_errors(
-        [
-            {
-                "errors": {
-                    "message": "service error",
-                    "path": ["user", "primaryTeam"],
-                }
-            }
-        ],
-        ["StreamMetadata"],
-        record_optional_degradation=record_degradation,
-    )
-
-    record_degradation.assert_not_called()
 
 
 @pytest.mark.parametrize("fatal_message", ["Unauthorized", "PersistedQueryNotFound"])
@@ -151,26 +127,20 @@ def test_download_gql_does_not_count_degradation_from_rejected_hash_response() -
     record_degradation.assert_not_called()
 
 
-def test_download_gql_adds_persisted_query_hash_and_calls_base(
-    monkeypatch,
-) -> None:
+@pytest.mark.parametrize("client_id", [None, "custom-client"])
+def test_download_gql_adds_hash_without_mutating_input(client_id) -> None:
     op_name = next(iter(OPERATION_HASHES.keys()))
     ops = [{"operationName": op_name, "variables": {"x": 1}}]
     ops_snapshot = [{"operationName": op_name, "variables": {"x": 1}}]
 
-    calls = {}
-
-    def session_post(url, json, headers):
-        calls["url"] = url
-        calls["json"] = json
-        calls["headers"] = headers
-        return _Resp([{"data": {"ok": True}}])
-
-    out = _download_gql(session_post, ops)
+    session_post = Mock(return_value=_Resp([{"data": {"ok": True}}]))
+    kwargs = {} if client_id is None else {"client_id": client_id}
+    out = _download_gql(session_post, ops, **kwargs)
+    calls = session_post.call_args.kwargs
     assert out == [{"data": {"ok": True}}]
 
-    assert calls["url"] == GQL_API_URL
-    assert calls["headers"]["Client-ID"] == CLIENT_ID
+    assert session_post.call_args.args == (GQL_API_URL,)
+    assert calls["headers"]["Client-ID"] == (client_id or CLIENT_ID)
     assert (
         calls["json"][0]["extensions"]["persistedQuery"]["sha256Hash"]
         == OPERATION_HASHES[op_name]
@@ -178,34 +148,11 @@ def test_download_gql_adds_persisted_query_hash_and_calls_base(
     assert ops == ops_snapshot, "Input operations must not be mutated in-place"
 
 
-def test_download_gql_uses_client_id_override() -> None:
-    op_name = next(iter(OPERATION_HASHES.keys()))
-    calls = {}
-
-    def session_post(url, json, headers):
-        calls["headers"] = headers
-        return _Resp([{"data": {"ok": True}}])
-
-    _download_gql(
-        session_post,
-        [{"operationName": op_name, "variables": {}}],
-        client_id="custom-client",
-    )
-
-    assert calls["headers"]["Client-ID"] == "custom-client"
-
-
 def test_download_gql_maps_mobile_global_badge_alias_to_wire_operation() -> None:
-    captured = {}
-
-    def session_post(_url, json, headers):
-        _ = headers
-        captured["operation"] = json[0]
-        return _Resp([{"data": {"badges": []}}])
-
+    session_post = Mock(return_value=_Resp([{"data": {"badges": []}}]))
     _download_gql(session_post, [{"operationName": "GlobalBadgesMobile"}])
 
-    operation = captured["operation"]
+    operation = session_post.call_args.kwargs["json"][0]
     assert operation["operationName"] == "GlobalBadges"
     assert (
         operation["extensions"]["persistedQuery"]["sha256Hash"]
@@ -238,24 +185,19 @@ def test_download_gql_retries_supported_hash_failure_with_full_document(
     variables: dict[str, object],
     fallback_variables: dict[str, object],
 ) -> None:
-    payloads = iter(
-        [
-            [{"errors": [{"message": "PersistedQueryNotFound"}]}],
-            [{"data": {"ok": True}}],
+    session_post = Mock(
+        side_effect=[
+            _Resp([{"errors": [{"message": "PersistedQueryNotFound"}]}]),
+            _Resp([{"data": {"ok": True}}]),
         ]
     )
-    requests = []
-
-    def session_post(_url, json, headers):
-        _ = headers
-        requests.append(json)
-        return _Resp(next(payloads))
 
     result = _download_gql(
         session_post,
         [{"operationName": operation_name, "variables": variables}],
     )
 
+    requests = [call.kwargs["json"] for call in session_post.call_args_list]
     assert result == [{"data": {"ok": True}}]
     assert (
         requests[0][0]["extensions"]["persistedQuery"]["sha256Hash"]
@@ -278,61 +220,28 @@ def test_mobile_replay_document_matches_apk_persisted_hash() -> None:
     assert query_hash == OPERATION_HASHES["VideoCommentsQuery"]
 
 
-def test_download_gql_does_not_fallback_for_unsupported_operation() -> None:
-    calls = 0
-
-    def session_post(_url, json, headers):
-        nonlocal calls
-        _ = json, headers
-        calls += 1
-        return _Resp([{"errors": [{"message": "PersistedQueryNotFound"}]}])
-
-    with pytest.raises(ParsingError, match="GlobalBadges"):
-        _download_gql(session_post, [{"operationName": "GlobalBadges"}])
-
-    assert calls == 1
-
-
-def test_download_gql_maps_full_document_errors_without_another_retry() -> None:
-    payloads = iter(
-        [
-            [{"errors": [{"message": "Persisted query not found"}]}],
-            [{"errors": [{"message": "Unauthorized"}]}],
+@pytest.mark.parametrize(
+    ("operation", "messages", "error"),
+    [
+        ("GlobalBadges", ["PersistedQueryNotFound"], ParsingError),
+        (
+            "StreamMetadata",
+            ["Persisted query not found", "Unauthorized"],
+            LoginRequired,
+        ),
+        ("VideoMetadata", ["Unauthorized"], LoginRequired),
+    ],
+    ids=["unsupported-fallback", "fallback-auth-error", "non-hash-error"],
+)
+def test_download_gql_limits_fallback_and_maps_errors(operation, messages, error):
+    session_post = Mock(
+        side_effect=[
+            _Resp([{"errors": [{"message": message}]}]) for message in messages
         ]
     )
-    calls = 0
-
-    def session_post(_url, json, headers):
-        nonlocal calls
-        _ = json, headers
-        calls += 1
-        return _Resp(next(payloads))
-
-    with pytest.raises(LoginRequired, match="Authentication required"):
-        _download_gql(
-            session_post,
-            [{"operationName": "StreamMetadata", "variables": {}}],
-        )
-
-    assert calls == 2
-
-
-def test_download_gql_does_not_fallback_for_non_hash_error() -> None:
-    calls = 0
-
-    def session_post(_url, json, headers):
-        nonlocal calls
-        _ = json, headers
-        calls += 1
-        return _Resp([{"errors": [{"message": "Unauthorized"}]}])
-
-    with pytest.raises(LoginRequired):
-        _download_gql(
-            session_post,
-            [{"operationName": "VideoMetadata", "variables": {}}],
-        )
-
-    assert calls == 1
+    with pytest.raises(error):
+        _download_gql(session_post, [{"operationName": operation, "variables": {}}])
+    assert session_post.call_count == len(messages)
 
 
 def test_update_badge_info_merges_global_and_channel_badges() -> None:
@@ -406,44 +315,28 @@ def test_get_user_videos_raises_user_not_found_on_empty_user_id() -> None:
         next(gen)
 
 
-def test_get_chat_messages_by_vod_id_uses_scalar_offset_for_first_page() -> None:
-    calls = {}
-
-    def download_gql_func(query):
-        calls["query"] = query
-        return [{"data": {"video": {"comments": {"edges": []}}}}]
-
+@pytest.mark.parametrize(
+    ("cursor", "offset", "expected"),
+    [
+        (None, 12.5, {"contentOffsetSeconds": 12.5}),
+        ("cursor123", 99.0, {"cursor": "cursor123"}),
+    ],
+)
+def test_get_chat_messages_by_vod_id_selects_cursor_or_offset(cursor, offset, expected):
+    download = Mock(return_value=[{"data": {"video": {"comments": {"edges": []}}}}])
     comments, info = get_chat_messages_by_vod_id(
-        session_post=lambda *a, **k: None,
-        download_gql_func=download_gql_func,
+        session_post=Mock(),
+        download_gql_func=download,
         vod_id="vod123",
-        cursor=None,
-        content_offset_seconds=12.5,
+        cursor=cursor,
+        content_offset_seconds=offset,
     )
-
     assert comments == {"edges": []}
     assert info == {"comments": {"edges": []}}
-    assert calls["query"][0]["variables"]["contentOffsetSeconds"] == 12.5
-    assert "cursor" not in calls["query"][0]["variables"]
-
-
-def test_get_chat_messages_by_vod_id_prefers_cursor_over_offset() -> None:
-    calls = {}
-
-    def download_gql_func(query):
-        calls["query"] = query
-        return [{"data": {"video": {"comments": {"edges": []}}}}]
-
-    get_chat_messages_by_vod_id(
-        session_post=lambda *a, **k: None,
-        download_gql_func=download_gql_func,
-        vod_id="vod123",
-        cursor="cursor123",
-        content_offset_seconds=99.0,
-    )
-
-    assert calls["query"][0]["variables"]["cursor"] == "cursor123"
-    assert "contentOffsetSeconds" not in calls["query"][0]["variables"]
+    assert download.call_args.args[0][0]["variables"] == {
+        "videoID": "vod123",
+        **expected,
+    }
 
 
 def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric() -> (

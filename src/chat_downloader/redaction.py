@@ -467,8 +467,7 @@ def capture_debug_sample(
         return None
 
     logger = _get_logger()
-    reserved = False
-    group_reserved = False
+    reservations: list[tuple[str, str]] = []
     sample_dir: Path | None = None
     try:
         _validate_debug_sample_group(sample_group, group_limit)
@@ -494,24 +493,22 @@ def capture_debug_sample(
                 f"{slugify_debug_label(label)}:{digest}".encode(),
                 usedforsecurity=False,
             ).hexdigest()[:12]
-            group_allowed, group_reserved = _reserve_debug_sample(
-                sample_dir,
-                sample_group,
-                group_digest,
-                group_limit,
+            bounds: list[tuple[str, str, int | None]] = [
+                (sample_group, group_digest, group_limit)
+            ]
+        else:
+            bounds = []
+        bounds.append((label, digest, sample_limit))
+        for bound_label, bound_digest, limit in bounds:
+            allowed, reserved = _reserve_debug_sample(
+                sample_dir, bound_label, bound_digest, limit
             )
-            if not group_allowed:
+            if reserved:
+                reservations.append((bound_label, bound_digest))
+            if not allowed:
+                for reserved_label, reserved_digest in reservations:
+                    _release_debug_sample(sample_dir, reserved_label, reserved_digest)
                 return None
-        allowed, reserved = _reserve_debug_sample(
-            sample_dir,
-            label,
-            digest,
-            sample_limit,
-        )
-        if not allowed:
-            if group_reserved and sample_group is not None:
-                _release_debug_sample(sample_dir, sample_group, group_digest)
-            return None
         directory_fd = _prepare_sample_directory(sample_dir)
         try:
             path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
@@ -529,10 +526,9 @@ def capture_debug_sample(
         )
         return str(path)
     except (OSError, TypeError, ValueError) as exc:
-        if reserved and sample_dir is not None:
-            _release_debug_sample(sample_dir, label, digest)
-        if group_reserved and sample_dir is not None and sample_group is not None:
-            _release_debug_sample(sample_dir, sample_group, group_digest)
+        if sample_dir is not None:
+            for reserved_label, reserved_digest in reservations:
+                _release_debug_sample(sample_dir, reserved_label, reserved_digest)
         logger.warning("Unable to capture debug sample for %r: %s", label, exc)
         return None
 

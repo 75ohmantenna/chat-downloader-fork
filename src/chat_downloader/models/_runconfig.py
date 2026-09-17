@@ -9,7 +9,7 @@ from dataclasses import fields as dc_fields
 from typing import Any, Self
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
-from chat_downloader.models._base import _cli
+from chat_downloader.models._base import _cli_metadata
 from chat_downloader.models._request import ChatRequest
 
 
@@ -21,58 +21,50 @@ class RunConfig:
     # execution controls.
     quiet: bool = field(
         default=False,
-        metadata={
-            "cli": _cli(
-                "Suppress formatted chat output to stdout, defaults to False",
-                group="debug",
-            )
-        },
+        metadata=_cli_metadata(
+            "Suppress formatted chat output to stdout, defaults to False",
+            group="debug",
+        ),
     )
     resume: str | None = field(
         default=None,
-        metadata={
-            "cli": _cli("Create or resume a replay shutdown checkpoint", group="output")
-        },
+        metadata=_cli_metadata(
+            "Create or resume a replay shutdown checkpoint", group="output"
+        ),
     )
     verify_output: bool = field(
         default=False,
-        metadata={
-            "cli": _cli(
-                "Verify JSONL/TXT parity and supported provider diagnostics",
-                group="output",
-            )
-        },
+        metadata=_cli_metadata(
+            "Verify JSONL/TXT parity and supported provider diagnostics",
+            group="output",
+        ),
     )
     require_complete: bool = field(
         default=False,
-        metadata={
-            "cli": _cli("Fail unless the selected replay completes", group="output")
-        },
+        metadata=_cli_metadata(
+            "Fail unless the selected replay completes", group="output"
+        ),
     )
     run_manifest: str | None = field(
         default=None,
-        metadata={
-            "cli": _cli("Write a JSON run manifest to a new file", group="output")
-        },
+        metadata=_cli_metadata(
+            "Write a JSON run manifest to a new file", group="output"
+        ),
     )
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS
     exit_on_debug: bool = field(
         default=False,
-        metadata={
-            "cli": _cli(
-                "Exit when something unexpected happens, defaults to False",
-                group="debug",
-            )
-        },
+        metadata=_cli_metadata(
+            "Exit when something unexpected happens, defaults to False",
+            group="debug",
+        ),
     )
     pause_on_debug: bool = field(
         default=False,
-        metadata={
-            "cli": _cli(
-                "Pause on certain debug messages, defaults to False",
-                group="debug",
-            )
-        },
+        metadata=_cli_metadata(
+            "Pause on certain debug messages, defaults to False",
+            group="debug",
+        ),
     )
 
     @classmethod

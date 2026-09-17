@@ -113,32 +113,13 @@ def _record_mismatch(
     *,
     jsonl_line: int | None = None,
     txt_line: int | None = None,
+    newline: bool = False,
 ) -> None:
-    """Count a mismatch and retain its first JSONL/TXT positions."""
-    stats.text_mismatches += 1
-    if (
-        stats.first_mismatch_jsonl_line is None
-        and stats.first_mismatch_txt_line is None
-    ):
-        stats.first_mismatch_jsonl_line = jsonl_line
-        stats.first_mismatch_txt_line = txt_line
-    _record_issue(
-        stats,
-        reason,
-        jsonl_line=jsonl_line,
-        txt_line=txt_line,
-    )
-
-
-def _record_newline_error(
-    stats: AuditStats,
-    reason: str,
-    *,
-    jsonl_line: int | None = None,
-    txt_line: int | None = None,
-) -> None:
-    """Count a physical-newline error and retain its first positions."""
-    stats.newline_errors += 1
+    """Count a text or newline mismatch and retain its first positions."""
+    if newline:
+        stats.newline_errors += 1
+    else:
+        stats.text_mismatches += 1
     if (
         stats.first_mismatch_jsonl_line is None
         and stats.first_mismatch_txt_line is None
@@ -220,7 +201,7 @@ def _observe_newline(
         if artifact == "jsonl"
         else {"txt_line": line_number}
     )
-    _record_newline_error(stats, f"{artifact}_mixed_newlines", **positions)
+    _record_mismatch(stats, f"{artifact}_mixed_newlines", newline=True, **positions)
 
 
 def _read_txt_line(
@@ -280,16 +261,6 @@ def _parse_jsonl_line(
 
     stats.jsonl_records += 1
     return cast("JSONDict", value)
-
-
-def _render_expected_line(
-    formatter: CaptureFormatter,
-    format_name: str,
-    item: JSONDict,
-) -> bytes:
-    """Render production TXT content without assuming the host newline."""
-    rendered = formatter.format(item, format_name=format_name)
-    return rendered.encode("utf-8")
 
 
 def _mark_comparison_incomplete(
@@ -376,7 +347,9 @@ def audit_capture(  # noqa: C901 - one streaming state machine validates both fi
                 continue
 
             try:
-                expected_line = _render_expected_line(formatter, format_name, item)
+                expected_line = formatter.format(item, format_name=format_name).encode(
+                    "utf-8"
+                )
             except Exception:  # noqa: BLE001 - privacy boundary must not echo item data
                 stats.render_errors += 1
                 _record_issue(stats, "render_error", jsonl_line=jsonl_line)
@@ -429,17 +402,19 @@ def audit_capture(  # noqa: C901 - one streaming state machine validates both fi
                 _record_issue(stats, "text_count_mismatch")
 
         if stats.jsonl_trailing_newline is False:
-            _record_newline_error(
+            _record_mismatch(
                 stats,
                 "jsonl_missing_trailing_newline",
                 jsonl_line=stats.jsonl_lines,
+                newline=True,
             )
 
         if stats.txt_trailing_newline is False:
-            _record_newline_error(
+            _record_mismatch(
                 stats,
                 "txt_missing_trailing_newline",
                 txt_line=stats.txt_lines,
+                newline=True,
             )
 
         if (
@@ -448,11 +423,12 @@ def audit_capture(  # noqa: C901 - one streaming state machine validates both fi
             and stats.jsonl_newline_style != stats.txt_newline_style
         ):
             stats.newline_style_mismatch = True
-            _record_newline_error(
+            _record_mismatch(
                 stats,
                 "capture_newline_style_mismatch",
                 jsonl_line=1,
                 txt_line=1,
+                newline=True,
             )
 
     return stats

@@ -41,6 +41,26 @@ def _clear_remapping_cache():
     _get_remapping.cache_clear()
 
 
+@pytest.fixture
+def item_parser(monkeypatch):
+    def configure(remapping, colours=()):
+        monkeypatch.setattr(
+            "chat_downloader.sites.youtube.constants_message.build_remapping",
+            lambda: remapping,
+        )
+        monkeypatch.setattr(
+            "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
+            colours,
+        )
+        return _parse_item
+
+    return configure
+
+
+def _nested_item(renderer):
+    return {"showItemEndpoint": {"showLiveChatItemEndpoint": {"renderer": renderer}}}
+
+
 def test_link_helpers_normalize_supported_youtube_url_forms() -> None:
     assert _get_source_image_url("https://img.example/avatar=s48-c-k") == (
         "https://img.example/avatar"
@@ -370,33 +390,17 @@ def test_parse_item_returns_existing_info_for_empty_renderer() -> None:
     assert _parse_item({"liveChatTextMessageRenderer": {}}, info=info) == {"kept": True}
 
 
-def test_parse_item_recurses_moves_author_and_applies_offset_once(
-    monkeypatch,
-) -> None:
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message.build_remapping",
-        lambda: {
-            "authorImages": "author_images",
-            "timeText": "time_text",
-        },
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
+def test_parse_item_recurses_moves_author_and_applies_offset_once(item_parser) -> None:
+    parse = item_parser(
+        {"authorImages": "author_images", "timeText": "time_text"},
         ["bodyBackgroundColor"],
     )
 
-    result = _parse_item(
+    result = parse(
         {
             "outerRenderer": {
                 "bodyBackgroundColor": 0xFF112233,
-                "showItemEndpoint": {
-                    "showLiveChatItemEndpoint": {
-                        "renderer": {
-                            "nestedRenderer": {"authorImages": {"thumb": "img"}},
-                        },
-                    },
-                },
+                **_nested_item({"nestedRenderer": {"authorImages": {"thumb": "img"}}}),
                 "header": {"headerRenderer": {"timeText": "1:02"}},
             },
         },
@@ -432,143 +436,61 @@ def test_apply_author_roles_ignores_unknown_badge_without_icons() -> None:
     assert author == {"badges": [{"icon_name": "custom"}]}
 
 
-def test_parse_item_merges_header_when_show_item_endpoint_has_no_renderer(
-    monkeypatch,
-) -> None:
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message.build_remapping",
-        lambda: {"timeText": "time_text"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
-        [],
-    )
-
-    result = _parse_item(
+def test_parse_item_merges_header_when_show_item_endpoint_has_no_renderer(item_parser):
+    parse = item_parser({"timeText": "time_text"})
+    result = parse(
         {
             "outerRenderer": {
                 "showItemEndpoint": {"showLiveChatItemEndpoint": {}},
                 "header": {"headerRenderer": {"timeText": "0:09"}},
             },
-        },
+        }
     )
 
     assert result["time_in_seconds"] == 9
     assert result["message"] is None
 
 
-def test_parse_item_generates_time_text_from_time_in_seconds(
-    monkeypatch,
-) -> None:
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message.build_remapping",
-        dict,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
-        [],
-    )
-
-    result = _parse_item(
+def test_parse_item_generates_time_text_from_time_in_seconds(item_parser) -> None:
+    result = item_parser({})(
         {"outerRenderer": {"unused": True}},
         info={"time_in_seconds": 5},
     )
-
     assert result["time_in_seconds"] == 5
     assert result["time_text"] == "0:05"
     assert result["message"] is None
 
 
-def test_parse_item_preserves_authoritative_wrapper_timing_pair(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message.build_remapping",
-        lambda: {"timeText": "time_text"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
-        [],
-    )
-
-    result = _parse_item(
-        {
-            "outerRenderer": {
-                "showItemEndpoint": {
-                    "showLiveChatItemEndpoint": {
-                        "renderer": {
-                            "nestedRenderer": {"timeText": "0:09"},
-                        },
-                    },
-                },
-            },
-        },
-        info={"time_in_seconds": 5.25},
+@pytest.mark.parametrize(
+    ("nested", "info", "expected"),
+    [
+        pytest.param(
+            {"timeText": "0:09"},
+            {"time_in_seconds": 5.25},
+            (5.25, "0:05"),
+            id="authoritative-wrapper",
+        ),
+        pytest.param(
+            {},
+            {"time_in_seconds": 5.25, "time_text": "0:02"},
+            (5.25, "0:02"),
+            id="empty-nested-shell",
+        ),
+        pytest.param(
+            {"timeText": "0:09"}, {"time_in_seconds": 0}, (9, "0:09"), id="zero-wrapper"
+        ),
+    ],
+)
+def test_parse_item_preserves_wrapper_or_nested_timing(
+    item_parser, nested, info, expected
+):
+    parse = item_parser({"timeText": "time_text"} if nested else {})
+    result = parse(
+        {"outerRenderer": _nested_item({"nestedRenderer": nested})},
+        info=info,
         preserve_wrapper_time=True,
     )
-
-    assert result["time_in_seconds"] == 5.25
-    assert result["time_text"] == "0:05"
-
-
-def test_parse_item_does_not_treat_empty_nested_shell_as_timing_merge(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message.build_remapping",
-        dict,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
-        [],
-    )
-
-    result = _parse_item(
-        {
-            "outerRenderer": {
-                "showItemEndpoint": {
-                    "showLiveChatItemEndpoint": {
-                        "renderer": {"nestedRenderer": {}},
-                    },
-                },
-            },
-        },
-        info={"time_in_seconds": 5.25, "time_text": "0:02"},
-        preserve_wrapper_time=True,
-    )
-
-    assert result["time_in_seconds"] == 5.25
-    assert result["time_text"] == "0:02"
-
-
-def test_parse_item_uses_nested_timing_for_zero_wrapper_time(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message.build_remapping",
-        lambda: {"timeText": "time_text"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.constants_message._COLOUR_KEYS",
-        [],
-    )
-
-    result = _parse_item(
-        {
-            "outerRenderer": {
-                "showItemEndpoint": {
-                    "showLiveChatItemEndpoint": {
-                        "renderer": {
-                            "nestedRenderer": {"timeText": "0:09"},
-                        },
-                    },
-                },
-            },
-        },
-        info={"time_in_seconds": 0},
-        preserve_wrapper_time=True,
-    )
-
-    assert result["time_in_seconds"] == 9
-    assert result["time_text"] == "0:09"
+    assert (result["time_in_seconds"], result["time_text"]) == expected
 
 
 def test_parse_video_uses_overlay_style_or_default() -> None:
@@ -602,79 +524,41 @@ def test_parse_video_uses_overlay_style_or_default() -> None:
     assert default_video["video_type"] == "DEFAULT"
 
 
-def test_parse_video_accepts_lockup_view_model() -> None:
-    video = _parse_video(
-        {
-            "lockupViewModel": {
-                "contentId": "live123",
-                "contentImage": {
-                    "thumbnailViewModel": {
-                        "overlays": [
-                            {
-                                "thumbnailBottomOverlayViewModel": {
-                                    "badges": [
-                                        {
-                                            "thumbnailBadgeViewModel": {
-                                                "text": "LIVE",
-                                            },
-                                        },
-                                    ],
-                                },
-                            },
-                        ],
-                    },
-                },
-                "metadata": {
-                    "lockupMetadataViewModel": {
-                        "title": {"content": "Live stream"},
-                        "metadata": {
-                            "contentMetadataViewModel": {
-                                "metadataRows": [
-                                    {
-                                        "metadataParts": [
-                                            {
-                                                "text": {
-                                                    "content": "1 watching",
-                                                },
-                                            },
-                                        ],
-                                    },
-                                ],
-                            },
-                        },
-                    },
-                },
-            },
-        },
+@pytest.mark.parametrize("live", [True, False], ids=["live-lockup", "plain-lockup"])
+def test_parse_video_accepts_lockup_view_model(live) -> None:
+    video_id, title = (
+        ("live123", "Live stream") if live else ("plain123", "Plain upload")
     )
-
-    assert video == {
-        "video_id": "live123",
-        "title": "Live stream",
-        "video_type": "LIVE",
-        "view_count": "1 watching",
-        "short_view_count": "1 watching",
+    metadata = {"title": {"content": title}}
+    lockup = {
+        "contentId": video_id,
+        "metadata": {"lockupMetadataViewModel": metadata},
     }
-
-
-def test_parse_video_accepts_lockup_without_view_count_or_badge() -> None:
-    video = _parse_video(
-        {
-            "lockupViewModel": {
-                "contentId": "plain123",
-                "metadata": {
-                    "lockupMetadataViewModel": {
-                        "title": {"content": "Plain upload"},
-                    },
-                },
+    if live:
+        lockup.update(_make_lockup_with_badge("LIVE"))
+        metadata["metadata"] = {
+            "contentMetadataViewModel": {
+                "metadataRows": [
+                    {
+                        "metadataParts": [{"text": {"content": "1 watching"}}],
+                    }
+                ],
             },
-        },
-    )
-
-    assert video["video_id"] == "plain123"
-    assert video["title"] == "Plain upload"
-    assert video["video_type"] == "DEFAULT"
-    assert "view_count" not in video
+        }
+    video = _parse_video({"lockupViewModel": lockup})
+    if live:
+        assert video == {
+            "video_id": video_id,
+            "title": title,
+            "video_type": "LIVE",
+            "view_count": "1 watching",
+            "short_view_count": "1 watching",
+        }
+    else:
+        assert video["video_id"] == video_id
+        assert video["title"] == title
+        assert video["video_type"] == "DEFAULT"
+        assert "view_count" not in video
 
 
 def test_parse_video_uses_later_overlay_when_first_style_is_empty() -> None:
@@ -710,27 +594,23 @@ def _make_lockup_with_badge(text: str) -> dict[str, Any]:
     }
 
 
-def test_parse_lockup_badge_style_returns_upcoming_for_premiere() -> None:
-    assert _parse_lockup_badge_style(_make_lockup_with_badge("PREMIERE")) == "UPCOMING"
+@pytest.mark.parametrize(
+    ("badge", "expected"),
+    [
+        ("PREMIERE", "UPCOMING"),
+        ("UPCOMING", "UPCOMING"),
+        ("SHORTS", None),
+        (None, None),
+    ],
+)
+def test_parse_lockup_badge_style(badge, expected) -> None:
+    lockup = _make_lockup_with_badge(badge) if badge is not None else {}
+    assert _parse_lockup_badge_style(lockup) == expected
 
 
-def test_parse_lockup_badge_style_returns_upcoming_for_upcoming() -> None:
-    assert _parse_lockup_badge_style(_make_lockup_with_badge("UPCOMING")) == "UPCOMING"
-
-
-def test_parse_lockup_badge_style_returns_none_for_unknown_badge() -> None:
-    assert _parse_lockup_badge_style(_make_lockup_with_badge("SHORTS")) is None
-
-
-def test_parse_lockup_badge_style_returns_none_when_no_overlays() -> None:
-    assert _parse_lockup_badge_style({}) is None
-
-
-def test_safe_float_returns_none_for_non_numeric_text() -> None:
-    assert _safe_float("Free") is None
-    assert _safe_float("N/A") is None
-
-
-def test_safe_float_returns_float_for_numeric_text() -> None:
-    assert _safe_float("1.99") == 1.99
-    assert _safe_float("1234") == 1234.0
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [("Free", None), ("N/A", None), ("1.99", 1.99), ("1234", 1234.0)],
+)
+def test_safe_float(text, expected) -> None:
+    assert _safe_float(text) == expected

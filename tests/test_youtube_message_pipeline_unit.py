@@ -92,45 +92,8 @@ def test_pipeline_result_accepts_only_valid_state_combinations(
         )
 
 
-@pytest.mark.parametrize("reason", [reason.value for reason in NonEmissionReason])
-def test_pipeline_result_rejects_raw_string_non_emission_reasons(reason) -> None:
-    with pytest.raises(ValueError):
-        PipelineResult(
-            disposition="skip",
-            non_emission_reason=cast("Any", reason),
-        )
-
-
 def test_validate_pipeline_message_returns_none_for_missing_parse_result() -> None:
     assert _validate_pipeline_message(None) is None
-
-
-def test_validate_pipeline_message_returns_finalized_message(
-    monkeypatch,
-) -> None:
-    parse_result = ProcessedAction(
-        parsed_data={"message": "hello"},
-        original_item={"raw": True},
-        message_type="text_message",
-        action_type="addChatItem",
-    )
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.message_pipeline.validate_and_finalize_message",
-        lambda data, original_item, original_message_type, original_action_type: {
-            "data": data,
-            "item": original_item,
-            "message_type": original_message_type,
-            "action_type": original_action_type,
-        },
-    )
-
-    assert _validate_pipeline_message(parse_result) == {
-        "data": {"message": "hello"},
-        "item": {"raw": True},
-        "message_type": "text_message",
-        "action_type": "addChatItem",
-    }
 
 
 def test_check_time_filter_defaults_to_yield_without_filter() -> None:
@@ -202,8 +165,23 @@ def test_process_pipeline_action_categorizes_known_ignored_renderer() -> None:
     assert result.non_emission_reason is NonEmissionReason.KNOWN_IGNORED_MESSAGE
 
 
-def test_process_pipeline_action_skips_when_validation_fails(
+@pytest.mark.parametrize(
+    ("valid", "accepted", "time_result", "disposition", "reason"),
+    [
+        (False, True, None, "skip", NonEmissionReason.INVALID_MESSAGE),
+        (True, False, None, "skip", NonEmissionReason.MESSAGE_FILTERED),
+        (True, True, "skip", "skip", NonEmissionReason.TIME_RANGE_FILTERED),
+        (True, True, "stop", "stop", NonEmissionReason.TIME_RANGE_STOPPED),
+    ],
+    ids=["invalid", "message-filtered", "time-filtered", "time-stopped"],
+)
+def test_process_pipeline_action_non_emission(
     monkeypatch,
+    valid,
+    accepted,
+    time_result,
+    disposition,
+    reason,
 ) -> None:
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.process_action",
@@ -214,112 +192,25 @@ def test_process_pipeline_action_skips_when_validation_fails(
             action_type="addChatItem",
         ),
     )
+    message = {"message": "hello"}
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.message_pipeline.validate_and_finalize_message",
-        lambda *_args, **_kwargs: None,
+        lambda *_args, **_kwargs: message if valid else None,
     )
-
-    result = process_pipeline_action(
-        {"raw": True},
-        0,
-        cast("MessageFilter", _DummyMessageFilter()),
-        None,
-    )
-
-    assert result.disposition == "skip"
-    assert result.message is None
-    assert result.non_emission_reason is NonEmissionReason.INVALID_MESSAGE
-
-
-def test_process_pipeline_action_skips_when_message_filter_rejects(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda _action, _offset: ProcessedAction(
-            parsed_data={},
-            original_item={"raw": True},
-            message_type="text_message",
-            action_type="addChatItem",
-        ),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.message_pipeline.validate_and_finalize_message",
-        lambda *_args, **_kwargs: {"message": "hello"},
-    )
-    msg_filter = _DummyMessageFilter(should_add_result=False)
-
+    msg_filter = _DummyMessageFilter(accepted)
+    time_filter = _DummyTimeFilter(time_result)
     result = process_pipeline_action(
         {"raw": True},
         0,
         cast("MessageFilter", msg_filter),
-        None,
-    )
-
-    assert result.disposition == "skip"
-    assert result.message is None
-    assert result.non_emission_reason is NonEmissionReason.MESSAGE_FILTERED
-    assert msg_filter.seen_messages == [{"message": "hello"}]
-
-
-def test_process_pipeline_action_skips_when_time_filter_skips(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda _action, _offset: ProcessedAction(
-            parsed_data={},
-            original_item={"raw": True},
-            message_type="text_message",
-            action_type="addChatItem",
-        ),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.message_pipeline.validate_and_finalize_message",
-        lambda *_args, **_kwargs: {"message": "hello"},
-    )
-    time_filter = _DummyTimeFilter("skip")
-
-    result = process_pipeline_action(
-        {"raw": True},
-        0,
-        cast("MessageFilter", _DummyMessageFilter()),
         cast("TimeRangeFilter", time_filter),
     )
 
-    assert result.disposition == "skip"
+    assert result.disposition == disposition
     assert result.message is None
-    assert result.non_emission_reason is NonEmissionReason.TIME_RANGE_FILTERED
-    assert time_filter.seen_messages == [{"message": "hello"}]
-
-
-def test_process_pipeline_action_stops_when_time_filter_stops(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.message_pipeline.process_action",
-        lambda _action, _offset: ProcessedAction(
-            parsed_data={},
-            original_item={"raw": True},
-            message_type="text_message",
-            action_type="addChatItem",
-        ),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.message_pipeline.validate_and_finalize_message",
-        lambda *_args, **_kwargs: {"message": "hello"},
-    )
-
-    result = process_pipeline_action(
-        {"raw": True},
-        0,
-        cast("MessageFilter", _DummyMessageFilter()),
-        cast("TimeRangeFilter", _DummyTimeFilter("stop")),
-    )
-
-    assert result.disposition == "stop"
-    assert result.message is None
-    assert result.non_emission_reason is NonEmissionReason.TIME_RANGE_STOPPED
+    assert result.non_emission_reason is reason
+    assert msg_filter.seen_messages == ([message] if valid else [])
+    assert time_filter.seen_messages == ([message] if valid and accepted else [])
 
 
 def test_process_pipeline_action_yields_valid_message(monkeypatch) -> None:

@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for src/chat_downloader/debugging.py to improve coverage."""
+"""Behavioral tests for logging controls and terminal colour detection."""
 
 from __future__ import annotations
 
+import logging
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -12,187 +14,89 @@ import chat_downloader.debugging as dbg
 
 
 @pytest.fixture(autouse=True)
-def _restore_testing_mode():
-    original = dbg.get_testing_mode()
+def _restore_logging_state():
+    mode = dbg.get_testing_mode()
+    state = [(logger, logger.level, logger.disabled) for logger in dbg.loggers]
     yield
-    dbg.set_testing_mode(original)
+    dbg.set_testing_mode(mode)
+    for logger, level, disabled in state:
+        logger.setLevel(level)
+        logger.disabled = disabled
 
 
-@pytest.fixture(autouse=True)
-def _restore_loggers():
-    yield
-    for configured_logger in dbg.loggers:
-        configured_logger.disabled = False
+@pytest.mark.parametrize("level", ["debug", "info", "warning", "nonexistent_level"])
+@pytest.mark.parametrize("items", ["message", ["first", "second"], ("first", "second")])
+def test_log_emits_each_item_at_supported_levels(caplog, level, items):
+    dbg.set_log_level("debug")
+    with caplog.at_level(logging.DEBUG, logger=dbg.logger.name):
+        dbg.log(level, items)
+    expected = (
+        []
+        if level == "nonexistent_level"
+        else ([items] if isinstance(items, str) else list(items))
+    )
+    assert [record.getMessage() for record in caplog.records] == expected
 
 
-@pytest.fixture(autouse=True)
-def _restore_logger_levels():
-    original_levels = [logger.level for logger in dbg.loggers]
-    yield
-    for logger, original_level in zip(dbg.loggers, original_levels, strict=True):
-        logger.setLevel(original_level)
+@pytest.mark.parametrize("mode_name", [mode.name for mode in dbg.TestingModes])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_log_testing_controls(mode_name, enabled):
+    mode = dbg.TestingModes[mode_name]
+    dbg.set_testing_mode(mode)
+    exits = enabled and mode in (
+        dbg.TestingModes.EXIT_ON_DEBUG,
+        dbg.TestingModes.EXIT_ON_ERROR,
+    )
+    pauses = enabled and mode in (
+        dbg.TestingModes.PAUSE_ON_DEBUG,
+        dbg.TestingModes.PAUSE_ON_ERROR,
+    )
+    with patch.object(dbg, "pause") as pause:
+        if exits:
+            with pytest.raises(dbg.TestingException):
+                dbg.log("debug", "trigger", to_exit=enabled, to_pause=enabled)
+        else:
+            dbg.log("debug", "trigger", to_exit=enabled, to_pause=enabled)
+        assert pause.call_count == int(pauses)
 
 
-# ---------------------------------------------------------------------------
-# set_log_level() / loggers
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# log()
-# ---------------------------------------------------------------------------
-
-
-def test_log_valid_level() -> None:
-    """Log() with a known level should not raise."""
-    dbg.log("debug", "test message")
-    dbg.log("info", "test message")
-    dbg.log("warning", "test message")
-
-
-def test_log_invalid_level_is_silently_ignored() -> None:
-    """Log() with an unknown level does nothing (logger has no such method)."""
-    dbg.log("nonexistent_level", "test message")  # should not raise
-
-
-def test_log_with_list_of_items() -> None:
-    """Log() accepts a list and logs each item."""
-    dbg.log("debug", ["item1", "item2", "item3"])
-
-
-def test_log_to_exit_raises_testing_exception_in_exit_on_debug_mode() -> None:
-    """TestingException is raised when to_exit=True and mode=EXIT_ON_DEBUG."""
-    dbg.set_testing_mode(dbg.TestingModes.EXIT_ON_DEBUG)
-    with pytest.raises(dbg.TestingException):
-        dbg.log("debug", "trigger exit", to_exit=True)
-
-
-def test_log_to_exit_raises_in_exit_on_error_mode() -> None:
-    """TestingException is raised when to_exit=True and mode=EXIT_ON_ERROR."""
-    dbg.set_testing_mode(dbg.TestingModes.EXIT_ON_ERROR)
-    with pytest.raises(dbg.TestingException):
-        dbg.log("debug", "trigger exit", to_exit=True)
-
-
-def test_log_to_exit_does_not_raise_in_none_mode() -> None:
-    """to_exit=True is harmless when mode=NONE."""
-    dbg.set_testing_mode(dbg.TestingModes.NONE)
-    dbg.log("debug", "no exit", to_exit=True)  # should not raise
-
-
-def test_log_to_pause_calls_pause_in_pause_on_debug_mode() -> None:
-    """Line 56: pause() is called when to_pause=True and mode=PAUSE_ON_DEBUG."""
-    dbg.set_testing_mode(dbg.TestingModes.PAUSE_ON_DEBUG)
-    with patch("chat_downloader.debugging.pause") as mock_pause:
-        dbg.log("debug", "trigger pause", to_pause=True)
-    mock_pause.assert_called_once()
-
-
-def test_log_to_pause_calls_pause_in_pause_on_error_mode() -> None:
-    """Line 56: pause() is called when to_pause=True and mode=PAUSE_ON_ERROR."""
-    dbg.set_testing_mode(dbg.TestingModes.PAUSE_ON_ERROR)
-    with patch("chat_downloader.debugging.pause") as mock_pause:
-        dbg.log("debug", "trigger pause", to_pause=True)
-    mock_pause.assert_called_once()
-
-
-def test_log_to_pause_does_not_call_pause_in_none_mode() -> None:
-    """to_pause=True is harmless when mode=NONE."""
-    dbg.set_testing_mode(dbg.TestingModes.NONE)
-    with patch("chat_downloader.debugging.pause") as mock_pause:
-        dbg.log("debug", "no pause", to_pause=True)
-    mock_pause.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# disable_logger()
-# ---------------------------------------------------------------------------
-
-
-def test_disable_logger_sets_disabled_flag() -> None:
-    """disable_logger() disables every configured logger."""
+def test_disable_logger_suppresses_output(caplog):
+    dbg.set_log_level("debug")
     dbg.disable_logger()
-    assert all(configured_logger.disabled for configured_logger in dbg.loggers)
+    for logger in dbg.loggers:
+        logger.error("must not be emitted")
+    assert caplog.records == []
 
 
-# ---------------------------------------------------------------------------
-# supports_colour()
-# ---------------------------------------------------------------------------
-
-
-def test_returns_false_when_not_a_tty() -> None:
-    """supports_colour() returns False when stdout is not a TTY."""
-    mock_stdout = type("MockStdout", (), {"isatty": lambda self: False})()
-    with patch("sys.stdout", mock_stdout):
-        result = dbg.supports_colour()
-    assert not result
-
-
-def test_returns_false_when_stdout_has_no_isatty() -> None:
-    """supports_colour() returns False when stdout lacks isatty."""
-    mock_stdout = object()  # no isatty attribute
-    with patch("sys.stdout", mock_stdout):
-        result = dbg.supports_colour()
-    assert not result
-
-
-def test_returns_true_on_non_windows_tty() -> None:
-    """supports_colour() returns True on non-Windows TTY."""
-    mock_stdout = type("MockStdout", (), {"isatty": lambda self: True})()
-    with patch("sys.stdout", mock_stdout), patch("sys.platform", "linux"):
-        result = dbg.supports_colour()
-    assert result
-
-
-def test_returns_true_on_windows_with_colorama() -> None:
-    """supports_colour() returns True on Windows when HAS_COLORAMA is True."""
-    mock_stdout = type("MockStdout", (), {"isatty": lambda self: True})()
-    with (
-        patch("sys.stdout", mock_stdout),
-        patch("sys.platform", "win32"),
-        patch.object(dbg, "HAS_COLORAMA", True),
-    ):
-        result = dbg.supports_colour()
-    assert result
-
-
-def test_returns_true_on_windows_with_ansicon() -> None:
-    """supports_colour() returns True on Windows with ANSICON env var."""
-    mock_stdout = type("MockStdout", (), {"isatty": lambda self: True})()
-    env = {"ANSICON": "1"}
-    with (
-        patch("sys.stdout", mock_stdout),
-        patch("sys.platform", "win32"),
-        patch("os.environ", env),
-        patch.object(dbg, "HAS_COLORAMA", False),
-    ):
-        result = dbg.supports_colour()
-    assert result
-
-
-def test_returns_true_on_windows_terminal() -> None:
-    """supports_colour() returns True when WT_SESSION is set."""
-    mock_stdout = type("MockStdout", (), {"isatty": lambda self: True})()
-    env = {"WT_SESSION": "some-guid"}
-    with (
-        patch("sys.stdout", mock_stdout),
-        patch("sys.platform", "win32"),
-        patch("os.environ", env),
-        patch.object(dbg, "HAS_COLORAMA", False),
-    ):
-        result = dbg.supports_colour()
-    assert result
-
-
-def test_returns_true_on_vscode_terminal() -> None:
-    """supports_colour() returns True with TERM_PROGRAM=vscode."""
-    mock_stdout = type("MockStdout", (), {"isatty": lambda self: True})()
-    env = {"TERM_PROGRAM": "vscode"}
-    with (
-        patch("sys.stdout", mock_stdout),
-        patch("sys.platform", "win32"),
-        patch("os.environ", env),
-        patch.object(dbg, "HAS_COLORAMA", False),
-    ):
-        result = dbg.supports_colour()
-    assert result
+@pytest.mark.parametrize(
+    ("stdout", "platform", "colorama", "environment", "expected"),
+    [
+        (SimpleNamespace(isatty=lambda: False), "linux", False, {}, False),
+        (object(), "linux", False, {}, False),
+        (SimpleNamespace(isatty=lambda: True), "linux", False, {}, True),
+        (SimpleNamespace(isatty=lambda: True), "win32", True, {}, True),
+        (SimpleNamespace(isatty=lambda: True), "win32", False, {"ANSICON": "1"}, True),
+        (
+            SimpleNamespace(isatty=lambda: True),
+            "win32",
+            False,
+            {"WT_SESSION": "guid"},
+            True,
+        ),
+        (
+            SimpleNamespace(isatty=lambda: True),
+            "win32",
+            False,
+            {"TERM_PROGRAM": "vscode"},
+            True,
+        ),
+    ],
+)
+def test_supports_colour(
+    monkeypatch, stdout, platform, colorama, environment, expected
+):
+    monkeypatch.setattr(dbg.sys, "stdout", stdout)
+    monkeypatch.setattr(dbg.sys, "platform", platform)
+    monkeypatch.setattr(dbg, "HAS_COLORAMA", colorama)
+    monkeypatch.setattr(dbg.os, "environ", environment)
+    assert dbg.supports_colour() is expected

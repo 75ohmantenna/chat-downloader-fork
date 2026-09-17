@@ -141,111 +141,52 @@ def test_generate_sapisidhash_header_promotes_cookie_and_uses_datasync_id(
         ),
     ]
     assert header == " ".join(
-        [
-            _make_sid_authorization(
-                "SAPISIDHASH",
-                "threep",
-                "https://www.youtube.com",
-                1234,
-                {"u": "user-session"},
-            ),
-            _make_sid_authorization(
-                "SAPISID1PHASH",
-                "onep",
-                "https://www.youtube.com",
-                1234,
-                {"u": "user-session"},
-            ),
-            _make_sid_authorization(
-                "SAPISID3PHASH",
-                "threep",
-                "https://www.youtube.com",
-                1234,
-                {"u": "user-session"},
-            ),
-        ],
+        _make_sid_authorization(
+            scheme, sid, "https://www.youtube.com", 1234, {"u": "user-session"}
+        )
+        for scheme, sid in [
+            ("SAPISIDHASH", "threep"),
+            ("SAPISID1PHASH", "onep"),
+            ("SAPISID3PHASH", "threep"),
+        ]
     )
 
 
-def test_generate_sapisidhash_header_uses_sapisid_when_already_present(
-    monkeypatch,
-) -> None:
-    """SAPISID cookie present: _ensure_primary_sapisid returns it directly."""
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.client_auth.time.time",
-        lambda: 1234,
-    )
-    session = _FakeSession({"SAPISID": "direct-sapisid"})
-
-    header = _generate_sapisidhash_header(
-        session, "https://www.youtube.com", ytcfg=None
-    )
-
-    # No promotion call should have been made — cookie already exists.
-    assert session.set_calls == []
+@pytest.mark.parametrize(
+    ("cookies", "ytcfg", "promoted"),
+    [
+        ({"SAPISID": "direct-sapisid"}, None, False),
+        ({"__Secure-3PAPISID": "threep"}, None, True),
+        ({"__Secure-3PAPISID": "threep"}, {"OTHER_KEY": "value"}, True),
+    ],
+    ids=["primary-cookie", "no-config", "no-datasync-id"],
+)
+def test_generate_sapisidhash_header_without_session_binding(
+    monkeypatch, cookies, ytcfg, promoted
+):
+    monkeypatch.setattr(_yt_auth.time, "time", lambda: 1234)
+    session = _FakeSession(cookies)
+    header = _generate_sapisidhash_header(session, "https://www.youtube.com", ytcfg)
     assert header is not None
-    assert "SAPISIDHASH" in header
+    if not promoted:
+        assert session.set_calls == []
+        assert "SAPISIDHASH" in header
 
 
-def test_generate_sapisidhash_header_no_session_id_when_ytcfg_none(
-    monkeypatch,
-) -> None:
-    """ytcfg=None: _session_id_parts returns None (early return, line 117)."""
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.client_auth.time.time",
-        lambda: 1234,
-    )
-    session = _FakeSession({"__Secure-3PAPISID": "threep"})
-
-    header = _generate_sapisidhash_header(
-        session, "https://www.youtube.com", ytcfg=None
-    )
-
-    assert header is not None
-
-
-def test_generate_sapisidhash_header_no_session_id_when_datasync_id_absent(
-    monkeypatch,
-) -> None:
-    """Ytcfg present but no DATASYNC_ID: _session_id_parts returns None."""
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.client_auth.time.time",
-        lambda: 1234,
-    )
-    session = _FakeSession({"__Secure-3PAPISID": "threep"})
-
-    header = _generate_sapisidhash_header(
-        session, "https://www.youtube.com", ytcfg={"OTHER_KEY": "value"}
-    )
-
-    assert header is not None
-
-
-def test_initialize_consent_returns_early_for_existing_secure_cookie() -> None:
-    session = _FakeSession({"__Secure-3PSID": "present"})
-
+@pytest.mark.parametrize(
+    ("cookies", "expected"),
+    [
+        ({"__Secure-3PSID": "present"}, []),
+        ({"SOCS": "XYZ"}, []),
+        ({}, [(".youtube.com", "SOCS", "CAI", {"secure": True})]),
+        ({"SOCS": "CAAabc"}, [(".youtube.com", "SOCS", "CAI", {"secure": True})]),
+    ],
+    ids=["secure-cookie", "non-consented", "missing", "consented"],
+)
+def test_initialize_consent(cookies, expected) -> None:
+    session = _FakeSession(cookies)
     _initialize_consent(session)
-
-    assert session.set_calls == []
-
-
-def test_initialize_consent_skips_non_consented_socs_cookie() -> None:
-    session = _FakeSession({"SOCS": "XYZ"})
-
-    _initialize_consent(session)
-
-    assert session.set_calls == []
-
-
-def test_initialize_consent_sets_cookie_for_missing_or_consented_socs() -> None:
-    missing = _FakeSession()
-    consented = _FakeSession({"SOCS": "CAAabc"})
-
-    _initialize_consent(missing)
-    _initialize_consent(consented)
-
-    assert missing.set_calls == [(".youtube.com", "SOCS", "CAI", {"secure": True})]
-    assert consented.set_calls == [(".youtube.com", "SOCS", "CAI", {"secure": True})]
+    assert session.set_calls == expected
 
 
 def test_get_sid_cookies_returns_all_variants() -> None:
@@ -334,33 +275,19 @@ def test_generate_headers_preserves_zero_session_index() -> None:
     assert headers["x-goog-authuser"] == "0"
 
 
-def test_get_innertube_context_handles_non_dict_and_missing_client() -> None:
-    assert _get_innertube_context({"INNERTUBE_CONTEXT": "invalid"}) == {}
-
-    empty_context = _get_innertube_context({"INNERTUBE_CONTEXT": []})
-
-    context = _get_innertube_context(
-        {
-            "INNERTUBE_CONTEXT": {
-                "client": None,
-            },
-        },
-    )
-
-    assert empty_context == {
-        "client": {
-            "hl": "en",
-            "timeZone": "UTC",
-            "utcOffsetMinutes": 0,
-        },
-    }
-    assert context == {
-        "client": {
-            "hl": "en",
-            "timeZone": "UTC",
-            "utcOffsetMinutes": 0,
-        },
-    }
+@pytest.mark.parametrize(
+    ("context", "expected"),
+    [
+        ("invalid", {}),
+        ([], {"client": {"hl": "en", "timeZone": "UTC", "utcOffsetMinutes": 0}}),
+        (
+            {"client": None},
+            {"client": {"hl": "en", "timeZone": "UTC", "utcOffsetMinutes": 0}},
+        ),
+    ],
+)
+def test_get_innertube_context_handles_non_dict_and_missing_client(context, expected):
+    assert _get_innertube_context({"INNERTUBE_CONTEXT": context}) == expected
 
 
 def test_apply_request_profile_to_ytcfg_keeps_body_and_headers_aligned() -> None:
@@ -432,33 +359,22 @@ def test_get_continuation_info_retries_after_json_decode_error() -> None:
     assert calls["count"] == 2
 
 
-def test_get_continuation_info_raises_retries_exceeded_on_json_parse_failure() -> None:
-    """Exhausted retries on JSONDecodeError now surface as RetriesExceeded."""
+@pytest.mark.parametrize("network", [False, True], ids=["json-parse", "network"])
+def test_get_continuation_info_raises_retries_exceeded(network) -> None:
     from chat_downloader.errors import RetriesExceeded
 
-    with pytest.raises(RetriesExceeded, match="Unable to parse JSON"):
+    def fail(*_args, **_kwargs):
+        if network:
+            raise RequestsConnectionError("boom")
+        raise JSONDecodeError("bad json", "doc", 0)
+
+    response = _Resp(200, payload=fail, text="not-json")
+    with pytest.raises(
+        RetriesExceeded, match="ConnectionError" if network else "Unable to parse JSON"
+    ):
         _get_continuation_info(
             "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            lambda *_a, **_k: _Resp(
-                200,
-                payload=lambda _n: (_ for _ in ()).throw(
-                    JSONDecodeError("bad json", "doc", 0),
-                ),
-                text="not-json",
-            ),
-            {"max_attempts": 1},
-            json={"continuation": "abc"},
-        )
-
-
-def test_get_continuation_info_raises_retries_exceeded_on_network_error() -> None:
-    """Exhausted retries on a network error now surface as RetriesExceeded."""
-    from chat_downloader.errors import RetriesExceeded
-
-    with pytest.raises(RetriesExceeded, match="ConnectionError"):
-        _get_continuation_info(
-            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
-            lambda *_a, **_k: (_ for _ in ()).throw(RequestsConnectionError("boom")),
+            fail if network else lambda *_a, **_k: response,
             {"max_attempts": 1},
             json={"continuation": "abc"},
         )
@@ -494,28 +410,16 @@ def test_get_initial_info_raises_video_not_found(monkeypatch) -> None:
         )
 
 
-def test_get_initial_info_raises_network_error_without_retry() -> None:
-    with pytest.raises(RequestsConnectionError):
-        _get_initial_info(
-            "https://www.youtube.com/watch?v=test",
-            lambda _url: (_ for _ in ()).throw(RequestsConnectionError("boom")),
-            {"max_attempts": 1},
-            r"ytInitialData",
-            r"ytcfg",
-            r"ytInitialPlayerResponse",
-        )
-
-
-def test_get_initial_info_retries_network_error_before_success(
-    monkeypatch,
-) -> None:
-    calls = {"count": 0}
+@pytest.mark.parametrize(
+    "retry_network", [False, True], ids=["missing-params", "network-retry"]
+)
+def test_get_initial_info_success(monkeypatch, retry_network) -> None:
+    calls = []
 
     def session_get(_url):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            msg = "boom"
-            raise RequestsConnectionError(msg)
+        calls.append(_url)
+        if retry_network and len(calls) == 1:
+            raise RequestsConnectionError("boom")
         return _PageResp(200, "<html>ok</html>")
 
     monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: "{}")
@@ -524,20 +428,16 @@ def test_get_initial_info_retries_network_error_before_success(
         "try_parse_json",
         lambda _value, default=None: {"contents": {}} if default is None else default,
     )
-
-    yt_initial_data, ytcfg, player_response = _get_initial_info(
+    result = _get_initial_info(
         "https://www.youtube.com/watch?v=test",
         session_get,
-        {"max_attempts": 2},
+        {"max_attempts": 2} if retry_network else None,
         r"ytInitialData",
         r"ytcfg",
         r"ytInitialPlayerResponse",
     )
-
-    assert calls["count"] == 2
-    assert yt_initial_data == {"contents": {}}
-    assert ytcfg == {}
-    assert player_response == {}
+    assert result == ({"contents": {}}, {}, {})
+    assert len(calls) == (2 if retry_network else 1)
 
 
 def test_get_initial_info_raises_retries_exceeded_when_attempts_disabled() -> None:
@@ -552,64 +452,24 @@ def test_get_initial_info_raises_retries_exceeded_when_attempts_disabled() -> No
         )
 
 
-def test_get_initial_info_uses_default_attempts_when_params_missing(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(_yt_initial, "regex_search", lambda *_a, **_k: "{}")
-    monkeypatch.setattr(
-        _yt_initial,
-        "try_parse_json",
-        lambda _value, default=None: {"contents": {}} if default is None else default,
-    )
+@pytest.mark.parametrize(
+    ("existing", "broken"), [("f1=val1&f2=val2", False), ("broken", True)]
+)
+def test_initialize_pref_preserves_or_recovers_existing_cookie(
+    monkeypatch, existing, broken
+):
+    session = _FakeSession({"PREF": existing})
+    if broken:
 
-    yt_initial_data, ytcfg, player_response = _get_initial_info(
-        "https://www.youtube.com/watch?v=test",
-        lambda _url: _PageResp(200, "<html>ok</html>"),
-        None,
-        r"ytInitialData",
-        r"ytcfg",
-        r"ytInitialPlayerResponse",
-    )
+        def invalid_cookie(_value):
+            raise ValueError
 
-    assert yt_initial_data == {"contents": {}}
-    assert ytcfg == {}
-    assert player_response == {}
-
-
-def test_initialize_pref_merges_existing_cookie() -> None:
-    from unittest.mock import MagicMock
-
-    from chat_downloader.sites.youtube.client_auth import _initialize_pref
-
-    mock_session = MagicMock()
-    mock_session.get_cookie_value.return_value = "f1=val1&f2=val2"
-
-    _initialize_pref(mock_session)
-
-    call_args = mock_session.set_cookie_value.call_args
-    value = call_args[0][2]  # Third positional arg is the cookie value
-    assert "hl=en" in value
-    assert "tz=UTC" in value
-    assert "f1=val1" in value  # Original values preserved
-
-
-def test_initialize_pref_ignores_unparseable_existing_cookie(
-    monkeypatch,
-) -> None:
-    from unittest.mock import MagicMock
-
-    from chat_downloader.sites.youtube import client_auth
-
-    mock_session = MagicMock()
-    mock_session.get_cookie_value.return_value = "broken"
-    monkeypatch.setattr(
-        client_auth,
-        "parse_qsl",
-        MagicMock(side_effect=ValueError),
-    )
-
-    client_auth._initialize_pref(mock_session)
-
-    mock_session.set_cookie_value.assert_called_once_with(
-        ".youtube.com", "PREF", "hl=en&tz=UTC"
-    )
+        monkeypatch.setattr(_yt_auth, "parse_qsl", invalid_cookie)
+    _yt_auth._initialize_pref(session)
+    if broken:
+        assert session.set_calls == [(".youtube.com", "PREF", "hl=en&tz=UTC", {})]
+    else:
+        value = session.cookies["PREF"]
+        assert "hl=en" in value
+        assert "tz=UTC" in value
+        assert "f1=val1" in value

@@ -129,34 +129,14 @@ class TwitchChatDownloader(BaseChatDownloader):
         Returns:
             JSON response from GraphQL API
         """
-        auth_token: str | None = self.get_cookie_value(GQL_AUTH_COOKIE_NAME)
-        client_id: str | None = getattr(self, "_twitch_client_id", None)
-        if record_optional_degradation is None:
-            if client_id is None:
-                return _download_gql(
-                    self._session_post,
-                    ops,
-                    auth_token,
-                )
-            return _download_gql(
-                self._session_post,
-                ops,
-                auth_token,
-                client_id=client_id,
-            )
-        if client_id is None:
-            return _download_gql(
-                self._session_post,
-                ops,
-                auth_token,
-                record_optional_degradation=record_optional_degradation,
-            )
+        kwargs: dict[str, Any] = self._client_id_kwargs()
+        if record_optional_degradation is not None:
+            kwargs["record_optional_degradation"] = record_optional_degradation
         return _download_gql(
             self._session_post,
             ops,
-            auth_token,
-            client_id=client_id,
-            record_optional_degradation=record_optional_degradation,
+            self.get_cookie_value(GQL_AUTH_COOKIE_NAME),
+            **kwargs,
         )
 
     def generate_urls(  # type: ignore[override]  # test helper: signature intentionally diverges from base

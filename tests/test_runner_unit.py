@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, NoReturn
+import ast
+import json
+import threading
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,53 +14,94 @@ from requests.exceptions import (
     RequestException,
 )
 
-from chat_downloader.debugging import (
-    TestingException as RuntimeTestingException,
-)
-from chat_downloader.errors import (
-    ChatGeneratorError,
-    ParsingError,
-    SiteNotSupported,
-)
-from chat_downloader.models import RunConfig
+from chat_downloader.debugging import TestingException as RuntimeTestingException
+from chat_downloader.errors import ChatGeneratorError, ParsingError, SiteNotSupported
+from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime.runner import (
     SITE_CHANGE_ERROR_HINT,
     RunResult,
-    _classify_run_error,
-    _configure_testing_mode,
-    _finalize_run,
     _log_run_summary,
     create_message_callback,
     execute_run,
 )
+from chat_downloader.sites.models import Chat
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 
 class _FakeChat:
-    def __iter__(self):
-        return iter(())
-
-    def print_formatted(self, _msg) -> None: ...
-
-    def close(self) -> None: ...
-
-
-class _FakeDownloader:
-    """Minimal downloader stub; get_chat returns _FakeChat by default."""
-
-    _last: _FakeDownloader | None = None
-
-    def __init__(self, **kwargs) -> None:
-        self.init_kwargs = kwargs
-        self.chat_kwargs: dict[str, Any] | None = None
+    def __init__(self, items=(), *, error=None, close_error=None) -> None:
+        self.items = iter(items)
+        self.error = error
+        self.close_error = close_error
         self.closed = False
-        _FakeDownloader._last = self
 
-    def get_chat(self, **kwargs) -> _FakeChat:
-        self.chat_kwargs = kwargs
-        return _FakeChat()
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return next(self.items)
+        except StopIteration:
+            if self.error is not None:
+                raise self.error from None
+            raise
+
+    def print_formatted(self, _message) -> None: ...
 
     def close(self) -> None:
         self.closed = True
+        if self.close_error is not None:
+            raise self.close_error
+
+
+@pytest.fixture
+def downloader():
+    """Build a downloader around a supplied chat or acquisition failure."""
+
+    def make(chat=None, *, error=None, close_error=None):
+        class Downloader:
+            instance = None
+
+            def __init__(self, **kwargs) -> None:
+                self.init_kwargs = kwargs
+                self.chat_kwargs = None
+                self.closed = False
+                Downloader.instance = self
+
+            def get_chat(self, **kwargs):
+                self.chat_kwargs = kwargs
+                if error is not None:
+                    raise error
+                return chat if chat is not None else _FakeChat()
+
+            def close(self) -> None:
+                self.closed = True
+                if close_error is not None:
+                    raise close_error
+
+        return Downloader
+
+    return make
+
+
+@pytest.fixture
+def logged(monkeypatch):
+    entries = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda level, message: entries.append((level, str(message))),
+    )
+    return entries
+
+
+def _summary(logged):
+    return ast.literal_eval(
+        next(
+            message.removeprefix("Run summary: ")
+            for level, message in logged
+            if level == "debug" and message.startswith("Run summary: ")
+        )
+    )
 
 
 def test_run_result_preserves_existing_positional_field_order() -> None:
@@ -70,27 +114,8 @@ def test_run_result_preserves_existing_positional_field_order() -> None:
     assert result.message_type_counts == {}
 
 
-def _make_error_downloader(error_to_raise: BaseException) -> type:
-    """Return a fresh class whose get_chat() raises error_to_raise."""
-
-    class _ErrorDownloader:
-        _last: _ErrorDownloader | None = None
-
-        def __init__(self, **_kwargs) -> None:
-            self.closed = False
-            _ErrorDownloader._last = self
-
-        def get_chat(self, **_kwargs) -> NoReturn:
-            raise error_to_raise
-
-        def close(self) -> None:
-            self.closed = True
-
-    return _ErrorDownloader
-
-
 @pytest.mark.parametrize(
-    ("exc", "expected_fragment"),
+    ("error", "fragment"),
     [
         (ChatGeneratorError("gen"), SITE_CHANGE_ERROR_HINT),
         (ParsingError("parse"), SITE_CHANGE_ERROR_HINT),
@@ -100,243 +125,143 @@ def _make_error_downloader(error_to_raise: BaseException) -> type:
         (RequestException("timeout"), "timeout"),
         (OSError("disk full"), "disk full"),
         (ValueError("max_attempts must be positive"), "max_attempts"),
+        (KeyboardInterrupt(), "Keyboard Interrupt"),
     ],
 )
-def test_classify_run_error_returns_correct_message(
-    exc: Exception, expected_fragment: str
-) -> None:
-    msg = _classify_run_error(exc)
-    assert expected_fragment in msg
+def test_execute_run_reports_acquisition_errors(downloader, logged, error, fragment):
+    factory = downloader(error=error)
+    result = execute_run(factory)
 
-
-@pytest.mark.parametrize(
-    ("error_to_raise", "expected_result_fragment", "expected_interrupted"),
-    [
-        (ChatGeneratorError("gen"), SITE_CHANGE_ERROR_HINT, False),
-        (ParsingError("parse"), SITE_CHANGE_ERROR_HINT, False),
-        (RuntimeTestingException("test"), SITE_CHANGE_ERROR_HINT, False),
-        (ConnectionError("offline"), "internet connection", False),
-        (SiteNotSupported("no site"), "no site", False),
-        (RequestException("timeout"), "timeout", False),
-        (OSError("disk full"), "disk full", False),
-        (ValueError("max_attempts must be positive"), "max_attempts", False),
-        (KeyboardInterrupt(), "Keyboard Interrupt", True),
-    ],
-)
-def test_execute_run_result_fields_per_exception_type(
-    error_to_raise: BaseException,
-    expected_result_fragment: str,
-    expected_interrupted: bool,
-) -> None:
-    result = execute_run(_make_error_downloader(error_to_raise))
     assert result.success is False
     assert result.error_message is not None
-    assert expected_result_fragment in result.error_message
-    assert result.interrupted is expected_interrupted
-
-
-def test_finalize_run_suppresses_cleanup_errors_on_primary_error(
-    monkeypatch,
-) -> None:
-    logged = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, str(message))),
-    )
-
-    class _BadChat:
-        def close(self) -> None:
-            raise RuntimeError("chat broken")
-
-    class _BadDownloader:
-        def close(self) -> None:
-            raise RuntimeError("downloader broken")
-
-    _finalize_run(_BadChat(), _BadDownloader(), primary_error=True)
-    assert ("warning", "Error finalizing chat output: chat broken") in logged
-    assert (
-        "warning",
-        "Error closing downloader session(s): downloader broken",
-    ) in logged
-
-
-def test_finalize_run_reraises_cleanup_errors_without_primary_error() -> None:
-    class _BadChat:
-        def close(self) -> None:
-            raise RuntimeError("chat broken")
-
-    with pytest.raises(RuntimeError, match="chat broken"):
-        _finalize_run(_BadChat(), None, primary_error=False)
+    assert fragment in result.error_message
+    assert result.interrupted is isinstance(error, KeyboardInterrupt)
+    assert [(level, message) for level, message in logged if level == "error"] == [
+        ("error", result.error_message)
+    ]
+    assert _summary(logged)["success"] is False
+    assert factory.instance.closed is True
 
 
 def test_create_message_callback_quiet_returns_noop() -> None:
     chat = MagicMock()
-    callback = create_message_callback(quiet=True, chat=chat)
-
-    callback({"message_type": "text_message"})
+    create_message_callback(quiet=True, chat=chat)({"message_type": "text_message"})
     chat.print_formatted.assert_not_called()
 
 
-def test_create_message_callback_deduplicates_superchat_stdout() -> None:
+@pytest.mark.parametrize(
+    ("limit", "messages", "emitted"),
+    [
+        (
+            None,
+            [
+                ("paid_message", "a"),
+                ("ticker_paid_message_item", "a"),
+                ("text_message", "a"),
+            ],
+            [0, 2],
+        ),
+        (
+            1,
+            [
+                ("paid_message", "one"),
+                ("ticker_paid_message_item", "one"),
+                ("membership_item", "two"),
+                ("ticker_sponsor_item", "two"),
+                ("paid_message", "one"),
+            ],
+            [0, 2, 4],
+        ),
+        (
+            0,
+            [
+                ("paid_message", "dup"),
+                ("text_message", "dup"),
+                ("paid_message", "dup"),
+            ],
+            [0, 1],
+        ),
+    ],
+)
+def test_create_message_callback_deduplicates(limit, messages, emitted) -> None:
     chat = MagicMock()
-    callback = create_message_callback(quiet=False, chat=chat)
+    options = {} if limit is None else {"max_seen_message_ids": limit}
+    callback = create_message_callback(quiet=False, chat=chat, **options)
+    items = [{"message_type": kind, "message_id": key} for kind, key in messages]
 
-    callback({"message_type": "paid_message", "message_id": "abc"})
-    callback({"message_type": "ticker_paid_message_item", "message_id": "abc"})
-    callback({"message_type": "text_message", "message_id": "abc"})
+    for item in items:
+        callback(item)
 
-    assert chat.print_formatted.call_count == 2
-
-
-def test_create_message_callback_deduplicates_with_bounded_cache() -> None:
-    chat = MagicMock()
-    callback = create_message_callback(quiet=False, chat=chat, max_seen_message_ids=1)
-
-    callback({"message_type": "paid_message", "message_id": "one"})
-    callback({"message_type": "ticker_paid_message_item", "message_id": "one"})
-    callback({"message_type": "membership_item", "message_id": "two"})
-    callback({"message_type": "ticker_sponsor_item", "message_id": "two"})
-    callback({"message_type": "paid_message", "message_id": "one"})
-
-    assert chat.print_formatted.call_count == 3
+    assert [call.args[0] for call in chat.print_formatted.call_args_list] == [
+        items[index] for index in emitted
+    ]
 
 
-def test_create_message_callback_uses_default_cache_when_limit_disabled() -> None:
-    chat = MagicMock()
-    callback = create_message_callback(quiet=False, chat=chat, max_seen_message_ids=0)
-
-    callback({"message_type": "paid_message", "message_id": "dup"})
-    callback({"message_type": "text_message", "message_id": "dup"})
-    callback({"message_type": "paid_message", "message_id": "dup"})
-
-    assert chat.print_formatted.call_count == 2
-
-
-def test_execute_run_processes_messages_and_closes_downloader() -> None:
-    seen_messages: list[dict[str, str]] = []
-
-    class FakeChat:
-        def __iter__(self):
-            yield {"message_type": "text_message", "message_id": "1"}
-
-        def print_formatted(self, message) -> None:
-            seen_messages.append(message)
-
-    class FakeDownloader:
-        instance = None
-
-        def __init__(self, **kwargs) -> None:
-            self.init_kwargs = kwargs
-            self.closed = False
-            self.chat_kwargs = None
-            FakeDownloader.instance = self
-
-        def get_chat(self, **kwargs):
-            self.chat_kwargs = kwargs
-            return FakeChat()
-
-        def close(self) -> None:
-            self.closed = True
-
-    execute_run(
-        FakeDownloader,
-        url="https://www.youtube.com/watch?v=abc",
-        max_messages=1,
+def test_execute_run_processes_messages_and_closes_downloader(downloader, capsys):
+    chat = Chat(iter([{"message_type": "text_message", "message_id": "1"}]))
+    chat.set_formatter(lambda message: message["message_id"])
+    factory = downloader(chat)
+    result = execute_run(
+        factory, url="https://www.youtube.com/watch?v=abc", max_messages=1
     )
 
-    assert FakeDownloader.instance is not None
-    assert FakeDownloader.instance.init_kwargs == {}
-    assert FakeDownloader.instance.chat_kwargs == {
+    assert factory.instance.init_kwargs == {}
+    assert factory.instance.chat_kwargs == {
         "url": "https://www.youtube.com/watch?v=abc",
         "max_messages": 1,
     }
-    assert FakeDownloader.instance.closed is True
-    assert seen_messages == [{"message_type": "text_message", "message_id": "1"}]
+    assert factory.instance.closed is True
+    assert result.message_count == 1
+    assert capsys.readouterr().out.splitlines() == ["1"]
 
 
-def test_execute_run_logs_final_message_and_writer_counts(monkeypatch) -> None:
-    from chat_downloader.sites.models import Chat
+@pytest.mark.parametrize(
+    ("cache_size", "quiet", "emitted"), [(1, False, 3), (2, True, 2)]
+)
+def test_execute_run_logs_final_message_and_writer_counts(
+    downloader, logged, tmp_path, capsys, cache_size, quiet, emitted
+):
+    items = [
+        {"message_type": kind, "message_id": key}
+        for kind, key in [
+            ("paid_message", "one"),
+            ("ticker_paid_message_item", "one"),
+            ("membership_item", "two"),
+            ("ticker_sponsor_item", "two"),
+            ("paid_message", "one"),
+        ]
+    ]
+    chat = Chat(iter(items), max_seen_message_ids=cache_size)
+    chat.set_formatter(lambda item: item["message_id"])
+    paths = [tmp_path / "chat.jsonl", tmp_path / "chat.txt"]
+    for path in paths:
+        chat.attach_writer(ContinuousWriter(str(path)))
 
-    class Writer:
-        def __init__(self, file_name: str, output_mode: str) -> None:
-            self.file_name = file_name
-            self.output_mode = output_mode
-
-        def is_initialised(self) -> bool:
-            return True
-
-        def initialize(self) -> None:
-            raise AssertionError("already initialized")
-
-        def write(self, _item, *, flush: bool = False) -> None:
-            assert flush is True
-
-        def close(self) -> None:
-            pass
-
-    class Downloader:
-        def __init__(self, **_kwargs) -> None:
-            pass
-
-        def get_chat(self, **_kwargs):
-            chat = Chat(
-                iter(
-                    (
-                        {"message_type": "paid_message", "message_id": "same"},
-                        {
-                            "message_type": "ticker_paid_message_item",
-                            "message_id": "same",
-                        },
-                    )
-                )
-            )
-            chat.set_formatter(lambda item: str(item["message_type"]))
-            chat.attach_writer(Writer("chat.jsonl", "raw"))
-            chat.attach_writer(Writer("chat.txt", "formatted"))
-            return chat
-
-        def close(self) -> None:
-            pass
-
-    logged: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, message)),
-    )
-
-    result = execute_run(Downloader, quiet=True)
+    result = execute_run(downloader(chat), quiet=quiet, max_seen_message_ids=cache_size)
 
     assert result.success is True
-    assert result.message_count == 2
+    assert result.message_count == 5
     assert result.message_type_counts == {
-        "paid_message": 1,
+        "paid_message": 2,
         "ticker_paid_message_item": 1,
+        "membership_item": 1,
+        "ticker_sponsor_item": 1,
     }
-    assert logged[-1] == (
-        "debug",
-        (
-            "Run summary: {'success': True, 'termination_reason': 'completed', "
-            "'parity_status': 'not_requested', 'provider_inspection': None, "
-            "'message_count': 2, "
-            "'message_type_counts': {'paid_message': 1, "
-            "'ticker_paid_message_item': 1}, "
-            "'formatted_duplicates_suppressed': 1, "
-            "'prefetched_after_deadline_count': 0, "
-            "'deadline_prefetch_count_complete': True, "
-            "'provider_diagnostics': {}, 'output_writers': "
-            "[{'file_name': 'chat.jsonl', 'file_created': True, "
-            "'records_written': 2}, {'file_name': 'chat.txt', "
-            "'file_created': True, 'records_written': 1}]}"
-        ),
-    )
+    summary = _summary(logged)
+    assert summary["message_count"] == result.message_count
+    assert summary["message_type_counts"] == result.message_type_counts
+    assert summary["formatted_duplicates_suppressed"] == 5 - emitted
+    assert summary["output_writers"] == [
+        {"file_name": str(path), "file_created": True, "records_written": count}
+        for path, count in zip(paths, [5, emitted], strict=True)
+    ]
+    assert [json.loads(line) for line in paths[0].read_text().splitlines()] == items
+    expected = ["one", "two", "one"][:emitted]
+    assert paths[1].read_text().splitlines() == expected
+    assert capsys.readouterr().out.splitlines() == ([] if quiet else expected)
 
 
-def test_execute_run_marks_deadline_prefetch_summary_incomplete(monkeypatch) -> None:
-    import threading
-
-    from chat_downloader.sites.models import Chat
-    from chat_downloader.utils.timed_generator import TimedGenerator
-
+def test_execute_run_marks_deadline_prefetch_summary_incomplete(downloader, logged):
     advance_started = threading.Event()
     allow_item = threading.Event()
     diagnostics: dict[str, object] = {"live_emitted_count": 0}
@@ -348,574 +273,169 @@ def test_execute_run_marks_deadline_prefetch_summary_incomplete(monkeypatch) -> 
         yield {"message_type": "text_message", "message_id": "late"}
 
     timed_source = TimedGenerator(blocked_source(), timeout=0.01)
+    try:
+        assert advance_started.wait(timeout=1)
+        result = execute_run(
+            downloader(Chat(timed_source, diagnostics=diagnostics)), quiet=True
+        )
+        assert result.success is True
+        assert result.message_count == 0
+        summary = _summary(logged)
+        assert summary["prefetched_after_deadline_count"] == 0
+        assert summary["deadline_prefetch_count_complete"] is False
+        assert summary["provider_diagnostics"] == {"live_emitted_count": 0}
+    finally:
+        allow_item.set()
+        timed_source._worker.join(timeout=1)
 
-    class Downloader:
-        def __init__(self, **_kwargs) -> None:
-            pass
-
-        def get_chat(self, **_kwargs):
-            return Chat(timed_source, diagnostics=diagnostics)
-
-        def close(self) -> None:
-            pass
-
-    logged: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, message)),
-    )
-
-    assert advance_started.wait(timeout=1)
-    result = execute_run(Downloader, quiet=True)
-
-    assert result.success is True
-    assert result.message_count == 0
-    assert "'prefetched_after_deadline_count': 0" in logged[-1][1]
-    assert "'deadline_prefetch_count_complete': False" in logged[-1][1]
-    assert "'provider_diagnostics': {'live_emitted_count': 0}" in logged[-1][1]
-
-    allow_item.set()
-    timed_source._worker.join(timeout=1)
     assert timed_source.deadline_prefetch_summary() == (1, True)
     assert diagnostics == {"live_emitted_count": 1}
 
 
-def test_log_run_summary_redacts_credentials(monkeypatch) -> None:
-    class Dispatcher:
-        def __init__(self) -> None:
-            self.formatted_duplicates_suppressed = 0
-            self.writer_summaries = [
+def test_log_run_summary_redacts_credentials(logged):
+    chat = SimpleNamespace(
+        _output_dispatcher=SimpleNamespace(
+            formatted_duplicates_suppressed=0,
+            writer_summaries=[
                 {
-                    "file_name": ("https://alice:hunter2@example.invalid/chat.jsonl"),
+                    "file_name": "https://alice:hunter2@example.invalid/chat.jsonl",
                     "file_created": False,
                     "records_written": 0,
                 }
-            ]
-
-    class Chat:
-        def __init__(self) -> None:
-            self._output_dispatcher = Dispatcher()
-
-    logged: list[str] = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda _level, message: logged.append(message),
-    )
-
-    _log_run_summary(Chat(), 0, {})
-
-    assert len(logged) == 2
-    assert all("hunter2" not in message for message in logged)
-    assert all("<redacted>@example.invalid" in message for message in logged)
-
-
-def test_execute_run_summary_includes_unwritten_attached_writer(monkeypatch) -> None:
-    from chat_downloader.sites.models import Chat
-
-    class Writer:
-        file_name = "empty.txt"
-        output_mode = "formatted"
-
-        def is_initialised(self) -> bool:
-            return False
-
-        def initialize(self) -> None:
-            raise AssertionError("zero-message writer must stay lazy")
-
-        def write(self, _item, *, flush: bool = False) -> None:
-            raise AssertionError("zero-message writer must not receive writes")
-
-        def close(self) -> None:
-            pass
-
-    class Downloader:
-        def __init__(self, **_kwargs) -> None:
-            pass
-
-        def get_chat(self, **_kwargs):
-            chat = Chat(iter(()))
-            chat.attach_writer(Writer())
-            return chat
-
-        def close(self) -> None:
-            pass
-
-    logged: list[str] = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda _level, message: logged.append(message),
-    )
-
-    result = execute_run(Downloader, quiet=True)
-
-    assert result.success is True
-    assert logged[-2:] == [
-        "Lazy output file was not created because no records were retrieved: empty.txt",
-        (
-            "Run summary: {'success': True, 'termination_reason': 'completed', "
-            "'parity_status': 'not_requested', 'provider_inspection': None, "
-            "'message_count': 0, "
-            "'message_type_counts': {}, 'formatted_duplicates_suppressed': 0, "
-            "'prefetched_after_deadline_count': 0, "
-            "'deadline_prefetch_count_complete': True, "
-            "'provider_diagnostics': {}, 'output_writers': "
-            "[{'file_name': 'empty.txt', 'file_created': False, "
-            "'records_written': 0}]}"
-        ),
-    ]
-
-
-def test_execute_run_reports_uncreated_lazy_jsonl_and_txt(
-    monkeypatch,
-    tmp_path,
-) -> None:
-    from chat_downloader.output.continuous_write import ContinuousWriter
-    from chat_downloader.sites.models import Chat
-
-    jsonl_path = tmp_path / "empty.jsonl"
-    txt_path = tmp_path / "empty.txt"
-
-    class Downloader:
-        def __init__(self, **_kwargs) -> None:
-            pass
-
-        def get_chat(self, **_kwargs):
-            chat = Chat(iter(()))
-            chat.attach_writer(
-                ContinuousWriter(
-                    str(jsonl_path),
-                    overwrite=True,
-                    lazy_initialise=True,
-                )
-            )
-            chat.attach_writer(
-                ContinuousWriter(
-                    str(txt_path),
-                    overwrite=True,
-                    lazy_initialise=True,
-                )
-            )
-            return chat
-
-        def close(self) -> None:
-            pass
-
-    logged: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, message)),
-    )
-
-    result = execute_run(Downloader, quiet=True)
-
-    assert result.success is True
-    assert not jsonl_path.exists()
-    assert not txt_path.exists()
-    assert (
-        "info",
-        (
-            "Lazy output file was not created because no records were retrieved: "
-            f"{jsonl_path}"
-        ),
-    ) in logged
-    assert (
-        "info",
-        (
-            "Lazy output file was not created because no records were retrieved: "
-            f"{txt_path}"
-        ),
-    ) in logged
-    assert "'file_created': False" in logged[-1][1]
-
-
-def test_execute_run_passes_dedup_cache_size_to_message_callback() -> None:
-    captured = {}
-
-    def fake_create_message_callback(quiet, chat, *, max_seen_message_ids):
-        captured["quiet"] = quiet
-        captured["chat"] = chat
-        captured["max_seen_message_ids"] = max_seen_message_ids
-        return lambda _message: None
-
-    monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.create_message_callback",
-        fake_create_message_callback,
-    )
-    try:
-        execute_run(
-            _FakeDownloader,
-            quiet=False,
-            max_seen_message_ids=123,
+            ],
         )
-    finally:
-        monkeypatch.undo()
-
-    assert captured["quiet"] is False
-    assert isinstance(captured["chat"], _FakeChat)
-    assert captured["max_seen_message_ids"] == 123
-
-
-def test_execute_run_applies_typed_run_debug_controls(monkeypatch) -> None:
-    captured_modes: list[str] = []
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.set_testing_mode",
-        lambda mode: captured_modes.append(mode.name),
     )
+    _log_run_summary(chat, 0, {})
 
-    execute_run(
-        _FakeDownloader,
-        exit_on_debug=True,
-        pause_on_debug=False,
-    )
-
-    assert captured_modes == ["EXIT_ON_DEBUG"]
+    assert {level for level, _message in logged} == {"info", "debug"}
+    assert all("hunter2" not in message for _level, message in logged)
+    assert all("<redacted>@example.invalid" in message for _level, message in logged)
 
 
-def test_execute_run_closes_chat_when_iteration_is_interrupted() -> None:
-    class FakeChat:
-        def __init__(self) -> None:
-            self.closed = False
-            self.calls = 0
+def test_execute_run_reports_uncreated_lazy_jsonl_and_txt(downloader, logged, tmp_path):
+    paths = [tmp_path / "empty.jsonl", tmp_path / "empty.txt"]
+    chat = Chat(iter(()))
+    for path in paths:
+        chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
 
-        def __iter__(self):
-            return self
+    result = execute_run(downloader(chat), quiet=True)
 
-        def __next__(self):
-            if self.calls == 0:
-                self.calls += 1
-                return {"message_type": "text_message", "message_id": "1"}
-            raise KeyboardInterrupt
-
-        def print_formatted(self, _message) -> None:
-            pass
-
-        def close(self) -> None:
-            self.closed = True
-
-    class FakeDownloader:
-        instance = None
-
-        def __init__(self, **kwargs) -> None:
-            self.closed = False
-            self.chat = FakeChat()
-            FakeDownloader.instance = self
-
-        def get_chat(self, **kwargs):
-            return self.chat
-
-        def close(self) -> None:
-            self.closed = True
-
-    execute_run(FakeDownloader)
-
-    assert FakeDownloader.instance.chat.closed is True
-    assert FakeDownloader.instance.closed is True
-
-
-def test_execute_run_keyboard_interrupt_closes_real_chat_source() -> None:
-    from chat_downloader.sites.models import Chat
-
-    class InterruptingSource:
-        def __init__(self) -> None:
-            self.closed = False
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            raise KeyboardInterrupt
-
-        def close(self) -> None:
-            self.closed = True
-
-    class FakeDownloader:
-        instance = None
-
-        def __init__(self, **_kwargs) -> None:
-            self.source = InterruptingSource()
-            self.chat = Chat(self.source)
-            self.closed = False
-            FakeDownloader.instance = self
-
-        def get_chat(self, **_kwargs):
-            return self.chat
-
-        def close(self) -> None:
-            self.closed = True
-
-    result = execute_run(FakeDownloader, quiet=True)
-
-    assert result.interrupted is True
-    assert FakeDownloader.instance.source.closed is True
-    assert FakeDownloader.instance.closed is True
-
-
-@pytest.mark.parametrize(
-    ("error_to_raise", "expected_fragment"),
-    [
-        (SiteNotSupported("unsupported"), "unsupported"),
-        (ConnectionError("offline"), "internet connection"),
-        (RequestException("bad response"), "bad response"),
-    ],
-)
-def test_execute_run_logs_expected_error_paths(
-    monkeypatch,
-    error_to_raise,
-    expected_fragment,
-) -> None:
-    logged = []
-    FakeDownloader = _make_error_downloader(error_to_raise)
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, str(message))),
-    )
-
-    execute_run(
-        FakeDownloader,
-        url="https://www.youtube.com/watch?v=abc",
-    )
-
-    assert logged
-    assert logged[0][0] == "error"
-    assert expected_fragment in logged[0][1]
-    assert FakeDownloader._last is not None
-    assert FakeDownloader._last.closed is True
-
-
-@pytest.mark.parametrize(
-    "error_to_raise",
-    [
-        ChatGeneratorError("generator"),
-        ParsingError("parse"),
-        RuntimeTestingException("testing"),
-    ],
-)
-def test_execute_run_logs_error_message_for_generator_and_testing_errors(
-    monkeypatch,
-    error_to_raise,
-) -> None:
-    logged = []
-    FakeDownloader = _make_error_downloader(error_to_raise)
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, str(message))),
-    )
-
-    execute_run(
-        FakeDownloader,
-        url="https://www.youtube.com/watch?v=abc",
-    )
-
-    assert logged[:-1] == [
-        (
-            "error",
-            (
-                f"{error_to_raise}. This usually means the site response "
-                "changed. Re-run with --logging debug for details."
-            ),
-        ),
+    assert result.success is True
+    assert result.message_count == 0
+    assert _summary(logged)["output_writers"] == [
+        {"file_name": str(path), "file_created": False, "records_written": 0}
+        for path in paths
     ]
+    for path in paths:
+        assert not path.exists()
+        assert any(
+            level == "info" and str(path) in message for level, message in logged
+        )
 
 
-def test_execute_run_logs_and_continues_when_chat_close_fails(
-    monkeypatch,
-) -> None:
-    logged = []
-
-    class _OSErrorChat(_FakeChat):
-        def close(self) -> NoReturn:
-            raise OSError("close failed")
-
-    class _TrackingDownloader(_FakeDownloader):
-        def get_chat(self, **kwargs):
-            return _OSErrorChat()
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, str(message))),
+@pytest.mark.parametrize("message_count", [0, 1])
+@pytest.mark.parametrize("propagate", [False, True])
+def test_execute_run_interrupt_closes_real_chat_source(
+    downloader, logged, message_count, propagate
+):
+    source = _FakeChat(
+        [{"message_type": "text_message", "message_id": "1"}] * message_count,
+        error=KeyboardInterrupt(),
     )
+    factory = downloader(Chat(source))
+    if propagate:
+        with pytest.raises(KeyboardInterrupt):
+            execute_run(factory, quiet=True, propagate_interrupt=True)
+    else:
+        result = execute_run(factory, quiet=True)
+        assert result.interrupted is True
+        assert result.message_count == message_count
+        assert ("error", result.error_message) in logged
 
-    execute_run(_TrackingDownloader)
-
-    assert ("warning", "Error finalizing chat output: close failed") in logged
-    assert _TrackingDownloader._last.closed is True
-
-
-def test_execute_run_does_not_swallow_non_io_chat_close_errors() -> None:
-    class _RuntimeErrorChat(_FakeChat):
-        def close(self) -> NoReturn:
-            raise RuntimeError("programmer bug")
-
-    class _Downloader(_FakeDownloader):
-        def get_chat(self, **kwargs):
-            return _RuntimeErrorChat()
-
-    with pytest.raises(RuntimeError, match="programmer bug"):
-        execute_run(_Downloader)
+    assert source.closed is True
+    assert factory.instance.closed is True
+    assert _summary(logged)["message_count"] == message_count
 
 
-def test_execute_run_logs_cleanup_errors_when_primary_error_occurs(
-    monkeypatch,
-) -> None:
-    logged = []
-
-    class FakeChat:
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            raise ChatGeneratorError("generator failed")
-
-        def print_formatted(self, _message) -> None:
-            pass
-
-        def close(self) -> NoReturn:
-            msg = "chat cleanup failed"
-            raise RuntimeError(msg)
-
-    class FakeDownloader:
-        def __init__(self, **_kwargs) -> None:
-            self.closed = False
-
-        def get_chat(self, **_kwargs):
-            return FakeChat()
-
-        def close(self) -> None:
-            raise RuntimeError("downloader cleanup failed")
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, str(message))),
-    )
-
-    result = execute_run(FakeDownloader)
-
-    assert result.success is False
-    assert result.error_message == (
-        "generator failed. This usually means the site response changed. "
-        "Re-run with --logging debug for details."
-    )
-    assert (
-        "warning",
-        "Error finalizing chat output: chat cleanup failed",
-    ) in logged
-    assert (
-        "warning",
-        "Error closing downloader session(s): downloader cleanup failed",
-    ) in logged
-    assert any(
-        entry[0] == "error" and "generator failed" in entry[1] for entry in logged
-    )
-
-
-def test_execute_run_detects_write_errors(
-    monkeypatch: Any,
-) -> None:
-    """A chat with write_error_count > 0 sets result.success = False."""
-
-    class _WriteErrorChat(_FakeChat):
-        write_error_count = 1
-
-    class _WriteErrorDownloader(_FakeDownloader):
-        def get_chat(self, **kwargs: Any) -> _WriteErrorChat:
-            return _WriteErrorChat()
-
-    logged: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, message)),
-    )
-    result = execute_run(_WriteErrorDownloader)
-    assert result.success is False
-    assert result.error_message is not None
-    assert "output writers reported errors" in result.error_message
-    assert any("Run summary" in message for _level, message in logged)
-
-
-def test_execute_run_raises_downloader_close_error_when_no_primary_error(
-    monkeypatch,
-) -> None:
-    class _BadCloseDownloader(_FakeDownloader):
-        def close(self) -> NoReturn:
-            raise RuntimeError("downloader cleanup failed")
-
-    with pytest.raises(RuntimeError, match="downloader cleanup failed"):
-        execute_run(_BadCloseDownloader)
-
-
-def test_execute_run_logs_keyboard_interrupt_without_propagation(
-    monkeypatch,
-) -> None:
-    logged = []
-    FakeDownloader = _make_error_downloader(KeyboardInterrupt())
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.log",
-        lambda level, message: logged.append((level, str(message))),
-    )
-
-    execute_run(
-        FakeDownloader,
-        url="https://www.youtube.com/watch?v=abc",
-    )
-
-    assert logged[0] == ("error", "Keyboard Interrupt")
-    assert "Run summary" in logged[-1][1]
-    assert FakeDownloader._last is not None
-    assert FakeDownloader._last.closed is True
-
-
-def test_execute_run_propagates_keyboard_interrupt_when_requested() -> None:
-    FakeDownloader = _make_error_downloader(KeyboardInterrupt())
-
+def test_execute_run_propagates_acquisition_interrupt(downloader):
+    factory = downloader(error=KeyboardInterrupt())
     with pytest.raises(KeyboardInterrupt):
-        execute_run(
-            FakeDownloader,
-            propagate_interrupt=True,
-            url="https://www.youtube.com/watch?v=abc",
-        )
-
-    assert FakeDownloader._last is not None
-    assert FakeDownloader._last.closed is True
+        execute_run(factory, propagate_interrupt=True)
+    assert factory.instance.closed is True
 
 
 @pytest.mark.parametrize(
-    ("kwargs", "expected_mode"),
+    ("target", "error", "suppressed"),
     [
-        ({"exit_on_debug": True}, "EXIT_ON_DEBUG"),
-        ({"pause_on_debug": True}, "PAUSE_ON_DEBUG"),
-        ({}, "NONE"),
+        ("chat", OSError("close failed"), True),
+        ("chat", RuntimeError("programmer bug"), False),
+        ("downloader", RuntimeError("downloader cleanup failed"), False),
     ],
 )
-def test_configure_testing_mode_sets_expected_mode(
-    monkeypatch, kwargs, expected_mode
-) -> None:
-    seen_modes: list[str] = []
+def test_execute_run_cleanup_without_primary_error(
+    downloader, logged, target, error, suppressed
+):
+    chat = _FakeChat(close_error=error if target == "chat" else None)
+    factory = downloader(chat, close_error=error if target == "downloader" else None)
+    if suppressed:
+        execute_run(factory)
+        assert any(
+            level == "warning" and str(error) in message for level, message in logged
+        )
+        assert factory.instance.closed is True
+    else:
+        with pytest.raises(type(error), match=str(error)):
+            execute_run(factory)
+    assert chat.closed is True
 
+
+def test_execute_run_preserves_primary_error_when_cleanup_fails(downloader, logged):
+    chat = _FakeChat(
+        error=ChatGeneratorError("generator failed"),
+        close_error=RuntimeError("chat cleanup failed"),
+    )
+    factory = downloader(chat, close_error=RuntimeError("downloader cleanup failed"))
+    result = execute_run(factory)
+
+    assert result.success is False
+    assert "generator failed" in result.error_message
+    assert SITE_CHANGE_ERROR_HINT in result.error_message
+    assert ("error", result.error_message) in logged
+    for fragment in ("chat cleanup failed", "downloader cleanup failed"):
+        assert any(
+            level == "warning" and fragment in message for level, message in logged
+        )
+    assert chat.closed is True
+    assert factory.instance.closed is True
+
+
+def test_execute_run_detects_write_errors(downloader, logged):
+    chat = _FakeChat()
+    chat.write_error_count = 1
+    result = execute_run(downloader(chat))
+
+    assert result.success is False
+    assert "output writers reported errors" in result.error_message
+    assert _summary(logged)["success"] is False
+
+
+@pytest.mark.parametrize(
+    ("options", "expected_modes"),
+    [
+        ([{"exit_on_debug": True}], ["EXIT_ON_DEBUG"]),
+        ([{"pause_on_debug": True}], ["PAUSE_ON_DEBUG"]),
+        ([{}], ["NONE"]),
+        ([{"exit_on_debug": True}, {}], ["EXIT_ON_DEBUG", "NONE"]),
+    ],
+)
+def test_execute_run_configures_and_resets_testing_mode(
+    monkeypatch, downloader, options, expected_modes
+):
+    seen_modes = []
     monkeypatch.setattr(
         "chat_downloader.runtime.runner.set_testing_mode",
         lambda mode: seen_modes.append(mode.name),
     )
-
-    _configure_testing_mode(RunConfig.from_kwargs(**kwargs))
-
-    assert seen_modes == [expected_mode]
-
-
-def test_configure_testing_mode_resets_to_none_when_no_flags(monkeypatch) -> None:
-    """Testing mode must reset to NONE when neither flag is set."""
-    seen_modes: list[str] = []
-
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.set_testing_mode",
-        lambda mode: seen_modes.append(mode.name),
-    )
-
-    _configure_testing_mode(RunConfig(exit_on_debug=True))
-    _configure_testing_mode(RunConfig())
-
-    assert seen_modes == ["EXIT_ON_DEBUG", "NONE"]
+    for kwargs in options:
+        execute_run(downloader(), **kwargs)
+    assert seen_modes == expected_modes

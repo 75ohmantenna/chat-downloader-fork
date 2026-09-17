@@ -11,7 +11,7 @@ import os
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.models import ChatRequest
@@ -25,6 +25,14 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
 
 _BOUNDARY_LIMIT = 10_000
+
+
+def _valid_offset(value: object) -> TypeGuard[int | float]:
+    return (
+        (type(value) is int or type(value) is float)
+        and math.isfinite(value)
+        and value >= 0
+    )
 
 
 def _file_signature(path: Path) -> str | None:
@@ -183,14 +191,7 @@ class CaptureCheckpoint:
         self.record_loss = state.get("record_loss", False)
         offset, ids, total = state.get("offset"), state.get("ids"), state.get("total")
         if (
-            (
-                offset is not None
-                and (
-                    type(offset) not in (int, float)
-                    or not math.isfinite(offset)
-                    or offset < 0
-                )
-            )
+            (offset is not None and not _valid_offset(offset))
             or type(self.record_loss) is not bool
             or not isinstance(ids, list)
             or len(ids) > _BOUNDARY_LIMIT
@@ -240,9 +241,7 @@ class CaptureCheckpoint:
                         item.get("message_id"),
                     )
                     if (
-                        type(offset) not in (int, float)
-                        or not math.isfinite(offset)
-                        or offset < 0
+                        not _valid_offset(offset)
                         or not isinstance(message_id, str)
                         or not message_id
                     ):
@@ -311,6 +310,7 @@ class CaptureCheckpoint:
         if count and self.total:
             self.resets.append(self.total + 1)
         self.total += count
+        record_loss = has_record_loss(chat.diagnostics)
         _atomic_json(
             self.path,
             {
@@ -321,8 +321,8 @@ class CaptureCheckpoint:
                 "ids": sorted(self.ids),
                 "total": self.total,
                 "resets": self.resets,
-                "completed": self.completed and not has_record_loss(chat.diagnostics),
-                "record_loss": has_record_loss(chat.diagnostics),
+                "completed": self.completed and not record_loss,
+                "record_loss": record_loss,
                 "artifacts": [_file_signature(path) for path in self.outputs],
             },
         )

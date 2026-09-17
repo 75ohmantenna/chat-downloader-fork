@@ -106,23 +106,17 @@ def _process_irc_buffer(
         for parsing.
     """
     matches = list(pattern.finditer(readbuffer))
-    full_readbuffer = readbuffer.endswith("\r\n")
+    if readbuffer.endswith("\r\n"):
+        return "", matches
+    if not matches:
+        return readbuffer, matches
 
-    if matches:
-        if not full_readbuffer:
-            span = matches[-1].span()
-            pass_on = readbuffer[span[0] :]
-
-            if "\r\n" in pass_on:
-                pass_on = pass_on[span[1] - span[0] :]
-            else:
-                matches.pop()
-
-            remaining = pass_on
-        else:
-            remaining = ""
+    start, end = matches[-1].span()
+    remaining = readbuffer[start:]
+    if "\r\n" in remaining:
+        remaining = readbuffer[end:]
     else:
-        remaining = "" if full_readbuffer else readbuffer
+        matches.pop()
 
     return remaining, matches
 
@@ -132,14 +126,11 @@ def _consume_irc_buffer(
     pattern: re.Pattern[str],
 ) -> tuple[str, list[re.Match[str]], str | None]:
     """Return complete IRC matches plus any unmatched buffer to log."""
-    buffer_before = readbuffer
-    readbuffer, matches = _process_irc_buffer(readbuffer, pattern)
-
-    unmatched_full_buffer: str | None = None
-    if not matches and buffer_before.endswith("\r\n"):
-        unmatched_full_buffer = buffer_before
-
-    return readbuffer, matches, unmatched_full_buffer
+    remaining, matches = _process_irc_buffer(readbuffer, pattern)
+    unmatched_full_buffer = (
+        readbuffer if not matches and readbuffer.endswith("\r\n") else None
+    )
+    return remaining, matches, unmatched_full_buffer
 
 
 def _parse_irc_matches(
@@ -350,19 +341,19 @@ def get_chat_messages_by_stream_id(
                     diagnostics,
                 )
                 yield from items
-            elif unmatched_full_buffer is not None:
-                # Buffer was fully consumed with no matches — log unrecognized
-                # traffic.
-                if not _is_benign_unmatched_irc_buffer(unmatched_full_buffer):
-                    capture_debug_sample(
-                        "twitch-unknown-irc-shape",
-                        {"raw": unmatched_full_buffer},
-                        sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
-                    )
-                    log(
-                        "debug",
-                        f'No matches found in "\n{unmatched_full_buffer.strip()}\n"',
-                    )
+            elif (
+                unmatched_full_buffer is not None
+                and not _is_benign_unmatched_irc_buffer(unmatched_full_buffer)
+            ):
+                capture_debug_sample(
+                    "twitch-unknown-irc-shape",
+                    {"raw": unmatched_full_buffer},
+                    sample_limit=TWITCH_DEBUG_SAMPLE_LIMIT,
+                )
+                log(
+                    "debug",
+                    f'No matches found in "\n{unmatched_full_buffer.strip()}\n"',
+                )
 
             current_time = time.monotonic()
             last_receive_time = current_time

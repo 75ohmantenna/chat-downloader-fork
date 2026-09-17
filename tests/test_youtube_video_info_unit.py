@@ -5,6 +5,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.youtube.video_initialization import (
@@ -226,70 +228,98 @@ def test_get_video_data_handles_none_and_dict_params() -> None:
     assert dummy.calls[1][1].max_messages == 2
 
 
-def test_initial_video_info_adds_live_chat_continuations(monkeypatch) -> None:
+def _watch_chat(renderer):
+    return {
+        "contents": {
+            "twoColumnWatchNextResults": {
+                "conversationBar": {"liveChatRenderer": renderer},
+            },
+        },
+    }
+
+
+def _submenu_item(token, endpoint="reloadContinuationData", title=None):
+    if endpoint == "reloadContinuationData":
+        item = {"continuation": {endpoint: {"continuation": token}}}
+    else:
+        key = "token" if endpoint == "continuationCommand" else "continuation"
+        item = {"continuationEndpoint": {endpoint: {key: token}}}
+    if title is not None:
+        item["title"] = title
+    return item
+
+
+@pytest.mark.parametrize(
+    ("status", "items", "expected"),
+    [
+        pytest.param(
+            "live",
+            [_submenu_item("top-live"), _submenu_item("live-chat")],
+            {"Top chat": "top-live", "Live chat": "live-chat"},
+            id="unlabeled-live",
+        ),
+        pytest.param(
+            "live",
+            [
+                _submenu_item("live-chat", "continuationCommand", "Live chat"),
+                _submenu_item("top-live", "getLiveChatEndpoint", "Top chat"),
+            ],
+            {"Live chat": "live-chat", "Top chat": "top-live"},
+            id="reordered-labeled-endpoints",
+        ),
+        pytest.param(
+            "past",
+            [_submenu_item("top-replay"), _submenu_item("live-replay")],
+            {"Top chat replay": "top-replay", "Live chat replay": "live-replay"},
+            id="unlabeled-replay",
+        ),
+        pytest.param(
+            "past",
+            [
+                _submenu_item("top-replay"),
+                _submenu_item("live-replay", "continuationCommand"),
+            ],
+            {"Top chat replay": "top-replay", "Live chat replay": "live-replay"},
+            id="unlabeled-mixed-replay-endpoints",
+        ),
+    ],
+)
+def test_initial_video_info_enriches_chat_submenus(
+    monkeypatch,
+    status,
+    items,
+    expected,
+) -> None:
     from chat_downloader.sites.youtube import video_initialization
 
-    details = {"status": "live", "continuation_info": {}}
+    replay = status == "past"
+    token = "client-replay-token" if replay else "client-live-token"
+    config = {"cfg": True} if replay else {"INNERTUBE_CLIENT_NAME": "web"}
     dummy = _InitializationDummy(
         (
-            details,
+            {"status": status, "continuation_info": {}},
             {"playabilityStatus": {"status": "OK"}},
-            {
-                "contents": {
-                    "twoColumnWatchNextResults": {
-                        "conversationBar": {
-                            "liveChatRenderer": {
-                                "continuations": [
-                                    {
-                                        "reloadContinuationData": {
-                                            "continuation": "client-live-token",
-                                        },
-                                    },
-                                ],
-                            },
-                        },
-                    },
-                },
-            },
-            {"INNERTUBE_CLIENT_NAME": "web"},
+            _watch_chat({"continuations": [_submenu_item(token)["continuation"]]}),
+            config,
         ),
     )
-    raise_calls = []
-
-    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
-    monkeypatch.setattr(
-        video_initialization,
-        "try_parse_json",
-        lambda _value: {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "header": {
-                        "liveChatHeaderRenderer": {
-                            "viewSelector": {
-                                "sortFilterSubMenuRenderer": {
-                                    "subMenuItems": [
-                                        {
-                                            "continuation": {
-                                                "reloadContinuationData": {
-                                                    "continuation": "top-live",
-                                                },
-                                            },
-                                        },
-                                        {
-                                            "continuation": {
-                                                "reloadContinuationData": {
-                                                    "continuation": "live-chat",
-                                                },
-                                            },
-                                        },
-                                    ],
-                                },
-                            },
+    bootstrap = {
+        "continuationContents": {
+            "liveChatContinuation": {
+                "header": {
+                    "liveChatHeaderRenderer": {
+                        "viewSelector": {
+                            "sortFilterSubMenuRenderer": {"subMenuItems": items},
                         },
                     },
                 },
             },
         },
+    }
+    raise_calls = []
+    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
+    monkeypatch.setattr(
+        video_initialization, "try_parse_json", lambda _value: bootstrap
     )
     monkeypatch.setattr(
         video_initialization,
@@ -299,329 +329,46 @@ def test_initial_video_info_adds_live_chat_continuations(monkeypatch) -> None:
 
     returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
 
+    route = "live_chat_replay" if replay else "live_chat"
     assert dummy.session_calls == [
-        "https://www.youtube.com/live_chat?continuation=client-live-token",
+        f"https://www.youtube.com/{route}?continuation={token}",
     ]
-    assert returned_details["continuation_info"] == {
-        "Top chat": "top-live",
-        "Live chat": "live-chat",
-    }
-    assert ytcfg == {"INNERTUBE_CLIENT_NAME": "web"}
+    assert returned_details["continuation_info"] == expected
+    assert ytcfg == config
     assert raise_calls == []
 
 
-def test_initial_video_info_skips_bootstrap_when_continuations_exist(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.youtube import video_initialization
-
-    details = {"status": "live", "continuation_info": {"Live chat": "token"}}
-    player_response = {"playabilityStatus": {"status": "OK"}}
-    yt_initial_data = {"_chat_downloader_continuation_info": {"Live chat": "token"}}
-    dummy = _InitializationDummy(
-        (details, player_response, yt_initial_data, {"cfg": True}),
-    )
-    raise_calls = []
-
-    monkeypatch.setattr(
-        video_initialization,
-        "raise_if_playability_error",
-        lambda *args: raise_calls.append(args),
-    )
-
-    returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
-
-    assert returned_details is details
-    assert ytcfg == {"cfg": True}
-    assert dummy.session_calls == []
-    assert raise_calls == []
-
-
-def test_initial_video_info_maps_reordered_labeled_chat_submenus(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.youtube import video_initialization
-
-    details = {"status": "live", "continuation_info": {}}
-    dummy = _InitializationDummy(
+@pytest.mark.parametrize(
+    ("continuations", "player_status", "initial_data", "warn"),
+    [
         (
-            details,
-            {"playabilityStatus": {"status": "OK"}},
-            {
-                "contents": {
-                    "twoColumnWatchNextResults": {
-                        "conversationBar": {
-                            "liveChatRenderer": {
-                                "continuations": [
-                                    {
-                                        "reloadContinuationData": {
-                                            "continuation": "client-live-token",
-                                        },
-                                    },
-                                ],
-                            },
-                        },
-                    },
-                },
-            },
-            {"INNERTUBE_CLIENT_NAME": "web"},
+            {"Live chat": "token"},
+            "OK",
+            {"_chat_downloader_continuation_info": {"Live chat": "token"}},
+            False,
         ),
-    )
-
-    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
-    monkeypatch.setattr(
-        video_initialization,
-        "try_parse_json",
-        lambda _value: {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "header": {
-                        "liveChatHeaderRenderer": {
-                            "viewSelector": {
-                                "sortFilterSubMenuRenderer": {
-                                    "subMenuItems": [
-                                        {
-                                            "title": "Live chat",
-                                            "continuationEndpoint": {
-                                                "continuationCommand": {
-                                                    "token": "live-chat",
-                                                },
-                                            },
-                                        },
-                                        {
-                                            "title": "Top chat",
-                                            "continuationEndpoint": {
-                                                "getLiveChatEndpoint": {
-                                                    "continuation": "top-live",
-                                                },
-                                            },
-                                        },
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    )
-    monkeypatch.setattr(
-        video_initialization,
-        "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
-    )
-
-    returned_details, _ytcfg = dummy._get_initial_video_info("abc", None)
-
-    assert returned_details["continuation_info"] == {
-        "Live chat": "live-chat",
-        "Top chat": "top-live",
-    }
-
-
-def test_initial_video_info_adds_replay_chat_continuations(monkeypatch) -> None:
-    from chat_downloader.sites.youtube import video_initialization
-
-    details = {"status": "past", "continuation_info": {}}
-    dummy = _InitializationDummy(
-        (
-            details,
-            {"playabilityStatus": {"status": "OK"}},
-            {
-                "contents": {
-                    "twoColumnWatchNextResults": {
-                        "conversationBar": {
-                            "liveChatRenderer": {
-                                "continuations": [
-                                    {
-                                        "reloadContinuationData": {
-                                            "continuation": "client-replay-token",
-                                        },
-                                    },
-                                ],
-                            },
-                        },
-                    },
-                },
-            },
-            {"cfg": True},
-        ),
-    )
-
-    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
-    monkeypatch.setattr(
-        video_initialization,
-        "try_parse_json",
-        lambda _value: {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "header": {
-                        "liveChatHeaderRenderer": {
-                            "viewSelector": {
-                                "sortFilterSubMenuRenderer": {
-                                    "subMenuItems": [
-                                        {
-                                            "continuation": {
-                                                "reloadContinuationData": {
-                                                    "continuation": "top-replay",
-                                                },
-                                            },
-                                        },
-                                        {
-                                            "continuation": {
-                                                "reloadContinuationData": {
-                                                    "continuation": "live-replay",
-                                                },
-                                            },
-                                        },
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    )
-    monkeypatch.setattr(
-        video_initialization,
-        "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
-    )
-
-    returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
-
-    assert dummy.session_calls == [
-        "https://www.youtube.com/live_chat_replay?continuation=client-replay-token",
-    ]
-    assert returned_details["continuation_info"] == {
-        "Top chat replay": "top-replay",
-        "Live chat replay": "live-replay",
-    }
-    assert ytcfg == {"cfg": True}
-
-
-def test_initial_video_info_uses_fallback_labels_for_unlabeled_replay_submenus(
+        ({"Live chat": "existing"}, "ERROR", {"contents": {}}, False),
+        ({}, "LOGIN_REQUIRED", {"contents": {}}, False),
+        ({}, "LOGIN_REQUIRED", {"contents": {"unexpected": True}}, True),
+    ],
+    ids=["existing-bootstrap", "existing-error", "missing-bootstrap", "invalid-shape"],
+)
+def test_initial_video_info_without_bootstrap(
     monkeypatch,
+    continuations,
+    player_status,
+    initial_data,
+    warn,
 ) -> None:
     from chat_downloader.sites.youtube import video_initialization
 
-    details = {"status": "past", "continuation_info": {}}
+    details = {"status": "live", "continuation_info": continuations}
+    player_response = {"playabilityStatus": {"status": player_status}}
     dummy = _InitializationDummy(
-        (
-            details,
-            {"playabilityStatus": {"status": "OK"}},
-            {
-                "contents": {
-                    "twoColumnWatchNextResults": {
-                        "conversationBar": {
-                            "liveChatRenderer": {
-                                "continuations": [
-                                    {
-                                        "reloadContinuationData": {
-                                            "continuation": "client-replay-token",
-                                        },
-                                    },
-                                ],
-                            },
-                        },
-                    },
-                },
-            },
-            {"cfg": True},
-        ),
-    )
-
-    monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
-    monkeypatch.setattr(
-        video_initialization,
-        "try_parse_json",
-        lambda _value: {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "header": {
-                        "liveChatHeaderRenderer": {
-                            "viewSelector": {
-                                "sortFilterSubMenuRenderer": {
-                                    "subMenuItems": [
-                                        {
-                                            "continuation": {
-                                                "reloadContinuationData": {
-                                                    "continuation": "top-replay",
-                                                },
-                                            },
-                                        },
-                                        {
-                                            "continuationEndpoint": {
-                                                "continuationCommand": {
-                                                    "token": "live-replay",
-                                                },
-                                            },
-                                        },
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
-    )
-    monkeypatch.setattr(
-        video_initialization,
-        "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
-    )
-
-    returned_details, _ytcfg = dummy._get_initial_video_info("abc", None)
-
-    assert returned_details["continuation_info"] == {
-        "Top chat replay": "top-replay",
-        "Live chat replay": "live-replay",
-    }
-
-
-def test_initial_video_info_falls_back_to_playability_when_bootstrap_missing(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.youtube import video_initialization
-
-    details = {"status": "live", "continuation_info": {}}
-    player_response = {"playabilityStatus": {"status": "LOGIN_REQUIRED"}}
-    yt_initial_data: dict[str, Any] = {"contents": {}}
-    dummy = _InitializationDummy(
-        (details, player_response, yt_initial_data, {"cfg": True}),
-    )
-    raise_calls = []
-
-    monkeypatch.setattr(
-        video_initialization,
-        "raise_if_playability_error",
-        lambda *args: raise_calls.append(args),
-    )
-
-    returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
-
-    assert dummy.session_calls == []
-    assert returned_details is details
-    assert ytcfg == {"cfg": True}
-    assert raise_calls == [(player_response, yt_initial_data)]
-
-
-def test_initial_video_info_logs_warning_when_bootstrap_shape_is_invalid(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.youtube import video_initialization
-
-    details = {"status": "live", "continuation_info": {}}
-    player_response = {"playabilityStatus": {"status": "LOGIN_REQUIRED"}}
-    yt_initial_data: dict[str, Any] = {"contents": {"unexpected": True}}
-    dummy = _InitializationDummy(
-        (details, player_response, yt_initial_data, {"cfg": True}),
+        (details, player_response, initial_data, {"cfg": True}),
     )
     raise_calls = []
     warning_logs = []
-
     monkeypatch.setattr(
         video_initialization,
         "raise_if_playability_error",
@@ -633,40 +380,17 @@ def test_initial_video_info_logs_warning_when_bootstrap_shape_is_invalid(
         lambda level, message: warning_logs.append((level, message)),
     )
 
-    returned_details, _ = dummy._get_initial_video_info("abc", None)
+    returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
 
     assert returned_details is details
-    assert warning_logs
-    assert warning_logs[0][0] == "warning"
-    assert "Unable to enrich chat submenu continuation tokens" in warning_logs[0][1]
-    assert raise_calls == [(player_response, yt_initial_data)]
-
-
-def test_initial_video_info_skips_playability_check_when_continuation_exists(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.youtube import video_initialization
-
-    details = {"status": "live", "continuation_info": {"Live chat": "existing"}}
-    dummy = _InitializationDummy(
-        (
-            details,
-            {"playabilityStatus": {"status": "ERROR"}},
-            {"contents": {}},
-            {"cfg": True},
-        ),
-    )
-
-    monkeypatch.setattr(
-        video_initialization,
-        "raise_if_playability_error",
-        lambda *_args: (_ for _ in ()).throw(AssertionError("should not be called")),
-    )
-
-    returned_details, _ = dummy._get_initial_video_info("abc", None)
-
-    assert returned_details["continuation_info"] == {"Live chat": "existing"}
+    assert returned_details["continuation_info"] == continuations
+    assert ytcfg == {"cfg": True}
     assert dummy.session_calls == []
+    assert raise_calls == ([] if continuations else [(player_response, initial_data)])
+    if warn:
+        assert warning_logs
+        assert warning_logs[0][0] == "warning"
+        assert "Unable to enrich chat submenu continuation tokens" in warning_logs[0][1]
 
 
 def test_parse_video_details_triggers_livestreaming_debug_log() -> None:

@@ -35,6 +35,17 @@ def _load(name: str) -> dict:
     return json.loads((_FIXTURE_DIR / f"{name}.json").read_text())
 
 
+def _payload(kind="timedContinuationData", *, actions=None, **continuation):
+    return {
+        "continuationContents": {
+            "liveChatContinuation": {
+                "actions": [] if actions is None else actions,
+                "continuations": [{kind: {"continuation": "TOK", **continuation}}],
+            }
+        }
+    }
+
+
 # ---------------------------------------------------------------------------
 # Parametrized fixture-based tests
 #
@@ -142,169 +153,49 @@ class TestEdgeCases:
             parse_continuation_response(payload)
         assert "Chat disabled" in str(exc_info.value)
 
-    def test_timeout_zero_when_raw_is_zero(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "continuations": [
-                        {
-                            "timedContinuationData": {
-                                "timeoutMs": 0,
-                                "continuation": "TOK",
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.timeout_ms == 0
+    @pytest.mark.parametrize(
+        ("fields", "expected"),
+        [
+            ({"timeoutMs": 0}, 0),
+            ({"timeoutMs": -500}, -500),
+            ({}, None),
+            ({"timeout_ms": 1500}, 1500),
+            ({"pollingIntervalMillis": 2500}, 2500),
+            ({"timeoutMs": "soon"}, None),
+            ({"timeoutMs": []}, None),
+            ({"timeoutMs": {}}, None),
+            ({"timeoutMs": None}, None),
+            ({"timeoutMs": True}, None),
+            ({"timeoutMs": False}, None),
+        ],
+    )
+    def test_timeout_hints(self, fields, expected) -> None:
+        assert parse_continuation_response(_payload(**fields)).timeout_ms == expected
 
-    def test_timeout_preserves_negative_value(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "continuations": [
-                        {
-                            "timedContinuationData": {
-                                "timeoutMs": -500,
-                                "continuation": "TOK",
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.timeout_ms == -500
-
-    def test_no_timeout_field_returns_none(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "continuations": [
-                        {
-                            "timedContinuationData": {
-                                "continuation": "TOK",
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.timeout_ms is None
-
-    def test_timeout_ms_extracts_timeout_ms_alias(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "continuations": [
-                        {
-                            "timedContinuationData": {
-                                "timeout_ms": 1500,
-                                "continuation": "TOK",
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.timeout_ms == 1500
-
-    def test_timeout_ms_extracts_polling_interval_millis(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "continuations": [
-                        {
-                            "timedContinuationData": {
-                                "pollingIntervalMillis": 2500,
-                                "continuation": "TOK",
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.timeout_ms == 2500
-
-    def test_invalid_timeout_field_returns_none(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "continuations": [
-                        {
-                            "timedContinuationData": {
-                                "timeoutMs": "soon",
-                                "continuation": "TOK",
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.timeout_ms is None
-
-    def test_reload_continuation_data_is_recognized(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "actions": [],
-                    "continuations": [
-                        {
-                            "reloadContinuationData": {
-                                "continuation": "RELOAD_TOK",
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.next_continuation == "RELOAD_TOK"
+    @pytest.mark.parametrize(
+        ("kind", "fields", "actions"),
+        [
+            ("reloadContinuationData", {"continuation": "RELOAD_TOK"}, []),
+            (
+                "liveChatReplayContinuationData",
+                {"continuation": "REPLAY_TOK", "timeoutMs": 2000},
+                [{"addChatItemAction": {}}],
+            ),
+        ],
+    )
+    def test_chat_continuation_types(self, kind, fields, actions) -> None:
+        result = parse_continuation_response(_payload(kind, actions=actions, **fields))
+        assert result.next_continuation == fields["continuation"]
+        assert result.timeout_ms == fields.get("timeoutMs")
         assert result.is_end is False
-
-    def test_live_chat_replay_continuation_data_is_recognized(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "actions": [{"addChatItemAction": {}}],
-                    "continuations": [
-                        {
-                            "liveChatReplayContinuationData": {
-                                "continuation": "REPLAY_TOK",
-                                "timeoutMs": 2000,
-                            },
-                        },
-                    ],
-                },
-            },
-        }
-        result = parse_continuation_response(payload)
-        assert result.next_continuation == "REPLAY_TOK"
-        assert result.timeout_ms == 2000
-        assert len(result.actions) == 1
+        assert result.actions == actions
 
     def test_unknown_continuation_preserves_payload_summary(self) -> None:
-        payload = {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "actions": [{"addChatItemAction": {}}],
-                    "continuations": [
-                        {
-                            "futureContinuationData": {
-                                "continuation": "TOK",
-                                "timeoutMs": 2000,
-                            },
-                        },
-                    ],
-                },
-            },
-        }
+        payload = _payload(
+            "futureContinuationData",
+            actions=[{"addChatItemAction": {}}],
+            timeoutMs=2000,
+        )
         result = parse_continuation_response(payload)
         assert result.is_end is False
         assert result.debug_info["unknown"] is True
@@ -324,21 +215,9 @@ class TestEdgeCases:
             "error": {"code": 429, "message": "Rate limited"},
         }
 
-    def test_extract_actions_non_list_returns_empty(self) -> None:
-        """Non-list ``actions`` value (malformed payload) yields empty list."""
-        from chat_downloader.sites.youtube.continuations import _extract_actions
-
-        assert _extract_actions({"actions": {"not": "a list"}}) == []
-        assert _extract_actions({"actions": "string"}) == []
-
-    def test_extract_timeout_ms_non_numeric_type_returns_none(self) -> None:
-        """A list/dict timeout value (unexpected JSON type) returns None."""
-        from chat_downloader.sites.youtube.continuations import _extract_timeout_ms
-
-        assert _extract_timeout_ms([]) is None
-        assert _extract_timeout_ms({}) is None
-
-    def test_extract_timeout_ms_none_returns_none(self) -> None:
-        from chat_downloader.sites.youtube.continuations import _extract_timeout_ms
-
-        assert _extract_timeout_ms(None) is None
+    @pytest.mark.parametrize("actions", [{"not": "a list"}, "string"])
+    def test_non_list_actions_return_empty(self, actions) -> None:
+        payload = {
+            "continuationContents": {"liveChatContinuation": {"actions": actions}}
+        }
+        assert parse_continuation_response(payload).actions == []

@@ -145,10 +145,8 @@ def _process_vod_edge(
         )
 
     result = time_filter.check(data)
-    if result == "skip":
-        return None, "skip"
-    if result == "stop":
-        return None, "stop"
+    if result in ("skip", "stop"):
+        return None, result
 
     if not msg_filter.should_add(data):
         return None, "skip"

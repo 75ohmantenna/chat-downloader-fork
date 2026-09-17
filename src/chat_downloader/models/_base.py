@@ -16,10 +16,10 @@ DEFAULT_MESSAGE_RECEIVE_TIMEOUT: float = 1.0
 DEFAULT_BUFFER_SIZE: int = 4096
 
 
-def _cli(
+def _cli_metadata(
     description: str, group: str = "general", flags: list[str] | None = None
 ) -> dict[str, Any]:
-    """Build the ``"cli"`` metadata dict for a dataclass field.
+    """Build dataclass metadata containing the CLI option description.
 
     :param description: Help text shown in ``--help`` output.
     :param group: Declarative argument-group ownership label.
@@ -28,7 +28,7 @@ def _cli(
     m: dict[str, Any] = {"help": description, "group": group}
     if flags:
         m["flags"] = flags
-    return m
+    return {"cli": m}
 
 
 def get_field_default(f: dataclasses.Field[Any]) -> Any:

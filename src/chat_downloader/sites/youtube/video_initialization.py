@@ -46,7 +46,7 @@ def _has_generic_unplayable_reason(player_response: JSONDict) -> bool:
 class YouTubeVideoInitializationMixin:
     """Enrich video details with continuation bootstrap metadata."""
 
-    def _get_initial_video_info(  # noqa: C901 — ordered bootstrap fallback
+    def _get_initial_video_info(
         self,
         video_id: str,
         params: ChatRequest | None = None,
@@ -62,8 +62,7 @@ class YouTubeVideoInitializationMixin:
             )
 
             if not yt_initial_data.get("_chat_downloader_continuation_info"):
-                # Indigo128 03.11.2025 >>
-                # Continuation changes mid October 2025
+                # Refresh submenu tokens through the chat-page bootstrap.
                 try:
                     client_continuation = multi_get(
                         yt_initial_data,
@@ -79,30 +78,24 @@ class YouTubeVideoInitializationMixin:
                     if not client_continuation:
                         msg = "liveChat reload continuation token missing"
                         raise KeyError(msg)  # noqa: TRY301 — intentionally caught by the enclosing except to trigger the fallback-path warning
-                    if details["status"] in REPLAY_STATUSES:
-                        response = proto._session_get(
-                            f"{_YT_LIVE_CHAT_REPLAY_URL}?continuation={client_continuation}",
-                        )
-                    else:
-                        response = proto._session_get(
-                            f"{_YT_LIVE_CHAT_URL}?continuation={client_continuation}",
-                        )
-                    html = response.text
-                    yt = regex_search(html, _YT_INITIAL_DATA_RE)
-                    dict_live_chats = try_parse_json(yt)
-                    if details["status"] in REPLAY_STATUSES:
-                        fallback_labels = ["Top chat replay", "Live chat replay"]
-                        canonical_labels = {
-                            "Top chat": "Top chat replay",
-                            "Live chat": "Live chat replay",
-                        }
-                    else:
-                        fallback_labels = ["Top chat", "Live chat"]
-                        canonical_labels = {}
+                    is_replay = details["status"] in REPLAY_STATUSES
+                    chat_url = (
+                        _YT_LIVE_CHAT_REPLAY_URL if is_replay else _YT_LIVE_CHAT_URL
+                    )
+                    response = proto._session_get(
+                        f"{chat_url}?continuation={client_continuation}",
+                    )
+                    dict_live_chats = try_parse_json(
+                        regex_search(response.text, _YT_INITIAL_DATA_RE)
+                    )
+                    canonical_labels = {
+                        label: f"{label} replay" if is_replay else label
+                        for label in ("Top chat", "Live chat")
+                    }
 
                     continuation_info = extract_chat_submenu_continuations(
                         dict_live_chats,
-                        fallback_labels=fallback_labels,
+                        fallback_labels=list(canonical_labels.values()),
                     )
                     for source_label, token in continuation_info.items():
                         details["continuation_info"][
@@ -116,29 +109,23 @@ class YouTubeVideoInitializationMixin:
                         f"({type(exc).__name__}). Falling back to playability "
                         "checks when required.",
                     )
-                # Indigo128 03.11.2025 <<
 
             if details["continuation_info"]:
                 return details, ytcfg
 
-            if not getattr(proto, "_auto_profile_fallback", False) or not (
-                _has_generic_unplayable_reason(player_response_info)
+            next_profile = (
+                get_next_request_profile(proto._request_profile, site="youtube")
+                if getattr(proto, "_auto_profile_fallback", False)
+                and _has_generic_unplayable_reason(player_response_info)
+                else None
+            )
+            if (
+                next_profile is None
+                or next_profile in attempted_profiles
+                or not proto.apply_request_profile(next_profile)
             ):
                 raise_if_playability_error(player_response_info, yt_initial_data)
                 return details, ytcfg
-
-            next_profile = get_next_request_profile(
-                proto._request_profile,
-                site="youtube",
-            )
-            if next_profile is None:
-                raise_if_playability_error(player_response_info, yt_initial_data)
-                return details, ytcfg  # pragma: no cover — checker may return
-            if next_profile in attempted_profiles or not proto.apply_request_profile(
-                next_profile
-            ):
-                raise_if_playability_error(player_response_info, yt_initial_data)
-                return details, ytcfg  # pragma: no cover — checker may return
 
             attempted_profiles.add(next_profile)
             log(

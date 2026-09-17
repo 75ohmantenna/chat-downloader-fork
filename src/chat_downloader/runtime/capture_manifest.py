@@ -48,6 +48,23 @@ def has_record_loss(state: Mapping[str, object]) -> bool:
     )
 
 
+def _capture_outputs(chat: Chat, *, keep_created: bool = False) -> list[Path]:
+    """Expand lazy paths while retaining opened artifact names when requested."""
+    dispatcher = chat._output_dispatcher
+    if dispatcher is None:
+        return []
+    return [
+        Path(
+            item["file_name"]
+            if keep_created and item["file_created"]
+            else _expand_output_file_name(
+                item["file_name"], title=chat.title, video_id=chat.id
+            )
+        )
+        for item in dispatcher.writer_summaries
+    ]
+
+
 class RunManifest:
     """Validate artifact separation before capture; never replace an existing file."""
 
@@ -69,20 +86,9 @@ class RunManifest:
     def bind(self, chat: Chat) -> None:
         """Resolve lazy names before any output writer can open its file."""
         self.valid = False
-        dispatcher = chat._output_dispatcher
-        self.outputs = (
-            [
-                Path(
-                    _expand_output_file_name(
-                        item["file_name"], title=chat.title, video_id=chat.id
-                    )
-                )
-                for item in dispatcher.writer_summaries
-            ]
-            if dispatcher
-            else []
-        )
-        if any(path.resolve() == self.path.resolve() for path in self.outputs):
+        self.outputs = _capture_outputs(chat)
+        destination = self.path.resolve()
+        if any(path.resolve() == destination for path in self.outputs):
             msg = "Run manifest must be distinct from chat outputs."
             raise ValueError(msg)
 

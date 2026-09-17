@@ -56,50 +56,12 @@ def _apply_retry_or_raise(
     message: str,
     exc_cls: type[Exception],
 ) -> None:
-    """Wait and return if a retry is allowed; otherwise raise exc_cls.
-
-    Consolidates the ``can_retry → wait → raise`` pattern shared across all
-    error-handling paths in the continuation retry loop.
-
-    Args:
-        policy: The :class:`RetryPolicy` governing wait behavior.
-        attempt_number: Current attempt number (1-based).
-        url: Endpoint URL, included verbatim in the raised exception message.
-        message: Human-readable error description.
-        exc_cls: Exception class to instantiate and raise when retries are
-            exhausted.
-
-    Raises:
-        exc_cls: When ``policy.can_retry(attempt_number)`` returns ``False``,
-            with *message* and *url* embedded in the exception text.
-    """
+    """Wait for another attempt or raise with endpoint context."""
     if policy.can_retry(attempt_number):
         policy.wait(attempt_number, interruptible=False)
         return
     msg = f"Retries exhausted. {message}. Endpoint: {url}"
     raise exc_cls(msg)
-
-
-def _retry_or_raise_incomplete(
-    attempt_number: int,
-    reason: str,
-    max_attempts: int,
-    retry_policy: RetryPolicy,
-    continuation_url: str,
-) -> None:
-    log(
-        "warning",
-        f"Retriable incomplete continuation response (attempt {attempt_number}/"
-        f"{max_attempts}): {reason}",
-    )
-    if retry_policy.can_retry(attempt_number):
-        retry_policy.wait(attempt_number, interruptible=False)
-        return
-    msg = (
-        f"Retries exhausted after {max_attempts} attempt(s). "
-        f"Endpoint: {continuation_url}. Last error: {reason}"
-    )
-    raise IncompleteContinuationError(msg)
 
 
 def _is_retryable_status(code: int | None) -> bool:
@@ -116,6 +78,8 @@ def _retry_or_raise_exhausted(
     continuation_url: str,
     error_message: str,
     log_label: str,
+    *,
+    exc_cls: type[Exception] = RetriesExceeded,
 ) -> bool:
     """Log, sleep, and return True to retry; raise when budget is gone."""
     log(
@@ -130,7 +94,7 @@ def _retry_or_raise_exhausted(
         f"Retries exhausted after {max_attempts} attempt(s). "
         f"Endpoint: {continuation_url}. Last error: {error_message}"
     )
-    raise RetriesExceeded(msg)
+    raise exc_cls(msg)
 
 
 def _handle_http_error(
@@ -140,27 +104,7 @@ def _handle_http_error(
     max_attempts: int,
     retry_policy: RetryPolicy,
 ) -> bool:
-    """Handle an HTTP error response.
-
-    Returns True if the caller should retry (continue). Returns False only for
-    terminal non-retryable statuses whose bodies may still contain a structured
-    YouTube JSON error; the caller then parses the body and lets
-    ``_handle_json_api_error`` choose the final exception.
-
-    Args:
-        response: The HTTP response object with ``status_code`` and ``text``.
-        continuation_url: The endpoint URL, used in error messages.
-        attempt_number: Current attempt number (1-based).
-        max_attempts: Total attempt budget.
-        retry_policy: Controls wait behavior between retries.
-
-    Returns:
-        True to signal the caller to retry, False to fall through.
-
-    Raises:
-        CaptchaChallengeRequired: If challenge text is detected.
-        RetriesExceeded: If a retryable status code exhausts the retry budget.
-    """
+    """Retry transient HTTP errors; leave terminal JSON errors to the caller."""
     response_text = getattr(response, "text", "")
     error_message = f"HTTP {response.status_code}"
     try:
@@ -195,26 +139,7 @@ def _handle_json_api_error(
     max_attempts: int,
     retry_policy: RetryPolicy,
 ) -> bool:
-    """Handle a JSON-body API error from the YouTube continuation endpoint.
-
-    Returns True if the caller should retry (continue). Raises on captcha or
-    when the retry budget is exhausted for retryable codes.
-
-    Args:
-        error: The ``error`` dict extracted from the JSON response body.
-        continuation_url: The endpoint URL, used in error messages.
-        attempt_number: Current attempt number (1-based).
-        max_attempts: Total attempt budget.
-        retry_policy: Controls wait behavior between retries.
-
-    Returns:
-        True to signal the caller to retry.
-
-    Raises:
-        CaptchaChallengeRequired: If challenge text is detected in the message.
-        RetriesExceeded: If a retryable error code exhausts the retry budget.
-        IncompleteContinuationError: If an "unknown error" exhausts retries.
-    """
+    """Handle API challenges, transient statuses, and incomplete responses."""
     _raw_code = error.get("code")
     error_code: int | None = (
         _raw_code
@@ -237,14 +162,15 @@ def _handle_json_api_error(
             "API error",
         )
     if isinstance(error_message, str) and "unknown error" in error_message.lower():
-        _retry_or_raise_incomplete(
+        return _retry_or_raise_exhausted(
             attempt_number,
-            detail,
             max_attempts,
             retry_policy,
             continuation_url,
+            detail,
+            "incomplete continuation response",
+            exc_cls=IncompleteContinuationError,
         )
-        return True
     return False
 
 
@@ -273,12 +199,13 @@ def _handle_missing_live_chat_continuation(
     ):
         return False
     summary = summarize_continuation_payload(json_response)
-    _retry_or_raise_incomplete(
+    return _retry_or_raise_exhausted(
         attempt_number,
-        "Missing continuationContents.liveChatContinuation in response body. "
-        f"Summary: {summary}",
         max_attempts,
         retry_policy,
         continuation_url,
+        "Missing continuationContents.liveChatContinuation in response body. "
+        f"Summary: {summary}",
+        "incomplete continuation response",
+        exc_cls=IncompleteContinuationError,
     )
-    return True

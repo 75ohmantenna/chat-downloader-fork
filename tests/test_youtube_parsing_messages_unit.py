@@ -2,9 +2,28 @@
 
 from __future__ import annotations
 
+import pytest
+
 from chat_downloader.sites.youtube import constants_message as yt_constants
 from chat_downloader.sites.youtube import parsing as yt_messages
 from chat_downloader.sites.youtube.parsing import message_items_content_parser
+
+
+def _thumbnails(name):
+    return {
+        "thumbnails": [
+            {"url": f"https://img.example/{name}=s32", "width": 32, "height": 32}
+        ],
+    }
+
+
+def _badge(title, icon=None, image=None):
+    renderer = {"tooltip": title}
+    if icon is not None:
+        renderer["icon"] = {"iconType": icon}
+    if image is not None:
+        renderer["customThumbnail"] = _thumbnails(image)
+    return {"liveChatAuthorBadgeRenderer": renderer}
 
 
 def test_parse_item_depth_guard_returns_existing_info() -> None:
@@ -80,15 +99,7 @@ def test_parse_runs_plain_text_links_and_emoji() -> None:
                     "emojiId": "E1",
                     "shortcuts": [":)"],
                     "searchTerms": ["smile"],
-                    "image": {
-                        "thumbnails": [
-                            {
-                                "url": "https://img.example/e=s32",
-                                "width": 32,
-                                "height": 32,
-                            },
-                        ],
-                    },
+                    "image": _thumbnails("e"),
                     "isCustomEmoji": True,
                 },
             },
@@ -106,9 +117,7 @@ def test_parse_runs_plain_text_links_and_emoji() -> None:
 
 
 def test_parse_thumbnails_list_dict_and_invalid_inputs() -> None:
-    thumbs = {
-        "thumbnails": [{"url": "https://img.example/x=s32", "width": 32, "height": 32}],
-    }
+    thumbs = _thumbnails("x")
     parsed = yt_messages._parse_thumbnails(thumbs)
     assert parsed[0]["id"] == "source"
     assert parsed[0]["url"] == "https://img.example/x"
@@ -121,23 +130,7 @@ def test_parse_thumbnails_list_dict_and_invalid_inputs() -> None:
 
 
 def test_parse_badges_extracts_tooltip_icon_and_icons() -> None:
-    badge_items = [
-        {
-            "liveChatAuthorBadgeRenderer": {
-                "tooltip": "Moderator",
-                "icon": {"iconType": "MODERATOR"},
-                "customThumbnail": {
-                    "thumbnails": [
-                        {
-                            "url": "https://img.example/badge=s32",
-                            "width": 32,
-                            "height": 32,
-                        },
-                    ],
-                },
-            },
-        },
-    ]
+    badge_items = [_badge("Moderator", "MODERATOR", "badge")]
 
     badges = yt_messages._parse_badges(badge_items)
     assert len(badges) == 1
@@ -149,47 +142,29 @@ def test_parse_badges_extracts_tooltip_icon_and_icons() -> None:
     assert badge["icons"][1]["id"] == "32x32"
 
 
-def test_parse_item_time_logic_and_offset_adjustment() -> None:
-    # Exercise the "time_in_seconds <= 0" fix-up without needing a fully
-    # remapped item.
-    info = {"time_in_seconds": 0, "time_text": "0:02"}
+@pytest.mark.parametrize(
+    ("info", "offset", "seconds", "text"),
+    [
+        ({"time_in_seconds": 0, "time_text": "0:02"}, 0, 2, "0:02"),
+        ({"time_text": "0:10"}, 5, 5, "0:05"),
+    ],
+    ids=["zero-time-fixup", "offset-subtraction"],
+)
+def test_parse_item_time_logic_and_offset_adjustment(info, offset, seconds, text):
     out = yt_messages._parse_item(
         {"liveChatTextMessageRenderer": {"dummy": 1}},
         info=info.copy(),
+        offset=offset,
     )
-    assert out["time_in_seconds"] == 2
-    assert out["time_text"] == "0:02"
-
-    # Exercise offset subtraction.
-    info2 = {"time_text": "0:10"}
-    out2 = yt_messages._parse_item(
-        {"liveChatTextMessageRenderer": {"dummy": 1}},
-        info=info2.copy(),
-        offset=5,
-    )
-    assert out2["time_in_seconds"] == 5
-    assert out2["time_text"] == "0:05"
+    assert out["time_in_seconds"] == seconds
+    assert out["time_text"] == text
 
 
 def test_parse_item_parses_paid_message_leaderboard_badge() -> None:
     out = yt_messages._parse_item(
         {
             "liveChatPaidMessageRenderer": {
-                "leaderboardBadge": {
-                    "liveChatAuthorBadgeRenderer": {
-                        "tooltip": "Top supporter",
-                        "icon": {"iconType": "STAR"},
-                        "customThumbnail": {
-                            "thumbnails": [
-                                {
-                                    "url": "https://img.example/leader=s32",
-                                    "width": 32,
-                                    "height": 32,
-                                },
-                            ],
-                        },
-                    },
-                },
+                "leaderboardBadge": _badge("Top supporter", "STAR", "leader"),
             },
         },
     )
@@ -205,78 +180,37 @@ def test_known_keys_include_dynamic_state_data() -> None:
     assert "dynamicStateData" in yt_constants.known_keys()
 
 
-def test_parse_item_sets_author_role_booleans_from_badges() -> None:
+@pytest.mark.parametrize(
+    ("badges", "present", "absent"),
+    [
+        (
+            [_badge("Moderator", "MODERATOR")],
+            ["is_moderator"],
+            ["is_owner", "is_verified", "is_sponsor"],
+        ),
+        (
+            [_badge("Owner", "OWNER"), _badge("Verified", "VERIFIED")],
+            ["is_owner", "is_verified"],
+            ["is_moderator"],
+        ),
+        (
+            [_badge("Member (6 months)", image="badge")],
+            ["is_sponsor"],
+            ["is_moderator"],
+        ),
+    ],
+    ids=["moderator", "owner-and-verified", "member"],
+)
+def test_parse_item_sets_author_role_booleans_from_badges(badges, present, absent):
     out = yt_messages._parse_item(
         {
             "liveChatTextMessageRenderer": {
-                "authorBadges": [
-                    {
-                        "liveChatAuthorBadgeRenderer": {
-                            "tooltip": "Moderator",
-                            "icon": {"iconType": "MODERATOR"},
-                        },
-                    },
-                ],
+                "authorBadges": badges,
                 "timestampUsec": "1",
             },
-        },
+        }
     )
-    assert out["author"].get("is_moderator") is True
-    assert "is_owner" not in out["author"]
-    assert "is_verified" not in out["author"]
-    assert "is_sponsor" not in out["author"]
-
-
-def test_parse_item_sets_is_owner_and_is_verified() -> None:
-    out = yt_messages._parse_item(
-        {
-            "liveChatTextMessageRenderer": {
-                "authorBadges": [
-                    {
-                        "liveChatAuthorBadgeRenderer": {
-                            "tooltip": "Owner",
-                            "icon": {"iconType": "OWNER"},
-                        },
-                    },
-                    {
-                        "liveChatAuthorBadgeRenderer": {
-                            "tooltip": "Verified",
-                            "icon": {"iconType": "VERIFIED"},
-                        },
-                    },
-                ],
-                "timestampUsec": "2",
-            },
-        },
-    )
-    assert out["author"].get("is_owner") is True
-    assert out["author"].get("is_verified") is True
-    assert "is_moderator" not in out["author"]
-
-
-def test_parse_item_sets_is_sponsor_for_membership_badge() -> None:
-    out = yt_messages._parse_item(
-        {
-            "liveChatTextMessageRenderer": {
-                "authorBadges": [
-                    {
-                        "liveChatAuthorBadgeRenderer": {
-                            "tooltip": "Member (6 months)",
-                            "customThumbnail": {
-                                "thumbnails": [
-                                    {
-                                        "url": "https://img.example/badge=s32",
-                                        "width": 32,
-                                        "height": 32,
-                                    },
-                                ],
-                            },
-                        },
-                    },
-                ],
-                "timestampUsec": "3",
-            },
-        },
-    )
-    assert out["author"].get("is_sponsor") is True
-    assert "is_moderator" not in out["author"]
+    for role in present:
+        assert out["author"].get(role) is True
+    for role in absent:
+        assert role not in out["author"]

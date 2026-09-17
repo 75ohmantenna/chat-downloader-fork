@@ -108,16 +108,25 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                 error_message = title or f"HTTP {response.status_code}"
                 if response.status_code == 404:
                     raise VideoNotFound(error_message)
-                if response.status_code in (403, 429):
-                    _raise_if_challenge_response(
-                        response,
-                        url=url,
-                        error_message=error_message,
-                    )
+                if (
+                    response.status_code in (403, 429)
+                    or response.status_code // 100 == 5
+                ):
+                    if response.status_code in (403, 429):
+                        _raise_if_challenge_response(
+                            response,
+                            url=url,
+                            error_message=error_message,
+                        )
+                        label, detail = "Retriable HTTP error", error_message
+                    else:
+                        label, detail = (
+                            "Server error",
+                            title or f"HTTP {response.status_code}",
+                        )
                     log(
                         "warning",
-                        f"Retriable HTTP error (attempt {attempt_number}/"
-                        f"{max_attempts}): {error_message}",
+                        f"{label} (attempt {attempt_number}/{max_attempts}): {detail}",
                     )
                     if retry_policy.can_retry(attempt_number):
                         retry_policy.wait(attempt_number, interruptible=False)
@@ -126,25 +135,7 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                         f"Retries exhausted after {max_attempts} attempt(s) "
                         f"fetching: {url}. Last error: {error_message}"
                     )
-                    raise RetriesExceeded(
-                        msg,
-                    )
-                if response.status_code // 100 == 5:
-                    log(
-                        "warning",
-                        f"Server error (attempt {attempt_number}/"
-                        f"{max_attempts}): {title}",
-                    )
-                    if retry_policy.can_retry(attempt_number):
-                        retry_policy.wait(attempt_number, interruptible=False)
-                        continue
-                    msg = (
-                        f"Retries exhausted after {max_attempts} attempt(s) "
-                        f"fetching: {url}. Last error: {error_message}"
-                    )
-                    raise RetriesExceeded(
-                        msg,
-                    )
+                    raise RetriesExceeded(msg)
 
             yt_initial_data = cast(
                 "JSONDict",

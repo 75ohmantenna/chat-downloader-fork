@@ -4,6 +4,10 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
+import pytest
+
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.models import Chat
@@ -16,24 +20,25 @@ from chat_downloader.sites.youtube.continuation import (
 )
 
 
+class _Streams(YouTubeChatStreamsMixin):
+    _coerce_chat_request = staticmethod(BaseChatDownloader._coerce_chat_request)
+
+    def __init__(self, **details):
+        self.details = {"title": "Example", **details}
+        self.initial_request = self.message_params = None
+
+    def _get_initial_video_info(self, video_id, params, video_type="video"):
+        self.initial_request = params
+        return self.details, {}
+
+    def _get_chat_messages(self, initial_info, ytcfg, params):
+        self.message_params = params
+        return iter(())
+
+
 def test_youtube_video_entry_accepts_chat_request_and_bridges_later() -> None:
-    class DummyYouTubeStreams(YouTubeChatStreamsMixin):
-        _coerce_chat_request = staticmethod(BaseChatDownloader._coerce_chat_request)
-
-        def __init__(self) -> None:
-            self.initial_request = None
-            self.message_params = None
-
-        def _get_initial_video_info(self, video_id, params, video_type="video"):
-            self.initial_request = params
-            return {"title": "Example"}, {}
-
-        def _get_chat_messages(self, initial_info, ytcfg, params):
-            self.message_params = params
-            return iter(())
-
     request = ChatRequest(url="https://www.youtube.com/watch?v=abc", max_messages=3)
-    downloader = DummyYouTubeStreams()
+    downloader = _Streams()
 
     chat = downloader.get_chat_by_video_id("abc", request)
 
@@ -42,49 +47,25 @@ def test_youtube_video_entry_accepts_chat_request_and_bridges_later() -> None:
     assert downloader.message_params is request
 
 
-def test_youtube_video_entry_match_wrapper_calls_video_entry() -> None:
-    class DummyYouTubeStreams(YouTubeChatStreamsMixin):
-        def get_chat_by_video_id(self, video_id, params):
-            return (video_id, params)
+@pytest.mark.parametrize(
+    ("kind", "identifier"), [("video", "vid-1"), ("clip", "clip-1")]
+)
+def test_youtube_match_wrapper_dispatches_identifier_and_request(
+    kind, identifier
+) -> None:
+    class Streams(YouTubeChatStreamsMixin):
+        pass
 
-    class Match:
-        def __init__(self, value: str) -> None:
-            self.value = value
-
-        def group(self, _name: str) -> str:
-            return self.value
-
-    downloader = DummyYouTubeStreams()
-    request = ChatRequest(url="https://www.youtube.com/watch?v=abc")
-    called_video_id, called_request = downloader._get_chat_by_video_id(
-        Match("vid-1"), request
+    setattr(
+        Streams, f"get_chat_by_{kind}_id", lambda self, value, params: (value, params)
     )
-
-    assert called_video_id == "vid-1"
-    assert called_request is request
-
-
-def test_youtube_clip_entry_match_wrapper_calls_clip_entry() -> None:
-    class DummyYouTubeStreams(YouTubeChatStreamsMixin):
-        def get_chat_by_clip_id(self, clip_id, params):
-            return (clip_id, params)
-
-    class Match:
-        def __init__(self, value: str) -> None:
-            self.value = value
-
-        def group(self, _name: str) -> str:
-            return self.value
-
-    downloader = DummyYouTubeStreams()
-    request = ChatRequest(url="https://www.youtube.com/clip/abc")
-    called_clip_id, called_request = downloader._get_chat_by_clip_id(
-        Match("clip-1"),
+    request = ChatRequest(url="https://www.youtube.com/watch?v=abc")
+    result = getattr(Streams(), f"_get_chat_by_{kind}_id")(
+        SimpleNamespace(group=lambda _name: identifier),
         request,
     )
-
-    assert called_clip_id == "clip-1"
-    assert called_request is request
+    assert result == (identifier, request)
+    assert result[1] is request
 
 
 def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -> None:
@@ -119,31 +100,12 @@ def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -
 
 
 def test_youtube_clip_entry_updates_times_without_mutating_request() -> None:
-    class DummyYouTubeStreams(YouTubeChatStreamsMixin):
-        _coerce_chat_request = staticmethod(BaseChatDownloader._coerce_chat_request)
-
-        def __init__(self) -> None:
-            self.initial_request = None
-            self.message_params = None
-
-        def _get_initial_video_info(self, video_id, params, video_type="video"):
-            self.initial_request = params
-            return {
-                "title": "Clip",
-                "clip_start_time": 10,
-                "clip_end_time": 70,
-            }, {}
-
-        def _get_chat_messages(self, initial_info, ytcfg, params):
-            self.message_params = params
-            return iter(())
-
     request = ChatRequest(
         url="https://www.youtube.com/clip/abc",
         start_time=5,
         end_time=None,
     )
-    downloader = DummyYouTubeStreams()
+    downloader = _Streams(clip_start_time=10, clip_end_time=70)
 
     downloader.get_chat_by_clip_id("abc", request)
 
@@ -202,13 +164,9 @@ def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
 ) -> None:
     captured = {}
 
-    class DummySession:
-        def __init__(self) -> None:
-            self.headers = {}
-
     class DummyDownloader:
         def __init__(self) -> None:
-            self.session = DummySession()
+            self.session = SimpleNamespace(headers={})
             self._session_post = object()
 
         def check_for_invalid_types(self, *_args, **_kwargs) -> None:
@@ -225,10 +183,6 @@ def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._generate_headers",
         lambda *_args, **_kwargs: {},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
@@ -252,16 +206,12 @@ def test_youtube_chat_iteration_passes_typed_request_to_continuation_helper(
     )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.parse_continuation_response",
-        lambda _yt_info: type(
-            "Result",
-            (),
-            {
-                "debug_info": {},
-                "timeout_ms": None,
-                "is_end": True,
-                "next_continuation": None,
-            },
-        )(),
+        lambda _yt_info: SimpleNamespace(
+            debug_info={},
+            timeout_ms=None,
+            is_end=True,
+            next_continuation=None,
+        ),
     )
 
     request = ChatRequest(

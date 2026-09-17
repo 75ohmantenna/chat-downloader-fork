@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock, patch
 
@@ -47,64 +48,45 @@ def _usernotice(message_id: str, message_type: str, text: str) -> str:
     )
 
 
-def test_successful_irc_frame_capture_requires_explicit_scope_opt_in(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(
-        "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES",
-        raising=False,
-    )
-    captured = []
-    monkeypatch.setattr(
-        irc_diagnostics,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
-    )
-
-    irc_diagnostics._SuccessfulIrcFrameCapture().capture("valid frame\r\n")
-
-    assert captured == []
-
-
-def test_event_frame_capture_requires_explicit_scope_opt_in(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(
-        "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES",
-        raising=False,
-    )
-    captured = []
-    monkeypatch.setattr(
-        irc_diagnostics,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
-    )
-
-    irc_diagnostics._EventDiverseIrcFrameCapture().capture(
-        "valid frame\r\n",
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub",
-    )
-
-    assert captured == []
-
-
-def test_event_frame_capture_prefers_message_type_and_falls_back_to_action(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.fixture
+def captured_frames(monkeypatch):
     captured = []
 
     def record_capture(*args, **kwargs):
         captured.append((args, kwargs))
         return f"/samples/{len(captured)}.json"
 
+    monkeypatch.setattr(irc_diagnostics, "capture_debug_sample", record_capture)
+    return captured
+
+
+@pytest.mark.parametrize("event_mode", [False, True], ids=["first", "event"])
+def test_frame_capture_requires_explicit_scope_opt_in(
+    monkeypatch,
+    captured_frames,
+    event_mode,
+) -> None:
+    scope = "TWITCH_IRC_EVENT_FRAMES" if event_mode else "TWITCH_IRC_FRAMES"
+    monkeypatch.delenv(f"CHAT_DOWNLOADER_CAPTURE_{scope}", raising=False)
+    if event_mode:
+        irc_diagnostics._EventDiverseIrcFrameCapture().capture(
+            "valid frame\r\n",
+            {"message_type": "resubscription"},
+            "USERNOTICE",
+            "msg-id=resub",
+        )
+    else:
+        irc_diagnostics._SuccessfulIrcFrameCapture().capture("valid frame\r\n")
+
+    assert captured_frames == []
+
+
+def test_event_frame_capture_prefers_message_type_and_falls_back_to_action(
+    monkeypatch: pytest.MonkeyPatch,
+    captured_frames,
+) -> None:
+    captured = captured_frames
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "yes")
-    monkeypatch.setattr(
-        irc_diagnostics,
-        "capture_debug_sample",
-        record_capture,
-    )
     frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
 
     frame_capture.capture(
@@ -129,56 +111,27 @@ def test_event_frame_capture_prefers_message_type_and_falls_back_to_action(
 
     assert captured == [
         (
-            (
-                "twitch-irc-event-message-resubscription-7dce7b9831c9",
-                {"raw": "resub one\r\n"},
-            ),
+            (f"twitch-irc-event-{label}", {"raw": frame}),
             {
                 "sample_limit": 1,
                 "sample_group": "twitch-irc-event-frames",
                 "group_limit": 12,
             },
-        ),
-        (
-            (
-                "twitch-irc-event-message-viewermilestone-71b63634a922",
-                {"raw": "milestone\r\n"},
-            ),
-            {
-                "sample_limit": 1,
-                "sample_group": "twitch-irc-event-frames",
-                "group_limit": 12,
-            },
-        ),
-        (
-            (
-                "twitch-irc-event-action-notice-dfb14fbb9e7d",
-                {"raw": "notice\r\n"},
-            ),
-            {
-                "sample_limit": 1,
-                "sample_group": "twitch-irc-event-frames",
-                "group_limit": 12,
-            },
-        ),
+        )
+        for label, frame in [
+            ("message-resubscription-7dce7b9831c9", "resub one\r\n"),
+            ("message-viewermilestone-71b63634a922", "milestone\r\n"),
+            ("action-notice-dfb14fbb9e7d", "notice\r\n"),
+        ]
     ]
 
 
 def test_event_frame_capture_bounds_provider_controlled_keys_and_labels(
     monkeypatch: pytest.MonkeyPatch,
+    captured_frames,
 ) -> None:
-    captured = []
-
-    def record_capture(*args, **kwargs):
-        captured.append((args, kwargs))
-        return f"/samples/{len(captured)}.json"
-
+    captured = captured_frames
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setattr(
-        irc_diagnostics,
-        "capture_debug_sample",
-        record_capture,
-    )
     frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
 
     for index in range(20):
@@ -502,15 +455,10 @@ def test_event_capture_backend_label_persists_across_runs_with_group_slots(
 
 def test_real_parser_raw_msg_id_provenance_prevents_normalized_masquerades(
     monkeypatch: pytest.MonkeyPatch,
+    captured_frames,
 ) -> None:
-    captured = []
-
-    def record_capture(*args, **kwargs):
-        captured.append((args, kwargs))
-        return f"/samples/{len(captured)}.json"
-
+    captured = captured_frames
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setattr(irc_diagnostics, "capture_debug_sample", record_capture)
 
     resub_frames = [
         _usernotice("genuine-resub", "resub", "Genuine resub"),
@@ -558,12 +506,9 @@ def test_real_parser_raw_msg_id_provenance_prevents_normalized_masquerades(
 
 def test_real_parser_unknown_types_share_raw_action_fallback(
     monkeypatch: pytest.MonkeyPatch,
+    captured_frames,
 ) -> None:
-    captured = []
-
-    def record_capture(*args, **kwargs):
-        captured.append((args, kwargs))
-        return f"/samples/{len(captured)}.json"
+    captured = captured_frames
 
     raw_frames = [
         _usernotice("unknown-1", "unknown-one", "First unknown"),
@@ -577,7 +522,6 @@ def test_real_parser_unknown_types_share_raw_action_fallback(
         irc_transport.MESSAGE_REGEX.finditer("\r\n".join(raw_frames) + "\r\n")
     )
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setattr(irc_diagnostics, "capture_debug_sample", record_capture)
 
     items, _message_count = irc_transport._parse_irc_matches(
         matches,
@@ -599,20 +543,11 @@ def test_real_parser_unknown_types_share_raw_action_fallback(
 
 def test_successful_capture_modes_have_additive_fifteen_frame_limit(
     monkeypatch: pytest.MonkeyPatch,
+    captured_frames,
 ) -> None:
-    captured = []
-
-    def record_capture(*args, **kwargs):
-        captured.append((args, kwargs))
-        return f"/samples/{len(captured)}.json"
-
+    captured = captured_frames
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "1")
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setattr(
-        irc_diagnostics,
-        "capture_debug_sample",
-        record_capture,
-    )
     first_frame_capture = irc_diagnostics._SuccessfulIrcFrameCapture()
     event_frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
 
@@ -730,19 +665,14 @@ def test_handle_gql_errors_reports_persisted_query_failures_actionably(
     assert "Operation hashes or required variables may be stale" in message
 
 
-def test_download_gql_handles_dict_error_response() -> None:
+@pytest.mark.parametrize("batched", [False, True], ids=["dict", "list"])
+def test_download_gql_handles_error_response(batched) -> None:
+    payload = {"errors": [{"message": "resource not found"}]}
+
     def session_post(_url, json, headers):
         assert headers["Client-ID"]
         assert json[0]["extensions"]["persistedQuery"]["version"] == 1
-        return type(
-            "_Resp",
-            (),
-            {
-                "json": staticmethod(
-                    lambda: {"errors": [{"message": "resource not found"}]},
-                ),
-            },
-        )()
+        return SimpleNamespace(json=lambda: [payload] if batched else payload)
 
     with pytest.raises(VideoNotFound):
         graphql_client._download_gql(
@@ -751,33 +681,7 @@ def test_download_gql_handles_dict_error_response() -> None:
                 {
                     "operationName": next(iter(graphql_client.OPERATION_HASHES)),
                     "variables": {},
-                },
-            ],
-        )
-
-
-def test_download_gql_handles_list_error_response() -> None:
-    def session_post(_url, json, headers):
-        assert headers["Client-ID"]
-        assert json[0]["extensions"]["persistedQuery"]["version"] == 1
-        return type(
-            "_Resp",
-            (),
-            {
-                "json": staticmethod(
-                    lambda: [{"errors": [{"message": "resource not found"}]}],
-                ),
-            },
-        )()
-
-    with pytest.raises(VideoNotFound):
-        graphql_client._download_gql(
-            session_post,
-            [
-                {
-                    "operationName": next(iter(graphql_client.OPERATION_HASHES)),
-                    "variables": {},
-                },
+                }
             ],
         )
 
@@ -926,14 +830,7 @@ def test_should_send_keepalive_respects_interval() -> None:
 
 
 def test_maybe_send_keepalive_updates_last_ping_only_when_due() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.sent = []
-
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
-
-    irc = FakeIRC()
+    irc = _FakeIRC()
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
 
     assert (
@@ -1014,260 +911,110 @@ def test_parse_irc_matches_returns_items_and_updated_count(monkeypatch) -> None:
     assert diagnostics.summary["parsed_irc_message_count"] == 2
 
 
-def test_irc_transport_sends_pong_on_ping_before_connection_error() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter(["PING :tmi.twitch.tv\r\n", ""])
-            self.sent: list[str] = []
+class _FakeIRC:
+    def __init__(self, responses=(), *, send_error=None) -> None:
+        self.responses = iter(responses)
+        self.sent: list[str] = []
+        self.sent_before_recv: list[list[str]] = []
+        self.send_error = send_error
 
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
+    def recv(self, _buffer_size: int) -> str:
+        self.sent_before_recv.append(self.sent.copy())
+        response = next(self.responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
 
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
+    def send_raw(self, message: str) -> None:
+        if self.send_error is not None:
+            raise self.send_error
+        self.sent.append(message)
 
-    irc = FakeIRC()
+
+def _stream_messages(irc, diagnostics=None):
+    return irc_transport.get_chat_messages_by_stream_id(
+        cast("Any", irc),
+        "example",
+        ChatRequest(url="https://www.twitch.tv/example"),
+        diagnostics=diagnostics,
+    )
+
+
+@pytest.mark.parametrize(
+    ("chunks", "ping_count"),
+    [
+        pytest.param(["PING :tmi.twitch.tv\r\n"], 1, id="complete"),
+        pytest.param(["PING :tmi.twitch.tv\r", "\n"], 1, id="split"),
+        pytest.param(["PING :tmi.twitch.tv\r\n" * 2], 2, id="multiple"),
+        pytest.param(
+            [_privmsg("1", "PING :tmi.twitch.tv") + "\r\n"],
+            0,
+            id="chat-payload",
+        ),
+    ],
+)
+def test_irc_transport_only_answers_completed_ping_frames(chunks, ping_count) -> None:
+    irc = _FakeIRC([*chunks, ""])
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-
     with pytest.raises(ConnectionError):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", irc),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-                diagnostics=diagnostics,
-            ),
-        )
+        list(_stream_messages(irc, diagnostics))
 
-    assert irc.sent == [irc_transport.PONG_TEXT]
-    assert diagnostics.summary["received_irc_chunk_count"] == 1
-    assert diagnostics.summary["received_irc_frame_count"] == 1
-    assert diagnostics.summary["keepalive_ping_received_count"] == 1
-    assert diagnostics.summary["keepalive_pong_sent_count"] == 1
+    assert irc.sent == [irc_transport.PONG_TEXT] * ping_count
+    assert diagnostics.summary["received_irc_chunk_count"] == len(chunks)
+    assert diagnostics.summary["received_irc_frame_count"] == max(1, ping_count)
+    assert diagnostics.summary["keepalive_ping_received_count"] == ping_count
+    assert diagnostics.summary["keepalive_pong_sent_count"] == ping_count
+    if len(chunks) == 2:
+        assert irc.sent_before_recv[1] == []
 
 
-def test_irc_transport_waits_for_complete_ping_before_sending_pong() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter(["PING :tmi.twitch.tv\r", "\n", ""])
-            self.sent: list[str] = []
-
-        def recv(self, _buffer_size: int) -> str:
-            response = next(self.responses)
-            if response == "\n":
-                assert self.sent == []
-            return response
-
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
-
-    irc = FakeIRC()
-    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-
-    with pytest.raises(ConnectionError):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", irc),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-                diagnostics=diagnostics,
-            )
-        )
-
-    assert irc.sent == [irc_transport.PONG_TEXT]
-    assert diagnostics.summary["received_irc_frame_count"] == 1
-    assert diagnostics.summary["keepalive_ping_received_count"] == 1
-    assert diagnostics.summary["keepalive_pong_sent_count"] == 1
-
-
-def test_irc_transport_sends_one_pong_per_completed_ping() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter(
-                ["PING :tmi.twitch.tv\r\nPING :tmi.twitch.tv\r\n", ""]
-            )
-            self.sent: list[str] = []
-
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
-
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
-
-    irc = FakeIRC()
-    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-
-    with pytest.raises(ConnectionError):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", irc),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-                diagnostics=diagnostics,
-            )
-        )
-
-    assert irc.sent == [irc_transport.PONG_TEXT, irc_transport.PONG_TEXT]
-    assert diagnostics.summary["keepalive_ping_received_count"] == 2
-    assert diagnostics.summary["keepalive_pong_sent_count"] == 2
-
-
-def test_irc_transport_ignores_ping_text_in_chat_payload() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter([_privmsg("1", "PING :tmi.twitch.tv") + "\r\n", ""])
-            self.sent: list[str] = []
-
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
-
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
-
-    irc = FakeIRC()
-    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-
-    with pytest.raises(ConnectionError):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", irc),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-                diagnostics=diagnostics,
-            )
-        )
-
-    assert irc.sent == []
-    assert diagnostics.summary["keepalive_ping_received_count"] == 0
-    assert diagnostics.summary["keepalive_pong_sent_count"] == 0
-
-
-def test_irc_transport_ignores_prefixed_pong_without_drift_capture() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter(
-                [":tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n", ""]
-            )
-
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
-
-        def send_raw(self, _message: str) -> None:
-            return None
-
+@pytest.mark.parametrize(
+    ("frame", "unknown"),
+    [
+        (":tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n", False),
+        ("UNKNOWN LINE\r\n", True),
+    ],
+)
+def test_irc_transport_captures_drift_but_not_control_frames(frame, unknown) -> None:
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
     with (
         patch.object(irc_transport, "log") as mock_log,
         patch.object(irc_transport, "capture_debug_sample") as mock_capture,
         pytest.raises(ConnectionError),
     ):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", FakeIRC()),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-                diagnostics=diagnostics,
-            )
+        list(_stream_messages(_FakeIRC([frame, ""]), diagnostics))
+
+    if unknown:
+        mock_log.assert_any_call("debug", 'No matches found in "\nUNKNOWN LINE\n"')
+        mock_capture.assert_called_once_with(
+            "twitch-unknown-irc-shape",
+            {"raw": frame},
+            sample_limit=10,
         )
+    else:
+        mock_log.assert_not_called()
+        mock_capture.assert_not_called()
+        assert diagnostics.summary["keepalive_pong_received_count"] == 1
 
-    mock_log.assert_not_called()
-    mock_capture.assert_not_called()
-    assert diagnostics.summary["keepalive_pong_received_count"] == 1
 
-
-def test_irc_transport_logs_unknown_full_buffer_when_no_matches() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter(["UNKNOWN LINE\r\n", ""])
-
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
-
-        def send_raw(self, _message: str) -> None:
-            return None
-
-    irc = FakeIRC()
-
-    with (
-        patch.object(
-            irc_transport,
-            "_is_benign_unmatched_irc_buffer",
-            return_value=False,
-        ),
-        patch.object(irc_transport, "log") as mock_log,
-        patch.object(
-            irc_transport,
-            "capture_debug_sample",
-        ) as mock_capture_debug_sample,
-        pytest.raises(ConnectionError),
-    ):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", irc),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-            ),
-        )
-
-    mock_log.assert_any_call("debug", 'No matches found in "\nUNKNOWN LINE\n"')
-    mock_capture_debug_sample.assert_called_once_with(
-        "twitch-unknown-irc-shape",
-        {"raw": "UNKNOWN LINE\r\n"},
-        sample_limit=10,
+def test_irc_transport_handles_partial_matches_and_sends_keepalive() -> None:
+    irc = _FakeIRC(
+        [
+            _privmsg("1", "hello") + "\r\n" + _privmsg("2", "part"),
+            "ial\r\n",
+            "",
+        ]
     )
-
-
-def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive() -> (
-    None
-):
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter(
-                [
-                    _privmsg("1", "hello") + "\r\n" + _privmsg("2", "part"),
-                    "ial\r\n",
-                    "",
-                ],
-            )
-            self.sent: list[str] = []
-
-        def recv(self, _buffer_size: int) -> str:
-            response: Any = next(self.responses)
-            if isinstance(response, Exception):
-                raise response
-            return cast("str", response)
-
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
-
-    irc = FakeIRC()
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-    time_values = iter([0.0, 61.0, 62.0])
-
+    messages = []
     with (
-        patch.object(
-            irc_transport.time,
-            "monotonic",
-            side_effect=lambda: next(time_values),
-        ),
-        patch.object(
-            irc_transport,
-            "_parse_irc_item",
-            side_effect=[{"message": "hello"}, {"message": "partial"}],
-        ) as mock_parse,
+        patch.object(irc_transport.time, "monotonic", side_effect=[0.0, 61.0, 62.0]),
         patch.object(irc_transport, "log") as mock_log,
         pytest.raises(ConnectionError),
     ):
-        assert list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", irc),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-                diagnostics=diagnostics,
-            ),
-        ) == [{"message": "hello"}, {"message": "partial"}]
+        messages.extend(_stream_messages(irc, diagnostics))
 
-    assert mock_parse.call_count == 2
+    assert [item["message"] for item in messages] == ["hello", "partial"]
     mock_log.assert_not_called()
     assert irc.sent == ["PING"]
     assert diagnostics.summary["received_irc_chunk_count"] == 2
@@ -1277,145 +1024,61 @@ def test_irc_transport_handles_partial_matches_logs_progress_and_sends_keepalive
 
 
 def test_irc_transport_does_not_log_progress_every_250_messages() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            payload = "\r\n".join(
-                _privmsg(str(index), f"message-{index}") for index in range(1, 251)
-            )
-            self.responses = iter([payload + "\r\n", ""])
-
-        def recv(self, _buffer_size: int) -> str:
-            response: Any = next(self.responses)
-            return cast("str", response)
-
-        def send_raw(self, _message: str) -> None:
-            return None
-
-    parsed_messages = [{"message": f"message-{index}"} for index in range(1, 251)]
-
+    payload = "\r\n".join(
+        _privmsg(str(index), f"message-{index}") for index in range(1, 251)
+    )
+    messages = []
     with (
-        patch.object(irc_transport, "_parse_irc_item", side_effect=parsed_messages),
         patch.object(irc_transport, "log") as mock_log,
         pytest.raises(ConnectionError),
     ):
-        assert (
-            len(
-                list(
-                    irc_transport.get_chat_messages_by_stream_id(
-                        cast("Any", FakeIRC()),
-                        "example",
-                        ChatRequest(url="https://www.twitch.tv/example"),
-                    ),
-                ),
-            )
-            == 250
-        )
+        messages.extend(_stream_messages(_FakeIRC([payload + "\r\n", ""])))
 
+    assert [item["message"] for item in messages] == [
+        f"message-{index}" for index in range(1, 251)
+    ]
     mock_log.assert_not_called()
 
 
 def test_irc_transport_preserves_trailing_unmatched_buffer_after_complete_match() -> (
     None
 ):
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter([_privmsg("1", "hello") + "\r\nUNKNOWN", ""])
+    messages = []
+    with pytest.raises(ConnectionError):
+        messages.extend(
+            _stream_messages(
+                _FakeIRC([_privmsg("1", "hello") + "\r\nUNKNOWN", ""]),
+            )
+        )
 
-        def recv(self, _buffer_size: int) -> str:
-            response: Any = next(self.responses)
-            return cast("str", response)
-
-        def send_raw(self, _message: str) -> None:
-            return None
-
-    with (
-        patch.object(
-            irc_transport,
-            "_parse_irc_item",
-            return_value={"message": "hello"},
-        ),
-        pytest.raises(ConnectionError),
-    ):
-        assert list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", FakeIRC()),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-            ),
-        ) == [{"message": "hello"}]
+    assert [item["message"] for item in messages] == ["hello"]
 
 
 def test_irc_transport_swallows_timeout_and_continues_until_disconnect() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter([TimeoutError("timed out"), ""])
-
-        def recv(self, _buffer_size: int) -> str:
-            response: Any = next(self.responses)
-            if isinstance(response, Exception):
-                raise response
-            return cast("str", response)
-
-        def send_raw(self, _message: str) -> None:
-            return None
-
+    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
+    messages = []
+    irc = _FakeIRC([TimeoutError("timed out"), _privmsg("1", "after") + "\r\n", ""])
     with pytest.raises(ConnectionError):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", FakeIRC()),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-            ),
-        )
+        messages.extend(_stream_messages(irc, diagnostics))
+
+    assert [item["message"] for item in messages] == ["after"]
+    assert diagnostics.summary["receive_timeout_count"] == 1
 
 
 def test_irc_transport_maps_socket_receive_error_to_reconnect() -> None:
-    class FakeIRC:
-        def recv(self, _buffer_size: int) -> str:
-            raise OSError("network changed")
-
     with pytest.raises(ConnectionError, match="receive failed"):
-        next(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", FakeIRC()),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-            )
-        )
+        next(_stream_messages(_FakeIRC([OSError("network changed")])))
 
 
 def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.sent: list[str] = []
-
-        def recv(self, _buffer_size: int) -> str:
-            raise TimeoutError
-
-        def send_raw(self, message: str) -> None:
-            self.sent.append(message)
-
-    irc = FakeIRC()
+    irc = _FakeIRC([TimeoutError(), TimeoutError()])
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-    time_values = iter([0.0, 61.0, 180.0])
-
     with (
-        patch.object(
-            irc_transport.time,
-            "monotonic",
-            side_effect=lambda: next(time_values),
-        ),
+        patch.object(irc_transport.time, "monotonic", side_effect=[0.0, 61.0, 180.0]),
         patch.object(irc_transport, "log") as mock_log,
         pytest.raises(ConnectionError, match="became idle"),
     ):
-        next(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", irc),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-                diagnostics=diagnostics,
-            )
-        )
+        next(_stream_messages(irc, diagnostics))
 
     assert irc.sent == ["PING", "PING"]
     assert diagnostics.summary["receive_timeout_count"] == 2
@@ -1427,67 +1090,14 @@ def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
     )
 
 
-def test_irc_transport_pong_oserror_raises_connection_error() -> None:
-    """OSError from send_raw(PONG) becomes ConnectionError for reconnect."""
-
-    class FakeIRC:
-        def __init__(self) -> None:
-            self.responses = iter(["PING :tmi.twitch.tv\r\n"])
-
-        def recv(self, _buffer_size: int) -> str:
-            return next(self.responses)
-
-        def send_raw(self, _message: str) -> None:
-            raise OSError("broken pipe")
-
-    with pytest.raises(ConnectionError):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", FakeIRC()),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-            ),
-        )
-
-
-def test_irc_transport_ping_oserror_raises_connection_error() -> None:
-    """OSError from send_raw(PING) becomes ConnectionError for reconnect."""
-
-    class FakeIRC:
-        def __init__(self) -> None:
-            # First recv returns a full buffer with no IRC matches (benign
-            # line); the ping check then runs and send_raw("PING") raises
-            # OSError.
-            self.responses = iter(["UNKNOWN LINE\r\n"])
-
-        def recv(self, _buffer_size: int) -> str:
-            try:
-                return next(self.responses)
-            except StopIteration:
-                raise TimeoutError from None
-
-        def send_raw(self, _message: str) -> None:
-            raise OSError("broken pipe")
-
-    # monotonic() called at init (→0.0), then after recv succeeds (→61.0),
-    # triggering the PING send_raw which raises OSError → ConnectionError.
-    time_values = iter([0.0, 61.0])
-
+@pytest.mark.parametrize("frame", ["PING :tmi.twitch.tv\r\n", "UNKNOWN LINE\r\n"])
+def test_irc_transport_keepalive_send_errors_trigger_reconnect(frame) -> None:
+    irc = _FakeIRC([frame], send_error=OSError("broken pipe"))
     with (
-        patch.object(
-            irc_transport.time,
-            "monotonic",
-            side_effect=lambda: next(time_values),
-        ),
+        patch.object(irc_transport.time, "monotonic", side_effect=[0.0, 61.0]),
         pytest.raises(ConnectionError),
     ):
-        list(
-            irc_transport.get_chat_messages_by_stream_id(
-                cast("Any", FakeIRC()),
-                "example",
-                ChatRequest(url="https://www.twitch.tv/example"),
-            ),
-        )
+        list(_stream_messages(irc))
 
 
 def test_twitch_chat_irc_constructor_closes_socket_on_send_raw_oserror(

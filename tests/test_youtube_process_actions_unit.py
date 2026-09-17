@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
+import pytest
 
+from chat_downloader.sites.filters import MessageFilter
+from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
 from chat_downloader.sites.youtube.continuation import (
     ContinuationLoopState,
     _process_actions,
+    enrich_live_message_timing,
 )
 from chat_downloader.sites.youtube.message_pipeline import (
     NonEmissionReason,
@@ -14,256 +17,107 @@ from chat_downloader.sites.youtube.message_pipeline import (
 )
 
 
-def _make_loop_state() -> ContinuationLoopState:
-    return ContinuationLoopState(continuation="tok", offset_milliseconds=None)
+def _actions(actions, **overrides):
+    options = {
+        "offset": None,
+        "msg_filter": MessageFilter({}),
+        "time_filter": None,
+        "loop_state": ContinuationLoopState(
+            continuation="tok",
+            offset_milliseconds=None,
+        ),
+        "live_start_time_ms": 0,
+        "is_replay": True,
+    }
+    return _process_actions(actions, **(options | overrides))
 
 
-def test_process_actions_yields_accepted_messages() -> None:
-    """_process_actions yields messages whose disposition is 'yield'."""
-    from chat_downloader.sites.filters import MessageFilter
-
-    msg_filter = MessageFilter({})
-    actions = [{"id": 1}, {"id": 2}]
-    pipeline_results = iter(
-        [
-            PipelineResult(disposition="yield", message={"text": "hello"}),
-            PipelineResult(disposition="yield", message={"text": "world"}),
-        ]
-    )
-
-    def fake_pipeline(action, offset, mf, tf, _paid_events):
-        return next(pipeline_results)
-
-    import chat_downloader.sites.youtube.continuation as mod
-
-    original = mod.process_pipeline_action
-    mod.process_pipeline_action = fake_pipeline
-    try:
-        result = list(
-            _process_actions(
-                actions,
-                offset=None,
-                msg_filter=msg_filter,
-                time_filter=None,
-                loop_state=_make_loop_state(),
-                live_start_time_ms=0,
-                is_replay=True,
-            )
-        )
-    finally:
-        mod.process_pipeline_action = original
-
-    assert result == [{"text": "hello"}, {"text": "world"}]
+def _yield(text):
+    return PipelineResult(disposition="yield", message={"text": text})
 
 
-def test_process_actions_stop_disposition_logs_reason_and_yields_nothing_after(
-    monkeypatch,
-) -> None:
-    """A 'stop' action makes _process_actions stop and return True."""
-    from chat_downloader.sites.filters import MessageFilter
+def _skip(reason):
+    return PipelineResult(disposition="skip", non_emission_reason=reason)
 
-    msg_filter = MessageFilter({})
-    actions = [{"id": 1}, {"id": 2}, {"id": 3}]
-    log_calls = []
-    # First action: yield; second: stop; third should never be reached.
-    pipeline_results = iter(
-        [
-            PipelineResult(disposition="yield", message={"text": "first"}),
-            PipelineResult(
-                disposition="stop",
-                non_emission_reason=NonEmissionReason.TIME_RANGE_STOPPED,
-            ),
-            PipelineResult(
-                disposition="yield",
-                message={"text": "should-not-appear"},
-            ),
-        ]
-    )
 
-    def fake_pipeline(action, offset, mf, tf, _paid_events):
-        return next(pipeline_results)
-
-    import chat_downloader.sites.youtube.continuation as mod
-
-    monkeypatch.setattr(mod, "log", lambda *args: log_calls.append(args))
-    original = mod.process_pipeline_action
-    mod.process_pipeline_action = fake_pipeline
-    try:
-        gen = _process_actions(
-            actions,
-            offset=None,
-            msg_filter=msg_filter,
-            time_filter=None,
-            loop_state=_make_loop_state(),
-            live_start_time_ms=0,
-            is_replay=True,
-        )
-        messages = []
-        stop_requested = False
-        try:
-            while True:
-                messages.append(next(gen))
-        except StopIteration as exc:
-            stop_requested = exc.value
-    finally:
-        mod.process_pipeline_action = original
-
-    assert messages == [{"text": "first"}]
-    assert stop_requested is True
-    assert log_calls == [
+@pytest.mark.parametrize(
+    ("results", "expected", "stopped", "summary"),
+    [
         (
-            "debug",
+            [_yield("hello"), _yield("world")],
+            [{"text": "hello"}, {"text": "world"}],
+            False,
+            None,
+        ),
+        (
+            [
+                _yield("first"),
+                PipelineResult(
+                    disposition="stop",
+                    non_emission_reason=NonEmissionReason.TIME_RANGE_STOPPED,
+                ),
+                _yield("should-not-appear"),
+            ],
+            [{"text": "first"}],
+            True,
             (
                 "Processed actions in poll: 2; emitted messages: 1; "
                 "non-emitted actions: 1 (time-range stop: 1)"
             ),
-        )
-    ]
-
-
-def test_process_actions_skip_disposition_does_not_yield() -> None:
-    """Messages with 'skip' disposition are silently dropped."""
-    from chat_downloader.sites.filters import MessageFilter
-
-    msg_filter = MessageFilter({})
-    actions = [{"id": 1}, {"id": 2}]
-    pipeline_results = iter(
-        [
-            PipelineResult(
-                disposition="skip",
-                non_emission_reason=NonEmissionReason.UNPARSED_ACTION,
-            ),
-            PipelineResult(disposition="yield", message={"text": "kept"}),
-        ]
-    )
-
-    def fake_pipeline(action, offset, mf, tf, _paid_events):
-        return next(pipeline_results)
-
-    import chat_downloader.sites.youtube.continuation as mod
-
-    original = mod.process_pipeline_action
-    mod.process_pipeline_action = fake_pipeline
-    try:
-        result = list(
-            _process_actions(
-                actions,
-                offset=None,
-                msg_filter=msg_filter,
-                time_filter=None,
-                loop_state=_make_loop_state(),
-                live_start_time_ms=0,
-                is_replay=True,
-            )
-        )
-    finally:
-        mod.process_pipeline_action = original
-
-    assert result == [{"text": "kept"}]
-
-
-def test_process_actions_logs_bounded_non_emission_counts(monkeypatch) -> None:
-    from chat_downloader.sites.filters import MessageFilter
-
-    msg_filter = MessageFilter({})
-    log_calls = []
-    pipeline_results = iter(
-        [
-            PipelineResult(
-                disposition="skip",
-                non_emission_reason=NonEmissionReason.MESSAGE_FILTERED,
-            ),
-            PipelineResult(
-                disposition="skip",
-                non_emission_reason=NonEmissionReason.KNOWN_IGNORED_ACTION,
-            ),
-            PipelineResult(disposition="yield", message={"text": "kept"}),
-        ]
-    )
-
-    def fake_pipeline(action, offset, mf, tf, _paid_events):
-        return next(pipeline_results)
-
-    import chat_downloader.sites.youtube.continuation as mod
-
-    monkeypatch.setattr(mod, "log", lambda *args: log_calls.append(args))
-    original = mod.process_pipeline_action
-    mod.process_pipeline_action = fake_pipeline
-    try:
-        gen = _process_actions(
-            [{"id": 1}, {"id": 2}, {"id": 3}],
-            offset=None,
-            msg_filter=msg_filter,
-            time_filter=None,
-            loop_state=_make_loop_state(),
-            live_start_time_ms=0,
-            is_replay=True,
-        )
-        messages = []
-        stop_requested = False
-        try:
-            while True:
-                messages.append(next(gen))
-        except StopIteration as exc:
-            stop_requested = exc.value
-    finally:
-        mod.process_pipeline_action = original
-
-    assert messages == [{"text": "kept"}]
-    assert stop_requested is False
-    assert log_calls == [
+        ),
         (
-            "debug",
+            [_skip(NonEmissionReason.UNPARSED_ACTION), _yield("kept")],
+            [{"text": "kept"}],
+            False,
+            None,
+        ),
+        (
+            [
+                _skip(NonEmissionReason.MESSAGE_FILTERED),
+                _skip(NonEmissionReason.KNOWN_IGNORED_ACTION),
+                _yield("kept"),
+            ],
+            [{"text": "kept"}],
+            False,
             (
                 "Processed actions in poll: 3; emitted messages: 1; "
                 "non-emitted actions: 2 (known ignored/control actions: 1, "
                 "message type/group filtered: 1)"
             ),
-        )
-    ]
-
-
-def test_process_actions_logs_one_zero_summary_for_empty_poll(monkeypatch) -> None:
-    from chat_downloader.sites.filters import MessageFilter
-
-    log_calls = []
+        ),
+        (
+            [],
+            [],
+            False,
+            "Processed actions in poll: 0; emitted messages: 0; non-emitted actions: 0",
+        ),
+    ],
+    ids=["yield", "stop", "skip", "bounded-counts", "empty-poll"],
+)
+def test_process_actions_dispositions(monkeypatch, results, expected, stopped, summary):
+    pending = iter(results)
+    logs = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
+        lambda *_args: next(pending),
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.log",
-        lambda *args: log_calls.append(args),
+        lambda *args: logs.append(args),
     )
+    gen = _actions([{"id": index} for index in range(len(results))])
+    messages = []
+    with pytest.raises(StopIteration) as exc:
+        while True:
+            messages.append(next(gen))
 
-    assert (
-        list(
-            _process_actions(
-                [],
-                offset=None,
-                msg_filter=MessageFilter({}),
-                time_filter=None,
-                loop_state=_make_loop_state(),
-                live_start_time_ms=0,
-                is_replay=True,
-            )
-        )
-        == []
-    )
-    assert log_calls == [
-        (
-            "debug",
-            (
-                "Processed actions in poll: 0; emitted messages: 0; "
-                "non-emitted actions: 0"
-            ),
-        )
-    ]
+    assert messages == expected
+    assert exc.value.value is stopped
+    if summary is not None:
+        assert logs == [("debug", summary)]
 
 
-def test_process_actions_composes_parser_filters_and_poll_diagnostics(
-    monkeypatch,
-) -> None:
-    """Drive real parser/filter collaborators through the poll aggregation."""
-    from chat_downloader.sites.filters import MessageFilter
-    from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
-
+def test_process_actions_composes_parser_filters_and_poll_diagnostics(monkeypatch):
     actions = [
         {"addInteractivityWidgetAction": {}},
         {},
@@ -275,38 +129,23 @@ def test_process_actions_composes_parser_filters_and_poll_diagnostics(
         },
         {
             "addChatItemAction": {
-                "item": {
-                    "liveChatTextMessageRenderer": {
-                        "timestampUsec": "1",
-                    },
-                },
+                "item": {"liveChatTextMessageRenderer": {"timestampUsec": "1"}},
             },
         },
     ]
-    log_calls = []
-
+    logs = []
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.log",
-        lambda *args: log_calls.append(args),
+        lambda *args: logs.append(args),
     )
-
     result = list(
-        _process_actions(
+        _actions(
             actions,
-            offset=None,
-            msg_filter=MessageFilter(
-                _MESSAGE_GROUPS,
-                types_to_add=["text_message"],
-            ),
-            time_filter=None,
-            loop_state=_make_loop_state(),
-            live_start_time_ms=0,
-            is_replay=True,
+            msg_filter=MessageFilter(_MESSAGE_GROUPS, types_to_add=["text_message"]),
         )
     )
-
     assert [message["message_type"] for message in result] == ["text_message"]
-    assert log_calls == [
+    assert logs == [
         (
             "debug",
             (
@@ -314,92 +153,50 @@ def test_process_actions_composes_parser_filters_and_poll_diagnostics(
                 "non-emitted actions: 3 (known ignored/control actions: 1, "
                 "unparsed actions: 1, message type/group filtered: 1)"
             ),
-        )
+        ),
     ]
 
 
-def test_process_actions_keeps_backlog_timing_signed_and_polling_nonnegative(
+@pytest.mark.parametrize(
+    ("initial_offset", "expected_offset"), [(None, 0), (5000, 5000)]
+)
+def test_process_actions_keeps_signed_backlog_and_monotonic_polling(
     monkeypatch,
-) -> None:
-    from chat_downloader.sites.filters import MessageFilter
-
-    state = _make_loop_state()
+    initial_offset,
+    expected_offset,
+):
+    state = ContinuationLoopState(
+        continuation="tok", offset_milliseconds=initial_offset
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation.process_pipeline_action",
-        lambda *_args, **_kwargs: SimpleNamespace(
+        lambda *_args, **_kwargs: PipelineResult(
             disposition="yield",
             message={"timestamp": 500_000},
-            non_emission_reason=None,
         ),
     )
-
     messages = list(
-        _process_actions(
+        _actions(
             [{"id": 1}],
-            offset=None,
-            msg_filter=MessageFilter({}),
-            time_filter=None,
             loop_state=state,
             live_start_time_ms=1000,
             is_replay=False,
         )
     )
-
     assert messages == [
-        {
-            "timestamp": 500_000,
-            "time_in_seconds": -0.5,
-            "time_text": "-0:00",
-        }
+        {"timestamp": 500_000, "time_in_seconds": -0.5, "time_text": "-0:00"},
     ]
-    assert state.offset_milliseconds == 0
+    assert state.offset_milliseconds == expected_offset
 
 
-def test_process_actions_does_not_regress_polling_offset_for_late_backlog(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.filters import MessageFilter
-
-    state = ContinuationLoopState(continuation="tok", offset_milliseconds=5000)
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            disposition="yield",
-            message={"timestamp": 500_000},
-            non_emission_reason=None,
-        ),
-    )
-
-    list(
-        _process_actions(
-            [{"id": 1}],
-            offset=None,
-            msg_filter=MessageFilter({}),
-            time_filter=None,
-            loop_state=state,
-            live_start_time_ms=1000,
-            is_replay=False,
-        )
-    )
-
-    assert state.offset_milliseconds == 5000
-
-
-def test_enrich_live_message_timing_skips_when_time_in_seconds_present() -> None:
-    from chat_downloader.sites.youtube.continuation import (
-        enrich_live_message_timing,
-    )
-
-    message = {"time_in_seconds": 5.0, "body": "hello"}
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"time_in_seconds": 5.0, "body": "hello"},
+        {"time_text": "0:05"},
+    ],
+)
+def test_enrich_live_message_timing_preserves_existing_timing(message):
+    original = message.copy()
     enrich_live_message_timing(message, live_offset_milliseconds=1000)
-    assert message["time_in_seconds"] == 5.0  # Unchanged — early return
-
-
-def test_enrich_live_message_timing_skips_when_time_text_present() -> None:
-    from chat_downloader.sites.youtube.continuation import (
-        enrich_live_message_timing,
-    )
-
-    message = {"time_text": "0:05"}
-    enrich_live_message_timing(message, live_offset_milliseconds=1000)
-    assert "time_in_seconds" not in message  # Not added — early return
+    assert message == original

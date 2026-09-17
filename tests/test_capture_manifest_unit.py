@@ -13,8 +13,11 @@ from chat_downloader.runtime.runner import execute_run
 from tests.test_capture_checkpoint_unit import Downloader, message, parameters
 
 
-def test_manifest_certifies_closed_files_and_completed_run(tmp_path):
+@pytest.mark.parametrize("resumed", [False, True], ids=["fresh", "exhausted-resume"])
+def test_manifest_certifies_closed_files_and_completed_run(tmp_path, resumed):
     params = parameters(tmp_path)
+    if resumed:
+        assert execute_run(Downloader, **params).success
     path = tmp_path / "run.json"
     result = execute_run(
         Downloader, **params, run_manifest=str(path), require_complete=True
@@ -23,7 +26,8 @@ def test_manifest_certifies_closed_files_and_completed_run(tmp_path):
     report = json.loads(path.read_text())
     assert report["replay_complete"]
     assert report["parity_status"] == "passed"
-    assert report["message_count"] == 4
+    assert report["message_count"] == (0 if resumed else 4)
+    assert report["prior_message_count"] == (4 if resumed else 0)
     assert report["recording"]["id"] == "video"
     for item in report["outputs"]:
         artifact = tmp_path / item["file_name"].split("/")[-1]
@@ -31,22 +35,21 @@ def test_manifest_certifies_closed_files_and_completed_run(tmp_path):
     assert "Record 1" not in path.read_text()
 
 
-def test_require_complete_rejects_limit_but_keeps_verified_checkpoint(tmp_path):
+@pytest.mark.parametrize("checkpoint", [False, True], ids=["plain", "checkpointed"])
+def test_require_complete_rejects_limit_but_preserves_resume(tmp_path, checkpoint):
     params = parameters(tmp_path)
-    result = execute_run(Downloader, **params, max_messages=2, require_complete=True)
+    if not checkpoint:
+        params.pop("resume")
+    count = 2 if checkpoint else 4
+    result = execute_run(
+        Downloader, **params, max_messages=count, require_complete=True
+    )
     assert not result.success
     assert result.parity_status == "passed"
     assert result.termination_reason == "message_limit"
-    assert json.loads((tmp_path / "checkpoint.json").read_text())["total"] == 2
-    assert execute_run(Downloader, **params, require_complete=True).success
-
-
-def test_limit_without_checkpoint_is_not_complete(tmp_path):
-    params = parameters(tmp_path)
-    params.pop("resume")
-    result = execute_run(Downloader, **params, max_messages=4, require_complete=True)
-    assert not result.success
-    assert result.termination_reason == "message_limit"
+    if checkpoint:
+        assert json.loads((tmp_path / "checkpoint.json").read_text())["total"] == count
+        assert execute_run(Downloader, **params, require_complete=True).success
 
 
 @pytest.mark.parametrize(
@@ -174,31 +177,6 @@ def test_known_loss_survives_resume_without_reappearing_in_later_pages(tmp_path)
     assert not second.success
     assert second.parity_status == "passed"
     assert json.loads((tmp_path / "checkpoint.json").read_text())["record_loss"]
-
-
-def test_zero_new_records_manifest_hashes_checkpoint_verified_existing_files(tmp_path):
-    params = parameters(tmp_path)
-    assert execute_run(Downloader, **params).success
-    path = tmp_path / "resumed.json"
-    result = execute_run(
-        Downloader, **params, run_manifest=str(path), require_complete=True
-    )
-    assert result.success
-    report = json.loads(path.read_text())
-    assert report["message_count"] == 0
-    assert report["prior_message_count"] == 4
-    assert all(item["sha256"] for item in report["outputs"])
-
-
-def test_corrupt_checkpoint_loss_flag_is_rejected(tmp_path):
-    params = parameters(tmp_path)
-    assert execute_run(Downloader, **params).success
-    path = tmp_path / "checkpoint.json"
-    value = json.loads(path.read_text())
-    value["record_loss"] = "false"
-    path.write_text(json.dumps(value))
-    result = execute_run(Downloader, **params, require_complete=True)
-    assert not result.success
 
 
 def test_expanded_manifest_collision_fails_before_output(tmp_path):

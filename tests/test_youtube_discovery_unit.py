@@ -39,11 +39,19 @@ def get_user_videos(owner, **kwargs):
 
 
 class _DummyDiscoveryBase(YouTubeDiscoveryMixin):
+    _session_get = object()
+    _session_post = object()
+
     @staticmethod
     def _coerce_chat_request(params):
         if isinstance(params, ChatRequest):
             return params
         return ChatRequest.from_kwargs(**params)
+
+
+class DummyPlaylistDiscovery(YouTubePlaylistDiscoveryMixin):
+    _session_get = object()
+    _session_post = object()
 
 
 class _DummyUserRouter(YouTubeChatUsersRouterMixin):
@@ -60,32 +68,22 @@ class _DummyUserRouter(YouTubeChatUsersRouterMixin):
         return ("handle", match_id, params)
 
 
-def test_user_router_dispatches_supported_user_types() -> None:
+@pytest.mark.parametrize(
+    ("selector", "kind"),
+    [
+        ("channel/", "channel"),
+        ("user/", "user"),
+        ("c/", "custom"),
+        (None, "custom"),
+        ("@/", "handle"),
+    ],
+)
+def test_user_router_dispatches_supported_user_types(selector, kind) -> None:
     router = _DummyUserRouter()
     request = ChatRequest(url="https://www.youtube.com/@example/live")
 
-    assert router._get_chat_by_user(_DummyMatch("abc", "channel/"), request) == (
-        "channel",
-        "abc",
-        request,
-    )
-    assert router._get_chat_by_user(_DummyMatch("abc", "user/"), request) == (
-        "user",
-        "abc",
-        request,
-    )
-    assert router._get_chat_by_user(_DummyMatch("abc", "c/"), request) == (
-        "custom",
-        "abc",
-        request,
-    )
-    assert router._get_chat_by_user(_DummyMatch("abc", None), request) == (
-        "custom",
-        "abc",
-        request,
-    )
-    assert router._get_chat_by_user(_DummyMatch("abc", "@/"), request) == (
-        "handle",
+    assert router._get_chat_by_user(_DummyMatch("abc", selector), request) == (
+        kind,
         "abc",
         request,
     )
@@ -828,9 +826,12 @@ def test_get_rendered_content_extracts_selected_tab_content() -> None:
     assert rendered == {"target": "value"}
 
 
-def test_playlist_discovery_accepts_dict_params_and_stops_on_empty_continuation(
-    monkeypatch,
-) -> None:
+@pytest.mark.parametrize(
+    "params",
+    [{"url": "https://www.youtube.com/playlist?list=PL123"}, None],
+    ids=["dict-request", "default-request"],
+)
+def test_playlist_discovery_stops_on_empty_continuation(monkeypatch, params) -> None:
     class DummyPlaylistDiscovery(YouTubePlaylistDiscoveryMixin):
         _session_get = object()
         _session_post = object()
@@ -881,7 +882,7 @@ def test_playlist_discovery_accepts_dict_params_and_stops_on_empty_continuation(
     videos = list(
         DummyPlaylistDiscovery().get_playlist_items(
             "https://www.youtube.com/playlist?list=PL123",
-            {"url": "https://www.youtube.com/playlist?list=PL123"},
+            params,
         ),
     )
 
@@ -919,68 +920,6 @@ def test_playlist_discovery_accepts_none_params_without_continuation(
         )
         == []
     )
-
-
-def test_playlist_discovery_accepts_none_params_with_continuation(
-    monkeypatch,
-) -> None:
-    class DummyPlaylistDiscovery(YouTubePlaylistDiscoveryMixin):
-        _session_get = object()
-        _session_post = object()
-
-    calls = []
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._get_rendered_content",
-        lambda _yt_info, tab_index=0: {
-            "playlistVideoListRenderer": {
-                "contents": [
-                    {"playlistVideoRenderer": {"videoId": "one"}},
-                    {
-                        "continuationItemRenderer": {
-                            "continuationEndpoint": {
-                                "continuationCommand": {"token": "cont-1"},
-                            },
-                        },
-                    },
-                ],
-            },
-        },
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._get_initial_info",
-        lambda *_args, **_kwargs: ({}, {"INNERTUBE_API_KEY": "key"}, {}),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._get_innertube_context",
-        lambda _ytcfg: {"client": {"visitorData": "visitor"}},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery_playlists._parse_video",
-        lambda video: {"video_id": video["videoId"]},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers._get_continuation_info",
-        lambda _url, _session_post, request, **kwargs: (
-            calls.append((request, kwargs["json"]["continuation"]))
-            or {
-                "onResponseReceivedActions": [
-                    {"appendContinuationItemsAction": {"continuationItems": []}}
-                ]
-            }
-        ),
-    )
-
-    videos = list(
-        DummyPlaylistDiscovery().get_playlist_items(
-            "https://www.youtube.com/playlist?list=PL123",
-            None,
-        ),
-    )
-
-    assert videos == [{"video_id": "one"}]
-    assert isinstance(calls[0][0], ChatRequest)
-    assert calls == [(calls[0][0], "cont-1")]
 
 
 def test_playlist_discovery_breaks_on_repeated_continuation(

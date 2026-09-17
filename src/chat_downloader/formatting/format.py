@@ -145,31 +145,15 @@ class ItemFormatter:
     ) -> dict[str, Any] | None:
         """Return the format object to use, by name or matched from list."""
         if format_object is None:
-            format_object = self._get_format_by_name(format_name)
+            format_object = self.format_file.get(format_name)
+            if not format_object and format_name != self.DEFAULT_FORMAT_NAME:
+                msg = f'Format not found: "{format_name}"'
+                raise FormatNotFound(msg)
 
         if isinstance(format_object, list):
             return self._match_format_from_list(format_object, item)
 
         return format_object
-
-    def _get_format_by_name(
-        self, format_name: str
-    ) -> dict[str, Any] | list[Any] | None:
-        """Return the format entry for *format_name*, or the default."""
-        format_object = self.format_file.get(format_name)
-
-        if not format_object and format_name != self.DEFAULT_FORMAT_NAME:
-            msg = f'Format not found: "{format_name}"'
-            raise FormatNotFound(msg)
-
-        if not format_object:
-            format_object = self._get_default_format()
-
-        return format_object
-
-    def _get_default_format(self) -> dict[str, Any] | None:
-        """Return the default format object."""
-        return self.format_file.get(self.DEFAULT_FORMAT_NAME)
 
     def _match_format_from_list(
         self,
@@ -180,26 +164,15 @@ class ItemFormatter:
         message_type = item.get(self.KEY_MESSAGE_TYPE)
 
         for format_candidate in format_list:
-            if self._does_format_match(format_candidate, message_type):
+            matching = format_candidate.get(self.KEY_MATCHING)
+            if matching == self.MATCH_ALL or (
+                message_type in matching
+                if isinstance(matching, list)
+                else matching == message_type
+            ):
                 return cast("dict[str, Any]", format_candidate)
 
-        return self._get_default_format()
-
-    def _does_format_match(
-        self,
-        format_object: dict[str, Any],
-        message_type: object,
-    ) -> bool:
-        """Return True when *format_object* matches *message_type*."""
-        matching = format_object.get(self.KEY_MATCHING)
-
-        if matching == self.MATCH_ALL:
-            return True
-
-        if isinstance(matching, list):
-            return message_type in matching
-
-        return matching == message_type
+        return self.format_file.get(self.DEFAULT_FORMAT_NAME)
 
     def _apply_inheritance(self, format_object: dict[str, Any]) -> dict[str, Any]:
         """Return *format_object* merged onto its inherited parent, if any."""
@@ -252,66 +225,31 @@ class ItemFormatter:
 
         if field_config is None:
             return str(value)
-        if (
-            isinstance(field_config, dict)
-            and field_config.get(self.KEY_OMIT_IF_FALSE) is True
-            and not value
-        ):
-            return ""
-
-        template = self._select_field_template(field_config, value)
-        formatted_value = self._apply_field_formatting(field_path, value, field_config)
-        if (
-            isinstance(field_config, dict)
-            and field_config.get(self.KEY_OMIT_IF_FALSE) is True
-            and not formatted_value
-        ):
-            return ""
-
-        return _SAFE_FORMATTER.format(template, formatted_value)
-
-    def _select_field_template(self, field_config: object, value: object) -> str:
-        """Select the singular template for an exact numeric value of one."""
-        template = self._extract_template(field_config)
-        if (
-            not isinstance(field_config, dict)
-            or isinstance(value, bool)
-            or not isinstance(value, (int, float))
-            or value != 1
-        ):
-            return template
-
-        singular_template = field_config.get(self.KEY_SINGULAR_TEMPLATE)
-        if isinstance(singular_template, str):
-            return singular_template
-
-        return template
-
-    def _extract_template(self, field_config: Any) -> str:
-        """Return the template string from a field config entry."""
-        if isinstance(field_config, str):
-            return field_config
-
-        if isinstance(field_config, dict):
-            return cast(
-                "str",
-                field_config.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE),
-            )
-
-        return self.DEFAULT_TEMPLATE
-
-    def _apply_field_formatting(
-        self,
-        field_path: str,
-        value: Any,
-        field_config: Any,
-    ) -> Any:
-        """Apply type-specific formatting and separator logic to *value*."""
         if not isinstance(field_config, dict):
-            return value
+            template = field_config if isinstance(field_config, str) else ""
+            return _SAFE_FORMATTER.format(template, value)
+
+        omit_if_false = field_config.get(self.KEY_OMIT_IF_FALSE) is True
+        if omit_if_false and not value:
+            return ""
+
+        template = field_config.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
+        singular = field_config.get(self.KEY_SINGULAR_TEMPLATE)
+        if (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and value == 1
+            and isinstance(singular, str)
+        ):
+            template = singular
 
         value = self._apply_format_by_type(field_path, value, field_config)
-        return self._apply_separator(field_path, value, field_config)
+        value = self._apply_separator(field_path, value, field_config)
+        return (
+            ""
+            if omit_if_false and not value
+            else _SAFE_FORMATTER.format(template, value)
+        )
 
     def _apply_format_by_type(
         self,

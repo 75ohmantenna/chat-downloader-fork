@@ -13,7 +13,7 @@ from chat_downloader._timeout_defaults import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_READ_TIMEOUT,
 )
-from chat_downloader.models._base import _cli
+from chat_downloader.models._base import _cli_metadata
 from chat_downloader.request_profiles import REQUEST_PROFILES
 
 
@@ -31,62 +31,52 @@ class DownloaderConfig:
 
     cookies: str | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Path to Netscape-format cookies file",
-                group="init",
-                flags=["-c"],
-            ),
-        },
+        metadata=_cli_metadata(
+            "Path to Netscape-format cookies file",
+            group="init",
+            flags=["-c"],
+        ),
     )
     proxy: str | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Proxy URL (HTTP/HTTPS/SOCKS), e.g. socks5://127.0.0.1:1080."
-                " Defaults to None (system proxy settings)",
-                group="init",
-                flags=["-p"],
-            ),
-        },
+        metadata=_cli_metadata(
+            "Proxy URL (HTTP/HTTPS/SOCKS), e.g. socks5://127.0.0.1:1080."
+            " Defaults to None (system proxy settings)",
+            group="init",
+            flags=["-p"],
+        ),
     )
     connect_timeout: float = field(
         default=DEFAULT_CONNECT_TIMEOUT,
-        metadata={"cli": _cli("TCP connect timeout in seconds", group="init")},
+        metadata=_cli_metadata("TCP connect timeout in seconds", group="init"),
     )
     read_timeout: float = field(
         default=DEFAULT_READ_TIMEOUT,
-        metadata={"cli": _cli("HTTP read timeout in seconds", group="init")},
+        metadata=_cli_metadata("HTTP read timeout in seconds", group="init"),
     )
     request_profile: str | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Preset request profile "
-                "(youtube_web/youtube_android/youtube_ios/twitch_web)",
-                group="init",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Preset request profile "
+            "(youtube_web/youtube_android/youtube_ios/twitch_web)",
+            group="init",
+        ),
     )
     auto_profile_fallback: bool = field(
         default=True,
-        metadata={
-            "cli": _cli(
-                "Auto-switch YouTube request profiles after generic initial "
-                "playability or repeated incomplete continuation responses",
-                group="init",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Auto-switch YouTube request profiles after generic initial "
+            "playability or repeated incomplete continuation responses",
+            group="init",
+        ),
     )
     twitch_client_id: str | None = field(
         default=None,
-        metadata={
-            "cli": _cli(
-                "Override the public Twitch Client-ID used for GraphQL and "
-                "VOD comment requests",
-                group="init",
-            ),
-        },
+        metadata=_cli_metadata(
+            "Override the public Twitch Client-ID used for GraphQL and "
+            "VOD comment requests",
+            group="init",
+        ),
     )
 
     def __post_init__(self) -> None:

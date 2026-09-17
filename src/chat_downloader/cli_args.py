@@ -204,6 +204,9 @@ class _ParamRegistrar:
         arg_kwargs = dict(field_info)
         arg_kwargs.pop("flags", None)
         arg_kwargs.update(kwargs)
+        if arg_kwargs.get("type") is str2bool:
+            arg_kwargs.setdefault("nargs", "?")
+            arg_kwargs.setdefault("const", True)
         group.add_argument(*arg_names, **arg_kwargs)
 
     def chat(self, group: _ArgumentTarget, *keys: str, **kwargs: object) -> None:
@@ -224,13 +227,13 @@ def _add_chat_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> Non
     reg.chat(parser, "url")
 
     time_group = parser.add_argument_group("Timing Arguments")
-    reg.chat(time_group, "--start_time", "-s")
-    reg.chat(time_group, "--end_time", "-e")
+    for name in ("--start_time", "--end_time"):
+        reg.chat(time_group, name)
 
     type_group = parser.add_argument_group("Message Type Arguments")
     type_options = type_group.add_mutually_exclusive_group()
-    reg.chat(type_options, "--message_types", type=splitter)
-    reg.chat(type_options, "--message_groups", type=splitter)
+    for name in ("--message_types", "--message_groups"):
+        reg.chat(type_options, name, type=splitter)
 
 
 def _add_retry_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:
@@ -238,18 +241,12 @@ def _add_retry_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> No
     retry_group = parser.add_argument_group("Retry Arguments")
     reg.chat(retry_group, "--max_attempts", type=int)
     reg.chat(retry_group, "--retry_timeout", type=float)
-    reg.chat(
-        retry_group,
-        "--interruptible_retry",
-        type=str2bool,
-        nargs="?",
-        const=True,
-    )
+    reg.chat(retry_group, "--interruptible_retry", type=str2bool)
 
     termination_group = parser.add_argument_group("Termination Arguments")
     reg.chat(termination_group, "--max_messages", type=int)
-    reg.chat(termination_group, "--inactivity_timeout", type=float)
-    reg.chat(termination_group, "--timeout", type=float)
+    for name in ("--inactivity_timeout", "--timeout"):
+        reg.chat(termination_group, name, type=float)
 
 
 def _add_format_site_output_args(
@@ -257,8 +254,8 @@ def _add_format_site_output_args(
 ) -> None:
     """Register format, site-specific, and output argument groups."""
     format_group = parser.add_argument_group("Format Arguments")
-    reg.chat(format_group, "--format")
-    reg.chat(format_group, "--format_file")
+    for name in ("--format", "--format_file"):
+        reg.chat(format_group, name)
 
     youtube_group = parser.add_argument_group("[Site Specific] YouTube Arguments")
     reg.chat(youtube_group, "--chat_type", choices=["live", "top"])
@@ -272,12 +269,12 @@ def _add_format_site_output_args(
     reg.chat(twitch_group, "--buffer_size", type=int)
 
     output_group = parser.add_argument_group("Output Arguments")
-    reg.chat(output_group, "--output", "-o", action="append")
-    reg.chat(output_group, "--overwrite", type=str2bool, nargs="?", const=True)
-    reg.chat(output_group, "--sort_keys", type=str2bool, nargs="?", const=True)
+    reg.chat(output_group, "--output", action="append")
+    for name in ("--overwrite", "--sort_keys"):
+        reg.chat(output_group, name, type=str2bool)
     reg.run(output_group, "--resume")
-    reg.run(output_group, "--verify_output", action="store_true")
-    reg.run(output_group, "--require_complete", action="store_true")
+    for name in ("--verify_output", "--require_complete"):
+        reg.run(output_group, name, action="store_true")
     reg.run(output_group, "--run_manifest")
 
 
@@ -286,8 +283,8 @@ def _add_debug_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> No
     debug_group = parser.add_argument_group("Debugging/Testing Arguments")
 
     on_debug_options = debug_group.add_mutually_exclusive_group()
-    reg.run(on_debug_options, "--pause_on_debug", action="store_true")
-    reg.run(on_debug_options, "--exit_on_debug", action="store_true")
+    for name in ("--pause_on_debug", "--exit_on_debug"):
+        reg.run(on_debug_options, name, action="store_true")
 
     debug_options = debug_group.add_mutually_exclusive_group()
     debug_options.add_argument(
@@ -315,18 +312,12 @@ def _add_debug_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> No
 def _add_init_args(reg: _ParamRegistrar, parser: argparse.ArgumentParser) -> None:
     """Register the initialization argument group."""
     init_group = parser.add_argument_group("Initialization Arguments")
-    reg.init(init_group, "--cookies", "-c")
-    reg.init(init_group, "--proxy", "-p")
-    reg.init(init_group, "--connect_timeout", type=float)
-    reg.init(init_group, "--read_timeout", type=float)
+    for name in ("--cookies", "--proxy"):
+        reg.init(init_group, name)
+    for name in ("--connect_timeout", "--read_timeout"):
+        reg.init(init_group, name, type=float)
     reg.init(init_group, "--request_profile", choices=sorted(REQUEST_PROFILES))
-    reg.init(
-        init_group,
-        "--auto_profile_fallback",
-        type=str2bool,
-        nargs="?",
-        const=True,
-    )
+    reg.init(init_group, "--auto_profile_fallback", type=str2bool)
     reg.init(init_group, "--twitch_client_id")
     init_group.add_argument(
         "--user-agent",

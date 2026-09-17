@@ -201,12 +201,7 @@ def _parse_item(
     Returns:
         Parsed comment dictionary
     """
-    comment_remapping = build_comment_remapping()
-
-    info: dict[str, Any] = {}
-
-    for key, value in item.items():
-        r.remap(info, comment_remapping, key, value)
+    info = r.remap_dict(item, build_comment_remapping())
 
     if "time_in_seconds" in info:
         info["time_in_seconds"] -= offset

@@ -11,6 +11,9 @@ import pytest
 from chat_downloader.errors import CaptchaChallengeRequired
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.client_requests_bootstrap import (
+    _build_fallback_initial_data,
+    _build_fallback_ytcfg,
+    _extract_reload_continuation,
     get_innertube_video_bootstrap,
 )
 from chat_downloader.sites.youtube.video_metadata import (
@@ -26,12 +29,19 @@ def _load_fixture(name: str) -> dict:
     return json.loads((_FIXTURE_DIR / name).read_text(encoding="utf-8"))
 
 
-class _JsonResponse:
-    def __init__(self, payload: dict) -> None:
-        self._payload = payload
+def _fixture_post(next_fixture="youtube-IzopCEgh2G8-next-web.json", calls=None):
+    def post(url, **kwargs):
+        if calls is not None:
+            calls.append((url, kwargs["json"]))
+        if "/player?" in url:
+            fixture = "youtube-IzopCEgh2G8-player-web.json"
+        elif "/next?" in url:
+            fixture = next_fixture
+        else:
+            raise AssertionError(f"unexpected URL: {url}")
+        return SimpleNamespace(json=lambda: _load_fixture(fixture))
 
-    def json(self) -> dict:
-        return self._payload
+    return post
 
 
 class _FallbackDummy(YouTubeVideoMetadataCoreMixin):
@@ -46,29 +56,17 @@ class _FallbackDummy(YouTubeVideoMetadataCoreMixin):
             url="https://www.google.com/sorry/index",
         )
 
-    def _session_post(self, url: str, **_kwargs):
+    def _session_post(self, url: str, **kwargs):
         self.post_urls.append(url)
-        if "/player?" in url:
-            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-player-web.json"))
-        if "/next?" in url:
-            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-next-web.json"))
-        raise AssertionError(f"unexpected URL: {url}")
+        return _fixture_post()(url, **kwargs)
 
 
 def test_innertube_bootstrap_extracts_primary_live_continuation() -> None:
     calls: list[tuple[str, dict]] = []
 
-    def session_post(url: str, **kwargs):
-        calls.append((url, kwargs["json"]))
-        if "/player?" in url:
-            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-player-web.json"))
-        if "/next?" in url:
-            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-next-web.json"))
-        raise AssertionError(f"unexpected URL: {url}")
-
     yt_initial_data, ytcfg, player_response = get_innertube_video_bootstrap(
         "IzopCEgh2G8",
-        session_post,
+        _fixture_post(calls=calls),
         None,
     )
 
@@ -88,18 +86,9 @@ def test_innertube_bootstrap_extracts_primary_live_continuation() -> None:
 
 @pytest.mark.parametrize("profile", ["youtube_android", "youtube_ios"])
 def test_innertube_bootstrap_extracts_mobile_chat_continuations(profile: str) -> None:
-    def session_post(url: str, **_kwargs):
-        if "/player?" in url:
-            return _JsonResponse(_load_fixture("youtube-IzopCEgh2G8-player-web.json"))
-        if "/next?" in url:
-            return _JsonResponse(
-                _load_fixture("youtube-CH0uI-v2Cbc-next-mobile-sanitized.json")
-            )
-        raise AssertionError(f"unexpected URL: {url}")
-
     yt_initial_data, ytcfg, _player_response = get_innertube_video_bootstrap(
         "CH0uI-v2Cbc",
-        session_post,
+        _fixture_post("youtube-CH0uI-v2Cbc-next-mobile-sanitized.json"),
         profile,
     )
 
@@ -155,50 +144,37 @@ def test_parse_video_data_does_not_fallback_for_clips(monkeypatch) -> None:
 
 
 def test_build_fallback_ytcfg_handles_non_dict_client() -> None:
-    from chat_downloader.sites.youtube.client_requests_bootstrap import (
-        _build_fallback_ytcfg,
-    )
-
     result = _build_fallback_ytcfg(
         context={"client": "not-a-dict"},
         player_response={},
         next_response={},
     )
-    assert isinstance(result, dict)
+    assert result["INNERTUBE_CONTEXT"] == {"client": "not-a-dict"}
+    assert result["INNERTUBE_CLIENT_VERSION"] is None
 
 
 def test_build_fallback_initial_data_keeps_submenus_without_primary_continuation() -> (
     None
 ):
-    from chat_downloader.sites.youtube.client_requests_bootstrap import (
-        _build_fallback_initial_data,
-    )
-
+    submenu = {
+        "subMenuItems": [
+            {
+                "title": "Top chat",
+                "continuation": {
+                    "reloadContinuationData": {"continuation": "top-token"}
+                },
+            }
+        ]
+    }
+    header = {
+        "liveChatHeaderRenderer": {
+            "viewSelector": {"sortFilterSubMenuRenderer": submenu},
+        }
+    }
     initial_data = _build_fallback_initial_data(
         {
-            "continuationContents": {
-                "liveChatContinuation": {
-                    "header": {
-                        "liveChatHeaderRenderer": {
-                            "viewSelector": {
-                                "sortFilterSubMenuRenderer": {
-                                    "subMenuItems": [
-                                        {
-                                            "title": "Top chat",
-                                            "continuation": {
-                                                "reloadContinuationData": {
-                                                    "continuation": "top-token",
-                                                },
-                                            },
-                                        },
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+            "continuationContents": {"liveChatContinuation": {"header": header}},
+        }
     )
 
     assert initial_data["_chat_downloader_continuation_info"] == {
@@ -207,16 +183,8 @@ def test_build_fallback_initial_data_keeps_submenus_without_primary_continuation
 
 
 def test_build_fallback_initial_data_omits_empty_continuation_metadata() -> None:
-    from chat_downloader.sites.youtube.client_requests_bootstrap import (
-        _build_fallback_initial_data,
-    )
-
     assert _build_fallback_initial_data({"contents": {}}) == {"contents": {}}
 
 
 def test_extract_reload_continuation_ignores_malformed_entries() -> None:
-    from chat_downloader.sites.youtube.client_requests_bootstrap import (
-        _extract_reload_continuation,
-    )
-
     assert _extract_reload_continuation({"continuations": [None]}) is None
