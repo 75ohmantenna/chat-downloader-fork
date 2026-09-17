@@ -391,6 +391,11 @@ def _write_or_validate_sample(
         raise
 
 
+def _sample_key(sample_dir: Path, label: str) -> tuple[str, str]:
+    """Return the reservation-map key for a bounded sample label."""
+    return str(sample_dir.absolute()), slugify_debug_label(label)
+
+
 def _reserve_debug_sample(
     sample_dir: Path,
     label: str,
@@ -404,7 +409,7 @@ def _reserve_debug_sample(
         msg = "sample_limit must be greater than or equal to zero"
         raise ValueError(msg)
 
-    key = (str(sample_dir.absolute()), slugify_debug_label(label))
+    key = _sample_key(sample_dir, label)
     with _DEBUG_SAMPLE_LIMIT_LOCK:
         digests = _DEBUG_SAMPLE_DIGESTS.setdefault(key, set())
         if digest in digests:
@@ -425,7 +430,7 @@ def _reserve_debug_sample(
 
 def _release_debug_sample(sample_dir: Path, label: str, digest: str) -> None:
     """Release a failed bounded-sample reservation so it can be retried."""
-    key = (str(sample_dir.absolute()), slugify_debug_label(label))
+    key = _sample_key(sample_dir, label)
     with _DEBUG_SAMPLE_LIMIT_LOCK:
         digests = _DEBUG_SAMPLE_DIGESTS.get(key)
         if digests is not None:
