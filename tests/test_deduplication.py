@@ -11,6 +11,17 @@ from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
 from chat_downloader.sites.models import Chat
 
 
+def test_formatted_deduplicator_none_keeps_default_cache_bounded():
+    deduplicator = _FormattedMessageDeduplicator(None)
+    assert deduplicator._seen_message_cache.limit > 0
+    assert deduplicator.should_emit(
+        {"message_type": "paid_message", "message_id": "one"}
+    )
+    assert not deduplicator.should_emit(
+        {"message_type": "ticker_paid_message_item", "message_id": "one"}
+    )
+
+
 @pytest.mark.parametrize("message_id", [None, "", 123])
 def test_formatted_deduplicator_ignores_unusable_ids(message_id) -> None:
     message = {"message_type": "paid_message"}

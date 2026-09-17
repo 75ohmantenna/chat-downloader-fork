@@ -44,21 +44,21 @@ class ContinuationParseResult:
     :param is_end: ``True`` when no continuation token was found and the
         stream is considered finished.
     :type is_end: bool
-    :param click_tracking_params: Click-tracking params for the next
-        request, or ``None`` when absent.
-    :type click_tracking_params: str | None
     :param debug_info: Small dictionary of diagnostic fields preserved for
         logging (continuation key, raw continuation entry). Not intended
         for programmatic use.
     :type debug_info: dict
+    :param click_tracking_params: Keyword-only click-tracking params for the
+        next request, or ``None`` when absent.
+    :type click_tracking_params: str | None
     """
 
     actions: list[JSONAny] = field(default_factory=list)
     next_continuation: str | None = None
     timeout_ms: int | None = None
     is_end: bool = False
-    click_tracking_params: str | None = None
     debug_info: dict[str, object] = field(default_factory=dict)
+    click_tracking_params: str | None = field(default=None, kw_only=True)
 
 
 def summarize_continuation_payload(payload: JSONDict) -> dict[str, object]:

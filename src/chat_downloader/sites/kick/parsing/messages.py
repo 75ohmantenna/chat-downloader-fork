@@ -175,6 +175,11 @@ def parse_chat_message(raw: object) -> dict[str, Any]:
     return info
 
 
+def parse_preloaded_messages(raw_messages: Iterable[object]) -> list[dict[str, Any]]:
+    """Normalize history eagerly, preserving the original list-returning API."""
+    return list(iter_preloaded_messages(raw_messages))
+
+
 def iter_preloaded_messages(raw_messages: Iterable[object]) -> Iterator[dict[str, Any]]:
     """Yield normalized preloaded history messages, skipping bad entries.
 

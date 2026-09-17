@@ -382,3 +382,19 @@ def test_modern_badges_require_nonempty_name(badge):
 )
 def test_preloaded_skips_invalid_messages_and_coerces_numeric_ids(rows, expected):
     assert [m["message_id"] for m in iter_preloaded_messages(rows)] == expected
+
+
+def test_preloaded_list_api_preserves_exports_order_and_eager_parsing(captured):
+    from chat_downloader.sites.kick import parsing
+    from chat_downloader.sites.kick.parsing.messages import parse_preloaded_messages
+
+    assert "parse_preloaded_messages" in parsing.__all__
+    assert parsing.parse_preloaded_messages is parse_preloaded_messages
+    rows = load_fixture("preloaded_messages.json")["data"]["messages"]
+    result = parse_preloaded_messages(iter([rows[0], {"content": "no id"}, rows[1]]))
+
+    assert isinstance(result, list)
+    assert [item["message_id"] for item in result] == ["preloaded-2", "preloaded-1"]
+    assert len(captured) == 1
+    assert captured[0][1]["sample_limit"] == 10
+    assert result == list(iter_preloaded_messages(rows))

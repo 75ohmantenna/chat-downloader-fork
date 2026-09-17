@@ -10,6 +10,7 @@ from chat_downloader.sites.kick.parsing.hosts import parse_stream_host_event
 from chat_downloader.sites.kick.parsing.messages import (
     iter_preloaded_messages,
     parse_chat_message,
+    parse_preloaded_messages,
 )
 from chat_downloader.sites.kick.parsing.moderation import (
     parse_chat_clear_event,
@@ -42,6 +43,7 @@ __all__ = [
     "parse_pinned_message_deleted_event",
     "parse_poll_deleted_event",
     "parse_poll_update_event",
+    "parse_preloaded_messages",
     "parse_stream_host_event",
     "parse_subscription_event",
     "parse_user_banned_event",

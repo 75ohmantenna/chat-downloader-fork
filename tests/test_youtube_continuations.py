@@ -11,10 +11,19 @@ import pytest
 
 from chat_downloader.errors import IncompleteContinuationError
 from chat_downloader.sites.youtube.continuations import (
+    ContinuationParseResult,
     parse_continuation_response,
     summarize_continuation_payload,
 )
 from tests.youtube_third_helpers import response, wrap
+
+
+def test_continuation_result_preserves_positional_debug_info():
+    debug_info = {"continuation_key": "timedContinuationData"}
+    result = ContinuationParseResult([], "next", 1000, False, debug_info)
+
+    assert result.debug_info is debug_info
+    assert result.click_tracking_params is None
 
 
 def _payload(kind="timedContinuationData", *, actions=(), **continuation):
