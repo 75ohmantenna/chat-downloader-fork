@@ -5,11 +5,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
 from chat_downloader.models import ChatRequest
+from chat_downloader.sites.kick import live_service
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -238,4 +240,76 @@ def session_patch(session):
     return patch(
         "chat_downloader.sites.kick.api_client.create_kick_session",
         return_value=session,
+    )
+
+
+class WindowSession(FakeKickSession):
+    """Serve subsequent empty five-second windows without consuming pin refresh."""
+
+    def get(self, url: str, **kwargs: Any) -> FakeResponse:
+        is_window = bool((kwargs.get("params") or {}).get("start_time"))
+        if is_window and getattr(self, "_previous_window", False):
+            self.calls.append((url, kwargs))
+            self.requested_urls.append(url)
+            return empty_response()
+        result = super().get(url, **kwargs)
+        self._previous_window = is_window
+        return result
+
+
+def empty_response():
+    return FakeResponse(200, message_page([]))
+
+
+def live_session(*responses):
+    return WindowSession(
+        [
+            FakeResponse(200, load_fixture("channel_live.json")),
+            *(responses or [empty_response()]),
+        ]
+    )
+
+
+def build_live_chat(downloader: FakeDownloader, **kwargs: Any) -> Any:
+    return live_service.get_chat_by_channel(
+        downloader,
+        "examplechannel",
+        request(**kwargs.pop("request_kwargs", {})),
+        **kwargs,
+    )
+
+
+def fake_live_chat(downloader, batches, *, transport_factory=FakeTransport, **kwargs):
+    return build_live_chat(
+        downloader,
+        transport_factory=transport_factory,
+        frame_iterator=make_frame_iterator(batches),
+        **kwargs,
+    )
+
+
+@contextmanager
+def live_chat(batches, *responses, session=None, **kwargs):
+    with session_patch(session if session is not None else live_session(*responses)):
+        yield fake_live_chat(FakeDownloader(), batches, **kwargs)
+
+
+def collect_live_chat(batches, *responses, **request_kwargs):
+    with live_chat(batches, *responses, request_kwargs=request_kwargs) as chat:
+        return chat, list(chat.chat)
+
+
+def live_clock(**kwargs):
+    return patch.object(live_service.time, "time_ns", **kwargs)
+
+
+def fixture_frame(event, name):
+    return pusher_frame(event, load_fixture(name))
+
+
+def recovery_session(messages, *, pin_response=None):
+    return live_session(
+        empty_response(),
+        FakeResponse(200, message_page(messages, cursor=None)),
+        pin_response if pin_response is not None else empty_response(),
     )
