@@ -82,146 +82,131 @@ def test_playability_rules_detect_age_gate_and_unplayable_status() -> None:
     assert not is_unplayable({"playabilityStatus": {"status": "OK"}})
 
 
-def test_raise_for_error_screen_maps_playability_statuses() -> None:
+def test_early_playability_errors() -> None:
     with pytest.raises(VideoUnavailable, match="age-restricted"):
         _raise_for_error_screen(
             {"status": "ERROR"},
             {"playabilityStatus": {"desktopLegacyAgeGateReason": "legacy"}},
         )
-
     with pytest.raises(VideoUnplayable, match="members only"):
         _raise_for_error_screen(
             {"status": "UNPLAYABLE", "reason": "members only"},
             {"playabilityStatus": {"status": "UNPLAYABLE"}},
         )
-
     with pytest.raises(VideoUnavailable, match="CAPTCHA verification"):
         _raise_for_error_screen(
-            {
-                "status": "ERROR",
-                "errorScreen": {"playerCaptchaViewModel": {}},
-            },
+            {"status": "ERROR", "errorScreen": {"playerCaptchaViewModel": {}}},
             {"playabilityStatus": {"status": "ERROR"}},
         )
 
-    with pytest.raises(LoginRequired, match="Please sign in"):
+
+@pytest.mark.parametrize(
+    ("status", "reason", "error", "match"),
+    [
+        ("LOGIN_REQUIRED", "Please sign in.", LoginRequired, "Please sign in"),
+        ("LIVE_STREAM_OFFLINE", "Offline.", ChatDisabled, "Offline"),
+        (
+            "ERROR",
+            "This content isn't available, try again later.",
+            VideoUnavailable,
+            "rate-limited by YouTube",
+        ),
+        ("SOMETHING_NEW", "Unknown.", VideoUnavailable, "SOMETHING_NEW: Unknown"),
+        ("UNPLAYABLE", "Still broken.", VideoUnplayable, "Still broken"),
+    ],
+)
+def test_raise_for_error_screen_maps_playability_statuses(
+    status, reason, error, match
+) -> None:
+    payload = {
+        "status": status,
+        "errorScreen": {
+            "playerErrorMessageRenderer": {"reason": {"simpleText": reason}}
+        },
+    }
+    player_status = "OK" if status == "UNPLAYABLE" else status
+    with pytest.raises(error, match=match):
         _raise_for_error_screen(
-            {
-                "status": "LOGIN_REQUIRED",
-                "errorScreen": {
-                    "playerErrorMessageRenderer": {
-                        "reason": {"simpleText": "Please sign in."},
-                    },
-                },
-            },
-            {"playabilityStatus": {"status": "LOGIN_REQUIRED"}},
+            payload, {"playabilityStatus": {"status": player_status}}
         )
 
-    with pytest.raises(ChatDisabled, match="Offline"):
-        _raise_for_error_screen(
-            {
-                "status": "LIVE_STREAM_OFFLINE",
-                "errorScreen": {
-                    "playerErrorMessageRenderer": {
-                        "reason": {"simpleText": "Offline."}
-                    },
-                },
-            },
-            {"playabilityStatus": {"status": "LIVE_STREAM_OFFLINE"}},
-        )
 
-    with pytest.raises(VideoUnavailable, match="rate-limited by YouTube"):
-        _raise_for_error_screen(
-            {
-                "status": "ERROR",
-                "errorScreen": {
-                    "playerErrorMessageRenderer": {
-                        "reason": {
-                            "simpleText": "This content isn't available, try again later.",  # noqa: E501
+def _watch_chat(renderer) -> dict:
+    return {
+        "contents": {
+            "twoColumnWatchNextResults": {
+                "conversationBar": {"liveChatRenderer": renderer},
+            },
+        },
+    }
+
+
+def _submenu(*items) -> dict:
+    selector = {"sortFilterSubMenuRenderer": {"subMenuItems": list(items)}}
+    header = {"liveChatHeaderRenderer": {"viewSelector": selector}}
+    return _watch_chat({"header": header})
+
+
+def _reload_item(title: str, token: str) -> dict:
+    return {
+        "title": title,
+        "continuation": {"reloadContinuationData": {"continuation": token}},
+    }
+
+
+def _endpoint_item(title: str, endpoint: str, token: str) -> dict:
+    if endpoint == "continuationCommand":
+        command = {"continuationCommand": {"token": token}}
+    else:
+        command = {"getLiveChatEndpoint": {"continuation": token}}
+    return {"title": title, "continuationEndpoint": command}
+
+
+def _availability_message(text: str) -> dict:
+    return {
+        "contents": {
+            "twoColumnWatchNextResults": {
+                "conversationBar": {
+                    "conversationBarRenderer": {
+                        "availabilityMessage": {
+                            "messageRenderer": {"text": {"runs": [{"text": text}]}}
                         },
                     },
                 },
             },
-            {"playabilityStatus": {"status": "ERROR"}},
-        )
+        },
+    }
 
-    with pytest.raises(VideoUnavailable, match="SOMETHING_NEW: Unknown"):
-        _raise_for_error_screen(
+
+def _popup(title: str, *messages: str) -> dict:
+    return {
+        "onResponseReceivedActions": [
             {
-                "status": "SOMETHING_NEW",
-                "errorScreen": {
-                    "playerErrorMessageRenderer": {
-                        "reason": {"simpleText": "Unknown."}
+                "openPopupAction": {
+                    "popup": {
+                        "confirmDialogRenderer": {
+                            "title": {"simpleText": title},
+                            "dialogMessages": [{"simpleText": m} for m in messages],
+                        },
                     },
                 },
             },
-            {"playabilityStatus": {"status": "SOMETHING_NEW"}},
-        )
-
-    with pytest.raises(VideoUnplayable, match="Still broken"):
-        _raise_for_error_screen(
-            {
-                "status": "UNPLAYABLE",
-                "errorScreen": {
-                    "playerErrorMessageRenderer": {
-                        "reason": {"simpleText": "Still broken."},
-                    },
-                },
-            },
-            {"playabilityStatus": {"status": "OK"}},
-        )
+        ],
+    }
 
 
 def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
     assert _raise_for_popup({}) is None
 
     with pytest.raises(VideoUnavailable, match=r"Popup title\. First Second"):
-        _raise_for_popup(
-            {
-                "onResponseReceivedActions": [
-                    {
-                        "openPopupAction": {
-                            "popup": {
-                                "confirmDialogRenderer": {
-                                    "title": {"simpleText": "Popup title"},
-                                    "dialogMessages": [
-                                        {"simpleText": "First"},
-                                        {"simpleText": "Second"},
-                                    ],
-                                },
-                            },
-                        },
-                    },
-                ],
-            },
-        )
+        _raise_for_popup(_popup("Popup title", "First", "Second"))
 
     with pytest.raises(VideoUnavailable, match="Unable to find initial video contents"):
         _raise_for_replay_unavailable({})
 
     with pytest.raises(ChatDisabled, match="disabled for this video"):
         _raise_for_replay_unavailable(
-            {
-                "contents": {
-                    "twoColumnWatchNextResults": {
-                        "conversationBar": {
-                            "conversationBarRenderer": {
-                                "availabilityMessage": {
-                                    "messageRenderer": {
-                                        "text": {
-                                            "runs": [
-                                                {
-                                                    "text": "Chat replay is disabled for this video",  # noqa: E501
-                                                },
-                                            ],
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
+            _availability_message("Chat replay is disabled for this video")
         )
 
     with pytest.raises(NoChatReplay, match="Video does not have a chat replay"):
@@ -231,85 +216,21 @@ def test_popup_and_replay_unavailable_checks_raise_expected_errors() -> None:
     # used to fall through to NoChatReplay. Now classified as VideoUnplayable.
     with pytest.raises(VideoUnplayable, match=r"(?i)members"):
         _raise_for_replay_unavailable(
-            {
-                "contents": {
-                    "twoColumnWatchNextResults": {
-                        "conversationBar": {
-                            "conversationBarRenderer": {
-                                "availabilityMessage": {
-                                    "messageRenderer": {
-                                        "text": {
-                                            "runs": [
-                                                {
-                                                    "text": "This chat is for members only.",  # noqa: E501
-                                                },
-                                            ],
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
+            _availability_message("This chat is for members only.")
         )
 
 
-def test_raise_if_playability_error_delegates_to_popup_and_replay_checks() -> None:
-    with pytest.raises(VideoUnavailable, match="Popup title"):
-        raise_if_playability_error(
-            {"playabilityStatus": {}},
-            {
-                "contents": {"twoColumnWatchNextResults": {}},
-                "onResponseReceivedActions": [
-                    {
-                        "openPopupAction": {
-                            "popup": {
-                                "confirmDialogRenderer": {
-                                    "title": {"simpleText": "Popup title"},
-                                    "dialogMessages": [],
-                                },
-                            },
-                        },
-                    },
-                ],
-            },
-        )
-
-    calls = []
-
-    def record_error_screen(*args):
-        calls.append(("error_screen", args))
-
-    def record_popup(*args):
-        calls.append(("popup", args))
-
-    def record_replay(*args):
-        calls.append(("replay", args))
-
-    import chat_downloader.sites.youtube.playability as mod
-
-    original_error_screen = mod._raise_for_error_screen
-    original_popup = mod._raise_for_popup
-    original_replay = mod._raise_for_replay_unavailable
-    mod._raise_for_error_screen = record_error_screen
-    mod._raise_for_popup = record_popup
-    mod._raise_for_replay_unavailable = record_replay
-    try:
-        assert (
-            raise_if_playability_error({"playabilityStatus": {}}, {"contents": {}})
-            is None
-        )
-    finally:
-        mod._raise_for_error_screen = original_error_screen
-        mod._raise_for_popup = original_popup
-        mod._raise_for_replay_unavailable = original_replay
-
-    assert [name for name, _args in calls] == [
-        "error_screen",
-        "popup",
-        "replay",
-    ]
+@pytest.mark.parametrize("popup", [False, True])
+def test_raise_if_playability_error_prioritizes_popup_over_missing_replay(
+    popup,
+) -> None:
+    initial_data = {"contents": {"twoColumnWatchNextResults": {}}}
+    if popup:
+        initial_data.update(_popup("Popup title"))
+    error = VideoUnavailable if popup else NoChatReplay
+    match = "Popup title" if popup else "Video does not have a chat replay"
+    with pytest.raises(error, match=match):
+        raise_if_playability_error({"playabilityStatus": {}}, initial_data)
 
 
 def test_video_status_helpers_resolve_types_statuses_and_continuations() -> None:
@@ -317,113 +238,30 @@ def test_video_status_helpers_resolve_types_statuses_and_continuations() -> None
         {"clipConfig": {"startTimeMs": "2000", "endTimeMs": "7000"}},
         {"isLiveContent": True},
     ) == ("clip", 2.0, 7.0)
-    assert _determine_video_type({}, {"isLiveContent": False}) == (
-        "premiere",
-        None,
-        None,
-    )
-    assert _determine_video_type({}, {"isLiveContent": True}) == (
-        "video",
-        None,
-        None,
-    )
+    for live, kind in [(False, "premiere"), (True, "video")]:
+        assert _determine_video_type({}, {"isLiveContent": live}) == (kind, None, None)
 
     assert _determine_status({}, {"isLiveNow": True}) == "live"
-    assert (
-        _determine_status(
-            {"isLive": False, "isLiveContent": False},
-            {"startTimestamp": "x"},
-        )
-        == "was_live"
-    )
-    assert (
-        _determine_status(
-            {"isLive": False, "isLiveContent": False},
-            {},
-        )
-        == "not_live"
-    )
+    not_live = {"isLive": False, "isLiveContent": False}
+    assert _determine_status(not_live, {"startTimestamp": "x"}) == "was_live"
+    assert _determine_status(not_live, {}) == "not_live"
     assert _determine_status({"isUpcoming": True}, {}) == "upcoming"
     assert _determine_status({"isPostLiveDvr": True}, {}) == "post_live"
     assert _determine_status({"isLiveContent": True}, {}) == "was_live"
     assert _determine_status({}, {}) == "past"
 
     assert _extract_continuation_info(
-        {
-            "contents": {
-                "twoColumnWatchNextResults": {
-                    "conversationBar": {
-                        "liveChatRenderer": {
-                            "header": {
-                                "liveChatHeaderRenderer": {
-                                    "viewSelector": {
-                                        "sortFilterSubMenuRenderer": {
-                                            "subMenuItems": [
-                                                {
-                                                    "title": "Top chat",
-                                                    "continuation": {
-                                                        "reloadContinuationData": {
-                                                            "continuation": "top-token",
-                                                        },
-                                                    },
-                                                },
-                                                {
-                                                    "title": "Live chat",
-                                                    "continuation": {
-                                                        "reloadContinuationData": {
-                                                            "continuation": "live-token",  # noqa: E501
-                                                        },
-                                                    },
-                                                },
-                                            ],
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        _submenu(
+            _reload_item("Top chat", "top-token"),
+            _reload_item("Live chat", "live-token"),
+        )
     ) == {"Top chat": "top-token", "Live chat": "live-token"}
 
     assert _extract_continuation_info(
-        {
-            "contents": {
-                "twoColumnWatchNextResults": {
-                    "conversationBar": {
-                        "liveChatRenderer": {
-                            "header": {
-                                "liveChatHeaderRenderer": {
-                                    "viewSelector": {
-                                        "sortFilterSubMenuRenderer": {
-                                            "subMenuItems": [
-                                                {
-                                                    "title": "Live chat",
-                                                    "continuationEndpoint": {
-                                                        "continuationCommand": {
-                                                            "token": "live-endpoint-token",  # noqa: E501
-                                                        },
-                                                    },
-                                                },
-                                                {
-                                                    "title": "Top chat",
-                                                    "continuationEndpoint": {
-                                                        "getLiveChatEndpoint": {
-                                                            "continuation": "top-endpoint-token",  # noqa: E501
-                                                        },
-                                                    },
-                                                },
-                                            ],
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        _submenu(
+            _endpoint_item("Live chat", "continuationCommand", "live-endpoint-token"),
+            _endpoint_item("Top chat", "getLiveChatEndpoint", "top-endpoint-token"),
+        )
     ) == {
         "Live chat": "live-endpoint-token",
         "Top chat": "top-endpoint-token",
@@ -452,34 +290,7 @@ def test_parse_video_details_builds_expected_model_and_dict() -> None:
                 "isLiveContent": True,
             },
         },
-        {
-            "contents": {
-                "twoColumnWatchNextResults": {
-                    "conversationBar": {
-                        "liveChatRenderer": {
-                            "header": {
-                                "liveChatHeaderRenderer": {
-                                    "viewSelector": {
-                                        "sortFilterSubMenuRenderer": {
-                                            "subMenuItems": [
-                                                {
-                                                    "title": "Live chat",
-                                                    "continuation": {
-                                                        "reloadContinuationData": {
-                                                            "continuation": "live-token",  # noqa: E501
-                                                        },
-                                                    },
-                                                },
-                                            ],
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-        },
+        _submenu(_reload_item("Live chat", "live-token")),
         "abc123",
     )
 

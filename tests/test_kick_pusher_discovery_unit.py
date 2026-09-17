@@ -12,421 +12,157 @@ from chat_downloader.sites.kick.pusher_discovery import (
     PusherKeyCache,
     resolve_pusher_key,
 )
+from tests.kick_helpers import FakeKickSession, FakeResponse
+
+HOME = "https://kick.com/"
+KEY = "a1b2c3d4e5f6"
+BUNDLE = f'NEXT_PUBLIC_PUSHER_KEY={{default("{KEY}")}}'
 
 
-class _FakeResponse:
-    """Stub response satisfying the discovery HTTP-response protocol."""
-
-    __slots__ = ("status_code", "text")
-
-    def __init__(
-        self,
-        ok: bool,
-        text: str,
-        *,
-        status_code: int | None = None,
-    ) -> None:
-        self.status_code = (
-            status_code if status_code is not None else 200 if ok else 500
-        )
-        self.text = text
-
-
-class _FakeClient:
-    """In-memory HTTP client for testing Pusher-key discovery."""
-
-    def __init__(
-        self,
-        responses: dict[str, _FakeResponse],
-        *,
-        errors: set[str] | None = None,
-    ) -> None:
-        self.responses = responses
-        self.errors = errors or set()
-        self.closed = False
-        self.requested_urls: list[str] = []
-
-    def get(
-        self, url: str, *, timeout: float, allow_redirects: bool = False
-    ) -> _FakeResponse:
-        del timeout, allow_redirects
-        self.requested_urls.append(url)
-        if url in self.errors:
-            msg = f"Unreachable URL: {url}"
-            raise ConnectionError(msg)
-        response = self.responses.get(url)
-        if response is None:
-            msg = f"Unexpected URL: {url}"
-            raise ConnectionError(msg)
-        return response
-
-    def close(self) -> None:
-        self.closed = True
+def _client(*scripts, homepage_status=200, bundles=None):
+    homepage = "".join(f'<script src="{script}"></script>' for script in scripts)
+    return FakeKickSession(
+        [FakeResponse(homepage_status, text=homepage)]
+        + (bundles if bundles is not None else [FakeResponse(200, text=BUNDLE)])
+    )
 
 
 @pytest.fixture(autouse=True)
 def _reset_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Clear the process-wide Pusher-key cache around every test."""
     monkeypatch.setattr(pusher_discovery._pusher_key_cache, "key", None)
 
 
-def test_is_kick_origin_rejects_non_https_url() -> None:
-    assert pusher_discovery._is_kick_origin("http://kick.com/app.js") is False
-
-
-def test_is_kick_origin_accepts_kick_domain() -> None:
-    assert pusher_discovery._is_kick_origin("https://kick.com/app.js") is True
-
-
-def test_is_kick_origin_accepts_kick_subdomain() -> None:
-    assert pusher_discovery._is_kick_origin("https://static.kick.com/app.js") is True
-
-
-def test_is_kick_origin_rejects_other_domain() -> None:
-    assert pusher_discovery._is_kick_origin("https://evil.com/app.js") is False
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("http://kick.com/app.js", False),
+        ("https://kick.com/app.js", True),
+        ("https://static.kick.com/app.js", True),
+        ("https://evil.com/app.js", False),
+    ],
+)
+def test_is_kick_origin(url, expected) -> None:
+    assert pusher_discovery._is_kick_origin(url) is expected
 
 
 def test_resolve_pusher_key_uses_default_without_network() -> None:
-    client = _FakeClient({})
-
-    key = resolve_pusher_key(http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
+    client = FakeKickSession([])
+    assert resolve_pusher_key(http_client=client) == _PUSHER_DEFAULT_KEY
     assert client.requested_urls == []
-    assert client.closed is False
+    assert client.close_calls == 0
 
 
-def test_forced_discovery_uses_requests_adapter_by_default(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Exercise the production ``requests`` adapter path with a fake session."""
-    calls: list[str] = []
-
-    class _FakeRequestsSession:
-        def __init__(self) -> None:
-            self.headers: dict[str, str] = {}
-
-        def get(
-            self, url: str, *, timeout: float, allow_redirects: bool = False
-        ) -> _FakeResponse:
-            del timeout, allow_redirects
-            calls.append(url)
-            if url == "https://kick.com/":
-                return _FakeResponse(
-                    True,
-                    '<script src="/adapter.js"></script>',
-                )
-            return _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("feedfacedead")}',
-            )
-
-        def close(self) -> None:
-            pass
-
-    monkeypatch.setattr(pusher_discovery.requests, "Session", _FakeRequestsSession)
-
-    key = resolve_pusher_key(force_discover=True)
-
-    assert key == "feedfacedead"
-    assert "https://kick.com/" in calls
+def test_forced_discovery_uses_requests_adapter_by_default(monkeypatch) -> None:
+    session = _client("/adapter.js")
+    session.headers = {}
+    monkeypatch.setattr(pusher_discovery.requests, "Session", lambda: session)
+    assert resolve_pusher_key(force_discover=True) == KEY
+    assert HOME in session.requested_urls
 
 
 def test_requests_adapter_reuses_downloader_session_without_closing() -> None:
     session = pusher_discovery.requests.Session()
     session.close = MagicMock()
-    adapter = pusher_discovery._RequestsHttpClient(session)
-
-    adapter.close()
-
+    pusher_discovery._RequestsHttpClient(session).close()
     session.close.assert_not_called()
 
 
-def test_requests_adapter_caps_calls_to_downloader_timeouts() -> None:
+@pytest.mark.parametrize("configured_timeout", [None, (1.0, 2.0)])
+def test_requests_adapter_timeout_and_redirect_policy(configured_timeout) -> None:
     session = MagicMock()
-    session.get.return_value = _FakeResponse(True, "")
+    session.get.return_value = FakeResponse(200)
     adapter = pusher_discovery._RequestsHttpClient(
-        session,
-        configured_timeout=(1.0, 2.0),
+        session, configured_timeout=configured_timeout
     )
-
-    adapter.get("https://kick.com/", timeout=3.0)
-
+    adapter.get(HOME, timeout=3.0)
     session.get.assert_called_once_with(
-        "https://kick.com/",
-        timeout=(1.0, 2.0),
-        allow_redirects=False,
+        HOME, timeout=configured_timeout or 3.0, allow_redirects=False
     )
 
 
-def test_requests_adapter_disables_automatic_redirects() -> None:
-    session = MagicMock()
-    session.get.return_value = _FakeResponse(True, "")
-
-    pusher_discovery._RequestsHttpClient(session).get(
-        "https://kick.com/app.js",
-        timeout=3.0,
-    )
-
-    assert session.get.call_args.kwargs["allow_redirects"] is False
-
-
-def test_resolve_pusher_key_discovers_key_from_bundle() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/_next/static/chunk.js"></script>',
-            ),
-            "https://kick.com/_next/static/chunk.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("a1b2c3d4e5f6")}',
-            ),
-        }
-    )
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == "a1b2c3d4e5f6"
-    assert client.closed
-    assert "https://kick.com/" in client.requested_urls
+@pytest.mark.parametrize("injected", [False, True])
+def test_discovery_caches_result_and_closes_client(injected) -> None:
+    cache = PusherKeyCache() if injected else pusher_discovery._pusher_key_cache
+    client = _client("/_next/static/chunk.js")
+    options = {"cache": cache} if injected else {}
+    key1 = resolve_pusher_key(force_discover=True, http_client=client, **options)
+    key2 = resolve_pusher_key(http_client=FakeKickSession([]), **options)
+    assert key1 == key2 == cache.key == KEY
+    assert client.close_calls == 1
+    assert HOME in client.requested_urls
 
 
-def test_resolve_pusher_key_caches_result() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/app.js"></script>',
-            ),
-            "https://kick.com/app.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("abcdef123456")}',
-            ),
-        }
-    )
-
-    key1 = resolve_pusher_key(force_discover=True, http_client=client)
-    key2 = resolve_pusher_key(http_client=_FakeClient({}))
-
-    assert key1 == key2 == "abcdef123456"
-
-
-def test_resolve_pusher_key_uses_injected_cache() -> None:
-    cache = PusherKeyCache()
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/app.js"></script>',
-            ),
-            "https://kick.com/app.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("cafebabe0001")}',
-            ),
-        }
-    )
-
-    key1 = resolve_pusher_key(
-        force_discover=True,
-        http_client=client,
-        cache=cache,
-    )
-    # A pre-seeded injected cache is returned without re-discovering.
-    key2 = resolve_pusher_key(http_client=_FakeClient({}), cache=cache)
-
-    assert key1 == key2 == "cafebabe0001"
-    assert cache.key == "cafebabe0001"
-
-
-def test_resolve_pusher_key_force_discover_bypasses_cache(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_resolve_pusher_key_force_discover_bypasses_cache(monkeypatch) -> None:
     monkeypatch.setattr(pusher_discovery._pusher_key_cache, "key", "oldkey")
-
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/app.js"></script>',
-            ),
-            "https://kick.com/app.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("0123456789ab")}',
-            ),
-        }
+    assert (
+        resolve_pusher_key(force_discover=True, http_client=_client("/app.js")) == KEY
     )
 
-    key = resolve_pusher_key(force_discover=True, http_client=client)
 
-    assert key == "0123456789ab"
-
-
-def test_resolve_pusher_key_falls_back_when_homepage_fails() -> None:
-    client = _FakeClient({"https://kick.com/": _FakeResponse(False, "")})
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
+@pytest.mark.parametrize("status", [500, 302])
+def test_discovery_rejects_failed_or_redirected_homepage(status) -> None:
+    client = _client("/app.js", homepage_status=status)
+    assert (
+        resolve_pusher_key(force_discover=True, http_client=client)
+        == _PUSHER_DEFAULT_KEY
+    )
+    assert client.requested_urls == [HOME]
 
 
-def test_resolve_pusher_key_rejects_homepage_redirect_response() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/app.js"></script>',
-                status_code=302,
-            ),
-            "https://kick.com/app.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("redirectedbad")}',
-            ),
-        }
+def test_discovery_homepage_request_failure_closes_client() -> None:
+    client = FakeKickSession([ConnectionError("unreachable")])
+    assert (
+        resolve_pusher_key(force_discover=True, http_client=client)
+        == _PUSHER_DEFAULT_KEY
+    )
+    assert client.close_calls == 1
+
+
+def test_discovery_stops_scanning_when_budget_expires(monkeypatch) -> None:
+    client = _client("/app.js")
+    monkeypatch.setattr(
+        pusher_discovery.time, "monotonic", MagicMock(side_effect=[0.0, 11.0])
+    )
+    assert (
+        resolve_pusher_key(force_discover=True, http_client=client)
+        == _PUSHER_DEFAULT_KEY
+    )
+    assert client.requested_urls == [HOME]
+
+
+@pytest.mark.parametrize(
+    "bundle", [FakeResponse(200, text="no key here"), FakeResponse(302, text=BUNDLE)]
+)
+def test_discovery_rejects_missing_key_or_redirected_bundle(bundle) -> None:
+    client = _client("/app.js", bundles=[bundle])
+    assert (
+        resolve_pusher_key(force_discover=True, http_client=client)
+        == _PUSHER_DEFAULT_KEY
     )
 
-    key = resolve_pusher_key(force_discover=True, http_client=client)
 
-    assert key == _PUSHER_DEFAULT_KEY
-    assert client.requested_urls == ["https://kick.com/"]
-
-
-def test_resolve_pusher_key_falls_back_when_homepage_request_raises() -> None:
-    client = _FakeClient({}, errors={"https://kick.com/"})
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
-    assert client.closed
-
-
-def test_resolve_pusher_key_stops_scanning_when_budget_expires(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/app.js"></script>',
-            ),
-        }
+@pytest.mark.parametrize(
+    "script", ["https://evil.com/app.js", "http://kick.com/app.js"]
+)
+def test_discovery_skips_unsafe_script_origins(script) -> None:
+    client = _client(script)
+    assert (
+        resolve_pusher_key(force_discover=True, http_client=client)
+        == _PUSHER_DEFAULT_KEY
     )
-    monotonic = MagicMock(side_effect=[0.0, 11.0])
-    monkeypatch.setattr(pusher_discovery.time, "monotonic", monotonic)
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
-    assert client.requested_urls == ["https://kick.com/"]
+    assert client.requested_urls == [HOME]
 
 
-def test_resolve_pusher_key_falls_back_when_no_bundle_matches() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/app.js"></script>',
-            ),
-            "https://kick.com/app.js": _FakeResponse(True, "no key here"),
-        }
+@pytest.mark.parametrize("bad", [ConnectionError("unreachable"), FakeResponse(500)])
+def test_discovery_skips_failed_bundle_and_uses_next(bad) -> None:
+    client = _client(
+        "/_next/static/bad.js",
+        "/_next/static/good.js",
+        bundles=[bad, FakeResponse(200, text=BUNDLE)],
     )
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
-
-
-def test_resolve_pusher_key_rejects_bundle_redirect_response() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="/app.js"></script>',
-            ),
-            "https://kick.com/app.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("redirectedbad")}',
-                status_code=302,
-            ),
-        }
-    )
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
-
-
-def test_resolve_pusher_key_skips_foreign_script_urls() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="https://evil.com/app.js"></script>',
-            ),
-        }
-    )
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
-
-
-def test_resolve_pusher_key_skips_http_script_urls() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                '<script src="http://kick.com/app.js"></script>',
-            ),
-        }
-    )
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == _PUSHER_DEFAULT_KEY
-
-
-def test_resolve_pusher_key_skips_unreachable_bundle_and_uses_next() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                (
-                    '<script src="/_next/static/bad.js"></script>'
-                    '<script src="/_next/static/good.js"></script>'
-                ),
-            ),
-            "https://kick.com/_next/static/good.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("123abcdef012")}',
-            ),
-        },
-        errors={"https://kick.com/_next/static/bad.js"},
-    )
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == "123abcdef012"
-
-
-def test_resolve_pusher_key_skips_non_ok_bundle() -> None:
-    client = _FakeClient(
-        {
-            "https://kick.com/": _FakeResponse(
-                True,
-                (
-                    '<script src="/_next/static/missing.js"></script>'
-                    '<script src="/_next/static/good.js"></script>'
-                ),
-            ),
-            "https://kick.com/_next/static/missing.js": _FakeResponse(False, ""),
-            "https://kick.com/_next/static/good.js": _FakeResponse(
-                True,
-                'NEXT_PUBLIC_PUSHER_KEY={default("0a1b2c3d4e5f")}',
-            ),
-        }
-    )
-
-    key = resolve_pusher_key(force_discover=True, http_client=client)
-
-    assert key == "0a1b2c3d4e5f"
+    assert resolve_pusher_key(force_discover=True, http_client=client) == KEY
+    assert client.requested_urls == [
+        HOME,
+        f"{HOME}_next/static/bad.js",
+        f"{HOME}_next/static/good.js",
+    ]

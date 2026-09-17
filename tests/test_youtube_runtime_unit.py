@@ -38,6 +38,29 @@ from chat_downloader.sites.youtube.message_pipeline import (
 )
 
 
+def _patch(monkeypatch, name, value):
+    monkeypatch.setattr(f"chat_downloader.sites.youtube.continuation.{name}", value)
+
+
+def _returns(monkeypatch, name, value):
+    _patch(monkeypatch, name, lambda *_args, **_kwargs: value)
+
+
+def _capture(monkeypatch, name="capture_debug_sample"):
+    calls = []
+    _patch(monkeypatch, name, lambda *args, **kwargs: calls.append((args, kwargs)))
+    return calls
+
+
+def _stub_loop(monkeypatch, *, msg_filter=None):
+    _patch(
+        monkeypatch,
+        "_ContinuationLoop._build_context",
+        lambda *_args, **_kwargs: _context(msg_filter=msg_filter),
+    )
+    _returns(monkeypatch, "build_continuation_params", {"continuation": "token"})
+
+
 def _loop(downloader: object, *, ytcfg: dict | None = None) -> _ContinuationLoop:
     """Construct a loop bound to *downloader* for driving response-state methods."""
     return _ContinuationLoop(
@@ -47,27 +70,16 @@ def _loop(downloader: object, *, ytcfg: dict | None = None) -> _ContinuationLoop
 
 @pytest.fixture(autouse=True)
 def _disable_youtube_poll_sleep(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.polling_sleep",
-        lambda _seconds: None,
-    )
+    _patch(monkeypatch, "polling_sleep", lambda _seconds: None)
 
 
 def _patch_visitor_data(monkeypatch, return_value) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.extract_visitor_data",
-        lambda _yt_info: return_value,
-    )
-
-
-class _DummySession:
-    def __init__(self) -> None:
-        self.headers: dict[str, str] = {}
+    _patch(monkeypatch, "extract_visitor_data", lambda _yt_info: return_value)
 
 
 class _DummyDownloader:
     def __init__(self) -> None:
-        self.session = _DummySession()
+        self.session = SimpleNamespace(headers={})
         self._session_post = object()
         self.invalid_type_checks: list[tuple[object, object]] = []
         self.header_updates: list[dict[str, str]] = []
@@ -91,17 +103,10 @@ class _DummyDownloader:
 
 
 def _patch_request_context(monkeypatch):
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_headers",
-        lambda *_args, **_kwargs: {},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_innertube_context",
-        lambda _ytcfg: {"client": {"visitorData": "visitor"}},
+    _returns(monkeypatch, "_generate_headers", {})
+    _returns(monkeypatch, "_generate_sapisidhash_header", None)
+    _returns(
+        monkeypatch, "_get_innertube_context", {"client": {"visitorData": "visitor"}}
     )
 
 
@@ -111,10 +116,12 @@ def _messages(owner, initial_info, **params):
         initial_info,
         {"INNERTUBE_API_KEY": "key"},
         ChatRequest(
-            url="https://www.youtube.com/watch?v=abc",
-            chat_type="live",
-            message_groups=["messages"],
-            **params,
+            **{
+                "url": "https://www.youtube.com/watch?v=abc",
+                "chat_type": "live",
+                "message_groups": ["messages"],
+                **params,
+            }
         ),
     )
 
@@ -166,10 +173,7 @@ def test_handle_continuation_response_updates_headers(
     expected,
 ) -> None:
     _patch_visitor_data(monkeypatch, visitor)
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: auth,
-    )
+    _returns(monkeypatch, "_generate_sapisidhash_header", auth)
     downloader = _DummyDownloader()
 
     _loop(downloader)._handle_continuation_response({"foo": "bar"}, {})
@@ -177,79 +181,43 @@ def test_handle_continuation_response_updates_headers(
     assert downloader.session.headers == expected
 
 
-def test_successful_response_capture_requires_explicit_scope_opt_in(
-    monkeypatch,
-) -> None:
-    captured_samples = []
-    monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", raising=False)
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
-        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
-    )
-
-    _loop(object())._capture_successful_response({"responseContext": {}})
-
-    assert captured_samples == []
-
-
-def test_successful_response_capture_limits_serialization_attempts(
-    monkeypatch,
-) -> None:
-    captured_samples = []
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "yes")
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
-        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
-    )
+@pytest.mark.parametrize("enabled", [False, True])
+def test_successful_response_capture_opt_in_and_limit(monkeypatch, enabled):
+    captured_samples = _capture(monkeypatch)
+    if enabled:
+        monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "yes")
+    else:
+        monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", raising=False)
     loop = _loop(object())
-
     for index in range(5):
         loop._capture_successful_response({"response": index})
-
     assert captured_samples == [
-        (
-            ("youtube-continuation-response", {"response": index}),
-            {"sample_limit": 3},
-        )
-        for index in range(3)
+        (("youtube-continuation-response", {"response": index}), {"sample_limit": 3})
+        for index in range(3 if enabled else 0)
     ]
 
 
 def test_handle_continuation_response_logs_request_context(monkeypatch) -> None:
     """Logging includes click tracking, continuation token, and login info."""
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: None,
-    )
+    _returns(monkeypatch, "_generate_sapisidhash_header", None)
     logs: list[tuple[str, object]] = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.log",
-        lambda level, message: logs.append((level, message)),
-    )
-
+    _patch(monkeypatch, "log", lambda level, message: logs.append((level, message)))
     _loop(_DummyDownloader())._handle_continuation_response(
         {
             "responseContext": {
-                "serviceTrackingParams": [
-                    {},
-                    {"params": [{"value": "abc"}]},
-                ],
-            },
+                "serviceTrackingParams": [{}, {"params": [{"value": "abc"}]}]
+            }
         },
         {
             "context": {"clickTracking": {"clickTrackingParams": "ctp"}},
             "continuation": "next-token",
         },
     )
-
     assert len(logs) == 2
-    level_one, message_one = logs[0]
-    level_two, message_two = logs[1]
-    assert level_one == "debug"
-    assert level_two == "debug"
-    assert "Continuation parameters" in str(message_one)
-    assert "Session headers:" in str(message_one)
-    assert "Logged-in info:" in str(message_two)
+    assert all(level == "debug" for level, _message in logs)
+    assert "Continuation parameters" in str(logs[0][1])
+    assert "Session headers:" in str(logs[0][1])
+    assert "Logged-in info:" in str(logs[1][1])
 
 
 def _build_result(
@@ -285,23 +253,10 @@ def test_advance_continuation_loop_updates_state_without_sleep_at_end(
         is_replay=True,
         replay_poll_interval=None,
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.polling_sleep",
-        sleep_calls.append,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.log",
-        lambda level, message: logs.append((level, message)),
-    )
+    _patch(monkeypatch, "polling_sleep", sleep_calls.append)
+    _patch(monkeypatch, "log", lambda level, message: logs.append((level, message)))
 
-    terminal_response = {
-        "continuationContents": {
-            "liveChatContinuation": {
-                "actions": [],
-                "continuations": [],
-            },
-        },
-    }
+    terminal_response = _response(continuations=[])
 
     assert _advance_continuation_loop(ctx, terminal_response) is True
     assert ctx.loop_state is loop_state
@@ -329,22 +284,14 @@ def test_advance_continuation_loop_poll_delay(
         is_replay=is_replay,
         replay_poll_interval=interval,
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
+    _patch(
+        monkeypatch,
+        "parse_continuation_response",
         lambda _yt_info: _build_result(timeout_ms=timeout_ms, is_end=False),
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.update_state_from_result",
-        lambda _state, _result: _state,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.polling_sleep",
-        sleep_calls.append,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.log",
-        lambda *_: None,
-    )
+    _patch(monkeypatch, "update_state_from_result", lambda _state, _result: _state)
+    _patch(monkeypatch, "polling_sleep", sleep_calls.append)
+    _patch(monkeypatch, "log", lambda *_: None)
 
     assert _advance_continuation_loop(ctx, {}) is False
     assert sleep_calls == [delay]
@@ -377,6 +324,7 @@ def test_copy_chat_metadata_skips_chat_generator_and_private_attrs() -> None:
     source = SimpleNamespace(chat=iter(()), title="real title", id="real-id")
     source._hidden = "secret"
     source.author = "example"
+    source.status = "live"
 
     _copy_chat_metadata(chat_item, source)
 
@@ -384,13 +332,6 @@ def test_copy_chat_metadata_skips_chat_generator_and_private_attrs() -> None:
     assert chat_item.id == "real-id"
     assert vars(chat_item)["author"] == "example"
     assert "_hidden" not in vars(chat_item)
-
-
-def test_copy_chat_metadata() -> None:
-    chat_item = Chat()
-    source = Chat(title="Test Title", status="live")
-    _copy_chat_metadata(chat_item, source)
-    assert chat_item.title == "Test Title"
     assert chat_item.status == "live"
 
 
@@ -406,51 +347,29 @@ def test_chat_iteration_rejects_missing_initial_continuation() -> None:
         )
 
 
-def test_build_continuation_params_includes_live_player_offset_when_available() -> None:
+@pytest.mark.parametrize(
+    ("offset", "tracking", "expected_offset"),
+    [(12345, "ctp", 7345), (2000, None, 0), (None, None, None)],
+)
+def test_build_continuation_params_live_offset(offset, tracking, expected_offset):
     params = build_continuation_params(
         {"client": {"visitorData": "visitor"}},
         ContinuationLoopState(
             continuation="live-token",
-            click_tracking_params="ctp",
-            offset_milliseconds=12345,
+            click_tracking_params=tracking,
+            offset_milliseconds=offset,
         ),
         is_replay=False,
     )
-
-    assert params == {
-        "context": {
-            "client": {"visitorData": "visitor"},
-            "clickTracking": {"clickTrackingParams": "ctp"},
-        },
-        "continuation": "live-token",
-        "currentPlayerState": {"playerOffsetMs": 7345},
-    }
-
-
-def test_build_continuation_params_clamps_small_player_offset_to_zero() -> None:
-    params = build_continuation_params(
-        {"client": {"visitorData": "visitor"}},
-        ContinuationLoopState(
-            continuation="live-token",
-            offset_milliseconds=2000,
-        ),
-        is_replay=False,
-    )
-
-    assert params["currentPlayerState"] == {"playerOffsetMs": 0}
-
-
-def test_build_continuation_params_omits_player_offset_when_unavailable() -> None:
-    params = build_continuation_params(
-        {"client": {"visitorData": "visitor"}},
-        ContinuationLoopState(continuation="live-token"),
-        is_replay=False,
-    )
-
-    assert params == {
+    expected = {
         "context": {"client": {"visitorData": "visitor"}},
         "continuation": "live-token",
     }
+    if tracking is not None:
+        expected["context"]["clickTracking"] = {"clickTrackingParams": tracking}
+    if expected_offset is not None:
+        expected["currentPlayerState"] = {"playerOffsetMs": expected_offset}
+    assert params == expected
 
 
 @pytest.mark.parametrize(
@@ -504,16 +423,8 @@ def test_get_chat_messages_by_user_args_stops_after_first_successful_chat(
         def get_user_videos(self, **_kwargs):
             return iter(
                 [
-                    {
-                        "video_id": "live-1",
-                        "video_type": "LIVE",
-                        "title": "Live One",
-                    },
-                    {
-                        "video_id": "live-2",
-                        "video_type": "LIVE",
-                        "title": "Live Two",
-                    },
+                    _user_video("live-1", "Live One"),
+                    _user_video("live-2", "Live Two"),
                 ]
             )
 
@@ -547,21 +458,11 @@ def test_get_chat_messages_by_user_args_stops_after_first_successful_chat(
 def test_chat_iteration_rejects_invalid_message_groups() -> None:
     with pytest.raises(InvalidParameter, match="Invalid groups specified"):
         list(
-            _get_chat_messages(
+            _messages(
                 _DummyDownloader(),
-                {
-                    "continuation_info": {
-                        "Top chat": "top",
-                        "Live chat": "live",
-                    },
-                    "status": "live",
-                },
-                {"INNERTUBE_API_KEY": "key"},
-                ChatRequest(
-                    url="https://www.youtube.com/watch?v=abc",
-                    message_groups=["not-a-group"],
-                ),
-            ),
+                _video_info(top="top", live="live"),
+                message_groups=["not-a-group"],
+            )
         )
 
 
@@ -601,34 +502,19 @@ def test_chat_iteration_api_errors(
     match,
 ) -> None:
     downloader = _DummyDownloader()
-    captured_samples = []
+    captured_samples = _capture(monkeypatch)
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "1")
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
-        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
-    )
     _patch_request_context(monkeypatch)
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.build_continuation_params",
-        lambda *_args, **_kwargs: {"continuation": "token"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *_args, **_kwargs: {"error": error},
-    )
+    _returns(monkeypatch, "build_continuation_params", {"continuation": "token"})
+    _returns(monkeypatch, "_get_continuation_info", {"error": error})
 
     with pytest.raises(exception, match=match):
         list(
-            _get_chat_messages(
+            _messages(
                 downloader,
                 _video_info(status, top="top", live="live"),
-                {"INNERTUBE_API_KEY": "key"},
-                ChatRequest(
-                    url="https://www.youtube.com/watch?v=abc",
-                    chat_type=chat_type,
-                    message_groups=["messages"],
-                ),
-            ),
+                chat_type=chat_type,
+            )
         )
 
     assert captured_samples == []
@@ -641,74 +527,58 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     debug_messages = []
     captured_samples = []
     sleep_calls = []
+    payload_summary = {
+        "top_level_keys": ["continuationContents"],
+        "continuation_contents_keys": ["liveChatContinuation"],
+        "live_chat_keys": ["actions", "continuations"],
+        "actions_count": 0,
+        "continuation_keys": ["heartbeat"],
+    }
+    debug_info = {
+        "continuation_key": "heartbeat",
+        "continuation_entry": {"timeoutMs": 250},
+        "payload_summary": payload_summary,
+    }
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_headers",
-        lambda *_args, **_kwargs: {"x-bootstrap": "1"},
+    _returns(monkeypatch, "_generate_headers", {"x-bootstrap": "1"})
+    _returns(monkeypatch, "_generate_sapisidhash_header", "AUTH_TOKEN")
+    _returns(
+        monkeypatch, "_get_innertube_context", {"client": {"visitorData": "visitor"}}
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: "AUTH_TOKEN",
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_innertube_context",
-        lambda _ytcfg: {"client": {"visitorData": "visitor"}},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.check_for_invalid_types",
+    _patch(
+        monkeypatch,
+        "check_for_invalid_types",
         lambda message_types, valid_types: downloader.invalid_type_checks.append(
-            (message_types, valid_types),
+            (message_types, valid_types)
         ),
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.build_continuation_params",
-        lambda *_args, **_kwargs: {"context": {}, "continuation": "live-token"},
+    _returns(
+        monkeypatch,
+        "build_continuation_params",
+        {"context": {}, "continuation": "live-token"},
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *_args, **_kwargs: _response([], responseContext={}),
-    )
+    _returns(monkeypatch, "_get_continuation_info", _response([], responseContext={}))
     _patch_visitor_data(monkeypatch, "visitor-2")
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
+    _patch(
+        monkeypatch,
+        "parse_continuation_response",
         lambda _yt_info: _build_result(
-            debug_info={
-                "unknown": True,
-                "continuation_key": "heartbeat",
-                "continuation_entry": {"timeoutMs": 250},
-                "payload_summary": {
-                    "top_level_keys": ["continuationContents"],
-                    "continuation_contents_keys": ["liveChatContinuation"],
-                    "live_chat_keys": ["actions", "continuations"],
-                    "actions_count": 0,
-                    "continuation_keys": ["heartbeat"],
-                },
-            },
+            debug_info={"unknown": True, **debug_info},
             timeout_ms=250,
             is_end=True,
         ),
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.debug_log",
-        lambda *items: debug_messages.append(items),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
+    _patch(monkeypatch, "debug_log", lambda *items: debug_messages.append(items))
+    _patch(
+        monkeypatch,
+        "capture_debug_sample",
         lambda label, payload, **kwargs: captured_samples.append(
             (label, payload, kwargs)
         ),
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.polling_sleep",
-        sleep_calls.append,
-    )
+    _patch(monkeypatch, "polling_sleep", sleep_calls.append)
 
-    result = list(
-        _messages(
-            downloader,
-            _video_info("live"),
-        ),
-    )
+    result = list(_messages(downloader, _video_info()))
 
     assert result == []
     assert downloader.invalid_type_checks
@@ -718,17 +588,7 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
     assert captured_samples == [
         (
             "youtube-unknown-continuation-heartbeat",
-            {
-                "continuation_key": "heartbeat",
-                "continuation_entry": {"timeoutMs": 250},
-                "payload_summary": {
-                    "top_level_keys": ["continuationContents"],
-                    "continuation_contents_keys": ["liveChatContinuation"],
-                    "live_chat_keys": ["actions", "continuations"],
-                    "actions_count": 0,
-                    "continuation_keys": ["heartbeat"],
-                },
-            },
+            debug_info,
             {"sample_limit": 10},
         ),
     ]
@@ -736,15 +596,7 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(
         (
             "Unknown continuation: heartbeat",
             {"heartbeat": {"timeoutMs": 250}},
-            {
-                "payload_summary": {
-                    "top_level_keys": ["continuationContents"],
-                    "continuation_contents_keys": ["liveChatContinuation"],
-                    "live_chat_keys": ["actions", "continuations"],
-                    "actions_count": 0,
-                    "continuation_keys": ["heartbeat"],
-                },
-            },
+            {"payload_summary": payload_summary},
         ),
     ]
 
@@ -755,72 +607,33 @@ def test_chat_iteration_reraises_incomplete_continuation_when_fallback_unavailab
     downloader = _DummyDownloader()
     original_error = IncompleteContinuationError("original")
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
-        lambda *_args, **_kwargs: _context(msg_filter=None),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.build_continuation_params",
-        lambda *_args, **_kwargs: {"continuation": "token"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
+    _stub_loop(monkeypatch)
+    _patch(
+        monkeypatch,
+        "_get_continuation_info",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(original_error),
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._attempt_profile_fallback",
-        lambda _downloader, _reason: False,
-    )
+    _returns(monkeypatch, "_ContinuationLoop._attempt_profile_fallback", False)
 
     with pytest.raises(IncompleteContinuationError, match="original"):
-        list(
-            _messages(
-                downloader,
-                {"continuation_info": {"Live chat": "token"}, "status": "live"},
-            )
-        )
+        list(_messages(downloader, _video_info(live="token")))
 
 
 def test_chat_iteration_raises_when_live_chat_continuation_is_missing(
     monkeypatch,
 ) -> None:
     downloader = _DummyDownloader()
-    captured_samples = []
+    captured_samples = _capture(monkeypatch)
 
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "1")
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
-        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
-    )
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
-        lambda *_args, **_kwargs: _context(msg_filter=None),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.build_continuation_params",
-        lambda *_args, **_kwargs: {"continuation": "token"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *_args, **_kwargs: {"responseContext": {}},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.summarize_continuation_payload",
-        lambda _yt_info: "summary",
-    )
+    _stub_loop(monkeypatch)
+    _returns(monkeypatch, "_get_continuation_info", {"responseContext": {}})
+    _returns(monkeypatch, "_ContinuationLoop._handle_continuation_response", None)
+    _patch(monkeypatch, "summarize_continuation_payload", lambda _yt_info: "summary")
 
     with pytest.raises(IncompleteContinuationError, match="Summary: summary"):
-        list(
-            _messages(
-                downloader,
-                {"continuation_info": {"Live chat": "token"}, "status": "live"},
-            )
-        )
+        list(_messages(downloader, _video_info(live="token")))
 
     assert captured_samples == []
 
@@ -830,48 +643,25 @@ def test_chat_iteration_returns_immediately_when_action_processing_requests_stop
 ) -> None:
     downloader = _DummyDownloader()
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
-        lambda *_args, **_kwargs: _context(msg_filter=None),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.build_continuation_params",
-        lambda *_args, **_kwargs: {"continuation": "token"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *_args, **_kwargs: _response([{"id": 1}]),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
-        lambda *_args, **_kwargs: None,
-    )
+    _stub_loop(monkeypatch)
+    _returns(monkeypatch, "_get_continuation_info", _response([{"id": 1}]))
+    _returns(monkeypatch, "_ContinuationLoop._handle_continuation_response", None)
 
     def _stop_processing(*_args, **_kwargs):
         if False:
             yield {}
         return True
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._process_actions",
-        _stop_processing,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._advance_continuation_loop",
+    _patch(monkeypatch, "_process_actions", _stop_processing)
+    _patch(
+        monkeypatch,
+        "_advance_continuation_loop",
         lambda *_args, **_kwargs: pytest.fail(
             "_advance_continuation_loop should not run after stop"
         ),
     )
 
-    assert (
-        list(
-            _messages(
-                downloader,
-                {"continuation_info": {"Live chat": "token"}, "status": "live"},
-            )
-        )
-        == []
-    )
+    assert list(_messages(downloader, _video_info(live="token"))) == []
 
 
 def test_chat_iteration_yields_chat_ended_when_clean_live_end(
@@ -879,47 +669,19 @@ def test_chat_iteration_yields_chat_ended_when_clean_live_end(
 ) -> None:
     downloader = _DummyDownloader()
     msg_filter = SimpleNamespace(should_add=lambda _message: True)
-    captured_samples = []
+    captured_samples = _capture(monkeypatch)
     log_calls = []
     response = _response([])
 
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "on")
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.capture_debug_sample",
-        lambda *args, **kwargs: captured_samples.append((args, kwargs)),
-    )
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._build_context",
-        lambda *_args, **_kwargs: _context(msg_filter=msg_filter),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.build_continuation_params",
-        lambda *_args, **_kwargs: {"continuation": "token"},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *_args, **_kwargs: response,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._ContinuationLoop._handle_continuation_response",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._advance_continuation_loop",
-        lambda *_args, **_kwargs: True,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.log",
-        lambda *args: log_calls.append(args),
-    )
+    _stub_loop(monkeypatch, msg_filter=msg_filter)
+    _returns(monkeypatch, "_get_continuation_info", response)
+    _returns(monkeypatch, "_ContinuationLoop._handle_continuation_response", None)
+    _returns(monkeypatch, "_advance_continuation_loop", True)
+    _patch(monkeypatch, "log", lambda *args: log_calls.append(args))
 
-    assert list(
-        _messages(
-            downloader,
-            {"continuation_info": {"Live chat": "token"}, "status": "live"},
-        )
-    ) == [
+    assert list(_messages(downloader, _video_info(live="token"))) == [
         {
             "message_type": "chat_ended",
             "action_type": "chat_ended",
@@ -950,17 +712,14 @@ def test_chat_iteration_switches_profile_after_incomplete_continuation(
     call_state = {"count": 0}
     generated_header_configs = []
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_headers",
-        lambda ytcfg, *_args, **_kwargs: generated_header_configs.append(ytcfg) or {},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_innertube_context",
-        lambda _ytcfg: {"client": {"visitorData": "visitor"}},
+    def _record_headers(ytcfg, *_args, **_kwargs):
+        generated_header_configs.append(ytcfg)
+        return {}
+
+    _patch(monkeypatch, "_generate_headers", _record_headers)
+    _returns(monkeypatch, "_generate_sapisidhash_header", None)
+    _returns(
+        monkeypatch, "_get_innertube_context", {"client": {"visitorData": "visitor"}}
     )
 
     def fake_continuation(_url, _session_post, _params, **_kwargs):
@@ -969,22 +728,17 @@ def test_chat_iteration_switches_profile_after_incomplete_continuation(
             raise IncompleteContinuationError("incomplete")
         return _response([], responseContext={})
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        fake_continuation,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
+    _patch(monkeypatch, "_get_continuation_info", fake_continuation)
+    _patch(
+        monkeypatch,
+        "parse_continuation_response",
         lambda _yt_info: _build_result(timeout_ms=None, is_end=True),
     )
 
     list(
         _messages(
             downloader,
-            {
-                "continuation_info": {"Top chat": "top", "Live chat": "live"},
-                "status": "live",
-            },
+            _video_info(top="top", live="live"),
         ),
     )
 
@@ -1017,72 +771,50 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
     )
 
     _patch_request_context(monkeypatch)
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.get_live_start_time_ms",
-        lambda: 1000,
-    )
+    _patch(monkeypatch, "get_live_start_time_ms", lambda: 1000)
 
     def fake_get_continuation_info(_url, _session_post, _request, **kwargs):
         continuation_payloads.append(kwargs["json"])
         return next(responses)
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        fake_get_continuation_info,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
-        lambda *_args, **_kwargs: PipelineResult(
+    _patch(monkeypatch, "_get_continuation_info", fake_get_continuation_info)
+    _returns(
+        monkeypatch,
+        "process_pipeline_action",
+        PipelineResult(
             disposition="yield",
             message={"timestamp": 6_000_000},
         ),
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.parse_continuation_response",
-        lambda _yt_info: next(parse_results),
+    _patch(
+        monkeypatch, "parse_continuation_response", lambda _yt_info: next(parse_results)
     )
 
-    messages = list(
-        _messages(
-            downloader,
-            _video_info("live"),
-        ),
-    )
+    messages = list(_messages(downloader, _video_info()))
 
     assert messages == [
         {"timestamp": 6_000_000, "time_in_seconds": 5.0, "time_text": "0:05"},
     ]
-    assert continuation_payloads[0] == {
-        "context": {
-            "client": {
-                "visitorData": "visitor",
-                "clientName": "WEB",
-                "clientVersion": REQUEST_PROFILE_INNERTUBE_CONTEXTS["youtube_web"][
-                    "client"
-                ]["clientVersion"],
-                "hl": "en",
-                "timeZone": "UTC",
-                "utcOffsetMinutes": 0,
-            },
-        },
-        "continuation": "live-token",
+    expected_context = {
+        "client": {
+            "visitorData": "visitor",
+            "clientName": "WEB",
+            "clientVersion": REQUEST_PROFILE_INNERTUBE_CONTEXTS["youtube_web"][
+                "client"
+            ]["clientVersion"],
+            "hl": "en",
+            "timeZone": "UTC",
+            "utcOffsetMinutes": 0,
+        }
     }
-    assert continuation_payloads[1] == {
-        "context": {
-            "client": {
-                "visitorData": "visitor",
-                "clientName": "WEB",
-                "clientVersion": REQUEST_PROFILE_INNERTUBE_CONTEXTS["youtube_web"][
-                    "client"
-                ]["clientVersion"],
-                "hl": "en",
-                "timeZone": "UTC",
-                "utcOffsetMinutes": 0,
-            },
+    assert continuation_payloads == [
+        {"context": expected_context, "continuation": "live-token"},
+        {
+            "context": expected_context,
+            "continuation": "next-live",
+            "currentPlayerState": {"playerOffsetMs": 0},
         },
-        "continuation": "next-live",
-        "currentPlayerState": {"playerOffsetMs": 0},
-    }
+    ]
 
 
 def test_chat_iteration_replay_processes_actions_and_ends_page(
@@ -1100,48 +832,24 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
 
     responses = iter(
         [
-            {
-                "continuationContents": {
-                    "liveChatContinuation": {
-                        "actions": [{"id": 1}, {"id": 2}],
-                        "continuations": [
-                            {
-                                "liveChatReplayContinuationData": {
-                                    "continuation": "first-token",
-                                    "timeUntilLastMessageMsec": 5000,
-                                },
-                            },
-                        ],
-                    },
-                },
-                "responseContext": {},
-            },
-            {
-                "continuationContents": {
-                    "liveChatContinuation": {
-                        "actions": [],
-                        "continuations": [
-                            {
-                                "liveChatReplayContinuationData": {
-                                    "continuation": "last-token",
-                                    "timeUntilLastMessageMsec": 5000,
-                                },
-                            },
-                        ],
-                    },
-                },
-                "responseContext": {},
-            },
-            {
-                "continuationContents": {
-                    "liveChatContinuation": {
-                        "actions": [],
-                        "continuations": [],
-                    },
-                },
-                "responseContext": {},
-            },
-        ],
+            _response(
+                actions,
+                continuations=[
+                    {
+                        "liveChatReplayContinuationData": {
+                            "continuation": token,
+                            "timeUntilLastMessageMsec": 5000,
+                        },
+                    }
+                ],
+                responseContext={},
+            )
+            for actions, token in [
+                ([{"id": 1}, {"id": 2}], "first-token"),
+                ([], "last-token"),
+            ]
+        ]
+        + [_response(continuations=[], responseContext={})]
     )
 
     _patch_request_context(monkeypatch)
@@ -1154,18 +862,11 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         continuation_requests.append(state.continuation)
         return {"continuation": state.continuation}
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.build_continuation_params",
-        fake_build_continuation_params,
+    _patch(monkeypatch, "build_continuation_params", fake_build_continuation_params)
+    _patch(
+        monkeypatch, "_get_continuation_info", lambda *_args, **_kwargs: next(responses)
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *_args, **_kwargs: next(responses),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.polling_sleep",
-        sleep_calls.append,
-    )
+    _patch(monkeypatch, "polling_sleep", sleep_calls.append)
 
     pipeline_results = iter(
         [
@@ -1186,10 +887,7 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
         process_calls.append((action, offset))
         return next(pipeline_results)
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
-        fake_process_pipeline_action,
-    )
+    _patch(monkeypatch, "process_pipeline_action", fake_process_pipeline_action)
     messages = list(
         _messages(
             downloader,
@@ -1206,52 +904,30 @@ def test_chat_iteration_replay_processes_actions_and_ends_page(
     assert end_page_calls == ["end", "end"]
 
 
+def _user_video(video_id, title="Target", video_type="LIVE"):
+    return {"video_id": video_id, "title": title, "video_type": video_type}
+
+
 def test_replay_progress_rejects_repeated_stale_action_pages() -> None:
     progress = _ContinuationProgress(
         max_no_progress_polls=2,
         max_profile_fallbacks=1,
     )
-    before_start_actions = [
-        {
-            "replayChatItemAction": {
-                "videoOffsetTimeMsec": "1797798",
-            },
-        },
-    ]
-
-    assert progress.response_advanced(
-        before_start_actions,
-        token_changed=False,
-        is_replay=True,
-    )
-    assert not progress.register_poll(made_progress=True)
-
-    assert not progress.response_advanced(
-        before_start_actions,
-        token_changed=False,
-        is_replay=True,
-    )
-    assert not progress.register_poll(made_progress=False)
-    assert not progress.response_advanced(
-        before_start_actions,
-        token_changed=False,
-        is_replay=True,
-    )
-    assert progress.register_poll(made_progress=False)
-
-    crossing_actions = [
-        {
-            "replayChatItemAction": {
-                "videoOffsetTimeMsec": "1800332",
-            },
-        },
-    ]
-    assert progress.response_advanced(
-        crossing_actions,
-        token_changed=False,
-        is_replay=True,
-    )
-    assert not progress.register_poll(made_progress=True)
+    for offset, advanced, exhausted in [
+        ("1797798", True, False),
+        ("1797798", False, False),
+        ("1797798", False, True),
+        ("1800332", True, False),
+    ]:
+        assert (
+            progress.response_advanced(
+                [{"replayChatItemAction": {"videoOffsetTimeMsec": offset}}],
+                token_changed=False,
+                is_replay=True,
+            )
+            is advanced
+        )
+        assert progress.register_poll(made_progress=advanced) is exhausted
     assert progress.no_progress_count == 0
 
 
@@ -1270,33 +946,20 @@ def test_replay_progress_ignores_invalid_offsets(raw_offset: str) -> None:
 
 
 def test_user_chat_lookup_skips_ignored_and_non_live_videos_before_yield() -> None:
-    class DummyChat:
-        def __init__(self, video_id: str) -> None:
-            self.chat = iter([{"message": "hello"}])
-            self.title = "Target"
-            self.id = video_id
-            self.author = "Uploader"
-            self._private = "ignored"
-
-        def __iter__(self):
-            return self.chat
+    def make_chat(video_id):
+        chat = Chat(chat=iter([{"message": "hello"}]), title="Target", id=video_id)
+        chat.author = "Uploader"
+        chat._private = "ignored"
+        return chat
 
     class DummyUsers(YouTubeChatUsersRetrievalMixin):
         def __init__(self) -> None:
             self._videos = iter(
                 [
-                    {"video_id": "old", "video_type": "VOD", "title": "Old"},
-                    {
-                        "video_id": "skip-me",
-                        "video_type": "LIVE",
-                        "title": "Ignored",
-                    },
-                    {
-                        "video_id": "keep-me",
-                        "video_type": "UPCOMING",
-                        "title": "Target",
-                    },
-                ],
+                    _user_video("old", "Old", "VOD"),
+                    _user_video("skip-me", "Ignored"),
+                    _user_video("keep-me", video_type="UPCOMING"),
+                ]
             )
 
         def get_user_videos(self, **_kwargs):
@@ -1305,7 +968,7 @@ def test_user_chat_lookup_skips_ignored_and_non_live_videos_before_yield() -> No
         def get_chat_by_video_id(self, video_id, params):
             assert video_id == "keep-me"
             assert params.ignore == ["skip-me"]
-            return DummyChat(video_id)
+            return make_chat(video_id)
 
     request = ChatRequest(
         url="https://www.youtube.com/@example/live",
@@ -1328,15 +991,7 @@ def test_user_chat_lookup_retries_after_chat_errors(monkeypatch) -> None:
 
     class DummyUsers(YouTubeChatUsersRetrievalMixin):
         def get_user_videos(self, **_kwargs):
-            return iter(
-                [
-                    {
-                        "video_id": "keep-me",
-                        "video_type": "LIVE",
-                        "title": "Target",
-                    },
-                ],
-            )
+            return iter([_user_video("keep-me")])
 
         def get_chat_by_video_id(self, video_id, params) -> NoReturn:
             msg = f"boom for {video_id} / {params.url}"

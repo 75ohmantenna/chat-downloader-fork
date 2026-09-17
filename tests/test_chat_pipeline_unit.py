@@ -27,29 +27,20 @@ def test_message_limit_preserves_selected_items(limit, expected) -> None:
     assert list(cast("Any", chat.chat)) == expected
 
 
-def test_apply_message_limit_propagates_close_to_source() -> None:
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_message_limit_closes_source_once(interrupted):
     source = MagicMock()
-    source.__next__.side_effect = [{"id": "1"}, {"id": "2"}]
-    chat = Chat(source, title="Example")
-
+    source.__next__.side_effect = KeyboardInterrupt if interrupted else [{"id": "1"}]
+    chat = Chat(source)
     apply_message_limit(chat, 1)
-    assert next(cast("Any", chat.chat)) == {"id": "1"}
     limited = cast("Any", chat.chat)
-    chat.close()
-    limited.close()
-
-    source.close.assert_called_once()
-
-
-def test_apply_message_limit_closes_source_when_iteration_raises() -> None:
-    source = MagicMock()
-    source.__next__.side_effect = KeyboardInterrupt
-    chat = Chat(source, title="Example")
-    apply_message_limit(chat, 1)
-
-    with pytest.raises(KeyboardInterrupt):
-        next(cast("Any", chat.chat))
-
+    if interrupted:
+        with pytest.raises(KeyboardInterrupt):
+            next(limited)
+    else:
+        assert next(limited) == {"id": "1"}
+        chat.close()
+        limited.close()
     source.close.assert_called_once()
 
 
@@ -88,22 +79,16 @@ def test_timeouts_leave_absent_source_or_disabled_deadlines_untouched(
 
 
 class _FakeSite:
-    """Provider-neutral live-format capability."""
+    def __init__(self, live=False):
+        self.live = live
 
-    def __init__(
-        self,
-        *,
-        live_statuses: frozenset[str] = frozenset(),
-        overrides: dict[str, str] | None = None,
-    ) -> None:
-        self._live = live_statuses
-        self._overrides = overrides or {}
+    def is_live_status(self, status):
+        return self.live and status == "live"
 
-    def is_live_status(self, status: str | None) -> bool:
-        return status in self._live
-
-    def resolve_live_format(self, format_name: str) -> str:
-        return self._overrides.get(format_name, format_name)
+    def resolve_live_format(self, format_name):
+        return {"default": "live_default", "custom": "live_custom"}.get(
+            format_name, format_name
+        )
 
 
 @pytest.mark.parametrize(
@@ -137,13 +122,7 @@ def test_formatter_resolves_live_overrides_and_custom_file(
     )
     chat = Chat(iter(()), status=status)
     if has_site:
-        chat.site = cast(
-            "Any",
-            _FakeSite(
-                live_statuses=frozenset({"live"}),
-                overrides={"default": "live_default", "custom": "live_custom"},
-            ),
-        )
+        chat.site = cast("Any", _FakeSite(live=True))
     configure_formatter(chat, str(formats), format_name)
     assert chat.format({"message": "hello"}) == expected
 
@@ -166,72 +145,42 @@ def test_output_options_preserve_append_sort_order_and_multiple_formats(
     assert formatted.read_text() == "existing\nhello\n"
 
 
-def test_configure_output_writer_deduplicates_duplicate_paths(tmp_path) -> None:
-    output_path = str(tmp_path / "out.jsonl")
-    aliased_path = f"{tmp_path}/./out.jsonl"
-    request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc",
-        output=[output_path, aliased_path],
+@pytest.mark.parametrize(
+    ("suffix", "template", "existing"),
+    [
+        ("txt", False, True),
+        ("jsonl", True, True),
+        ("jsonl", False, False),
+    ],
+)
+def test_output_aliases_write_each_item_once(tmp_path, suffix, template, existing):
+    output = tmp_path / f"same.{suffix}"
+    old = "existing\n" if suffix == "txt" else '{"old": true}\n'
+    if existing:
+        output.write_text(old, encoding="utf-8")
+    alias = (
+        str(tmp_path / "{title}.jsonl") if template else f"{tmp_path}/./same.{suffix}"
     )
-
-    chat = Chat(status="live")
-    writer_factory = MagicMock(return_value=MagicMock())
-
-    configure_output_writer(chat, request, writer_factory=writer_factory)
-    assert len(chat._output_dispatcher.writers) == 1
-
-
-def test_configure_output_writer_alias_writes_each_item_once(tmp_path) -> None:
-    output_path = tmp_path / "out.txt"
-    output_path.write_text("existing\n", encoding="utf-8")
-    request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc",
-        output=[str(output_path), f"{tmp_path}/./out.txt"],
-        overwrite=False,
-    )
-    chat = Chat(iter([{"message_type": "text_message"}]), status="live")
-    chat.set_formatter(lambda _item: "hello")
-
+    request = ChatRequest(output=[alias, str(output)], overwrite=False)
+    message = {"message_type": "text_message", "message": "hello"}
+    chat = Chat(iter([message]), title="same", status="live")
+    chat.set_formatter(lambda _: "hello")
     configure_output_writer(chat, request)
-    assert next(chat) == {"message_type": "text_message"}
-    with pytest.raises(StopIteration):
-        next(chat)
-
-    assert output_path.read_text(encoding="utf-8") == "existing\nhello\n"
-
-
-def test_configure_output_writer_deduplicates_expanded_template_paths(
-    tmp_path,
-) -> None:
-    output_path = tmp_path / "same.jsonl"
-    output_path.write_text('{"old": true}\n', encoding="utf-8")
-    request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc",
-        output=[str(tmp_path / "{title}.jsonl"), str(output_path)],
-        overwrite=False,
-    )
-    chat = Chat(
-        iter([{"message_type": "text_message", "message": "hello"}]),
-        title="same",
+    assert list(chat) == [message]
+    lines = output.read_text(encoding="utf-8").splitlines()
+    if existing:
+        assert lines.pop(0) == old.strip()
+    assert len(lines) == 1
+    assert (lines[0] if suffix == "txt" else json.loads(lines[0])) == (
+        "hello" if suffix == "txt" else message
     )
 
-    configure_output_writer(chat, request)
-    assert len(chat._output_dispatcher.writers) == 1
-    assert next(chat)["message"] == "hello"
-    chat.close()
 
-    assert len(output_path.read_text(encoding="utf-8").splitlines()) == 2
-
-
-def test_configure_output_writer_rejects_json_output(tmp_path) -> None:
-    request = ChatRequest(
-        url="https://www.youtube.com/watch?v=abc",
-        output=str(tmp_path / "out.json"),
-    )
-    chat = Chat(status="live")
-
+def test_configure_output_writer_rejects_json_output(tmp_path):
     with pytest.raises(ValueError, match=r"Use a \.jsonl or \.txt output path"):
-        configure_output_writer(chat, request)
+        configure_output_writer(
+            Chat(status="live"), ChatRequest(output=str(tmp_path / "out.json"))
+        )
 
 
 def test_configure_chat_composes_real_limit_formatter_and_writer(tmp_path) -> None:

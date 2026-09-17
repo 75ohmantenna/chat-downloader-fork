@@ -24,9 +24,14 @@ def test_formatted_deduplicator_ignores_unusable_ids(message_id) -> None:
 @pytest.mark.parametrize(
     ("events", "limit", "retained"),
     [
-        ([("paid_message", "one"), ("ticker_paid_message_item", "one")], None, [0]),
-        ([("paid_sticker", "one"), ("ticker_paid_sticker_item", "one")], None, [0]),
-        ([("membership_item", "one"), ("ticker_sponsor_item", "one")], None, [0]),
+        ([(primary, "one"), (ticker, "one")], None, [0])
+        for primary, ticker in [
+            ("paid_message", "ticker_paid_message_item"),
+            ("paid_sticker", "ticker_paid_sticker_item"),
+            ("membership_item", "ticker_sponsor_item"),
+        ]
+    ]
+    + [
         ([("paid_message", "one"), ("paid_message", "two")], None, [0, 1]),
         ([("text_message", "one"), ("text_message", "one")], None, [0, 1]),
         ([("paid_message", None), ("paid_message", None)], None, [0, 1]),
@@ -39,15 +44,6 @@ def test_formatted_deduplicator_ignores_unusable_ids(message_id) -> None:
             1,
             [0, 1, 2],
         ),
-    ],
-    ids=[
-        "paid",
-        "sticker",
-        "membership",
-        "distinct",
-        "ordinary",
-        "missing-id",
-        "eviction",
     ],
 )
 def test_formatted_output_deduplicates_only_eligible_cached_ids(

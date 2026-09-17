@@ -37,6 +37,20 @@ CLIP_ID = "clip_01M0BHEHDAX2NEAGXG0DA8V9S5"
 CLIP_URL = f"https://kick.com/n3on/clips/{CLIP_ID}"
 
 
+@pytest.fixture
+def client_factory(monkeypatch):
+    factory = MagicMock()
+    monkeypatch.setattr(extractor, "KickApiClient", factory)
+    return factory
+
+
+@pytest.fixture
+def downloader(client_factory):
+    instance = KickChatDownloader(headers={"X-Trace": "trace-value"})
+    yield instance
+    instance.close()
+
+
 @pytest.mark.parametrize("url", ACCEPTED)
 def test_accepts_channel_urls(url: str) -> None:
     match = KickChatDownloader.matches(url)
@@ -74,98 +88,42 @@ def test_site_metadata() -> None:
     assert KickChatDownloader._SITE_DEFAULT_PARAMS["format"] == "kick"
 
 
-def test_downloader_close_releases_both_http_sessions(monkeypatch: Any) -> None:
-    kick_client = MagicMock()
-    monkeypatch.setattr(extractor, "KickApiClient", lambda **_kwargs: kick_client)
-    downloader = KickChatDownloader()
+def test_downloader_close_releases_both_http_sessions(downloader, client_factory):
     base_session = downloader.session
-
     downloader.close()
     downloader.close()
-
-    kick_client.close.assert_called_once()
+    client_factory.return_value.close.assert_called_once()
     assert downloader._session_closed is True
     assert base_session is downloader.session
 
 
-def test_empty_proxy_disables_environment_for_kick_client(monkeypatch: Any) -> None:
-    captured: dict[str, Any] = {}
-
-    def build_client(**kwargs: Any) -> MagicMock:
-        captured.update(kwargs)
-        return MagicMock()
-
-    monkeypatch.setattr(extractor, "KickApiClient", build_client)
+def test_empty_proxy_disables_environment_for_kick_client(client_factory):
     downloader = KickChatDownloader(proxy="")
     try:
-        assert captured["trust_env"] is False
-    finally:
-        downloader.close()
-
-
-def test_kick_client_uses_explicit_headers_and_current_session_cookie(
-    monkeypatch: Any,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    def build_client(**kwargs: Any) -> MagicMock:
-        captured.update(kwargs)
-        return MagicMock()
-
-    monkeypatch.setattr(extractor, "KickApiClient", build_client)
-    downloader = KickChatDownloader(headers={"X-Trace": "trace-value"})
-    try:
-        downloader.session.cookies.set_cookie(
-            create_cookie(
-                "session_token",
-                "encoded%7Ctoken",
-                domain=".kick.com",
-            ),
-        )
-
-        assert captured["extra_headers"] == {"X-Trace": "trace-value"}
-        assert captured["bearer_token_provider"]() == "encoded|token"
+        assert client_factory.call_args.kwargs["trust_env"] is False
     finally:
         downloader.close()
 
 
 @pytest.mark.parametrize(
-    ("domain", "value", "path", "expires"),
+    ("domain", "value", "path", "expires", "expected"),
     [
-        ("example.com", "token", "/", None),
-        (".kick.com", "token", "/account", None),
-        (".kick.com", "token", "/", 1),
-        (".kick.com", "", "/", None),
+        (".kick.com", "encoded%7Ctoken", "/", None, "encoded|token"),
+        ("example.com", "token", "/", None, None),
+        (".kick.com", "token", "/account", None, None),
+        (".kick.com", "token", "/", 1, None),
+        (".kick.com", "", "/", None, None),
     ],
 )
-def test_kick_bearer_token_rejects_inapplicable_or_empty_cookies(
-    monkeypatch: Any,
-    domain: str,
-    value: str,
-    path: str,
-    expires: int | None,
-) -> None:
-    captured: dict[str, Any] = {}
-    monkeypatch.setattr(
-        extractor,
-        "KickApiClient",
-        lambda **kwargs: captured.update(kwargs) or MagicMock(),
+def test_headers_and_cookie_applicability(
+    downloader, client_factory, domain, value, path, expires, expected
+):
+    downloader.session.cookies.set_cookie(
+        create_cookie("session_token", value, domain=domain, path=path, expires=expires)
     )
-    downloader = KickChatDownloader()
-    try:
-        downloader.session.cookies.set_cookie(
-            create_cookie(
-                "session_token",
-                value,
-                domain=domain,
-                path=path,
-                expires=expires,
-            ),
-        )
-
-        assert captured["bearer_token_provider"]() is None
-    finally:
-        downloader.close()
+    configuration = client_factory.call_args.kwargs
+    assert configuration["extra_headers"] == {"X-Trace": "trace-value"}
+    assert configuration["bearer_token_provider"]() == expected
 
 
 def test_client_construction_failure_closes_base_session(monkeypatch: Any) -> None:
@@ -190,110 +148,48 @@ def test_client_construction_failure_closes_base_session(monkeypatch: Any) -> No
     assert len(closed) == 1
 
 
-def test_closed_downloader_rejects_api_client_access() -> None:
-    downloader = KickChatDownloader()
+def test_closed_downloader_rejects_api_client_access(downloader) -> None:
     downloader.close()
-
     with pytest.raises(RuntimeError, match="closed"):
         _ = downloader._kick_client
 
 
-def test_get_chat_by_channel_routes_to_builder(monkeypatch: Any) -> None:
-    captured: dict[str, Any] = {}
-
-    def fake_build(downloader: Any, username: str, request: Any) -> str:
-        captured["username"] = username
-        captured["request"] = request
-        return "CHAT"
-
-    monkeypatch.setattr(extractor, "build_channel_chat", fake_build)
-    downloader = KickChatDownloader()
-    result = downloader.get_chat_by_channel("xqc", {"url": "https://kick.com/xqc"})
+@pytest.mark.parametrize("internal", [False, True])
+def test_channel_routes_to_builder(monkeypatch, downloader, internal):
+    builder = MagicMock(return_value="CHAT")
+    monkeypatch.setattr(extractor, "build_channel_chat", builder)
+    username = "somechannel" if internal else "xqc"
+    params = {"url": f"https://kick.com/{username}"}
+    if internal:
+        match = KickChatDownloader.matches(params["url"])
+        assert match is not None
+        result = downloader._get_chat_by_channel(match[1], params)
+    else:
+        result = downloader.get_chat_by_channel(username, params)
     assert result == "CHAT"
-    assert captured["username"] == "xqc"
-    assert isinstance(captured["request"], ChatRequest)
+    assert builder.call_args.args[1] == username
+    assert isinstance(builder.call_args.args[2], ChatRequest)
 
 
-def test_internal_router_extracts_username(monkeypatch: Any) -> None:
-    captured: dict[str, Any] = {}
-
-    def fake_build(downloader: Any, username: str, request: Any) -> str:
-        captured["username"] = username
-        return "CHAT"
-
-    monkeypatch.setattr(extractor, "build_channel_chat", fake_build)
-    downloader = KickChatDownloader()
-    match = KickChatDownloader.matches("https://kick.com/somechannel")
-    assert match is not None
-    downloader._get_chat_by_channel(match[1], {"url": "https://kick.com/somechannel"})
-    assert captured["username"] == "somechannel"
-
-
-def test_get_chat_by_video_passes_owned_client_to_builder(monkeypatch: Any) -> None:
-    captured: dict[str, Any] = {}
-
-    def fake_build(
-        username: str,
-        video_id: str,
-        request: ChatRequest,
-        *,
-        api_client: Any,
-    ) -> str:
-        captured.update(
-            username=username,
-            video_id=video_id,
-            request=request,
-            api_client=api_client,
-        )
-        return "VOD"
-
-    monkeypatch.setattr(extractor, "build_vod_chat", fake_build)
-    downloader = KickChatDownloader()
-
-    result = downloader.get_chat_by_video(
-        "creator",
-        "video-id",
-        {"url": "https://kick.com/creator/videos/video-id"},
+@pytest.mark.parametrize("kind", ["video", "clip"])
+def test_recording_routes_identifiers_and_owned_client(monkeypatch, downloader, kind):
+    builder = MagicMock(return_value="CHAT")
+    monkeypatch.setattr(
+        extractor, "build_vod_chat" if kind == "video" else "build_clip_chat", builder
     )
-
-    assert result == "VOD"
-    assert captured["username"] == "creator"
-    assert captured["video_id"] == "video-id"
-    assert captured["api_client"] is downloader._kick_client
-
-
-def test_get_chat_by_clip_routes_identifiers_and_owned_client(
-    monkeypatch: Any,
-) -> None:
-    captured: dict[str, Any] = {}
-
-    def fake_build(
-        username: str,
-        clip_id: str,
-        request: ChatRequest,
-        *,
-        api_client: Any,
-    ) -> str:
-        captured.update(
-            username=username,
-            clip_id=clip_id,
-            request=request,
-            api_client=api_client,
+    if kind == "video":
+        username, identifier = "creator", "video-id"
+        result = downloader.get_chat_by_video(
+            username, identifier, {"url": "https://kick.com/creator/videos/video-id"}
         )
-        return "CLIP"
-
-    monkeypatch.setattr(extractor, "build_clip_chat", fake_build)
-    downloader = KickChatDownloader()
-    match = KickChatDownloader.matches(CLIP_URL)
-    assert match is not None
-
-    result = downloader._get_chat_by_clip(
-        match[1],
-        {"url": CLIP_URL, "start_time": 5},
-    )
-
-    assert result == "CLIP"
-    assert captured["username"] == "n3on"
-    assert captured["clip_id"] == CLIP_ID
-    assert captured["request"].start_time == 5
-    assert captured["api_client"] is downloader._kick_client
+    else:
+        username, identifier = "n3on", CLIP_ID
+        match = KickChatDownloader.matches(CLIP_URL)
+        assert match is not None
+        result = downloader._get_chat_by_clip(
+            match[1], {"url": CLIP_URL, "start_time": 5}
+        )
+        assert builder.call_args.args[2].start_time == 5
+    assert result == "CHAT"
+    assert builder.call_args.args[:2] == (username, identifier)
+    assert builder.call_args.kwargs["api_client"] is downloader._kick_client

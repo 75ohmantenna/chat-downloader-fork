@@ -19,6 +19,7 @@ from chat_downloader.sites.youtube.parsing.message_content_text_parser import (
     _parse_thumbnails,
 )
 from chat_downloader.sites.youtube.parsing.message_items_content_parser import (
+    _apply_author_roles,
     _get_remapping,
     _parse_item,
 )
@@ -61,32 +62,34 @@ def _nested_item(renderer):
     return {"showItemEndpoint": {"showLiveChatItemEndpoint": {"renderer": renderer}}}
 
 
-def test_link_helpers_normalize_supported_youtube_url_forms() -> None:
-    assert _get_source_image_url("https://img.example/avatar=s48-c-k") == (
-        "https://img.example/avatar"
-    )
-    assert _get_source_image_url("https://img.example/avatar") == (
+def _wrap(path, value):
+    for key in reversed(path.split(".")):
+        value = {key: value}
+    return value
+
+
+@pytest.mark.parametrize("suffix", ["=s48-c-k", ""])
+def test_source_image_url(suffix):
+    assert _get_source_image_url(f"https://img.example/avatar{suffix}") == (
         "https://img.example/avatar"
     )
 
-    assert _parse_youtube_link("/redirect?q=https%3A%2F%2Fexample.com") == (
-        "https://example.com"
-    )
-    assert (
-        _parse_youtube_link(
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("/redirect?q=https%3A%2F%2Fexample.com", "https://example.com"),
+        (
             "https://www.youtube.com/redirect?q=https%3A%2F%2Fexample.com%2Fwatch",
-        )
-        == "https://example.com/watch"
-    )
-    assert _parse_youtube_link("//cdn.example.com/image.png") == (
-        "https://cdn.example.com/image.png"
-    )
-    assert _parse_youtube_link("/watch?v=abc123") == (
-        "https://www.youtube.com/watch?v=abc123"
-    )
-    assert _parse_youtube_link("https://example.com/plain") == (
-        "https://example.com/plain"
-    )
+            "https://example.com/watch",
+        ),
+        ("//cdn.example.com/image.png", "https://cdn.example.com/image.png"),
+        ("/watch?v=abc123", "https://www.youtube.com/watch?v=abc123"),
+        ("https://example.com/plain", "https://example.com/plain"),
+    ],
+)
+def test_youtube_links(url, expected):
+    assert _parse_youtube_link(url) == expected
 
 
 def test_parse_navigation_endpoint_returns_default_on_invalid_payload() -> None:
@@ -103,39 +106,28 @@ def test_text_helpers_parse_simple_text_runs_links_and_emotes() -> None:
     assert _get_simple_text({"simpleText": "hello"}) == "hello"
     assert _parse_text({"simpleText": "hello"}) == "hello"
 
+    emoji = {
+        "emojiId": "smile",
+        "shortcuts": [":)"],
+        "searchTerms": ["smile"],
+        "image": {"thumbnails": [_image("//img.example/smile", 24)]},
+        "isCustomEmoji": True,
+    }
     parsed = _parse_runs(
         {
             "runs": [
                 {"text": "Look "},
                 {
                     "text": "here",
-                    "navigationEndpoint": {
-                        "commandMetadata": {
-                            "webCommandMetadata": {"url": "/watch?v=abc123"},
-                        },
-                    },
+                    "navigationEndpoint": _wrap(
+                        "commandMetadata.webCommandMetadata.url", "/watch?v=abc123"
+                    ),
                 },
-                {
-                    "emoji": {
-                        "emojiId": "smile",
-                        "shortcuts": [":)"],
-                        "searchTerms": ["smile"],
-                        "image": {
-                            "thumbnails": [
-                                {
-                                    "url": "//img.example/smile=s24",
-                                    "width": 24,
-                                    "height": 24,
-                                },
-                            ],
-                        },
-                        "isCustomEmoji": True,
-                    },
-                },
+                {"emoji": emoji},
                 {"emoji": {"emojiId": "smile", "shortcuts": [":)"]}},
                 {"unknown": True},
-            ],
-        },
+            ]
+        }
     )
 
     assert parsed["message"] == (
@@ -147,15 +139,7 @@ def test_text_helpers_parse_simple_text_runs_links_and_emotes() -> None:
             "name": ":)",
             "shortcuts": [":)"],
             "search_terms": ["smile"],
-            "images": [
-                {"url": "https://img.example/smile", "id": "source"},
-                {
-                    "url": "https://img.example/smile=s24",
-                    "width": 24,
-                    "height": 24,
-                    "id": "24x24",
-                },
-            ],
+            "images": _images("https://img.example/smile", 24),
             "is_custom_emoji": True,
         },
     ]
@@ -167,24 +151,22 @@ def test_text_helpers_parse_simple_text_runs_links_and_emotes() -> None:
     assert _parse_runs("not-a-dict") == {"message": ""}
 
 
-def test_emoji_without_shortcuts_falls_back_to_colon_wrapped_emoji_id() -> None:
-    parsed = _parse_runs({"runs": [{"emoji": {"emojiId": "UC_custom_abc123"}}]})
-    assert parsed["message"] == ":UC_custom_abc123:"
-    assert parsed["emotes"][0]["name"] == ":UC_custom_abc123:"
-
-
-@pytest.mark.parametrize("emoji", [{}, None])
-def test_emoji_without_name_or_id_uses_stable_placeholder(emoji: object) -> None:
-    assert _parse_runs({"runs": [{"emoji": emoji}]}) == {"message": ":emoji:"}
-
-
-def test_non_string_emoji_shortcut_falls_back_to_emoji_id() -> None:
-    parsed = _parse_runs(
-        {"runs": [{"emoji": {"emojiId": "emoji-1", "shortcuts": [123]}}]}
-    )
-
-    assert parsed["message"] == ":emoji-1:"
-    assert parsed["emotes"][0]["name"] == ":emoji-1:"
+@pytest.mark.parametrize(
+    ("emoji", "name"),
+    [
+        ({"emojiId": "UC_custom_abc123"}, ":UC_custom_abc123:"),
+        ({"emojiId": "emoji-1", "shortcuts": [123]}, ":emoji-1:"),
+        ({}, ":emoji:"),
+        (None, ":emoji:"),
+    ],
+)
+def test_emoji_fallback_names(emoji, name):
+    parsed = _parse_runs({"runs": [{"emoji": emoji}]})
+    assert parsed["message"] == name
+    if emoji:
+        assert parsed["emotes"][0]["name"] == name
+    else:
+        assert parsed == {"message": name}
 
 
 def test_parse_runs_ignores_invalid_containers_and_entries() -> None:
@@ -195,54 +177,40 @@ def test_parse_runs_ignores_invalid_containers_and_entries() -> None:
     assert _parse_runs({"content": 123}) == {"message": ""}
 
 
-def test_thumbnail_and_action_button_helpers_parse_expected_shapes() -> None:
-    thumbnails = _parse_thumbnails(
-        {
-            "thumbnails": [
-                {"url": "//img.example/thumb=s24", "width": 24, "height": 24},
-                {"url": "//img.example/thumb=s48", "width": 48, "height": 48},
-            ],
-        },
-    )
+def _image(url, size, **extra):
+    return {"url": f"{url}=s{size}", "width": size, "height": size, **extra}
 
-    assert thumbnails == [
-        {"url": "https://img.example/thumb", "id": "source"},
-        {
-            "url": "https://img.example/thumb=s24",
-            "width": 24,
-            "height": 24,
-            "id": "24x24",
-        },
-        {
-            "url": "https://img.example/thumb=s48",
-            "width": 48,
-            "height": 48,
-            "id": "48x48",
-        },
+
+def _images(url, *sizes):
+    return [{"url": url, "id": "source"}] + [
+        _image(url, size, id=f"{size}x{size}") for size in sizes
     ]
-    assert _parse_thumbnails(
-        [
-            {
-                "thumbnails": [
-                    {
-                        "url": "//img.example/thumb=s12",
-                        "width": 12,
-                        "height": 12,
-                    },
-                ],
-            },
-        ],
-    ) == [
-        {"url": "https://img.example/thumb", "id": "source"},
-        {
-            "url": "https://img.example/thumb=s12",
-            "width": 12,
-            "height": 12,
-            "id": "12x12",
-        },
-    ]
-    assert _parse_thumbnails(cast("Any", "invalid")) == []
-    assert _parse_thumbnails([]) == []
+
+
+@pytest.mark.parametrize("sizes", [(24, 48), (12,), (24,)])
+def test_thumbnail_containers(sizes):
+    entries = [_image("//img.example/thumb", n) for n in sizes]
+    if sizes == (24,):
+        entries[0]["newField"] = "ignored"
+        entries += [
+            {"width": 48, "height": 48},
+            {"url": None},
+            {"url": 123},
+            {"url": "   "},
+            "not-an-object",
+        ]
+    payload = {"thumbnails": entries}
+    if sizes == (12,):
+        payload = [payload]
+    assert _parse_thumbnails(payload) == _images("https://img.example/thumb", *sizes)
+
+
+@pytest.mark.parametrize("payload", ["invalid", []])
+def test_invalid_thumbnail_containers(payload):
+    assert _parse_thumbnails(cast("Any", payload)) == []
+
+
+def test_action_buttons():
 
     assert _parse_action_button(
         {
@@ -257,131 +225,50 @@ def test_thumbnail_and_action_button_helpers_parse_expected_shapes() -> None:
     assert _parse_action_button({}) == {"url": "", "text": ""}
 
 
-def test_parse_thumbnails_skips_malformed_entries_and_unknown_fields() -> None:
-    assert _parse_thumbnails(
-        {
-            "thumbnails": [
-                {
-                    "url": "//img.example/thumb=s24",
-                    "width": 24,
-                    "height": 24,
-                    "newField": "ignored",
-                },
-                {"width": 48, "height": 48},
-                {"url": None},
-                {"url": 123},
-                {"url": "   "},
-                "not-an-object",
-            ],
-        }
-    ) == [
-        {"url": "https://img.example/thumb", "id": "source"},
-        {
-            "url": "https://img.example/thumb=s24",
-            "width": 24,
-            "height": 24,
-            "id": "24x24",
-        },
-    ]
-
-
-def test_parse_badges_and_currency_cover_icon_and_fallback_paths(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.message_items_content_parser._parse_item",
-        lambda _badge: {
+@pytest.mark.parametrize("valid", [True, False])
+def test_badge_icons_and_missing_titles(monkeypatch, valid):
+    badge = {"icon": "SPONSOR", "badge_icons": [{}, {"url": ""}]}
+    expected = {"icon_name": "sponsor", "icons": []}
+    if valid:
+        badge = {
             "tooltip": "Moderator",
             "icon": "MODERATOR",
             "badge_icons": [
-                {"url": "https://img.example/badge=s16"},
-                {"url": "https://img.example/badge=s32"},
-                {"url": "https://img.example/badge=no-size"},
+                {"url": f"https://img.example/badge={size}"}
+                for size in ("s16", "s32", "no-size")
             ],
-        },
-    )
-
-    assert _parse_badges([{"liveChatAuthorBadgeRenderer": {}}]) == [
-        {
+        }
+        expected = {
             "title": "Moderator",
             "icon_name": "moderator",
-            "icons": [
-                {"url": "https://img.example/badge", "id": "source"},
-                {
-                    "url": "https://img.example/badge=s16",
-                    "width": 16,
-                    "height": 16,
-                    "id": "16x16",
-                },
-                {
-                    "url": "https://img.example/badge=s32",
-                    "width": 32,
-                    "height": 32,
-                    "id": "32x32",
-                },
-            ],
-        },
-    ]
-
-    assert _parse_currency({"simpleText": "$1,234.50"}) == {
-        "text": "$1,234.50",
-        "amount": 1234.5,
-        "currency": "USD",
-        "currency_symbol": "$",
-    }
-    assert _parse_currency({"simpleText": "CHF12.30"}) == {
-        "text": "CHF12.30",
-        "amount": 12.3,
-        "currency": "CHF",
-        "currency_symbol": "CHF",
-    }
-    assert _parse_currency({"simpleText": "12.30"}) == {
-        "text": "12.30",
-        "amount": 12.3,
-        "currency": "",
-        "currency_symbol": "",
-    }
-
-
-def test_parse_badges_ignores_malformed_icons_and_missing_title(
-    monkeypatch,
-) -> None:
+            "icons": _images("https://img.example/badge", 16, 32),
+        }
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.parsing.message_items_content_parser._parse_item",
-        lambda _badge: {
-            "icon": "SPONSOR",
-            "badge_icons": [
-                {},
-                {"url": ""},
-            ],
-        },
+        lambda _badge: badge,
     )
-
-    assert _parse_badges([{"liveChatAuthorBadgeRenderer": {}}]) == [
-        {
-            "icon_name": "sponsor",
-            "icons": [],
-        },
-    ]
+    assert _parse_badges([{"liveChatAuthorBadgeRenderer": {}}]) == [expected]
 
 
-def test_parse_currency_uses_numeric_fallback_when_split_fails(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.message_content_badges.re.split",
-        lambda _pattern, _text: ["not-parseable"],
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.message_content_badges.re.sub",
-        lambda _pattern, _repl, _text: "42.5",
-    )
-
-    assert _parse_currency({"simpleText": "unstructured"}) == {
-        "text": "unstructured",
-        "amount": 42.5,
-        "currency": None,
-        "currency_symbol": None,
+@pytest.mark.parametrize(
+    ("text", "amount", "currency", "symbol"),
+    [
+        ("$1,234.50", 1234.5, "USD", "$"),
+        ("CHF12.30", 12.3, "CHF", "CHF"),
+        ("12.30", 12.3, "", ""),
+        ("unstructured", 42.5, None, None),
+    ],
+)
+def test_currency(monkeypatch, text, amount, currency, symbol):
+    if currency is None:
+        prefix = "chat_downloader.sites.youtube.parsing.message_content_badges.re"
+        monkeypatch.setattr(f"{prefix}.split", lambda *_: ["not-parseable"])
+        monkeypatch.setattr(f"{prefix}.sub", lambda *_: "42.5")
+    assert _parse_currency({"simpleText": text}) == {
+        "text": text,
+        "amount": amount,
+        "currency": currency,
+        "currency_symbol": symbol,
     }
 
 
@@ -414,71 +301,45 @@ def test_parse_item_recurses_moves_author_and_applies_offset_once(item_parser) -
     assert result["message"] is None
 
 
-def test_apply_author_roles_marks_badged_author_as_sponsor() -> None:
-    from chat_downloader.sites.youtube.parsing import (
-        message_items_content_parser as _mcp,
-    )
-
-    author = {"badges": [{"icon_name": "custom", "icons": [{"url": "badge"}]}]}
-    _mcp._apply_author_roles(author)
-
-    assert author["is_sponsor"] is True
-
-
-def test_apply_author_roles_ignores_unknown_badge_without_icons() -> None:
-    from chat_downloader.sites.youtube.parsing import (
-        message_items_content_parser as _mcp,
-    )
-
-    author = {"badges": [{"icon_name": "custom"}]}
-    _mcp._apply_author_roles(author)
-
-    assert author == {"badges": [{"icon_name": "custom"}]}
+@pytest.mark.parametrize("icons", [None, [{"url": "badge"}]])
+def test_custom_author_badge_roles(icons):
+    badge = {"icon_name": "custom"}
+    if icons is not None:
+        badge["icons"] = icons
+    author = {"badges": [badge]}
+    _apply_author_roles(author)
+    if icons:
+        assert author["is_sponsor"] is True
+    else:
+        assert author == {"badges": [{"icon_name": "custom"}]}
 
 
-def test_parse_item_merges_header_when_show_item_endpoint_has_no_renderer(item_parser):
-    parse = item_parser({"timeText": "time_text"})
-    result = parse(
-        {
-            "outerRenderer": {
-                "showItemEndpoint": {"showLiveChatItemEndpoint": {}},
-                "header": {"headerRenderer": {"timeText": "0:09"}},
-            },
+@pytest.mark.parametrize("header", [True, False])
+def test_parse_item_header_and_generated_time(item_parser, header):
+    payload = {"unused": True}
+    info = {"time_in_seconds": 5}
+    if header:
+        payload = {
+            "showItemEndpoint": {"showLiveChatItemEndpoint": {}},
+            "header": {"headerRenderer": {"timeText": "0:09"}},
         }
+        info = None
+    result = item_parser({"timeText": "time_text"} if header else {})(
+        {"outerRenderer": payload},
+        info=info,
     )
-
-    assert result["time_in_seconds"] == 9
-    assert result["message"] is None
-
-
-def test_parse_item_generates_time_text_from_time_in_seconds(item_parser) -> None:
-    result = item_parser({})(
-        {"outerRenderer": {"unused": True}},
-        info={"time_in_seconds": 5},
-    )
-    assert result["time_in_seconds"] == 5
-    assert result["time_text"] == "0:05"
+    assert result["time_in_seconds"] == (9 if header else 5)
+    if not header:
+        assert result["time_text"] == "0:05"
     assert result["message"] is None
 
 
 @pytest.mark.parametrize(
     ("nested", "info", "expected"),
     [
-        pytest.param(
-            {"timeText": "0:09"},
-            {"time_in_seconds": 5.25},
-            (5.25, "0:05"),
-            id="authoritative-wrapper",
-        ),
-        pytest.param(
-            {},
-            {"time_in_seconds": 5.25, "time_text": "0:02"},
-            (5.25, "0:02"),
-            id="empty-nested-shell",
-        ),
-        pytest.param(
-            {"timeText": "0:09"}, {"time_in_seconds": 0}, (9, "0:09"), id="zero-wrapper"
-        ),
+        ({"timeText": "0:09"}, {"time_in_seconds": 5.25}, (5.25, "0:05")),
+        ({}, {"time_in_seconds": 5.25, "time_text": "0:02"}, (5.25, "0:02")),
+        ({"timeText": "0:09"}, {"time_in_seconds": 0}, (9, "0:09")),
     ],
 )
 def test_parse_item_preserves_wrapper_or_nested_timing(
@@ -493,35 +354,28 @@ def test_parse_item_preserves_wrapper_or_nested_timing(
     assert (result["time_in_seconds"], result["time_text"]) == expected
 
 
-def test_parse_video_uses_overlay_style_or_default() -> None:
-    live_video = _parse_video(
-        {
-            "videoId": "abc123",
-            "title": {"runs": [{"text": "Example"}]},
-            "viewCountText": {"simpleText": "1 watching"},
-            "shortViewCountText": {"simpleText": "1"},
-            "thumbnailOverlays": [
-                {"thumbnailOverlayTimeStatusRenderer": {"style": "LIVE"}},
-            ],
-        },
-    )
-    default_video = _parse_video(
-        {
-            "videoId": "def456",
-            "title": {"runs": [{"text": "Other"}]},
-            "viewCountText": {"simpleText": "2 views"},
-            "shortViewCountText": {"simpleText": "2"},
-        },
-    )
-
-    assert live_video == {
+@pytest.mark.parametrize(
+    ("styles", "expected"),
+    [(["LIVE"], "LIVE"), (None, "DEFAULT"), (["", "UPCOMING"], "UPCOMING")],
+)
+def test_video_overlay_styles(styles, expected):
+    payload = {
+        "videoId": "abc123",
+        "title": {"runs": [{"text": "Example"}]},
+        "viewCountText": {"simpleText": "1 watching"},
+        "shortViewCountText": {"simpleText": "1"},
+    }
+    if styles is not None:
+        payload["thumbnailOverlays"] = [
+            {"thumbnailOverlayTimeStatusRenderer": {"style": style}} for style in styles
+        ]
+    assert _parse_video(payload) == {
         "video_id": "abc123",
         "title": "Example",
-        "video_type": "LIVE",
+        "video_type": expected,
         "view_count": "1 watching",
         "short_view_count": "1",
     }
-    assert default_video["video_type"] == "DEFAULT"
 
 
 @pytest.mark.parametrize("live", [True, False], ids=["live-lockup", "plain-lockup"])
@@ -536,62 +390,32 @@ def test_parse_video_accepts_lockup_view_model(live) -> None:
     }
     if live:
         lockup.update(_make_lockup_with_badge("LIVE"))
-        metadata["metadata"] = {
-            "contentMetadataViewModel": {
-                "metadataRows": [
-                    {
-                        "metadataParts": [{"text": {"content": "1 watching"}}],
-                    }
-                ],
-            },
-        }
-    video = _parse_video({"lockupViewModel": lockup})
-    if live:
-        assert video == {
-            "video_id": video_id,
-            "title": title,
-            "video_type": "LIVE",
-            "view_count": "1 watching",
-            "short_view_count": "1 watching",
-        }
-    else:
-        assert video["video_id"] == video_id
-        assert video["title"] == title
-        assert video["video_type"] == "DEFAULT"
-        assert "view_count" not in video
-
-
-def test_parse_video_uses_later_overlay_when_first_style_is_empty() -> None:
-    video = _parse_video(
-        {
-            "videoId": "abc123",
-            "title": {"runs": [{"text": "Example"}]},
-            "thumbnailOverlays": [
-                {"thumbnailOverlayTimeStatusRenderer": {"style": ""}},
-                {"thumbnailOverlayTimeStatusRenderer": {"style": "UPCOMING"}},
+        metadata["metadata"] = _wrap(
+            "contentMetadataViewModel.metadataRows",
+            [
+                {"metadataParts": [{"text": {"content": "1 watching"}}]},
             ],
-        },
-    )
-
-    assert video["video_type"] == "UPCOMING"
+        )
+    expected = {"video_id": video_id, "title": title, "video_type": "DEFAULT"}
+    if live:
+        expected.update(
+            video_type="LIVE", view_count="1 watching", short_view_count="1 watching"
+        )
+    assert _parse_video({"lockupViewModel": lockup}) == expected
 
 
 def _make_lockup_with_badge(text: str) -> dict[str, Any]:
-    return {
-        "contentImage": {
-            "thumbnailViewModel": {
-                "overlays": [
-                    {
-                        "thumbnailBottomOverlayViewModel": {
-                            "badges": [
-                                {"thumbnailBadgeViewModel": {"text": text}},
-                            ],
-                        },
-                    },
+    return _wrap(
+        "contentImage.thumbnailViewModel.overlays",
+        [
+            _wrap(
+                "thumbnailBottomOverlayViewModel.badges",
+                [
+                    {"thumbnailBadgeViewModel": {"text": text}},
                 ],
-            },
-        },
-    }
+            ),
+        ],
+    )
 
 
 @pytest.mark.parametrize(

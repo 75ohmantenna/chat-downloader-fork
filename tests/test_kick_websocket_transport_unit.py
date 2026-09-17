@@ -27,60 +27,34 @@ from chat_downloader.sites.kick.websocket_transport import (
 from tests.kick_helpers import FakeWebSocket
 
 
-def _connected(ws: FakeWebSocket) -> KickPusherTransport:
+def _connected(ws: FakeWebSocket, **kwargs: Any) -> KickPusherTransport:
     transport = KickPusherTransport(
         connector=lambda _url, _timeout, **_kwargs: ws,
         url="wss://fake.test/",
+        **kwargs,
     )
     transport.connect(5.0)
     return transport
 
 
-def test_default_connector_invokes_create_connection(monkeypatch: Any) -> None:
-    captured: dict[str, Any] = {}
-
-    def fake_create(url: str, timeout: float | None, **kwargs: Any) -> str:
-        captured.update(url=url, timeout=timeout, **kwargs)
-        return "connection"
-
-    monkeypatch.setattr(wt, "create_connection", fake_create)
-    result = wt._default_connector("wss://example", 3.0)
-    assert result == "connection"
-    assert captured == {"url": "wss://example", "timeout": 3.0}
-
-
-def test_default_connector_opens_authenticated_proxy_tunnel(
-    monkeypatch: Any,
-) -> None:
-    captured: dict[str, Any] = {}
+@pytest.mark.parametrize("proxy", [None, "socks5h://user:pass@proxy.test:1080"])
+def test_default_connector_creates_direct_or_authenticated_tunnel(monkeypatch, proxy):
     proxy_socket = MagicMock()
-
-    monkeypatch.setattr(
-        wt,
-        "open_proxied_tls_socket",
-        MagicMock(return_value=proxy_socket),
+    tunnel = MagicMock(return_value=proxy_socket)
+    create = MagicMock(return_value="connection")
+    monkeypatch.setattr(wt, "open_proxied_tls_socket", tunnel)
+    monkeypatch.setattr(wt, "create_connection", create)
+    assert (
+        wt._default_connector("wss://example.test/socket", 4.0, proxy_url=proxy)
+        == "connection"
     )
-
-    def fake_create(url: str, timeout: float | None, **kwargs: Any) -> str:
-        captured.update(url=url, timeout=timeout, **kwargs)
-        return "connection"
-
-    monkeypatch.setattr(wt, "create_connection", fake_create)
-
-    result = wt._default_connector(
-        "wss://example.test/socket",
-        4.0,
-        proxy_url="socks5h://user:pass@proxy.test:1080",
-    )
-
-    assert result == "connection"
-    wt.open_proxied_tls_socket.assert_called_once_with(
-        "example.test",
-        443,
-        timeout=4.0,
-        proxy_url="socks5h://user:pass@proxy.test:1080",
-    )
-    assert captured["socket"] is proxy_socket
+    if proxy:
+        tunnel.assert_called_once_with(
+            "example.test", 443, timeout=4.0, proxy_url=proxy
+        )
+        assert create.call_args.kwargs["socket"] is proxy_socket
+    else:
+        create.assert_called_once_with("wss://example.test/socket", timeout=4.0)
 
 
 def test_default_connector_rejects_non_secure_proxied_url() -> None:
@@ -117,28 +91,19 @@ def test_default_connector_closes_proxy_socket_on_handshake_failure(
     proxy_socket.close.assert_called_once_with()
 
 
-def test_connect_failure_raises_connection_error() -> None:
-    def boom(_url: str, _timeout: float | None, **_kwargs: Any) -> Any:
-        raise WebSocketException
-
-    transport = KickPusherTransport(connector=boom)
-    with pytest.raises(ConnectionError):
-        transport.connect(1.0)
-
-
-def test_connect_http_403_recommends_proxy() -> None:
-    def blocked(_url: str, _timeout: float | None, **_kwargs: Any) -> Any:
-        raise WebSocketBadStatusException("forbidden", 403)
-
-    transport = KickPusherTransport(connector=blocked)
-    with pytest.raises(ConnectionError, match=r"HTTP 403.*try --proxy"):
-        transport.connect(1.0)
-
-
-def test_connect_rejects_missing_websocket_object() -> None:
-    transport = KickPusherTransport(connector=lambda *_args, **_kwargs: None)
-
-    with pytest.raises(ConnectionError, match="returned no connection"):
+@pytest.mark.parametrize(
+    ("error", "match"),
+    [
+        (WebSocketException(), None),
+        (WebSocketBadStatusException("forbidden", 403), r"HTTP 403.*try --proxy"),
+        (None, "returned no connection"),
+    ],
+)
+def test_connect_failure(error, match) -> None:
+    transport = KickPusherTransport(
+        connector=MagicMock(side_effect=error, return_value=None)
+    )
+    with pytest.raises(ConnectionError, match=match):
         transport.connect(1.0)
 
 
@@ -158,15 +123,14 @@ def test_connect_can_force_pusher_key_rediscovery(monkeypatch: Any) -> None:
     )
 
 
-def test_set_timeout_noop_before_connect() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
-    # No connection yet: must not raise.
-    transport.set_timeout(2.0)
-
-
-def test_set_timeout_after_connect() -> None:
+def test_set_timeout_and_close_before_connection_then_configure_socket() -> None:
     ws = FakeWebSocket()
-    transport = _connected(ws)
+    transport = KickPusherTransport(connector=lambda *_args, **_kwargs: ws)
+    transport.set_timeout(2.0)
+    transport.close()
+    assert ws.timeout is None
+    assert ws.closed is False
+    transport.connect(5.0)
     transport.set_timeout(2.0)
     assert ws.timeout == 2.0
 
@@ -199,10 +163,11 @@ def test_send_pong_frame() -> None:
     assert json.loads(ws.sent[0])["event"] == PUSHER_PONG
 
 
-def test_send_before_connect_raises() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
+@pytest.mark.parametrize("operation", ["send_pong", "recv"])
+def test_io_before_connect_raises(operation) -> None:
+    transport = KickPusherTransport(connector=lambda *_args, **_kwargs: FakeWebSocket())
     with pytest.raises(ConnectionError):
-        transport.send_pong()
+        getattr(transport, operation)()
 
 
 def test_send_failure_raises_connection_error() -> None:
@@ -212,12 +177,6 @@ def test_send_failure_raises_connection_error() -> None:
         transport.send_pong()
 
 
-def test_recv_before_connect_raises() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
-    with pytest.raises(ConnectionError):
-        transport.recv()
-
-
 @pytest.mark.parametrize("error", [TimeoutError(), WebSocketTimeoutException()])
 def test_recv_timeout_returns_none(error: Exception) -> None:
     transport = _connected(FakeWebSocket([error]))
@@ -225,76 +184,44 @@ def test_recv_timeout_returns_none(error: Exception) -> None:
 
 
 @pytest.mark.parametrize(
-    "error", [WebSocketConnectionClosedException(), OSError("closed")]
+    "raw", [WebSocketConnectionClosedException(), OSError("closed"), ""]
 )
-def test_recv_closed_raises_connection_error(error: Exception) -> None:
-    transport = _connected(FakeWebSocket([error]))
+def test_recv_closed_or_empty_raises(raw) -> None:
+    transport = _connected(FakeWebSocket([raw]))
     with pytest.raises(ConnectionError):
         transport.recv()
 
 
-def test_recv_empty_payload_raises_connection_error() -> None:
-    transport = _connected(FakeWebSocket([""]))
-    with pytest.raises(ConnectionError):
-        transport.recv()
-
-
-def test_recv_malformed_frame_is_captured(monkeypatch: Any) -> None:
-    captured = []
-    monkeypatch.setattr(
-        wt,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
+@pytest.mark.parametrize("count_diagnostics", [False, True])
+@pytest.mark.parametrize(
+    ("raw", "reason"),
+    [("{not json", "invalid JSON"), ("[1, 2, 3]", "decoded frame was not an object")],
+)
+def test_recv_invalid_frame_is_captured_and_counted(
+    monkeypatch, raw, reason, count_diagnostics
+):
+    captured = MagicMock()
+    monkeypatch.setattr(wt, "capture_debug_sample", captured)
+    diagnostics = []
+    transport = _connected(
+        FakeWebSocket([raw]),
+        diagnostic_callback=diagnostics.append if count_diagnostics else None,
     )
-    transport = _connected(FakeWebSocket(["{not json"]))
-
     assert transport.recv() is None
-
-    assert captured[0][0][0] == "kick-unknown-websocket-shape"
-    assert captured[0][0][1]["reason"] == "invalid JSON"
-    assert captured[0][1]["sample_limit"] == 10
-
-
-def test_recv_non_object_frame_is_captured(monkeypatch: Any) -> None:
-    captured = []
-    monkeypatch.setattr(
-        wt,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
+    assert captured.call_args.args[0] == "kick-unknown-websocket-shape"
+    assert captured.call_args.args[1]["reason"] == reason
+    assert captured.call_args.kwargs["sample_limit"] == 10
+    if reason != "invalid JSON":
+        assert captured.call_args.args[1] == {"raw": [1, 2, 3], "reason": reason}
+    assert diagnostics == (
+        ["invalid_websocket_frame_count"] if count_diagnostics else []
     )
-    transport = _connected(FakeWebSocket(["[1, 2, 3]"]))
-
-    assert transport.recv() is None
-
-    assert captured[0][0][1] == {
-        "raw": [1, 2, 3],
-        "reason": "decoded frame was not an object",
-    }
-
-
-@pytest.mark.parametrize("raw", ["{not json", "[1, 2, 3]"])
-def test_recv_invalid_shape_records_diagnostic(raw: str) -> None:
-    diagnostics: list[str] = []
-    transport = KickPusherTransport(
-        connector=lambda _url, _timeout, **_kwargs: FakeWebSocket([raw]),
-        url="wss://fake.test/",
-        diagnostic_callback=diagnostics.append,
-    )
-    transport.connect(5.0)
-
-    assert transport.recv() is None
-    assert diagnostics == ["invalid_websocket_frame_count"]
 
 
 def test_recv_valid_frame_returns_dict() -> None:
     frame = {"event": "App\\Events\\ChatMessageEvent", "data": "{}"}
     transport = _connected(FakeWebSocket([json.dumps(frame)]))
     assert transport.recv() == frame
-
-
-def test_close_before_connect_is_noop() -> None:
-    transport = KickPusherTransport(connector=lambda _u, _t, **_kwargs: FakeWebSocket())
-    transport.close()  # must not raise
 
 
 def test_close_closes_socket() -> None:

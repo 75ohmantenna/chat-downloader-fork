@@ -47,12 +47,7 @@ def _poll(actions, *, continuation=None):
     chat = {"actions": actions}
     if continuation is not None:
         chat["continuations"] = [
-            {
-                "timedContinuationData": {
-                    "continuation": continuation,
-                    "timeoutMs": 500,
-                },
-            }
+            {"timedContinuationData": {"continuation": continuation, "timeoutMs": 500}}
         ]
     return {"continuationContents": {"liveChatContinuation": chat}}
 
@@ -110,9 +105,8 @@ def test_mobile_replay_preserves_paid_events_emotes_and_writer_parity(
         (messages[2], messages[3], 20),
         (messages[4], messages[5], 5),
     ]:
-        assert paid["message_id"] == ticker["message_id"]
-        assert paid["message"] == ticker["message"]
-        assert paid["money"] == ticker["money"]
+        for key in ("message_id", "message", "money"):
+            assert paid[key] == ticker[key]
         assert ticker["money"]["amount"] == amount
         assert ticker["money"]["currency"] == "BRL"
         assert paid["author"]["name"] == ticker["author"]["name"] == "@fixture-viewer"
@@ -122,9 +116,11 @@ def test_mobile_replay_preserves_paid_events_emotes_and_writer_parity(
     assert messages[2]["time_in_seconds"] == messages[3]["time_in_seconds"] == 8376.202
     stats = audit_capture(raw, txt, formatter=formatter, format_name="youtube")
     assert not stats.failed
-    assert stats.jsonl_records == 7
-    assert stats.txt_lines == 5
-    assert stats.suppressed_duplicates == 2
+    assert (stats.jsonl_records, stats.txt_lines, stats.suppressed_duplicates) == (
+        7,
+        5,
+        2,
+    )
     assert "R$20.00" in txt.read_text()
     assert "Fixture paid message" in txt.read_text()
 
@@ -137,38 +133,38 @@ def test_ticker_only_filter_still_enriches_from_paid_events_across_polls(monkeyp
     assert "Lemon" in messages[1]["message"]
 
 
-def _element(name, data):
+def _element(**models):
     return {
         "elementRenderer": {
-            "newElement": {"type": {"componentType": {"model": {name: data}}}}
+            "newElement": {"type": {"componentType": {"model": models}}}
         }
     }
 
 
 @pytest.mark.parametrize(
     "item",
-    [
-        {},
-        {"elementRenderer": None},
-        _element("unknownModel", {}),
-        _element("liveChatTextMessageModel", {}),
-        _element("superChatItemModel", {}),
-        _element("liveChatPaidStickerModel", {}),
-        _element("viewerEngagementMessageModel", {}),
-        {
-            "elementRenderer": {
-                "newElement": {
-                    "type": {
-                        "componentType": {
-                            "model": {
-                                "liveChatTextMessageModel": {},
-                                "superChatItemModel": {},
-                            }
-                        }
-                    }
-                }
+    [{}, {"elementRenderer": None}]
+    + [
+        _element(**{name: {}})
+        for name in (
+            "unknownModel",
+            "liveChatTextMessageModel",
+            "superChatItemModel",
+            "liveChatPaidStickerModel",
+            "viewerEngagementMessageModel",
+        )
+    ]
+    + [
+        _element(liveChatTextMessageModel={}, superChatItemModel={}),
+        _element(
+            liveChatTextMessageModel={
+                "messageData": {"attributedTextData": {"unexpected": True}}
             }
-        },
+        ),
+        _element(superChatItemModel={"paidMessageData": {"unexpected": True}}),
+        _element(
+            liveChatPaidStickerModel={"liveChatPaidSticker": {"unexpected": True}}
+        ),
     ],
 )
 def test_unknown_or_malformed_element_is_not_silently_reclassified(item):
@@ -204,67 +200,41 @@ def _attachment(start=0, length=1, label="wave"):
     }
 
 
-def _attachment_message(content, attachments):
-    return _parse_runs(
-        attributed_text(
-            {
-                "content": content,
-                "attachmentRuns": attachments,
-            }
-        )
-    )["message"]
-
-
-def test_emote_ranges_are_utf16_sorted_and_leave_other_unicode_intact():
-    value = {
-        "content": "😀□ café □!",
-        "attachmentRuns": [_attachment(9), _attachment(2)],
-    }
-    before = deepcopy(value)
-    result = _parse_runs(attributed_text(value))
-    assert result["message"] == "😀:wave: café :wave:!"
-    assert len(result["emotes"]) == 1
-    assert value == before
-
-
-@pytest.mark.parametrize(
-    ("start", "length"),
-    [
-        (-1, 1),
-        (True, 1),
-        (1, True),
-        (1, 1),
-        (0, 1),
-        (2, 0),
-        (2, -1),
-        (2, 2),
-        (99, 1),
-        ("2", 1),
-    ],
-)
-def test_invalid_attachment_ranges_preserve_original_text(start, length):
-    value = {"content": "😀□", "attachmentRuns": [_attachment(start, length)]}
-    assert _parse_runs(attributed_text(value))["message"] == "😀□"
-
-
 @pytest.mark.parametrize(
     ("content", "attachments", "expected"),
     [
+        ("😀□", [_attachment(start, length)], "😀□")
+        for start, length in (
+            (-1, 1),
+            (True, 1),
+            (1, True),
+            (1, 1),
+            (0, 1),
+            (2, 0),
+            (2, -1),
+            (2, 2),
+            (99, 1),
+            ("2", 1),
+        )
+    ]
+    + [
         (
             "□□",
             [_attachment(), _attachment(), _attachment(1, label=None)],
             ":wave::emoji:",
         ),
         ("□", [None, {"startIndex": 0, "length": 1}], "□"),
+        ("😀□ café □!", [_attachment(9), _attachment(2)], "😀:wave: café :wave:!"),
     ],
-    ids=["overlap-and-missing-label", "unknown-image"],
 )
-def test_attachment_overlap_unknown_image_and_missing_label_are_safe(
-    content,
-    attachments,
-    expected,
-):
-    assert _attachment_message(content, attachments) == expected
+def test_attachment_ranges_preserve_unicode_and_input(content, attachments, expected):
+    value = {"content": content, "attachmentRuns": attachments}
+    before = deepcopy(value)
+    result = _parse_runs(attributed_text(value))
+    assert result["message"] == expected
+    if content == "😀□ café □!":
+        assert len(result["emotes"]) == 1
+    assert value == before
 
 
 def test_malformed_attributed_metadata_is_ignored():
@@ -273,108 +243,86 @@ def test_malformed_attributed_metadata_is_ignored():
     assert image_thumbnails({"sources": [None, {}, {"url": " "}]}) == {}
 
 
-def _paid(message_id="a", **fields):
-    return {"message_id": message_id, "message_type": "paid_message", **fields}
-
-
-def _ticker(message_id="a", **fields):
-    return {
+def _event(cache=None, *, ticker=False, message_id="a", **fields):
+    item = {
         "message_id": message_id,
-        "message_type": "ticker_paid_message_item",
+        "message_type": "ticker_paid_message_item" if ticker else "paid_message",
         **fields,
     }
+    if cache is not None:
+        cache.enrich(item)
+    return item
 
 
 def test_paid_cache_is_bounded_and_does_not_alias_or_overwrite():
     cache = PaidEventCache(limit=1)
-    paid = _paid(
-        message="original", money={"amount": 5}, author={"id": "u", "name": "name"}
+    paid = _event(
+        cache,
+        message="original",
+        money={"amount": 5},
+        author={"id": "u", "name": "name"},
     )
-    cache.enrich(paid)
     paid["money"]["amount"] = 99
-    ticker = _ticker(author={"id": "u"})
-    cache.enrich(ticker)
+    ticker = _event(cache, ticker=True, author={"id": "u"})
     assert ticker["money"]["amount"] == 5
     ticker["money"]["amount"] = 12
     ticker["message"] = "ticker text"
     cache.enrich(ticker)
     assert ticker["message"] == "ticker text"
     assert ticker["money"]["amount"] == 12
-    cache.enrich(_paid("b"))
-    evicted = _ticker()
-    cache.enrich(evicted)
-    assert "money" not in evicted
+    _event(cache, message_id="b")
+    assert "money" not in _event(cache, ticker=True)
     cache.enrich({"message_type": "paid_message"})
-    wrong_type = {"message_id": "b", "message_type": "ticker_paid_sticker_item"}
-    cache.enrich(wrong_type)
+    wrong_type = _event(cache, message_id="b", message_type="ticker_paid_sticker_item")
     assert "money" not in wrong_type
 
 
 def test_paid_cache_rejects_conflicting_author_and_preserves_zero_timestamp():
     cache = PaidEventCache()
-    paid = _paid(
-        money={"amount": 5}, author={"id": "a", "name": "original"}, timestamp=123
+    _event(
+        cache,
+        money={"amount": 5},
+        author={"id": "a", "name": "original"},
+        timestamp=123,
     )
-    cache.enrich(paid)
-    conflict = _ticker(author={"id": "other"})
+    conflict = _event(ticker=True, author={"id": "other"})
     before = deepcopy(conflict)
     cache.enrich(conflict)
     assert conflict == before
-    ticker = _ticker(timestamp=0)
-    cache.enrich(ticker)
+    ticker = _event(cache, ticker=True, timestamp=0)
     assert ticker["timestamp"] == 0
     assert ticker["author"]["name"] == "original"
     ticker["author"]["name"] = "changed"
-    another = _ticker()
-    cache.enrich(another)
-    assert another["author"]["name"] == "original"
+    assert _event(cache, ticker=True)["author"]["name"] == "original"
 
 
 def test_zero_capacity_cache_and_unidentified_messages_do_not_enrich():
     cache = PaidEventCache(limit=0)
     cache.enrich({"message_type": [], "message_id": "a"})
-    cache.enrich(_paid(message="body"))
-    ticker = _ticker()
-    cache.enrich(ticker)
-    assert "message" not in ticker
+    _event(cache, message="body")
+    assert "message" not in _event(cache, ticker=True)
 
 
 @pytest.mark.parametrize(
-    ("name", "data"),
+    "item",
     [
-        (
-            "liveChatTextMessageModel",
-            {"messageData": {"attributedTextData": {"unexpected": True}}},
-        ),
-        ("superChatItemModel", {"paidMessageData": {"unexpected": True}}),
-        ("liveChatPaidStickerModel", {"liveChatPaidSticker": {"unexpected": True}}),
-    ],
-)
-def test_unrecognized_model_contents_stay_visible_as_unknown(name, data):
-    item = _element(name, data)
-    assert normalize_element(item) is item
-
-
-@pytest.mark.parametrize(
-    ("name", "data"),
-    [
-        (
-            "superChatItemModel",
-            {
+        _element(
+            superChatItemModel={
                 "paidMessageData": {
                     "paidItemHeaderStaticData": {"authorName": "viewer"},
                     "paidMessageHeaderData": {"priceText": ""},
                 }
-            },
+            }
         ),
-        (
-            "liveChatPaidStickerModel",
-            {"liveChatPaidSticker": {"authorName": {"content": "viewer"}}},
+        _element(
+            liveChatPaidStickerModel={
+                "liveChatPaidSticker": {"authorName": {"content": "viewer"}}
+            }
         ),
     ],
 )
-def test_missing_mobile_price_never_becomes_synthetic_money(name, data):
-    message = _parse_item(_element(name, data))
+def test_missing_mobile_price_never_becomes_synthetic_money(item):
+    message = _parse_item(item)
     assert "money" not in message
     assert message["author"]["name"] == "viewer"
 
@@ -400,23 +348,21 @@ def test_replacement_and_nested_items_use_same_mobile_normalizer():
 
 @pytest.mark.parametrize("reverse", [False, True])
 @pytest.mark.parametrize(
-    ("display", "expected"), [("Display name", "Display name"), ("", "@handle")]
+    ("fields", "expected"),
+    [
+        (
+            {
+                "authorName": {"simpleText": display},
+                "authorUsername": {"simpleText": "@handle"},
+            },
+            expected,
+        )
+        for display, expected in [("Display name", "Display name"), ("", "@handle")]
+    ]
+    + [({"authorUsername": {}}, None)],
 )
-def test_ticker_handle_is_only_a_fallback_for_author_display_name(
-    reverse, display, expected
-):
-    fields = {
-        "authorName": {"simpleText": display},
-        "authorUsername": {"simpleText": "@handle"},
-    }
+def test_ticker_author_display_name_fallback(reverse, fields, expected):
     if reverse:
         fields = dict(reversed(list(fields.items())))
     message = _parse_item({"liveChatTickerPaidMessageItemRenderer": fields})
-    assert message["author"]["name"] == expected
-
-
-def test_malformed_ticker_names_do_not_invent_an_author_name():
-    message = _parse_item(
-        {"liveChatTickerPaidMessageItemRenderer": {"authorUsername": {}}}
-    )
-    assert not message.get("author", {}).get("name")
+    assert message.get("author", {}).get("name") == expected

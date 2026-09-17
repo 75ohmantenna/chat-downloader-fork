@@ -52,13 +52,17 @@ def test_replay_request_position(cursor, offset, variables, edges, metadata) -> 
     assert info == {"comments": expected, **metadata}
 
 
+@pytest.mark.parametrize("mobile", [False, True])
 @pytest.mark.parametrize(
     "payload",
     [[], [{}], [{"data": {}}], [{"data": {"video": None}}], _video_payload(None)],
     ids=["empty", "missing-data", "missing-video", "null-video", "null-comments"],
 )
-def test_replay_returns_none_for_malformed_or_empty_payloads(payload) -> None:
-    assert _replay(Mock(return_value=payload), offset=1.5) == (None, None)
+def test_replay_returns_none_for_malformed_or_empty_payloads(payload, mobile):
+    responses = (
+        [_PersistedQueryUnavailable("rotated"), payload] if mobile else [payload]
+    )
+    assert _replay(Mock(side_effect=responses), offset=1.5) == (None, None)
 
 
 @pytest.mark.parametrize(
@@ -93,13 +97,6 @@ def test_mobile_replay_normalizes_page(
         }
     ]
     assert comments == {"edges": edges, "pageInfo": {"hasNextPage": has_next}}
-
-
-def test_mobile_replay_returns_none_for_malformed_payload() -> None:
-    download = Mock(
-        side_effect=[_PersistedQueryUnavailable("rotated"), _video_payload(None)]
-    )
-    assert _replay(download) == (None, None)
 
 
 def test_replay_fallback_composes_persisted_and_full_document_requests() -> None:

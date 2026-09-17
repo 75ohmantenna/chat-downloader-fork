@@ -35,63 +35,43 @@ def test_base_writer_is_abstract() -> None:
         ContinuousFileWriter("unused.txt")  # type: ignore[abstract]
 
 
-def test_close_oserror_is_logged_and_reraised(tmp_path: pathlib.Path) -> None:
-    path = str(tmp_path / "test.txt")
-    writer = _DummyWriter(path)
-    mock_file = Mock()
-    mock_file.close.side_effect = OSError("disk full")
-    writer.file = mock_file
-    writer.file_name = path
-    with pytest.raises(OSError):
-        writer.close()
-
-
-def test_writer_sort_keys_property_reports_configuration(
-    tmp_path: pathlib.Path,
-) -> None:
-    path = str(tmp_path / "test.jsonl")
-    with ContinuousWriter(path, sort_keys=True) as writer:
-        assert writer.sort_keys is True
-    with ContinuousWriter(path) as writer:
-        assert writer.sort_keys is None
-
-
-def test_persist_after_write_flush_oserror_is_propagated(
-    tmp_path: pathlib.Path,
-) -> None:
-    path = str(tmp_path / "test.txt")
-    writer = _DummyWriter(path)
-    mock_file = Mock()
-    mock_file.flush.side_effect = OSError("disk full")
-    writer.file = mock_file
-    writer.file_name = path
-    with (
-        patch.object(os, "fsync") as mock_fsync,
-        pytest.raises(OSError, match="disk full"),
-    ):
-        writer._persist_after_write()
-    mock_fsync.assert_not_called()  # returns before reaching fsync
-
-
-# --- JsonLinesContinuousWriter ---
+@pytest.mark.parametrize("operation", ["close", "flush"])
+def test_file_errors_are_propagated(tmp_path, operation):
+    writer = _DummyWriter(str(tmp_path / "test.txt"))
+    writer.file = Mock()
+    getattr(writer.file, operation).side_effect = OSError("disk full")
+    with patch.object(os, "fsync") as fsync, pytest.raises(OSError, match="disk full"):
+        if operation == "close":
+            writer.close()
+        else:
+            writer._persist_after_write()
+    if operation == "flush":
+        fsync.assert_not_called()  # flush error returns before fsync
 
 
 @pytest.mark.parametrize(
-    ("writer_class", "extension", "items", "expected"),
+    ("writer_class", "extension", "items", "expected", "closed_item"),
     [
-        (JsonLinesContinuousWriter, "jsonl", [{"key": "value"}], '{"key": "value"}\n'),
+        (
+            JsonLinesContinuousWriter,
+            "jsonl",
+            [{"key": "value"}],
+            '{"key": "value"}\n',
+            {"a": 1},
+        ),
         (
             JsonLinesContinuousWriter,
             "jsonl",
             [{"a": 1}, {"b": 2}, {"c": 3}],
             '{"a": 1}\n{"b": 2}\n{"c": 3}\n',
+            {"a": 1},
         ),
-        (TextContinuousWriter, "txt", ["Hello, world!"], "Hello, world!\n"),
+        (TextContinuousWriter, "txt", ["Hello, world!"], "Hello, world!\n", "hello"),
     ],
 )
 @pytest.mark.parametrize("flush", [False, True])
 def test_writes_complete_records(
-    tmp_path, writer_class, extension, items, expected, flush
+    tmp_path, writer_class, extension, items, expected, closed_item, flush
 ):
     path = tmp_path / f"test.{extension}"
     writer = writer_class(str(path))
@@ -102,28 +82,52 @@ def test_writes_complete_records(
         assert path.read_text(encoding="utf-8") == expected
     finally:
         writer.close()
+    with pytest.raises(RuntimeError, match="initialized"):
+        writer.write(closed_item)
 
 
-def test_txt_overwrite_true_truncates_existing_file(tmp_path: pathlib.Path) -> None:
+@pytest.mark.parametrize(
+    ("writer_class", "overwrite", "initial", "item", "expected"),
+    [
+        (TextContinuousWriter, True, "stale\n", "fresh", "fresh\n"),
+        (ContinuousWriter, False, "kept", None, "kept\n"),
+    ],
+)
+def test_existing_file_policy(
+    tmp_path, writer_class, overwrite, initial, item, expected
+):
     path = tmp_path / "test.txt"
-    path.write_text("stale\n", encoding="utf-8")
-    writer = TextContinuousWriter(str(path), overwrite=True)
-    writer.write("fresh")
+    path.write_text(initial, encoding="utf-8")
+    writer = writer_class(str(path), overwrite=overwrite)
+    if item is not None:
+        writer.write(item)
     writer.close()
-    assert path.read_text(encoding="utf-8") == "fresh\n"
+    assert path.read_text(encoding="utf-8") == expected
 
 
-# --- ContinuousWriter factory ---
-
-
-@pytest.mark.parametrize("extension", ["csv", "json", "xyz", ""])
-def test_factory_rejects_unsupported_extension_without_creating_file(
-    tmp_path: pathlib.Path, extension: str
-) -> None:
-    path = str(tmp_path / (f"test.{extension}" if extension else "test"))
-    with pytest.raises(ValueError, match=r"Use a \.jsonl or \.txt output path"):
-        ContinuousWriter(path, overwrite=True)
-    assert not os.path.exists(path)
+@pytest.mark.parametrize(
+    ("filename", "options", "message"),
+    [
+        *[
+            (
+                f"test.{ext}" if ext else "test",
+                {"overwrite": True},
+                r"Use a \.jsonl or \.txt output path",
+            )
+            for ext in ["csv", "json", "xyz", ""]
+        ],
+        ("test.txt", {"format": "json", "lazy_initialise": True}, "Use a"),
+        ("test.jsonl", {"format": "csv", "lazy_initialise": True}, "Use a"),
+        ("test.jsonl", {"format": "txt", "lazy_initialise": True}, "does not match"),
+    ],
+)
+def test_factory_rejects_invalid_output_without_creating_file(
+    tmp_path, filename, options, message
+):
+    path = tmp_path / filename
+    with pytest.raises(ValueError, match=message):
+        ContinuousWriter(str(path), **options)
+    assert not path.exists()
 
 
 @pytest.mark.parametrize(
@@ -134,13 +138,15 @@ def test_factory_rejects_unsupported_extension_without_creating_file(
     ],
 )
 @pytest.mark.parametrize("lazy", [False, True])
+@pytest.mark.parametrize("options", [{"sort_keys": True}, {}])
 def test_factory_selection_and_initialization(
-    tmp_path, extension, item, expected, output_mode, lazy
+    tmp_path, extension, item, expected, output_mode, lazy, options
 ) -> None:
-    path = tmp_path / f"test.{extension}"
-    with ContinuousWriter(str(path), lazy_initialise=lazy) as writer:
+    path = tmp_path / "nested" / "deep" / f"test.{extension}"
+    with ContinuousWriter(str(path), lazy_initialise=lazy, **options) as writer:
         assert writer.is_initialised() is (not lazy)
         assert path.exists() is (not lazy)
+        assert writer.sort_keys is options.get("sort_keys")
         writer.write(item)
         writer.initialize()
         writer.initialize()  # Repeated initialization must not truncate output.
@@ -148,13 +154,6 @@ def test_factory_selection_and_initialization(
         assert writer.output_mode == output_mode
         assert writer.is_default() is (output_mode == "formatted")
     assert path.read_text(encoding="utf-8") == expected
-
-
-def test_factory_validate_file_name_raises() -> None:
-    writer = ContinuousWriter(None, lazy_initialise=True)
-    with pytest.raises(ValueError):
-        writer._initialize_if_needed()
-    assert not writer.is_initialised()
 
 
 @pytest.mark.parametrize("error", [OSError("disk full"), RuntimeError("open failed")])
@@ -166,39 +165,21 @@ def test_initialize_failure_leaves_writer_uninitialized(tmp_path, error) -> None
     assert writer.writer is None
 
 
-def test_factory_lazy_init_can_recover_after_validation_failure(
-    tmp_path: pathlib.Path,
-) -> None:
+@pytest.mark.parametrize("operation", ["initialize", "write"])
+def test_factory_lazy_init_recovers_after_validation_failure(tmp_path, operation):
     writer = ContinuousWriter(None, lazy_initialise=True)
     with pytest.raises(ValueError):
-        writer.write({"first": 1})
+        if operation == "write":
+            writer.write({"first": 1})
+        else:
+            writer._initialize_if_needed()
     assert not writer.is_initialised()
-
-    path = str(tmp_path / "test.jsonl")
-    writer.file_name = path
+    path = tmp_path / "test.jsonl"
+    writer.file_name = str(path)
     writer.write({"second": 2})
     writer.close()
-
     assert writer.is_initialised()
-    with open(path, encoding="utf-8") as fh:
-        assert '"second": 2' in fh.read()
-
-
-@pytest.mark.parametrize(
-    ("extension", "format_name", "message"),
-    [
-        ("txt", "json", "Use a"),
-        ("jsonl", "csv", "Use a"),
-        ("jsonl", "txt", "does not match"),
-    ],
-)
-def test_factory_rejects_invalid_explicit_format(
-    tmp_path, extension, format_name, message
-) -> None:
-    path = tmp_path / f"test.{extension}"
-    with pytest.raises(ValueError, match=message):
-        ContinuousWriter(str(path), format=format_name, lazy_initialise=True)
-    assert not path.exists()
+    assert '"second": 2' in path.read_text(encoding="utf-8")
 
 
 def test_factory_unknown_kwargs_not_accessible_as_attributes(
@@ -209,13 +190,6 @@ def test_factory_unknown_kwargs_not_accessible_as_attributes(
     )
     with pytest.raises(AttributeError):
         _ = writer.custom_option
-
-
-def test_factory_parent_directory_created(tmp_path: pathlib.Path) -> None:
-    nested_path = str(tmp_path / "nested" / "deep" / "test.jsonl")
-    with ContinuousWriter(nested_path, overwrite=True) as writer:
-        writer.write({"key": "value"})
-    assert os.path.exists(nested_path)
 
 
 @pytest.mark.parametrize("error_type", [OSError, RuntimeError, ReferenceError])
@@ -248,32 +222,6 @@ def test_continuous_file_writer_closed_file_branch() -> None:
     writer.file = SimpleNamespace(closed=True)
     writer.close()
     assert writer.file is None
-
-
-def test_continuous_writer_preserves_existing_file_without_overwrite(
-    tmp_path,
-) -> None:
-    path = tmp_path / "existing.txt"
-    path.write_text("kept", encoding="utf-8")
-
-    writer = ContinuousWriter(str(path), overwrite=False)
-    writer.close()
-
-    assert path.read_text(encoding="utf-8") == "kept\n"
-
-
-@pytest.mark.parametrize(
-    ("writer_class", "extension", "item"),
-    [
-        (JsonLinesContinuousWriter, "jsonl", {"a": 1}),
-        (TextContinuousWriter, "txt", "hello"),
-    ],
-)
-def test_closed_writer_rejects_writes(tmp_path, writer_class, extension, item) -> None:
-    writer = writer_class(str(tmp_path / f"sample.{extension}"))
-    writer.close()
-    with pytest.raises(RuntimeError, match="initialized"):
-        writer.write(item)
 
 
 def test_factory_requires_initialization_to_produce_writer(tmp_path) -> None:

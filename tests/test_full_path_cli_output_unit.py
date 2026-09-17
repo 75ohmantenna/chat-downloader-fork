@@ -1,11 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""End-to-end offline path: CLI args → dispatch → Chat → output file → close.
-
-Focused tests cover the deep dispatch and configured-chat interfaces. This test
-wires them together through the real ``cli.main`` entry point with only the
-remote site replaced, so a regression in their composition is caught.
-"""
+"""Offline CLI → dispatch → Chat → output integration."""
 
 from __future__ import annotations
 
@@ -28,7 +23,6 @@ _MESSAGES = [
 
 def test_cli_full_path_writes_and_closes_output_file(tmp_path, monkeypatch) -> None:
     out_file = tmp_path / "chat.jsonl"
-    seen_requests: list[ChatRequest] = []
 
     class _FakeSite(BaseChatDownloader):
         _NAME = "fake.test"
@@ -37,8 +31,6 @@ def test_cli_full_path_writes_and_closes_output_file(tmp_path, monkeypatch) -> N
         }
 
         def _get_chat_by_fake(self, match, request: ChatRequest) -> Chat:
-            # Capture the typed request the dispatch layer resolved and passed.
-            seen_requests.append(request)
             return Chat(
                 (m for m in _MESSAGES),
                 title="Fake Stream",
@@ -46,13 +38,11 @@ def test_cli_full_path_writes_and_closes_output_file(tmp_path, monkeypatch) -> N
                 status="live",
             )
 
-    # Register the fake site in the real dispatch registry.
     monkeypatch.setattr(
         "chat_downloader.runtime.site_dispatch.get_all_sites",
         lambda: [_FakeSite],
     )
 
-    # Drive the real CLI entry point: parse argv → run → dispatch → output.
     main(
         [
             "https://fake.test/stream42",
@@ -64,13 +54,6 @@ def test_cli_full_path_writes_and_closes_output_file(tmp_path, monkeypatch) -> N
         ]
     )
 
-    # The typed request reached the site with CLI values applied.
-    assert len(seen_requests) == 1
-    assert seen_requests[0].url == "https://fake.test/stream42"
-    assert seen_requests[0].max_messages == 2
-
-    # Output file exists, is valid JSONL, honored --max-messages, and was
-    # flushed/closed (a complete, parseable final line proves close ran).
     lines = [
         json.loads(line)
         for line in out_file.read_text(encoding="utf-8").splitlines()

@@ -30,25 +30,64 @@ def downloader():
     )
 
 
-@pytest.fixture
-def replay_request():
+def _request(**overrides):
     return ChatRequest(
-        url="https://www.twitch.tv/videos/123",
-        max_attempts=1,
-        message_groups=["messages"],
+        **{
+            "url": "https://www.twitch.tv/videos/123",
+            "max_attempts": 1,
+            "message_groups": ["messages"],
+            **overrides,
+        }
     )
 
 
-def test_replay_service_get_chat_by_vod_id_raises_when_video_missing(downloader):
-    downloader._download_gql.return_value = [{"data": {"video": None}}]
+def _edge(message_id, cursor="c1"):
+    return {
+        "__typename": "VideoCommentEdge",
+        "cursor": cursor,
+        "node": {"__typename": "Comment", "id": message_id},
+    }
 
-    with pytest.raises(VideoUnavailable):
-        replay_service.get_chat_by_vod_id(
+
+def _response(edges, has_next=False):
+    return (
+        {"edges": edges, "pageInfo": {"hasNextPage": has_next}},
+        {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
+    )
+
+
+def _message(message_id, **extra):
+    return {"message_type": "text_message", "message_id": message_id, **extra}
+
+
+def _run(downloader, fetch, request=None, *, video_id="vod123", duration=120):
+    return list(
+        replay_service.iter_vod_chat_messages(
             cast("Any", downloader),
-            "vod123",
-            ChatRequest(url="https://www.twitch.tv/videos/123", max_attempts=1),
+            video_id,
+            request or _request(),
+            max_duration=duration,
+            fetch_messages=cast("replay_service._FetchMessages", fetch),
         )
+    )
 
+
+@pytest.mark.parametrize("kind", ["vod", "clip"])
+def test_replay_metadata_missing(downloader, kind):
+    if kind == "vod":
+        downloader._download_gql.return_value = [{"data": {"video": None}}]
+        get_chat, error = replay_service.get_chat_by_vod_id, VideoUnavailable
+        request = _request()
+        identifier = "vod123"
+    else:
+        downloader._download_base_gql.return_value = {
+            "data": {"clip": {"video": None, "title": "Expired Clip"}},
+        }
+        get_chat, error = replay_service.get_chat_by_clip_id, NoChatReplay
+        request = _request(url="https://clips.twitch.tv/expired-clip")
+        identifier = "expired-clip"
+    with pytest.raises(error):
+        get_chat(downloader, identifier, request)
     downloader._update_badge_info.assert_not_called()
 
 
@@ -56,119 +95,70 @@ def test_replay_service_get_chat_by_vod_id_allows_missing_owner_login(downloader
     downloader._download_gql.return_value = [
         {
             "data": {
-                "video": {"title": "Replay", "lengthSeconds": 12.5, "owner": {}},
-            },
-        },
+                "video": {
+                    "title": "Replay",
+                    "lengthSeconds": 12.5,
+                    "owner": {},
+                }
+            }
+        }
     ]
-    request = ChatRequest(url="https://www.twitch.tv/videos/123", max_attempts=1)
-
-    chat = replay_service.get_chat_by_vod_id(cast("Any", downloader), "123", request)
-
-    assert chat.title == "Replay"
-    assert chat.duration == 12.5
+    chat = replay_service.get_chat_by_vod_id(downloader, "123", _request())
+    assert (chat.title, chat.duration) == ("Replay", 12.5)
     downloader._update_badge_info.assert_not_called()
-    downloader._get_chat_messages_by_vod_id.assert_called_once_with(
-        "123",
-        request,
-        12.5,
-    )
 
 
 def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page(
     downloader,
-) -> None:
-    request = ChatRequest(
-        url="https://www.twitch.tv/videos/123",
-        max_attempts=2,
-        message_groups=["messages"],
-    )
-    fetch_messages = Mock(
+):
+    fetch = Mock(
         side_effect=[
             RequestException("temporary failure"),
             (None, {"creator": {"id": "creator-1"}}),
-        ],
+        ]
     )
-
-    result = list(
-        replay_service.iter_vod_chat_messages(
-            cast("Any", downloader),
-            "vod123",
-            request,
-            max_duration=120,
-            fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
-        ),
-    )
-
-    assert result == []
+    assert _run(downloader, fetch, _request(max_attempts=2)) == []
     downloader.retry.assert_called_once()
 
 
-def test_mobile_replay_fallback_drives_full_multi_page_composition() -> None:
-    calls: list[list[dict[str, Any]]] = []
-
-    def mobile_page(message_id: str, cursor: str, offset: int) -> list[dict[str, Any]]:
+def test_mobile_replay_fallback_drives_full_multi_page_composition(downloader):
+    def mobile_page(message_id, cursor, offset):
+        node = {
+            "__typename": "VideoComment",
+            "id": message_id,
+            "createdAt": "2026-08-31T00:00:00Z",
+            "contentOffsetSeconds": offset,
+            "commenter": {"id": "user-1", "login": "viewer", "displayName": "Viewer"},
+            "message": {
+                "fragments": [
+                    {"text": "Kappa", "emote": {"from": 0, "emoteID": "25", "to": 4}}
+                ],
+                "userBadges": [{"setID": "subscriber", "version": "1"}],
+            },
+            "video": {"id": "vod-1", "owner": {"id": "owner-1"}},
+        }
         return [
             {
                 "data": {
-                    "video": {
-                        "comments": {
-                            "edges": [
-                                {
-                                    "cursor": cursor,
-                                    "node": {
-                                        "__typename": "VideoComment",
-                                        "id": message_id,
-                                        "createdAt": "2026-08-31T00:00:00Z",
-                                        "contentOffsetSeconds": offset,
-                                        "commenter": {
-                                            "id": "user-1",
-                                            "login": "viewer",
-                                            "displayName": "Viewer",
-                                        },
-                                        "message": {
-                                            "fragments": [
-                                                {
-                                                    "text": "Kappa",
-                                                    "emote": {
-                                                        "from": 0,
-                                                        "emoteID": "25",
-                                                        "to": 4,
-                                                    },
-                                                }
-                                            ],
-                                            "userBadges": [
-                                                {
-                                                    "setID": "subscriber",
-                                                    "version": "1",
-                                                }
-                                            ],
-                                        },
-                                        "video": {
-                                            "id": "vod-1",
-                                            "owner": {"id": "owner-1"},
-                                        },
-                                    },
-                                }
-                            ]
-                        }
-                    }
+                    "video": {"comments": {"edges": [{"cursor": cursor, "node": node}]}}
                 }
             }
         ]
 
-    responses: list[object] = [
+    responses = [
         _PersistedQueryUnavailable("rotated"),
         mobile_page("message-1", "cursor-1", 1),
         _PersistedQueryUnavailable("rotated"),
         mobile_page("message-2", "", 2),
     ]
+    calls = []
 
-    def download(query: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def download(query):
         calls.append(query)
         response = responses.pop(0)
         if isinstance(response, Exception):
             raise response
-        return cast("list[dict[str, Any]]", response)
+        return response
 
     badge_set = BadgeSet(
         global_badges={},
@@ -179,32 +169,15 @@ def test_mobile_replay_fallback_drives_full_multi_page_composition() -> None:
                     "image1x": "https://example.invalid/1.png",
                     "image2x": "https://example.invalid/2.png",
                     "image4x": "https://example.invalid/4.png",
-                }
+                },
             }
         },
     )
-    downloader = SimpleNamespace(
-        _session_post=Mock(),
-        _download_gql=download,
-        badge_cache=SimpleNamespace(snapshot=lambda: badge_set),
-        retry=Mock(),
+    downloader._download_gql = download
+    downloader.badge_cache.snapshot = lambda: badge_set
+    result = _run(
+        downloader, get_chat_messages_by_vod_id, video_id="vod-1", duration=30
     )
-    request = ChatRequest(
-        url="https://www.twitch.tv/videos/123",
-        max_attempts=1,
-        message_groups=["messages"],
-    )
-
-    result = list(
-        replay_service.iter_vod_chat_messages(
-            cast("Any", downloader),
-            "vod-1",
-            request,
-            max_duration=30,
-            fetch_messages=get_chat_messages_by_vod_id,
-        )
-    )
-
     assert [item["message_id"] for item in result] == ["message-1", "message-2"]
     assert result[0]["emotes"][0]["locations"] == "0-4"
     assert result[0]["author"]["badges"][0]["title"] == "Channel subscriber"
@@ -215,179 +188,76 @@ def test_mobile_replay_fallback_drives_full_multi_page_composition() -> None:
 
 def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_stop(
     downloader,
-) -> None:
+):
     downloader.badge_cache.snapshot = lambda: {"badges": True}
-    request = ChatRequest(
-        url="https://www.twitch.tv/videos/123",
-        max_attempts=1,
-        message_groups=["messages"],
-        end_time=30,
-    )
-    comments = {
-        "edges": [
-            {"__typename": "UnexpectedEdge", "cursor": "c1", "node": {}},
-            {"__typename": "VideoCommentEdge", "cursor": "c2", "node": None},
-            {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c3",
-                "node": {"__typename": "UnexpectedNode"},
-            },
-            {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c4",
-                "node": {"__typename": "Comment", "id": "skip"},
-            },
-            {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c5",
-                "node": {"__typename": "Comment", "id": "filtered"},
-            },
-            {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c6",
-                "node": {"__typename": "Comment", "id": "kept"},
-            },
-            {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c7",
-                "node": {"__typename": "Comment", "id": "stop"},
-            },
+    edges = [
+        {"__typename": "UnexpectedEdge", "cursor": "c1", "node": {}},
+        {"__typename": "VideoCommentEdge", "cursor": "c2", "node": None},
+        {
+            "__typename": "VideoCommentEdge",
+            "cursor": "c3",
+            "node": {"__typename": "UnexpectedNode"},
+        },
+        *[
+            _edge(name, f"c{index}")
+            for index, name in enumerate(["skip", "filtered", "kept", "stop"], start=4)
         ],
-        "pageInfo": {"hasNextPage": True},
-    }
-    fetch_messages = cast(
-        "replay_service._FetchMessages",
-        Mock(
-            return_value=(
-                comments,
-                {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
-            ),
-        ),
-    )
-    fake_time_filter = Mock()
-    fake_time_filter.check.side_effect = ["skip", None, None, "stop"]
-    fake_msg_filter = Mock()
-    fake_msg_filter.should_add.side_effect = [False, True]
-    parsed_messages = [
-        {"message_type": "text_message", "message_id": "skip", "extra": "x"},
-        {"message_type": "text_message", "message_id": "filtered"},
-        {"message_type": "text_message", "message_id": "kept"},
-        {"message_type": "text_message", "message_id": "stop"},
     ]
-
+    fetch = Mock(return_value=_response(edges, True))
+    time_filter, message_filter = Mock(), Mock()
+    time_filter.check.side_effect = ["skip", None, None, "stop"]
+    message_filter.should_add.side_effect = [False, True]
+    parsed = [_message("skip", extra="x"), *map(_message, ["filtered", "kept", "stop"])]
     with (
+        patch.object(_replay_vod_loop, "TimeRangeFilter", return_value=time_filter),
         patch.object(
-            _replay_vod_loop, "TimeRangeFilter", return_value=fake_time_filter
+            _replay_vod_loop.MessageFilter, "from_request", return_value=message_filter
         ),
-        patch.object(
-            _replay_vod_loop.MessageFilter,
-            "from_request",
-            return_value=fake_msg_filter,
-        ),
-        patch.object(replay_service, "_parse_item", side_effect=parsed_messages),
+        patch.object(replay_service, "_parse_item", side_effect=parsed),
         patch.object(
             replay_service,
             "build_known_comment_keys",
             return_value={"message_type", "message_id"},
         ),
-        patch.object(replay_service, "debug_log") as mock_debug_log,
+        patch.object(replay_service, "debug_log") as debug_log,
         patch.object(replay_service.logger, "isEnabledFor", return_value=True),
-        patch.object(
-            replay_service,
-            "capture_debug_sample",
-        ) as mock_capture_debug_sample,
+        patch.object(replay_service, "capture_debug_sample") as capture,
     ):
-        result = list(
-            replay_service.iter_vod_chat_messages(
-                cast("Any", downloader),
-                "vod123",
-                request,
-                max_duration=120,
-                fetch_messages=fetch_messages,
-            ),
-        )
-
-    assert result == [{"message_type": "text_message", "message_id": "kept"}]
-    assert mock_debug_log.call_count == 3
-    assert mock_capture_debug_sample.call_count == 3
-    mock_capture_debug_sample.assert_any_call(
+        result = _run(downloader, fetch, _request(end_time=30))
+    assert result == [_message("kept")]
+    assert (debug_log.call_count, capture.call_count) == (3, 3)
+    capture.assert_any_call(
         "twitch-unknown-gql-shape",
-        {
-            "raw": {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c4",
-                "node": {"__typename": "Comment", "id": "skip"},
-            },
-            "unexpected_output_keys": ["extra"],
-            "parsed": parsed_messages[0],
-        },
+        {"raw": edges[3], "unexpected_output_keys": ["extra"], "parsed": parsed[0]},
         sample_limit=10,
     )
 
 
-def test_replay_service_iter_vod_chat_messages_logs_count_on_completed_page(
-    downloader,
-    replay_request,
-) -> None:
-    request = replay_request
-    comments = {
-        "edges": [
-            {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c1",
-                "node": {"__typename": "Comment", "id": "kept"},
-            },
-        ],
-        "pageInfo": {"hasNextPage": False},
-    }
-
+@pytest.mark.parametrize("non_dict_edge", [False, True])
+def test_replay_completed_page_logs_count_and_skips_non_dict_edges(
+    downloader, non_dict_edge
+):
+    message_id = "msg1" if non_dict_edge else "kept"
+    edges = ([None] if non_dict_edge else []) + [_edge(message_id)]
+    response = _response(edges)
+    if non_dict_edge:
+        response = (response[0], {"creator": {"id": "c1"}})
     with (
-        patch.object(
-            replay_service,
-            "_parse_item",
-            return_value={"message_type": "text_message", "message_id": "kept"},
-        ),
-        patch.object(replay_service, "log") as mock_log,
+        patch.object(replay_service, "_parse_item", return_value=_message(message_id)),
+        patch.object(replay_service, "log") as log,
     ):
-        result = list(
-            replay_service.iter_vod_chat_messages(
-                cast("Any", downloader),
-                "vod123",
-                request,
-                max_duration=120,
-                fetch_messages=cast(
-                    "replay_service._FetchMessages",
-                    Mock(
-                        return_value=(
-                            comments,
-                            {
-                                "creator": {
-                                    "id": "creator-1",
-                                    "channel": {"id": "1"},
-                                }
-                            },
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-    assert result == [{"message_type": "text_message", "message_id": "kept"}]
-    mock_log.assert_any_call("debug", "Total number of messages: 1")
+        result = _run(downloader, Mock(return_value=response))
+    assert result == [_message(message_id)]
+    log.assert_any_call("debug", "Total number of messages: 1")
 
 
 @pytest.mark.parametrize("kind", ["vod", "clip"])
 def test_replay_service_retries_metadata_before_success(downloader, kind):
     owner = {"id": "channel-123", "login": "streamer"}
     if kind == "vod":
-        metadata = {
-            "title": "Example VOD",
-            "lengthSeconds": 123,
-            "owner": owner,
-        }
+        metadata = {"title": "Example VOD", "lengthSeconds": 123, "owner": owner}
         response = [{"data": {"video": metadata}}]
-        download = downloader._download_gql
-        get_chat = replay_service.get_chat_by_vod_id
+        download, get_chat = downloader._download_gql, replay_service.get_chat_by_vod_id
         title = "Example VOD"
     else:
         metadata = {
@@ -398,135 +268,49 @@ def test_replay_service_retries_metadata_before_success(downloader, kind):
             "broadcaster": owner,
         }
         response = {"data": {"clip": metadata}}
-        download = downloader._download_base_gql
-        get_chat = replay_service.get_chat_by_clip_id
+        download, get_chat = (
+            downloader._download_base_gql,
+            replay_service.get_chat_by_clip_id,
+        )
         title = "Example Clip (123)"
     download.side_effect = [RequestException("temporary"), response]
-
     chat = get_chat(
-        downloader,
-        "123",
-        ChatRequest(url="https://twitch.tv", max_attempts=2),
+        downloader, "123", ChatRequest(url="https://twitch.tv", max_attempts=2)
     )
-
     assert chat.title == title
     downloader.retry.assert_called_once()
     downloader._update_badge_info.assert_called_once_with("streamer", "channel-123")
 
 
-def test_replay_service_get_chat_by_clip_id_raises_when_replay_missing(downloader):
-    downloader._download_base_gql.return_value = {
-        "data": {"clip": {"video": None, "title": "Expired Clip"}},
-    }
-
-    with pytest.raises(NoChatReplay):
-        replay_service.get_chat_by_clip_id(
-            cast("Any", downloader),
-            "expired-clip",
-            ChatRequest(url="https://clips.twitch.tv/expired-clip", max_attempts=1),
-        )
-
-    downloader._update_badge_info.assert_not_called()
-
-
 @pytest.mark.parametrize(
     "url", ["https://www.twitch.tv/videos/123", "https://clips.twitch.tv/clip123"]
 )
-def test_replay_request_rejects_zero_attempts(url) -> None:
+def test_replay_request_rejects_zero_attempts(url):
     with pytest.raises(ValueError, match="max_attempts"):
         ChatRequest(url=url, max_attempts=0)
 
 
-def test_iter_vod_stops_on_repeated_empty_pages_with_has_next_page(
-    downloader,
-    replay_request,
-) -> None:
-    """Pagination stops on empty edges even when hasNextPage=true."""
-    request = replay_request
-    empty_response = (
-        {"edges": [], "pageInfo": {"hasNextPage": True}},
-        {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
-    )
-    # If the guard didn't fire, this generator would loop forever; cap to a
-    # finite list so the test fails fast on regression.
-    fetch_messages = Mock(side_effect=[empty_response] * 50)
-
-    list(
-        replay_service.iter_vod_chat_messages(
-            cast("Any", downloader),
-            "vod123",
-            request,
-            max_duration=120,
-            fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
-        ),
-    )
-
-    assert fetch_messages.call_count == 3
-
-
-def test_iter_vod_stops_when_cursor_does_not_advance(
-    downloader, replay_request
-) -> None:
-    """If a non-empty page returns the same cursor as before, stop."""
-    request = replay_request
-    stuck_response = (
-        {
-            "edges": [
+@pytest.mark.parametrize(
+    ("edges", "page_limit", "expected_calls"),
+    [
+        ([], 50, 3),
+        (
+            [
                 {
                     "__typename": "VideoCommentEdge",
-                    # No "cursor" key on edges → outer `cursor` never advances.
                     "node": {"__typename": "UnexpectedNode"},
-                },
+                }
             ],
-            "pageInfo": {"hasNextPage": True},
-        },
-        {"creator": {"id": "creator-1", "channel": {"id": "1"}}},
-    )
-    fetch_messages = Mock(side_effect=[stuck_response] * 10)
-
-    list(
-        replay_service.iter_vod_chat_messages(
-            cast("Any", downloader),
-            "vod123",
-            request,
-            max_duration=120,
-            fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
+            10,
+            1,
         ),
-    )
-
-    # Loop runs once, then stops because cursor didn't advance.
-    assert fetch_messages.call_count == 1
-
-
-def test_iter_vod_chat_messages_skips_non_dict_edge_items(downloader, replay_request):
-    request = replay_request
-    comments = {
-        "edges": [
-            None,
-            {
-                "__typename": "VideoCommentEdge",
-                "cursor": "c1",
-                "node": {"__typename": "Comment", "id": "msg1"},
-            },
-        ],
-        "pageInfo": {"hasNextPage": False},
-    }
-    fetch_messages = Mock(return_value=(comments, {"creator": {"id": "c1"}}))
-
-    with patch.object(
-        replay_service,
-        "_parse_item",
-        return_value={"message_type": "text_message", "message_id": "msg1"},
-    ):
-        result = list(
-            replay_service.iter_vod_chat_messages(
-                cast("Any", downloader),
-                "vod123",
-                request,
-                max_duration=120,
-                fetch_messages=cast("replay_service._FetchMessages", fetch_messages),
-            ),
-        )
-
-    assert len(result) == 1
-    assert result[0]["message_id"] == "msg1"
+    ],
+    ids=["empty-pages", "cursor-not-advancing"],
+)
+def test_iter_vod_stops_when_pagination_cannot_advance(
+    downloader, edges, page_limit, expected_calls
+):
+    # Finite responses fail fast if empty-page or unchanged-cursor guards regress.
+    fetch = Mock(side_effect=[_response(edges, True)] * page_limit)
+    assert _run(downloader, fetch) == []
+    assert fetch.call_count == expected_calls

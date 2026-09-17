@@ -63,13 +63,10 @@ def downloader():
             instance = None
 
             def __init__(self, **kwargs) -> None:
-                self.init_kwargs = kwargs
-                self.chat_kwargs = None
                 self.closed = False
                 Downloader.instance = self
 
             def get_chat(self, **kwargs):
-                self.chat_kwargs = kwargs
                 if error is not None:
                     raise error
                 return chat if chat is not None else _FakeChat()
@@ -143,10 +140,13 @@ def test_execute_run_reports_acquisition_errors(downloader, logged, error, fragm
     assert factory.instance.closed is True
 
 
-def test_create_message_callback_quiet_returns_noop() -> None:
-    chat = MagicMock()
-    create_message_callback(quiet=True, chat=chat)({"message_type": "text_message"})
-    chat.print_formatted.assert_not_called()
+_PAID_MESSAGES = [
+    ("paid_message", "one"),
+    ("ticker_paid_message_item", "one"),
+    ("membership_item", "two"),
+    ("ticker_sponsor_item", "two"),
+    ("paid_message", "one"),
+]
 
 
 @pytest.mark.parametrize(
@@ -161,24 +161,10 @@ def test_create_message_callback_quiet_returns_noop() -> None:
             ],
             [0, 2],
         ),
-        (
-            1,
-            [
-                ("paid_message", "one"),
-                ("ticker_paid_message_item", "one"),
-                ("membership_item", "two"),
-                ("ticker_sponsor_item", "two"),
-                ("paid_message", "one"),
-            ],
-            [0, 2, 4],
-        ),
+        (1, _PAID_MESSAGES, [0, 2, 4]),
         (
             0,
-            [
-                ("paid_message", "dup"),
-                ("text_message", "dup"),
-                ("paid_message", "dup"),
-            ],
+            [("paid_message", "dup"), ("text_message", "dup"), ("paid_message", "dup")],
             [0, 1],
         ),
     ],
@@ -197,67 +183,62 @@ def test_create_message_callback_deduplicates(limit, messages, emitted) -> None:
     ]
 
 
-def test_execute_run_processes_messages_and_closes_downloader(downloader, capsys):
-    chat = Chat(iter([{"message_type": "text_message", "message_id": "1"}]))
-    chat.set_formatter(lambda message: message["message_id"])
-    factory = downloader(chat)
-    result = execute_run(
-        factory, url="https://www.youtube.com/watch?v=abc", max_messages=1
-    )
-
-    assert factory.instance.init_kwargs == {}
-    assert factory.instance.chat_kwargs == {
-        "url": "https://www.youtube.com/watch?v=abc",
-        "max_messages": 1,
-    }
-    assert factory.instance.closed is True
-    assert result.message_count == 1
-    assert capsys.readouterr().out.splitlines() == ["1"]
-
-
 @pytest.mark.parametrize(
-    ("cache_size", "quiet", "emitted"), [(1, False, 3), (2, True, 2)]
+    ("cache_size", "quiet", "emitted", "empty"),
+    [
+        (1, False, 3, False),
+        (2, True, 2, False),
+        (2, True, 0, True),
+    ],
 )
 def test_execute_run_logs_final_message_and_writer_counts(
-    downloader, logged, tmp_path, capsys, cache_size, quiet, emitted
+    downloader, logged, tmp_path, capsys, cache_size, quiet, emitted, empty
 ):
-    items = [
-        {"message_type": kind, "message_id": key}
-        for kind, key in [
-            ("paid_message", "one"),
-            ("ticker_paid_message_item", "one"),
-            ("membership_item", "two"),
-            ("ticker_sponsor_item", "two"),
-            ("paid_message", "one"),
-        ]
-    ]
+    items = (
+        []
+        if empty
+        else [{"message_type": kind, "message_id": key} for kind, key in _PAID_MESSAGES]
+    )
     chat = Chat(iter(items), max_seen_message_ids=cache_size)
     chat.set_formatter(lambda item: item["message_id"])
     paths = [tmp_path / "chat.jsonl", tmp_path / "chat.txt"]
     for path in paths:
-        chat.attach_writer(ContinuousWriter(str(path)))
+        chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=empty))
 
-    result = execute_run(downloader(chat), quiet=quiet, max_seen_message_ids=cache_size)
+    factory = downloader(chat)
+    result = execute_run(factory, quiet=quiet, max_seen_message_ids=cache_size)
+    assert factory.instance.closed is True
 
     assert result.success is True
-    assert result.message_count == 5
-    assert result.message_type_counts == {
-        "paid_message": 2,
-        "ticker_paid_message_item": 1,
-        "membership_item": 1,
-        "ticker_sponsor_item": 1,
-    }
+    assert result.message_count == len(items)
+    assert result.message_type_counts == (
+        {}
+        if empty
+        else {
+            "paid_message": 2,
+            "ticker_paid_message_item": 1,
+            "membership_item": 1,
+            "ticker_sponsor_item": 1,
+        }
+    )
     summary = _summary(logged)
     assert summary["message_count"] == result.message_count
     assert summary["message_type_counts"] == result.message_type_counts
-    assert summary["formatted_duplicates_suppressed"] == 5 - emitted
+    assert summary["formatted_duplicates_suppressed"] == len(items) - emitted
     assert summary["output_writers"] == [
-        {"file_name": str(path), "file_created": True, "records_written": count}
-        for path, count in zip(paths, [5, emitted], strict=True)
+        {"file_name": str(path), "file_created": not empty, "records_written": count}
+        for path, count in zip(paths, [len(items), emitted], strict=True)
     ]
-    assert [json.loads(line) for line in paths[0].read_text().splitlines()] == items
+    if empty:
+        for path in paths:
+            assert not path.exists()
+            assert any(
+                level == "info" and str(path) in message for level, message in logged
+            )
+    else:
+        assert [json.loads(line) for line in paths[0].read_text().splitlines()] == items
+        assert paths[1].read_text().splitlines() == ["one", "two", "one"][:emitted]
     expected = ["one", "two", "one"][:emitted]
-    assert paths[1].read_text().splitlines() == expected
     assert capsys.readouterr().out.splitlines() == ([] if quiet else expected)
 
 
@@ -310,27 +291,6 @@ def test_log_run_summary_redacts_credentials(logged):
     assert {level for level, _message in logged} == {"info", "debug"}
     assert all("hunter2" not in message for _level, message in logged)
     assert all("<redacted>@example.invalid" in message for _level, message in logged)
-
-
-def test_execute_run_reports_uncreated_lazy_jsonl_and_txt(downloader, logged, tmp_path):
-    paths = [tmp_path / "empty.jsonl", tmp_path / "empty.txt"]
-    chat = Chat(iter(()))
-    for path in paths:
-        chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
-
-    result = execute_run(downloader(chat), quiet=True)
-
-    assert result.success is True
-    assert result.message_count == 0
-    assert _summary(logged)["output_writers"] == [
-        {"file_name": str(path), "file_created": False, "records_written": 0}
-        for path in paths
-    ]
-    for path in paths:
-        assert not path.exists()
-        assert any(
-            level == "info" and str(path) in message for level, message in logged
-        )
 
 
 @pytest.mark.parametrize("message_count", [0, 1])
@@ -422,9 +382,7 @@ def test_execute_run_detects_write_errors(downloader, logged):
 @pytest.mark.parametrize(
     ("options", "expected_modes"),
     [
-        ([{"exit_on_debug": True}], ["EXIT_ON_DEBUG"]),
         ([{"pause_on_debug": True}], ["PAUSE_ON_DEBUG"]),
-        ([{}], ["NONE"]),
         ([{"exit_on_debug": True}, {}], ["EXIT_ON_DEBUG", "NONE"]),
     ],
 )

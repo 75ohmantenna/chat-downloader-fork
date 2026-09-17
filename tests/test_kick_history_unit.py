@@ -21,6 +21,19 @@ from tests.kick_helpers import FakeKickSession, FakeResponse, load_fixture
 START = datetime(2026, 9, 11, 16, 7, 2, tzinfo=UTC)
 
 
+def message(identifier, offset=0):
+    return {
+        "id": identifier,
+        "created_at": (START + timedelta(seconds=offset)).isoformat(),
+    }
+
+
+def page_client(messages):
+    client = Mock()
+    client.fetch_message_page.return_value = {"data": {"messages": messages}}
+    return client
+
+
 def collect(client, *, seconds=9, **kwargs):
     return list(
         history.iter_forward_history(
@@ -46,30 +59,18 @@ def test_sparse_history_ignores_reverse_cursor_and_reads_empty_windows() -> None
 
 
 def test_history_orders_deduplicates_and_filters_malformed_or_outside_records() -> None:
-    client = Mock()
-    client.fetch_message_page.return_value = {
-        "data": {
-            "messages": [
-                "bad",
-                {},
-                {"id": "bad-time", "created_at": 1},
-                {"id": "bad-time", "created_at": "bad"},
-                {
-                    "id": "before",
-                    "created_at": (START - timedelta(seconds=1)).isoformat(),
-                },
-                {
-                    "id": "later",
-                    "created_at": (START + timedelta(seconds=2)).isoformat(),
-                },
-                {"id": "first", "created_at": START.isoformat()},
-                {
-                    "id": "after",
-                    "created_at": (START + timedelta(seconds=20)).isoformat(),
-                },
-            ]
-        }
-    }
+    client = page_client(
+        [
+            "bad",
+            {},
+            {"id": "bad-time", "created_at": 1},
+            {"id": "bad-time", "created_at": "bad"},
+            message("before", -1),
+            message("later", 2),
+            message("first"),
+            message("after", 20),
+        ]
+    )
     assert [item["id"] for item in collect(client)] == ["first", "later"]
     assert client.fetch_message_page.call_count == 2
 
@@ -94,15 +95,7 @@ def test_history_retries_and_preserves_idless_raw_records() -> None:
 
 @pytest.mark.parametrize("limit", ["max_pages", "max_records"])
 def test_history_bounds_work_before_another_request(limit, caplog) -> None:
-    client = Mock()
-    client.fetch_message_page.return_value = {
-        "data": {
-            "messages": [
-                {"id": str(index), "created_at": START.isoformat()}
-                for index in range(3)
-            ]
-        }
-    }
+    client = page_client([message(str(index)) for index in range(3)])
     result = collect(client, **{limit: 1})
     assert len(result) == (1 if limit == "max_records" else 3)
     assert client.fetch_message_page.call_count == 1

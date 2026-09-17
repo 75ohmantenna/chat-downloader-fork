@@ -21,200 +21,113 @@ def formatter() -> ItemFormatter:
 
 def test_item_formatter_with_custom_path(tmp_path: Path) -> None:
     path = tmp_path / "formats.json"
-    path.write_text(
-        json.dumps({"test_format": {"template": "Test: {message}"}}),
-        encoding="utf-8",
+    path.write_text(json.dumps({"test_format": {"template": "Test: {message}"}}))
+    assert (
+        ItemFormatter(path=str(path)).format({"message": "custom"}, "test_format")
+        == "Test: custom"
     )
-    fmt = ItemFormatter(path=str(path))
-    assert fmt.format({"message": "custom"}, "test_format") == "Test: custom"
 
 
 def test_item_formatter_invalid_path() -> None:
-    """Test ItemFormatter with non-existent format file."""
     with pytest.raises(FormatFileNotFound):
         ItemFormatter(path="/nonexistent/path/format.json")
 
 
 @pytest.mark.parametrize(
-    ("line_break", "visible"),
+    ("message", "template", "expected"),
     [
-        ("\r", r"\r"),
-        ("\n", r"\n"),
-        ("\r\n", r"\r\n"),
-        ("\x85", r"\u0085"),
-        ("\u2028", r"\u2028"),
-        ("\u2029", r"\u2029"),
+        (f"first{control}second", "{message}", f"first{visible}second")
+        for control, visible in [
+            ("\r", r"\r"),
+            ("\n", r"\n"),
+            ("\r\n", r"\r\n"),
+            ("\x85", r"\u0085"),
+            ("\u2028", r"\u2028"),
+            ("\u2029", r"\u2029"),
+            ("\t", "\t"),
+        ]
+    ]
+    + [
+        (
+            "value\x9bhidden\x9dtitle\x9c",
+            "head\n{message}\rfoot",
+            r"head\nvaluehiddentitle\rfoot",
+        )
     ],
 )
-def test_format_renders_line_breaks_visibly(
-    formatter: ItemFormatter,
-    line_break: str,
-    visible: str,
-) -> None:
-    result = formatter.format(
-        {"message": f"first{line_break}second"},
-        format_object={"template": "{message}"},
+def test_format_control_characters(formatter, message, template, expected):
+    assert (
+        formatter.format({"message": message}, format_object={"template": template})
+        == expected
     )
 
-    assert result == f"first{visible}second"
 
-
-def test_format_flattens_template_line_breaks_and_removes_c1_controls(
-    formatter: ItemFormatter,
-) -> None:
-    result = formatter.format(
-        {"message": "value\x9bhidden\x9dtitle\x9c"},
-        format_object={"template": "head\n{message}\rfoot"},
-    )
-
-    assert result == r"head\nvaluehiddentitle\rfoot"
-
-
-def test_format_preserves_horizontal_tabs(formatter: ItemFormatter) -> None:
-    result = formatter.format(
-        {"message": "first\tsecond"},
-        format_object={"template": "{message}"},
-    )
-
-    assert result == "first\tsecond"
-
-
-def test_format_nonexistent(formatter: ItemFormatter) -> None:
-    """Test formatting with non-existent format."""
-    item = {"message": "test"}
-
-    with pytest.raises(FormatNotFound):
-        formatter.format(item, format_name="nonexistent_format")
-
-
-@pytest.mark.parametrize(
-    ("format_name", "expected_prefix"),
-    [
-        ("youtube_live_default", "2020-01-01 00:00:00 | "),
-        ("youtube_live_24_hour", "00:00 | "),
-    ],
-)
-def test_youtube_live_prefers_timestamp_over_time_text(
-    formatter: ItemFormatter, format_name: str, expected_prefix: str
-) -> None:
-    item = {
-        "message": "Test",
-        "author": {"name": "user"},
-        "time_text": "0:42",
-        "timestamp": 1577836800000000,
-    }
-    assert formatter.format(item, format_name) == f"{expected_prefix}user: Test"
-
-
-@pytest.mark.parametrize(
-    ("format_name", "expected_prefix"),
-    [
-        ("youtube_live_default", "2020-01-01 00:00:00 | "),
-        ("youtube_live_24_hour", "00:00 | "),
-        ("youtube_live_12_hour", "12:00 AM | "),
-    ],
-)
-@pytest.mark.parametrize(
-    "message_type",
-    ["viewer_engagement_message", "deleted_message", "ban_user"],
-)
-def test_youtube_live_system_messages_omit_missing_author_separator(
-    formatter: ItemFormatter,
-    format_name: str,
-    expected_prefix: str,
-    message_type: str,
-) -> None:
-    item = {
-        "message_type": message_type,
-        "message": "System notice",
-        "timestamp": 1577836800000000,  # 2020-01-01 00:00:00 UTC
-        "time_text": "0:42",
-    }
-
-    result = formatter.format(item, format_name=format_name)
-
-    assert result == f"{expected_prefix}System notice"
-
-
-@pytest.mark.parametrize(
-    ("format_name", "expected_prefix"),
-    [
+@pytest.fixture(
+    params=[
         ("youtube", "0:42 | "),
         ("youtube_live_default", "2020-01-01 00:00:00 | "),
         ("youtube_live_24_hour", "00:00 | "),
         ("youtube_live_12_hour", "12:00 AM | "),
+    ]
+)
+def youtube_format(request):
+    return request.param
+
+
+@pytest.mark.parametrize(
+    ("fields", "notice"),
+    [
+        ({"author": {"name": "user"}, "message": "Test"}, "user: Test"),
+        (
+            {
+                "message_type": "text_message",
+                "author": {"name": "user"},
+                "message": "Hello",
+            },
+            "user: Hello",
+        ),
+        *[
+            ({"message_type": kind, "message": "System notice"}, "System notice")
+            for kind in ["viewer_engagement_message", "deleted_message", "ban_user"]
+        ],
     ],
 )
+def test_youtube_timestamp_and_author_separator(
+    formatter, youtube_format, fields, notice
+):
+    name, prefix = youtube_format
+    item = {"timestamp": 1577836800000000, "time_text": "0:42", **fields}
+    assert formatter.format(item, name) == prefix + notice
+
+
 @pytest.mark.parametrize(
-    ("fields", "expected_notice"),
+    ("fields", "notice"),
     [
         ({"target_message_id": "message-id"}, "[Message removed: message-id]"),
-        (
-            {"author": {"id": "channel-id"}},
-            "[Messages removed for author: channel-id]",
-        ),
+        ({"author": {"id": "channel-id"}}, "[Messages removed for author: channel-id]"),
         ({"action_type": "remove_chat_item"}, "[Moderation action: remove_chat_item]"),
     ],
 )
-def test_youtube_moderation_messages_have_nonempty_fallbacks(
-    formatter: ItemFormatter,
-    format_name: str,
-    expected_prefix: str,
-    fields: dict[str, object],
-    expected_notice: str,
-) -> None:
+def test_youtube_moderation_fallbacks(formatter, youtube_format, fields, notice):
+    name, prefix = youtube_format
     item = {
         "message_type": "ban_user",
         "message": None,
-        "timestamp": 1577836800000000,  # 2020-01-01 00:00:00 UTC
+        "timestamp": 1577836800000000,
         "time_text": "0:42",
         **fields,
     }
-
-    result = formatter.format(item, format_name=format_name)
-
-    assert result == f"{expected_prefix}{expected_notice}"
+    assert formatter.format(item, name) == prefix + notice
 
 
-@pytest.mark.parametrize(
-    "format_name",
-    [
-        "youtube",
-        "youtube_live_default",
-        "youtube_live_24_hour",
-        "youtube_live_12_hour",
-    ],
-)
-def test_youtube_moderation_message_without_timing_is_not_blank(
-    formatter: ItemFormatter,
-    format_name: str,
-) -> None:
+def test_youtube_moderation_without_timing(formatter, youtube_format):
     item = {
         "action_type": "remove_chat_item",
         "message": None,
         "message_type": "ban_user",
         "target_message_id": "message-id",
     }
-
-    result = formatter.format(item, format_name=format_name)
-
-    assert result == "[Message removed: message-id]"
-
-
-def test_youtube_live_system_format_keeps_authored_message_separator(
-    formatter: ItemFormatter,
-) -> None:
-    item = {
-        "message_type": "text_message",
-        "message": "Hello",
-        "author": {"name": "user"},
-        "timestamp": 1577836800000000,  # 2020-01-01 00:00:00 UTC
-        "time_text": "0:42",
-    }
-
-    result = formatter.format(item, format_name="youtube_live_default")
-
-    assert result == "2020-01-01 00:00:00 | user: Hello"
+    assert formatter.format(item, youtube_format[0]) == "[Message removed: message-id]"
 
 
 @pytest.mark.parametrize(
@@ -253,11 +166,8 @@ def test_youtube_live_system_format_keeps_authored_message_separator(
     ],
 )
 def test_format_twitch_subscription_types_separate_optional_message(
-    formatter: ItemFormatter,
-    message_type: str,
-    message: str | None,
-    expected_suffix: str,
-) -> None:
+    formatter, message_type, message, expected_suffix
+):
     item = {
         "message_type": message_type,
         "system_message": "Test subscribed!",
@@ -266,10 +176,7 @@ def test_format_twitch_subscription_types_separate_optional_message(
     }
     if message is not None:
         item["message"] = message
-
-    result = formatter.format(item, format_name="twitch")
-
-    assert result.endswith(expected_suffix)
+    assert formatter.format(item, "twitch").endswith(expected_suffix)
 
 
 @pytest.mark.parametrize(
@@ -281,48 +188,27 @@ def test_format_twitch_subscription_types_separate_optional_message(
             {"system_message": "Raid arrived!", "message": "Hello chat"},
             "Raid arrived! — Hello chat",
         ),
-        (
-            {"system_message": "", "raider_name": "explicit-raider"},
-            "explicit-raider",
-        ),
+        ({"system_message": "", "raider_name": "explicit-raider"}, "explicit-raider"),
         ({}, "raider"),
+        (
+            {
+                "raider_display_name": "Explicit Raider",
+                "raider_name": "explicit-raider",
+                "author": {"name": "event-author"},
+            },
+            "Explicit Raider",
+        ),
     ],
 )
 @pytest.mark.parametrize("message_type", ["raid", "unraid"])
-def test_format_twitch_raid_types_preserve_details_and_fallbacks(
-    formatter: ItemFormatter,
-    message_type: str,
-    fields: dict[str, str],
-    expected_suffix: str,
-) -> None:
+def test_format_twitch_raid_types(formatter, message_type, fields, expected_suffix):
     item = {
         "message_type": message_type,
         "author": {"name": "raider"},
         "timestamp": 1000000,
         **fields,
     }
-
-    result = formatter.format(item, format_name="twitch")
-
-    assert result.endswith(expected_suffix)
-
-
-@pytest.mark.parametrize("message_type", ["raid", "unraid"])
-def test_format_twitch_raid_types_prefer_raider_identity(
-    formatter: ItemFormatter,
-    message_type: str,
-) -> None:
-    item = {
-        "message_type": message_type,
-        "raider_display_name": "Explicit Raider",
-        "raider_name": "explicit-raider",
-        "author": {"name": "event-author"},
-        "timestamp": 1000000,
-    }
-
-    result = formatter.format(item, format_name="twitch")
-
-    assert result.endswith("Explicit Raider")
+    assert formatter.format(item, "twitch").endswith(expected_suffix)
 
 
 @pytest.mark.parametrize(
@@ -358,81 +244,53 @@ def test_inheritance_preserves_parent_and_prefers_child(formatter, parent) -> No
     assert formatter.format_file["base"]["template"] == "parent"
 
 
-def test_no_valid_format_raises(formatter: ItemFormatter) -> None:
-    """Test FormatNotFound when format_object is empty/falsy (line 104)."""
-    # Passing an empty dict as format_object makes it falsy, triggering line
-    # 104
+@pytest.mark.parametrize(
+    "kwargs", [{"format_name": "nonexistent_format"}, {"format_object": {}}, {}]
+)
+def test_missing_format_raises(formatter, kwargs):
+    if not kwargs:
+        formatter.format_file.pop("default")
     with pytest.raises(FormatNotFound):
-        formatter.format({"message": "test"}, format_object={})
+        formatter.format({"message": "test"}, **kwargs)
 
 
-def test_missing_default_format_raises(formatter: ItemFormatter) -> None:
-    formatter.format_file.pop("default")
-    with pytest.raises(FormatNotFound):
-        formatter.format({"message": "test"})
-
-
-@pytest.mark.parametrize("config", [42, []])
-def test_invalid_field_config_renders_empty(formatter, config) -> None:
+@pytest.mark.parametrize(
+    ("field", "value", "config", "template", "expected"),
+    [
+        *[("value", "present", config, "{value}", "") for config in [42, []]],
+        *[
+            (
+                "value",
+                value,
+                {"template": " [{}]", "omit_if_false": True},
+                "before{value}after",
+                "beforeafter",
+            )
+            for value in [False, 0, "", [], {}, None]
+        ],
+        (
+            "value",
+            True,
+            {"template": " [present]", "omit_if_false": True},
+            "before{value}after",
+            "before [present]after",
+        ),
+        (
+            "time_text",
+            "1:30:00",
+            {"template": "{}", "format": "{}:{:02}:{:02}"},
+            "{time_text}",
+            "1:30:00",
+        ),
+    ],
+)
+def test_field_configuration(formatter, field, value, config, template, expected):
     assert (
         formatter.format(
-            {"value": "present"},
-            format_object={"template": "{value}", "keys": {"value": config}},
+            {field: value},
+            format_object={"template": template, "keys": {field: config}},
         )
-        == ""
-    )
-
-
-@pytest.mark.parametrize("value", [False, 0, "", [], {}, None])
-def test_omit_if_false_suppresses_falsey_field_values(
-    formatter: ItemFormatter,
-    value: object,
-) -> None:
-    result = formatter.format(
-        {"value": value},
-        format_object={
-            "template": "before{value}after",
-            "keys": {
-                "value": {
-                    "template": " [{}]",
-                    "omit_if_false": True,
-                }
-            },
-        },
-    )
-
-    assert result == "beforeafter"
-
-
-def test_omit_if_false_preserves_truthy_constant_template(
-    formatter: ItemFormatter,
-) -> None:
-    result = formatter.format(
-        {"value": True},
-        format_object={
-            "template": "before{value}after",
-            "keys": {
-                "value": {
-                    "template": " [present]",
-                    "omit_if_false": True,
-                }
-            },
-        },
-    )
-
-    assert result == "before [present]after"
-
-
-def test_format_time_text_field(formatter: ItemFormatter) -> None:
-    assert (
-        formatter.format(
-            {"time_text": "1:30:00"},
-            format_object={
-                "template": "{time_text}",
-                "keys": {"time_text": {"template": "{}", "format": "{}:{:02}:{:02}"}},
-            },
-        )
-        == "1:30:00"
+        == expected
     )
 
 
@@ -465,20 +323,14 @@ def test_field_separator(formatter, field, value, separator, expected) -> None:
     )
 
 
-def test_omit_if_false_after_badge_separator(formatter: ItemFormatter) -> None:
-    result = formatter._format_field_value(
-        "author.badges",
-        [{"name": "level"}],
-        {
-            "author.badges": {
-                "separator": ", ",
-                "template": "({})",
-                "omit_if_false": True,
-            }
-        },
+def test_omit_if_false_after_badge_separator(formatter):
+    config = {"separator": ", ", "template": "({})", "omit_if_false": True}
+    assert (
+        formatter._format_field_value(
+            "author.badges", [{"name": "level"}], {"author.badges": config}
+        )
+        == ""
     )
-
-    assert result == ""
 
 
 @pytest.mark.parametrize(
@@ -508,10 +360,8 @@ def test_placeholder_fallbacks(formatter, author, expected) -> None:
     ],
 )
 def test_format_twitch_timeout_duration_uses_correct_grammar(
-    formatter: ItemFormatter,
-    duration: int,
-    expected_suffix: str,
-) -> None:
+    formatter, duration, expected_suffix
+):
     item = {
         "message_type": "ban_user",
         "banned_user": "spammer",
@@ -519,88 +369,52 @@ def test_format_twitch_timeout_duration_uses_correct_grammar(
         "ban_type": "timeout",
         "timestamp": 1000000,
     }
-
-    result = formatter.format(item, format_name="twitch")
-
-    assert result.endswith(expected_suffix)
+    assert formatter.format(item, "twitch").endswith(expected_suffix)
     assert item["ban_duration"] == duration
     assert isinstance(item["ban_duration"], int)
 
 
-def test_format_twitch_permanent_ban_falls_back_to_ban_type(
-    formatter: ItemFormatter,
-) -> None:
+def test_format_twitch_permanent_ban_falls_back_to_ban_type(formatter):
     item = {
         "message_type": "ban_user",
         "banned_user": "spammer",
         "ban_type": "permanent",
         "timestamp": 1000000,
     }
-
-    result = formatter.format(item, format_name="twitch")
-
-    assert result.endswith("spammer was permanently banned.")
+    assert formatter.format(item, "twitch").endswith("spammer was permanently banned.")
 
 
 @pytest.mark.parametrize(
-    ("value", "expected"),
+    ("value", "singular_template", "expected"),
     [
-        (1, "1 item"),
-        (1.0, "1.0 item"),
-        (0, "0 items"),
-        (2, "2 items"),
-        (True, "True items"),
-        (False, "False items"),
-        ("1", "1 items"),
+        (1, "{} item", "1 item"),
+        (1.0, "{} item", "1.0 item"),
+        (0, "{} item", "0 items"),
+        (2, "{} item", "2 items"),
+        (True, "{} item", "True items"),
+        (False, "{} item", "False items"),
+        ("1", "{} item", "1 items"),
+        *[(1, template, "1 items") for template in [None, 1, False]],
     ],
 )
-def test_singular_template_only_matches_exact_numeric_one(
-    formatter: ItemFormatter,
-    value: object,
-    expected: str,
-) -> None:
-    format_object = {
-        "template": "{count}",
-        "keys": {
-            "count": {
-                "template": "{} items",
-                "singular_template": "{} item",
-            },
-        },
-    }
-
-    assert formatter.format({"count": value}, format_object=format_object) == expected
-
-
-@pytest.mark.parametrize("singular_template", [None, 1, False])
-def test_invalid_singular_template_falls_back_to_standard_template(
-    formatter: ItemFormatter,
-    singular_template: object,
-) -> None:
-    format_object = {
-        "template": "{count}",
-        "keys": {
-            "count": {
-                "template": "{} items",
-                "singular_template": singular_template,
-            },
-        },
-    }
-
-    assert formatter.format({"count": 1}, format_object=format_object) == "1 items"
-
-
-def test_apply_format_by_type_unknown_field(formatter: ItemFormatter) -> None:
-    """_apply_format_by_type for a non-timestamp/time_text field."""
-    # A custom field with a format string but not timestamp or time_text
-    field_config = {"format": "%s", "template": "{}"}
-    result = formatter._apply_format_by_type(
-        "custom.field",
-        "some_value",
-        field_config,
+def test_singular_template_selection(formatter, value, singular_template, expected):
+    config = {"template": "{} items", "singular_template": singular_template}
+    assert (
+        formatter.format(
+            {"count": value},
+            format_object={"template": "{count}", "keys": {"count": config}},
+        )
+        == expected
     )
-    # Should return the value unchanged (line 309)
-    assert result == "some_value"
+
+
+def test_apply_format_by_type_unknown_field(formatter):
+    assert (
+        formatter._apply_format_by_type(
+            "custom.field", "some_value", {"format": "%s", "template": "{}"}
+        )
+        == "some_value"
+    )
 
 
 @pytest.mark.parametrize("template", ["{0.attr}", "{0[key]}"])

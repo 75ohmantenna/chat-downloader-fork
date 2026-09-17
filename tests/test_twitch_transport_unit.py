@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -27,9 +27,6 @@ from chat_downloader.sites.twitch import (
     irc_transport,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 def _privmsg(message_id: str, text: str) -> str:
     return (
@@ -48,6 +45,30 @@ def _usernotice(message_id: str, message_type: str, text: str) -> str:
     )
 
 
+def _capture_resub(capture, frame):
+    _capture_message(capture, frame, "resubscription", "resub")
+
+
+def _capture_message(capture, frame, message_type, raw_type=""):
+    tags = f"msg-id={raw_type}" if raw_type else ""
+    capture.capture(frame, {"message_type": message_type}, "USERNOTICE", tags)
+
+
+def _capture_key(message_type, action="USERNOTICE", tags="msg-id=resub"):
+    return irc_diagnostics._event_capture_key(
+        {"message_type": message_type}, action, tags
+    )
+
+
+def _parse_frames(frames):
+    return irc_transport._parse_irc_matches(
+        list(irc_transport.MESSAGE_REGEX.finditer("\r\n".join(frames) + "\r\n")),
+        None,
+        0,
+        event_frame_capture=irc_diagnostics._EventDiverseIrcFrameCapture(),
+    )[0]
+
+
 @pytest.fixture
 def captured_frames(monkeypatch):
     captured = []
@@ -60,6 +81,20 @@ def captured_frames(monkeypatch):
     return captured
 
 
+@pytest.fixture
+def event_capture(monkeypatch):
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
+    return irc_diagnostics._EventDiverseIrcFrameCapture()
+
+
+@pytest.fixture
+def sample_dir(monkeypatch, tmp_path, event_capture):
+    directory = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(directory))
+    monkeypatch.setattr(red, "_debug_sample_capture_enabled", lambda: True)
+    return directory
+
+
 @pytest.mark.parametrize("event_mode", [False, True], ids=["first", "event"])
 def test_frame_capture_requires_explicit_scope_opt_in(
     monkeypatch,
@@ -69,11 +104,8 @@ def test_frame_capture_requires_explicit_scope_opt_in(
     scope = "TWITCH_IRC_EVENT_FRAMES" if event_mode else "TWITCH_IRC_FRAMES"
     monkeypatch.delenv(f"CHAT_DOWNLOADER_CAPTURE_{scope}", raising=False)
     if event_mode:
-        irc_diagnostics._EventDiverseIrcFrameCapture().capture(
-            "valid frame\r\n",
-            {"message_type": "resubscription"},
-            "USERNOTICE",
-            "msg-id=resub",
+        _capture_resub(
+            irc_diagnostics._EventDiverseIrcFrameCapture(), "valid frame\r\n"
         )
     else:
         irc_diagnostics._SuccessfulIrcFrameCapture().capture("valid frame\r\n")
@@ -89,23 +121,10 @@ def test_event_frame_capture_prefers_message_type_and_falls_back_to_action(
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "yes")
     frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
 
-    frame_capture.capture(
-        "resub one\r\n",
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub",
-    )
-    frame_capture.capture(
-        "resub two\r\n",
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub",
-    )
-    frame_capture.capture(
-        "milestone\r\n",
-        {"message_type": "viewermilestone"},
-        "USERNOTICE",
-        "msg-id=viewermilestone",
+    for frame in ("resub one\r\n", "resub two\r\n"):
+        _capture_resub(frame_capture, frame)
+    _capture_message(
+        frame_capture, "milestone\r\n", "viewermilestone", "viewermilestone"
     )
     frame_capture.capture("notice\r\n", {}, "NOTICE", "")
 
@@ -127,21 +146,15 @@ def test_event_frame_capture_prefers_message_type_and_falls_back_to_action(
 
 
 def test_event_frame_capture_bounds_provider_controlled_keys_and_labels(
-    monkeypatch: pytest.MonkeyPatch,
+    event_capture,
     captured_frames,
-) -> None:
+):
     captured = captured_frames
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    frame_capture = event_capture
 
     for index in range(20):
         attacker_value = f"../Provider\\Type-{index}-" + "x" * 500
-        frame_capture.capture(
-            f"frame {index}\r\n",
-            {},
-            attacker_value,
-            "",
-        )
+        frame_capture.capture(f"frame {index}\r\n", {}, attacker_value, "")
 
     labels = [args[0] for args, _kwargs in captured]
     assert len(labels) == 12
@@ -196,18 +209,15 @@ def test_unknown_action_credentials_share_sanitized_opaque_identity() -> None:
 
 
 def test_unknown_action_capture_keeps_credentials_out_of_identity_and_logs(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    sample_dir = tmp_path / "samples"
+    monkeypatch,
+    sample_dir,
+    caplog,
+    event_capture,
+):
     canary = "SuperSecretCredential123"
     raw_action = f"Authorization=Bearer{canary}"
     raw_frame = f"@room-id=1 :provider.test {raw_action} #example :public message\r\n"
     captured_labels: list[str] = []
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
-    monkeypatch.setattr(red, "_debug_sample_capture_enabled", lambda: True)
     caplog.set_level(logging.DEBUG, logger=red._get_logger().name)
 
     def capture_real_sample(label, payload, **kwargs):
@@ -219,7 +229,7 @@ def test_unknown_action_capture_keeps_credentials_out_of_identity_and_logs(
         "capture_debug_sample",
         capture_real_sample,
     )
-    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
+    frame_capture = event_capture
     frame_capture.capture(raw_frame, {}, raw_action, "room-id=1")
 
     event_key = next(iter(frame_capture._captured_event_keys))
@@ -244,145 +254,67 @@ def test_unknown_action_capture_keeps_credentials_out_of_identity_and_logs(
 def test_event_keys_require_recognized_case_sensitive_raw_provenance() -> None:
     keys_by_normalized_type: dict[str, str] = {}
     for raw_msg_id, normalized_type in irc_diagnostics.MESSAGE_TYPE_REMAPPING.items():
-        key = irc_diagnostics._event_capture_key(
-            {"message_type": normalized_type},
-            "USERNOTICE",
-            f"room-id=1;msg-id={raw_msg_id};user-id=2",
+        key = _capture_key(
+            normalized_type, tags=f"room-id=1;msg-id={raw_msg_id};user-id=2"
         )
         assert key.startswith("message-")
         assert keys_by_normalized_type.setdefault(normalized_type, key) == key
 
     assert len(set(keys_by_normalized_type.values())) == len(keys_by_normalized_type)
     for raw_action, normalized_type in irc_diagnostics.ACTION_TYPE_REMAPPING.items():
-        key = irc_diagnostics._event_capture_key(
-            {"message_type": normalized_type},
-            raw_action,
-            "room-id=1;user-id=2",
-        )
+        key = _capture_key(normalized_type, raw_action, "room-id=1;user-id=2")
         assert key.startswith("message-")
 
-    assert irc_diagnostics._event_capture_key(
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub",
-    ).startswith("message-resubscription-")
-    assert irc_diagnostics._event_capture_key(
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resubscription",
-    ).startswith("action-usernotice-")
-    assert irc_diagnostics._event_capture_key(
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=RESUB",
-    ).startswith("action-usernotice-")
-    assert irc_diagnostics._event_capture_key(
-        {"message_type": "text_message"},
-        "USERNOTICE",
-        "msg-id=text_message",
-    ).startswith("action-usernotice-")
-    assert irc_diagnostics._event_capture_key(
-        {"message_type": "text_message"},
-        "text_message",
-        "room-id=1",
-    ).startswith("action-unknown-")
-    assert irc_diagnostics._event_capture_key(
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub;msg-id=resubscription",
-    ).startswith("action-usernotice-")
-
-
-def test_event_capture_retries_transient_failure_before_marking_success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    results = iter([None, "/samples/success.json"])
-    capture_calls = []
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-
-    def capture_with_transient_failure(*args, **kwargs):
-        capture_calls.append((args, kwargs))
-        return next(results)
-
-    monkeypatch.setattr(
-        irc_diagnostics,
-        "capture_debug_sample",
-        capture_with_transient_failure,
-    )
-    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
-
-    for index in range(3):
-        frame_capture.capture(
-            f"resub {index}\r\n",
-            {"message_type": "resubscription"},
+    for message_type, action, tags, prefix in [
+        ("resubscription", "USERNOTICE", "msg-id=resub", "message-resubscription-"),
+        ("resubscription", "USERNOTICE", "msg-id=resubscription", "action-usernotice-"),
+        ("resubscription", "USERNOTICE", "msg-id=RESUB", "action-usernotice-"),
+        ("text_message", "USERNOTICE", "msg-id=text_message", "action-usernotice-"),
+        ("text_message", "text_message", "room-id=1", "action-unknown-"),
+        (
+            "resubscription",
             "USERNOTICE",
-            "msg-id=resub",
-        )
-
-    event_key = irc_diagnostics._event_capture_key(
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub",
-    )
-    assert len(capture_calls) == 2
-    assert frame_capture._event_key_attempts == {event_key: 2}
-    assert frame_capture._captured_event_keys == {event_key}
+            "msg-id=resub;msg-id=resubscription",
+            "action-usernotice-",
+        ),
+    ]:
+        assert _capture_key(message_type, action, tags).startswith(prefix)
 
 
-def test_event_capture_permanent_failures_have_bounded_attempts_and_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    capture_calls = []
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setattr(
-        irc_diagnostics,
-        "capture_debug_sample",
-        lambda *args, **kwargs: capture_calls.append((args, kwargs)),
-    )
-    frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
-
-    for index in range(20):
-        for attempt in range(4):
-            frame_capture.capture(
-                f"frame {index}-{attempt}\r\n",
-                {},
-                f"ACTION-{index}",
-                "",
-            )
-
-    assert len(capture_calls) == 24
-    assert len(frame_capture._event_key_attempts) == 12
-    assert set(frame_capture._event_key_attempts.values()) == {2}
-    assert frame_capture._captured_event_keys == set()
+@pytest.mark.parametrize("transient", [False, True])
+def test_event_capture_bounds_failed_attempts(monkeypatch, event_capture, transient):
+    backend = Mock(side_effect=[None, "/samples/success.json"] if transient else None)
+    if not transient:
+        backend.return_value = None
+    monkeypatch.setattr(irc_diagnostics, "capture_debug_sample", backend)
+    if transient:
+        for index in range(3):
+            _capture_resub(event_capture, f"resub {index}\r\n")
+        key = _capture_key("resubscription")
+        assert backend.call_count == 2
+        assert event_capture._event_key_attempts == {key: 2}
+        assert event_capture._captured_event_keys == {key}
+    else:
+        for index in range(20):
+            for attempt in range(4):
+                event_capture.capture(
+                    f"frame {index}-{attempt}\r\n", {}, f"ACTION-{index}", ""
+                )
+        assert backend.call_count == 24
+        assert len(event_capture._event_key_attempts) == 12
+        assert set(event_capture._event_key_attempts.values()) == {2}
+        assert event_capture._captured_event_keys == set()
 
 
-def test_event_capture_backend_group_is_shared_by_directory_across_runs(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    sample_dir = tmp_path / "samples"
+def test_event_capture_backend_group_is_shared_by_directory_across_runs(sample_dir):
     known_types = sorted(irc_diagnostics._KNOWN_NORMALIZED_MESSAGE_TYPES)
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
-    monkeypatch.setattr(red, "_debug_sample_capture_enabled", lambda: True)
-
     first_run_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
     for index, message_type in enumerate(known_types[:12]):
-        first_run_capture.capture(
-            f"first run {index}\r\n",
-            {"message_type": message_type},
-            "USERNOTICE",
-            "",
-        )
+        _capture_message(first_run_capture, f"first run {index}\r\n", message_type)
 
     later_run_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
     for index in range(3):
-        later_run_capture.capture(
-            f"later run {index}\r\n",
-            {"message_type": known_types[12]},
-            "USERNOTICE",
-            "",
-        )
+        _capture_message(later_run_capture, f"later run {index}\r\n", known_types[12])
 
     assert len(list(sample_dir.glob("*.json"))) == 12
     assert len(first_run_capture._captured_event_keys) == 12
@@ -391,14 +323,10 @@ def test_event_capture_backend_group_is_shared_by_directory_across_runs(
 
 
 def test_event_capture_backend_label_persists_across_runs_with_group_slots(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    sample_dir = tmp_path / "samples"
-    backend_paths: list[str | None] = []
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
-    monkeypatch.setattr(red, "_debug_sample_capture_enabled", lambda: True)
+    monkeypatch,
+    sample_dir,
+):
+    backend_paths = []
 
     def record_backend_path(*args, **kwargs):
         path = red.capture_debug_sample(*args, **kwargs)
@@ -411,37 +339,20 @@ def test_event_capture_backend_label_persists_across_runs_with_group_slots(
         record_backend_path,
     )
 
-    first_run_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
-    first_run_capture.capture(
-        "same payload\r\n",
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub",
-    )
-
-    exact_repeat_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
-    exact_repeat_capture.capture(
-        "same payload\r\n",
-        {"message_type": "resubscription"},
-        "USERNOTICE",
-        "msg-id=resub",
-    )
+    for _ in range(2):
+        _capture_resub(
+            irc_diagnostics._EventDiverseIrcFrameCapture(), "same payload\r\n"
+        )
 
     changed_payload_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
     for index in range(3):
-        changed_payload_capture.capture(
-            f"different payload {index}\r\n",
-            {"message_type": "resubscription"},
-            "USERNOTICE",
-            "msg-id=resub",
-        )
+        _capture_resub(changed_payload_capture, f"different payload {index}\r\n")
 
-    available_group_slot_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
-    available_group_slot_capture.capture(
+    _capture_message(
+        irc_diagnostics._EventDiverseIrcFrameCapture(),
         "different event\r\n",
-        {"message_type": "viewermilestone"},
-        "USERNOTICE",
-        "msg-id=viewermilestone",
+        "viewermilestone",
+        "viewermilestone",
     )
 
     assert backend_paths[0] is not None
@@ -453,53 +364,41 @@ def test_event_capture_backend_label_persists_across_runs_with_group_slots(
     assert set(changed_payload_capture._event_key_attempts.values()) == {2}
 
 
+@pytest.mark.parametrize(
+    ("genuine", "masquerade", "message_type", "label"),
+    [
+        (
+            _usernotice("genuine-resub", "resub", "Genuine resub"),
+            "resubscription",
+            "resubscription",
+            "message-resubscription-7dce7b9831c9",
+        ),
+        (
+            _privmsg("genuine-text", "Genuine text"),
+            "text_message",
+            "text_message",
+            "message-text-message-18e44952e1aa",
+        ),
+    ],
+)
 def test_real_parser_raw_msg_id_provenance_prevents_normalized_masquerades(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch,
     captured_frames,
-) -> None:
-    captured = captured_frames
+    genuine,
+    masquerade,
+    message_type,
+    label,
+):
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-
-    resub_frames = [
-        _usernotice("genuine-resub", "resub", "Genuine resub"),
-        _usernotice("masquerade-resub", "resubscription", "Unknown raw type"),
-    ]
-    resub_matches = list(
-        irc_transport.MESSAGE_REGEX.finditer("\r\n".join(resub_frames) + "\r\n")
+    items = _parse_frames(
+        [
+            genuine,
+            _usernotice("masquerade", masquerade, "Unknown raw type"),
+        ]
     )
-    resub_items, _message_count = irc_transport._parse_irc_matches(
-        resub_matches,
-        None,
-        0,
-        event_frame_capture=irc_diagnostics._EventDiverseIrcFrameCapture(),
-    )
-
-    text_frames = [
-        _privmsg("genuine-text", "Genuine text"),
-        _usernotice("masquerade-text", "text_message", "Unknown raw type"),
-    ]
-    text_matches = list(
-        irc_transport.MESSAGE_REGEX.finditer("\r\n".join(text_frames) + "\r\n")
-    )
-    text_items, _message_count = irc_transport._parse_irc_matches(
-        text_matches,
-        None,
-        0,
-        event_frame_capture=irc_diagnostics._EventDiverseIrcFrameCapture(),
-    )
-
-    assert [item["message_type"] for item in resub_items] == [
-        "resubscription",
-        "resubscription",
-    ]
-    assert [item["message_type"] for item in text_items] == [
-        "text_message",
-        "text_message",
-    ]
-    assert [args[0] for args, _kwargs in captured] == [
-        "twitch-irc-event-message-resubscription-7dce7b9831c9",
-        "twitch-irc-event-action-usernotice-541488f4d6e7",
-        "twitch-irc-event-message-text-message-18e44952e1aa",
+    assert [item["message_type"] for item in items] == [message_type] * 2
+    assert [args[0] for args, _kwargs in captured_frames] == [
+        f"twitch-irc-event-{label}",
         "twitch-irc-event-action-usernotice-541488f4d6e7",
     ]
 
@@ -518,17 +417,8 @@ def test_real_parser_unknown_types_share_raw_action_fallback(
             "user-id=1 :tmi.twitch.tv MYSTERY #example :Unknown action"
         ),
     ]
-    matches = list(
-        irc_transport.MESSAGE_REGEX.finditer("\r\n".join(raw_frames) + "\r\n")
-    )
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-
-    items, _message_count = irc_transport._parse_irc_matches(
-        matches,
-        None,
-        0,
-        event_frame_capture=irc_diagnostics._EventDiverseIrcFrameCapture(),
-    )
+    items = _parse_frames(raw_frames)
 
     assert [item["message_type"] for item in items] == [
         "unknown-one",
@@ -542,24 +432,17 @@ def test_real_parser_unknown_types_share_raw_action_fallback(
 
 
 def test_successful_capture_modes_have_additive_fifteen_frame_limit(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch,
     captured_frames,
-) -> None:
+    event_capture,
+):
     captured = captured_frames
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "1")
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
     first_frame_capture = irc_diagnostics._SuccessfulIrcFrameCapture()
-    event_frame_capture = irc_diagnostics._EventDiverseIrcFrameCapture()
-
     for index in range(20):
         raw_frame = f"frame {index}\r\n"
         first_frame_capture.capture(raw_frame)
-        event_frame_capture.capture(
-            raw_frame,
-            {},
-            f"ACTION-{index}",
-            "",
-        )
+        event_capture.capture(raw_frame, {}, f"ACTION-{index}", "")
 
     assert len(captured) == 15
     assert [args[1]["raw"] for args, _kwargs in captured].count("frame 0\r\n") == 2
@@ -614,55 +497,45 @@ def test_control_command_ignores_incomplete_prefixes(frame_prefix: str) -> None:
 
 
 @pytest.mark.parametrize(
-    ("message", "expected_exception"),
+    ("message", "error", "operation", "path", "details"),
     [
-        ("resource not found", VideoNotFound),
-        ("not authorized to view this resource", LoginRequired),
-        ("subscription required for this video", VideoUnplayable),
-        ("this content was deleted", VideoUnavailable),
+        ("resource not found", VideoNotFound, None, ["root"], []),
+        ("not authorized to view this resource", LoginRequired, None, ["root"], []),
+        ("subscription required for this video", VideoUnplayable, None, ["root"], []),
+        ("this content was deleted", VideoUnavailable, None, ["root"], []),
+        (
+            "unexpected failure",
+            ParsingError,
+            "VideoCommentsByOffsetOrCursor",
+            ["video", "comments", 0],
+            ["video -> comments -> 0", "VideoCommentsByOffsetOrCursor"],
+        ),
+        *[
+            (
+                message,
+                graphql_client._PersistedQueryUnavailable,
+                "StreamMetadata",
+                ["video"],
+                [
+                    "StreamMetadata",
+                    "Operation hashes or required variables may be stale",
+                ],
+            )
+            for message in ("PersistedQueryNotFound", "Persisted query not found")
+        ],
     ],
 )
-def test_handle_gql_errors_maps_known_messages(message, expected_exception) -> None:
-    with pytest.raises(expected_exception):
-        graphql_client._handle_gql_errors([{"message": message, "path": ["root"]}])
+def test_handle_gql_errors(message, error, operation, path, details):
+    with pytest.raises(error) as exc:
+        graphql_client._handle_gql_errors(
+            [{"message": message, "path": path}],
+            [operation] if operation else None,
+        )
+    assert all(detail in str(exc.value) for detail in details)
 
 
 def test_handle_gql_errors_ignores_malformed_error_item() -> None:
     graphql_client._handle_gql_errors(["not-a-dict"])
-
-
-def test_handle_gql_errors_raises_parsing_error_with_path() -> None:
-    with pytest.raises(ParsingError) as excinfo:
-        graphql_client._handle_gql_errors(
-            [
-                {
-                    "message": "unexpected failure",
-                    "path": ["video", "comments", 0],
-                }
-            ],
-            ["VideoCommentsByOffsetOrCursor"],
-        )
-
-    assert "video -> comments -> 0" in str(excinfo.value)
-    assert "VideoCommentsByOffsetOrCursor" in str(excinfo.value)
-
-
-@pytest.mark.parametrize(
-    "message",
-    ["PersistedQueryNotFound", "Persisted query not found"],
-)
-def test_handle_gql_errors_reports_persisted_query_failures_actionably(
-    message: str,
-) -> None:
-    with pytest.raises(graphql_client._PersistedQueryUnavailable) as excinfo:
-        graphql_client._handle_gql_errors(
-            [{"message": message, "path": ["video"]}],
-            ["StreamMetadata"],
-        )
-
-    message = str(excinfo.value)
-    assert "StreamMetadata" in message
-    assert "Operation hashes or required variables may be stale" in message
 
 
 @pytest.mark.parametrize("batched", [False, True], ids=["dict", "list"])
@@ -686,25 +559,14 @@ def test_download_gql_handles_error_response(batched) -> None:
         )
 
 
-def test_download_base_gql_raises_captcha_challenge_required_on_challenge_response() -> (  # noqa: E501
-    None
-):
-    def session_post(_url, json, headers):
-        del json, headers
-        return type(
-            "_Resp",
-            (),
-            {
-                "status_code": 403,
-                "text": "Kasada challenge required",
-                "json": staticmethod(dict),
-            },
-        )()
-
-    with pytest.raises(CaptchaChallengeRequired) as exc_info:
-        graphql_client._download_base_gql(session_post, [{"operationName": "x"}])
-
-    assert "twitch_web" in str(exc_info.value)
+def test_download_base_gql_detects_captcha():
+    response = SimpleNamespace(
+        status_code=403, text="Kasada challenge required", json=dict
+    )
+    with pytest.raises(CaptchaChallengeRequired, match="twitch_web"):
+        graphql_client._download_base_gql(
+            lambda *a, **kw: response, [{"operationName": "x"}]
+        )
 
 
 def test_download_gql_rejects_missing_hash_mapping() -> None:
@@ -718,12 +580,18 @@ def test_download_gql_rejects_missing_hash_mapping() -> None:
 
     message = str(excinfo.value)
     assert "Missing Twitch persisted GraphQL hash mapping" in message
-    # Actionable diagnostics: name the bad op, the package version, the
-    # exact file to patch, and how to find the new hash.
+    # Diagnose the operation, package version, and location of stale hashes.
     assert "NonexistentOperation" in message
     assert __version__ in message
     assert "src/chat_downloader/sites/twitch/constants.py" in message
     assert "persistedQuery" in message
+
+
+@pytest.fixture
+def irc_socket(monkeypatch):
+    sock = Mock()
+    monkeypatch.setattr(irc_transport, "open_proxied_tls_socket", lambda *a, **kw: sock)
+    return sock
 
 
 def test_twitch_chat_irc_join_channel_is_idempotent() -> None:
@@ -742,58 +610,22 @@ def test_twitch_chat_irc_join_channel_is_idempotent() -> None:
     ]
 
 
-def test_twitch_chat_irc_timeout_and_close_delegate_to_socket() -> None:
-    irc = irc_transport.TwitchChatIRC.__new__(irc_transport.TwitchChatIRC)
-    irc.socket = Mock()
-
-    irc.set_timeout(1.25)
-    irc.close_connection()
-
-    irc.socket.settimeout.assert_called_once_with(1.25)
-    irc.socket.shutdown.assert_called_once_with(irc_transport.socket.SHUT_WR)
-    irc.socket.close.assert_called_once_with()
-
-
-def test_twitch_chat_irc_constructor_send_raw_and_recv(monkeypatch) -> None:
-    fake_socket = Mock()
-    fake_socket.recv.return_value = b"hello world"
-
-    monkeypatch.setattr(
-        irc_transport,
-        "open_proxied_tls_socket",
-        lambda *args, **kwargs: fake_socket,
-    )
-
+@pytest.mark.parametrize("split", [False, True])
+def test_twitch_chat_irc_registration_and_receive(irc_socket, split):
+    text = "hello \U0001f600 world" if split else "hello world"
+    encoded = text.encode()
+    chunks = [encoded[:8], encoded[8:]] if split else [encoded]
+    irc_socket.recv.side_effect = chunks
     irc = irc_transport.TwitchChatIRC()
-
-    assert fake_socket.settimeout.call_args_list == [((None,), {})]
-    assert fake_socket.sendall.call_args_list == [
-        ((b"CAP REQ :twitch.tv/tags twitch.tv/commands\r\n",), {}),
-        ((b"PASS listen\r\n",), {}),
-        ((b"NICK justinfan67420\r\n",), {}),
+    assert irc_socket.settimeout.call_args_list == [((None,), {})]
+    assert [call.args[0] for call in irc_socket.sendall.call_args_list] == [
+        b"CAP REQ :twitch.tv/tags twitch.tv/commands\r\n",
+        b"PASS listen\r\n",
+        b"NICK justinfan67420\r\n",
     ]
-
     irc.send_raw("PING")
-    assert fake_socket.sendall.call_args_list[-1] == ((b"PING\r\n",), {})
-    assert irc.recv(32) == "hello world"
-
-
-def test_twitch_chat_irc_preserves_utf8_split_across_recv_chunks(
-    monkeypatch,
-) -> None:
-    fake_socket = Mock()
-    encoded = "hello 😀 world".encode()
-    fake_socket.recv.side_effect = [encoded[:8], encoded[8:]]
-    monkeypatch.setattr(
-        irc_transport,
-        "open_proxied_tls_socket",
-        lambda *_args, **_kwargs: fake_socket,
-    )
-    irc = irc_transport.TwitchChatIRC()
-
-    received = irc.recv(1024) + irc.recv(1024)
-
-    assert received == "hello 😀 world"
+    assert irc_socket.sendall.call_args.args == (b"PING\r\n",)
+    assert "".join(irc.recv(32) for _ in chunks) == text
 
 
 @pytest.mark.parametrize(
@@ -833,38 +665,24 @@ def test_maybe_send_keepalive_updates_last_ping_only_when_due() -> None:
     irc = _FakeIRC()
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
 
-    assert (
-        irc_transport._maybe_send_keepalive(
-            irc,
-            current_time=120.0,
-            last_ping_time=40.0,
-            ping_every=60.0,
-            diagnostics=diagnostics,
+    for current, previous in [(120.0, 40.0), (150.0, 120.0)]:
+        assert (
+            irc_transport._maybe_send_keepalive(
+                irc,
+                current_time=current,
+                last_ping_time=previous,
+                ping_every=60.0,
+                diagnostics=diagnostics,
+            )
+            == 120.0
         )
-        == 120.0
-    )
-    assert irc.sent == ["PING"]
-
-    assert (
-        irc_transport._maybe_send_keepalive(
-            irc,
-            current_time=150.0,
-            last_ping_time=120.0,
-            ping_every=60.0,
-            diagnostics=diagnostics,
-        )
-        == 120.0
-    )
-    assert irc.sent == ["PING"]
+        assert irc.sent == ["PING"]
     assert diagnostics.summary["keepalive_ping_sent_count"] == 1
 
 
 def test_process_irc_buffer_keeps_partial_tail_without_final_newline() -> None:
     full_line = _privmsg("1", "one")
-    partial = (
-        "@badge-info=;badges=;color=;display-name=User;emotes=;id=2;mod=0;room-id=1;"
-        "subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;user-type= :user!user@user.tmi.twitch.tv PRIVMSG #example :par"  # noqa: E501
-    )
+    partial = _privmsg("2", "par")
     readbuffer_tail, matches = irc_transport._process_irc_buffer(
         f"{full_line}\r\n{partial}",
         irc_transport.MESSAGE_REGEX,
@@ -888,26 +706,17 @@ def test_consume_irc_buffer_returns_unmatched_full_buffer_only_for_complete_line
     assert unmatched_full_buffer == "UNKNOWN LINE\r\n"
 
 
-def test_parse_irc_matches_returns_items_and_updated_count(monkeypatch) -> None:
-    payload = _privmsg("1", "one") + "\r\n" + _privmsg("2", "two") + "\r\n"
-    matches = list(irc_transport.MESSAGE_REGEX.finditer(payload))
-
-    monkeypatch.setattr(
-        irc_transport,
-        "_parse_irc_item",
-        lambda match, _badge_set: {"message": match.group(3)},
-    )
-
+def test_parse_irc_matches_returns_items_and_updated_count():
+    payload = "\r\n".join([_privmsg("1", "one"), _privmsg("2", "two"), ""])
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-    items, message_count = irc_transport._parse_irc_matches(
-        matches,
+    items, count = irc_transport._parse_irc_matches(
+        list(irc_transport.MESSAGE_REGEX.finditer(payload)),
         None,
         249,
         diagnostics=diagnostics,
     )
-
-    assert items == [{"message": "one"}, {"message": "two"}]
-    assert message_count == 251
+    assert [item["message"] for item in items] == ["one", "two"]
+    assert count == 251
     assert diagnostics.summary["parsed_irc_message_count"] == 2
 
 
@@ -997,72 +806,56 @@ def test_irc_transport_captures_drift_but_not_control_frames(frame, unknown) -> 
         assert diagnostics.summary["keepalive_pong_received_count"] == 1
 
 
-def test_irc_transport_handles_partial_matches_and_sends_keepalive() -> None:
-    irc = _FakeIRC(
-        [
-            _privmsg("1", "hello") + "\r\n" + _privmsg("2", "part"),
-            "ial\r\n",
-            "",
-        ]
-    )
+@pytest.mark.parametrize(
+    ("chunks", "expected", "times", "counters", "sent"),
+    [
+        (
+            [_privmsg("1", "hello") + "\r\n" + _privmsg("2", "part"), "ial\r\n"],
+            ["hello", "partial"],
+            [0.0, 61.0, 62.0],
+            {
+                "received_irc_chunk_count": 2,
+                "received_irc_frame_count": 2,
+                "parsed_irc_message_count": 2,
+                "keepalive_ping_sent_count": 1,
+            },
+            ["PING"],
+        ),
+        (
+            [
+                "\r\n".join(_privmsg(str(i), f"message-{i}") for i in range(1, 251))
+                + "\r\n"
+            ],
+            [f"message-{i}" for i in range(1, 251)],
+            [0.0, 1.0],
+            {},
+            [],
+        ),
+        ([_privmsg("1", "hello") + "\r\nUNKNOWN"], ["hello"], [0.0, 1.0], {}, []),
+        (
+            [TimeoutError("timed out"), _privmsg("1", "after") + "\r\n"],
+            ["after"],
+            [0.0, 1.0, 2.0],
+            {"receive_timeout_count": 1},
+            [],
+        ),
+    ],
+    ids=["split-message-keepalive", "250-messages", "partial-tail", "receive-timeout"],
+)
+def test_irc_stream_chunks(chunks, expected, times, counters, sent):
+    irc = _FakeIRC([*chunks, ""])
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
     messages = []
     with (
-        patch.object(irc_transport.time, "monotonic", side_effect=[0.0, 61.0, 62.0]),
-        patch.object(irc_transport, "log") as mock_log,
+        patch.object(irc_transport.time, "monotonic", side_effect=times),
+        patch.object(irc_transport, "log") as log,
         pytest.raises(ConnectionError),
     ):
         messages.extend(_stream_messages(irc, diagnostics))
-
-    assert [item["message"] for item in messages] == ["hello", "partial"]
-    mock_log.assert_not_called()
-    assert irc.sent == ["PING"]
-    assert diagnostics.summary["received_irc_chunk_count"] == 2
-    assert diagnostics.summary["received_irc_frame_count"] == 2
-    assert diagnostics.summary["parsed_irc_message_count"] == 2
-    assert diagnostics.summary["keepalive_ping_sent_count"] == 1
-
-
-def test_irc_transport_does_not_log_progress_every_250_messages() -> None:
-    payload = "\r\n".join(
-        _privmsg(str(index), f"message-{index}") for index in range(1, 251)
-    )
-    messages = []
-    with (
-        patch.object(irc_transport, "log") as mock_log,
-        pytest.raises(ConnectionError),
-    ):
-        messages.extend(_stream_messages(_FakeIRC([payload + "\r\n", ""])))
-
-    assert [item["message"] for item in messages] == [
-        f"message-{index}" for index in range(1, 251)
-    ]
-    mock_log.assert_not_called()
-
-
-def test_irc_transport_preserves_trailing_unmatched_buffer_after_complete_match() -> (
-    None
-):
-    messages = []
-    with pytest.raises(ConnectionError):
-        messages.extend(
-            _stream_messages(
-                _FakeIRC([_privmsg("1", "hello") + "\r\nUNKNOWN", ""]),
-            )
-        )
-
-    assert [item["message"] for item in messages] == ["hello"]
-
-
-def test_irc_transport_swallows_timeout_and_continues_until_disconnect() -> None:
-    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-    messages = []
-    irc = _FakeIRC([TimeoutError("timed out"), _privmsg("1", "after") + "\r\n", ""])
-    with pytest.raises(ConnectionError):
-        messages.extend(_stream_messages(irc, diagnostics))
-
-    assert [item["message"] for item in messages] == ["after"]
-    assert diagnostics.summary["receive_timeout_count"] == 1
+    assert [item["message"] for item in messages] == expected
+    assert irc.sent == sent
+    assert {key: diagnostics.summary[key] for key in counters} == counters
+    log.assert_not_called()
 
 
 def test_irc_transport_maps_socket_receive_error_to_reconnect() -> None:
@@ -1100,43 +893,23 @@ def test_irc_transport_keepalive_send_errors_trigger_reconnect(frame) -> None:
         list(_stream_messages(irc))
 
 
-def test_twitch_chat_irc_constructor_closes_socket_on_send_raw_oserror(
-    monkeypatch,
-) -> None:
-    """SSL socket must be closed if send_raw raises during IRC registration."""
-    fake_socket = Mock()
-    fake_socket.sendall.side_effect = OSError("broken pipe")
-
-    monkeypatch.setattr(
-        irc_transport,
-        "open_proxied_tls_socket",
-        lambda *args, **kwargs: fake_socket,
-    )
-
+def test_twitch_chat_irc_registration_failure_closes_socket(irc_socket):
+    irc_socket.sendall.side_effect = OSError("broken pipe")
     with pytest.raises(OSError):
         irc_transport.TwitchChatIRC()
+    irc_socket.close.assert_called_once()
 
-    fake_socket.close.assert_called_once()
 
-
-def test_twitch_chat_irc_close_connection_sends_quit_before_closing(
-    monkeypatch,
-) -> None:
-    """close_connection() sends QUIT and shutdown before closing the socket."""
-    irc = irc_transport.TwitchChatIRC.__new__(irc_transport.TwitchChatIRC)
-    irc.socket = Mock()
-    irc.socket.shutdown = Mock()
-    sent: list[str] = []
-    irc.send_raw = sent.append
-
+def test_twitch_chat_irc_close_is_idempotent(irc_socket):
+    irc = irc_transport.TwitchChatIRC()
+    irc.set_timeout(1.25)
+    irc_socket.settimeout.assert_called_with(1.25)
     irc.close_connection()
-
-    assert "QUIT" in sent
-    irc.socket.shutdown.assert_called_once_with(irc_transport.socket.SHUT_WR)
-    irc.socket.close.assert_called_once()
-
+    assert irc_socket.sendall.call_args.args == (b"QUIT\r\n",)
+    irc_socket.shutdown.assert_called_once_with(irc_transport.socket.SHUT_WR)
+    irc_socket.close.assert_called_once()
     irc.close_connection()
-    irc.socket.close.assert_called_once()
+    irc_socket.close.assert_called_once()
 
 
 def test_download_base_gql_raises_http_error_for_non_captcha_4xx() -> None:
@@ -1157,40 +930,27 @@ def test_download_base_gql_raises_http_error_for_non_captcha_4xx() -> None:
     mock_response.raise_for_status.assert_called_once()
 
 
-def test_update_badge_info_skips_malformed_badge_and_keeps_others() -> None:
-    """One malformed badge ID must not drop the channel's other badges."""
+def test_update_badge_info_skips_malformed_badge_and_keeps_others():
     import base64
 
-    def make_badge_id(set_id: str, version: str, channel_id: str) -> str:
-        return base64.b64encode(f"{set_id};{version};{channel_id}".encode()).decode()
+    badges = [
+        {"id": base64.b64encode(value).decode(), "title": title}
+        for value, title in [
+            (b"subscriber;6;", "6-Month Sub"),
+            (b"notvalid", "Bad Badge"),
+        ]
+    ]
 
-    good_badge = {
-        "id": make_badge_id("subscriber", "6", ""),
-        "title": "6-Month Sub",
-    }
-    bad_badge = {
-        "id": base64.b64encode(b"notvalid").decode(),
-        "title": "Bad Badge",
-    }
+    def download(_session_post, query, client_id=None):
+        items = badges if query[0]["operationName"] == "ChatList_Badges" else []
+        return [{"data": {"badges": items, "user": None}}]
 
-    def fake_download_gql(_session_post, query, client_id=None):
-        op = query[0]["operationName"]
-        if op == "ChatList_Badges":
-            return [{"data": {"badges": [good_badge, bad_badge], "user": None}}]
-        return [{"data": {"badges": [], "user": None}}]
-
-    badge_info: dict = {}
-    subscriber_badge_info: dict = {}
-
+    badge_info = {}
     badge_client.update_badge_info(
         session_post=Mock(),
         channel="example",
-        download_gql_func=fake_download_gql,
+        download_gql_func=download,
         badge_info=badge_info,
-        subscriber_badge_info=subscriber_badge_info,
+        subscriber_badge_info={},
     )
-
-    # Good badge should be stored; bad badge silently skipped.
-    assert ("subscriber", "6") in badge_info
-    # Only one entry — bad badge dropped without killing the batch.
-    assert len(badge_info) == 1
+    assert list(badge_info) == [("subscriber", "6")]

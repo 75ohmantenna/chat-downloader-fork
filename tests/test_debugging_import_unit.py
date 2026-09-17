@@ -25,6 +25,16 @@ class _TtyAwareStringIO(io.StringIO):
         return self._tty
 
 
+@pytest.fixture
+def logging_state():
+    mode = dbg.get_testing_mode()
+    levels = [logger.level for logger in dbg.loggers]
+    yield
+    dbg.set_testing_mode(mode)
+    for logger, level in zip(dbg.loggers, levels, strict=True):
+        logger.setLevel(level)
+
+
 @contextmanager
 def _reload_debugging(monkeypatch, *, colorama, tty=False):
     state = [
@@ -102,34 +112,22 @@ def test_debugging_import_renders_with_available_colour(monkeypatch, colour):
         assert module.supports_colour() is colour
 
 
-def test_debug_log_applies_testing_controls(caplog):
-    mode = dbg.get_testing_mode()
-    levels = [logger.level for logger in dbg.loggers]
-    try:
-        dbg.set_log_level("debug")
-        dbg.set_testing_mode(dbg.TestingModes.EXIT_ON_DEBUG)
-        with (
-            caplog.at_level(logging.DEBUG, logger=dbg.logger.name),
-            pytest.raises(dbg.TestingException),
-        ):
-            dbg.debug_log("first", "second")
-        assert [record.getMessage() for record in caplog.records] == ["first", "second"]
-    finally:
-        dbg.set_testing_mode(mode)
-        for logger, level in zip(dbg.loggers, levels, strict=True):
-            logger.setLevel(level)
+def test_debug_log_applies_testing_controls(caplog, logging_state):
+    dbg.set_log_level("debug")
+    dbg.set_testing_mode(dbg.TestingModes.EXIT_ON_DEBUG)
+    with (
+        caplog.at_level(logging.DEBUG, logger=dbg.logger.name),
+        pytest.raises(dbg.TestingException),
+    ):
+        dbg.debug_log("first", "second")
+    assert [record.getMessage() for record in caplog.records] == ["first", "second"]
 
 
-def test_set_log_level_filters_all_configured_loggers(caplog):
-    levels = [logger.level for logger in dbg.loggers]
-    try:
-        dbg.set_log_level("error")
-        for logger in dbg.loggers:
-            logger.warning("hidden")
-            logger.error("visible")
-        assert [(record.name, record.getMessage()) for record in caplog.records] == [
-            (logger.name, "visible") for logger in dbg.loggers
-        ]
-    finally:
-        for logger, level in zip(dbg.loggers, levels, strict=True):
-            logger.setLevel(level)
+def test_set_log_level_filters_all_configured_loggers(caplog, logging_state):
+    dbg.set_log_level("error")
+    for logger in dbg.loggers:
+        logger.warning("hidden")
+        logger.error("visible")
+    assert [(record.name, record.getMessage()) for record in caplog.records] == [
+        (logger.name, "visible") for logger in dbg.loggers
+    ]

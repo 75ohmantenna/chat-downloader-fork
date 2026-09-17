@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import stat
-from typing import TYPE_CHECKING
 
 import pytest
 
@@ -26,24 +25,42 @@ from chat_downloader.sites.kick.parsing import events
 from chat_downloader.sites.kick.parsing.events import dispatch_event
 from tests.kick_helpers import load_fixture, pusher_frame
 
-if TYPE_CHECKING:
-    from pathlib import Path
+
+@pytest.fixture
+def captured(monkeypatch):
+    samples = []
+    monkeypatch.setattr(
+        events,
+        "capture_debug_sample",
+        lambda *args, **kwargs: samples.append((args, kwargs)),
+    )
+    return samples
 
 
-def test_chat_message_event_is_parsed() -> None:
+@pytest.fixture
+def sample_dir(tmp_path, monkeypatch, caplog):
+    directory = tmp_path / "samples"
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(directory))
+    caplog.set_level("DEBUG", logger=events.logger.name)
+    return directory
+
+
+@pytest.mark.parametrize("encoded", [False, True])
+def test_chat_message_event_is_parsed(encoded) -> None:
     data = load_fixture("chat_message_event_data.json")
-    message = dispatch_event(pusher_frame(CHAT_MESSAGE_EVENT, data))
+    frame = (
+        pusher_frame(CHAT_MESSAGE_EVENT, data)
+        if encoded
+        else {
+            "event": CHAT_MESSAGE_EVENT,
+            "data": data,
+        }
+    )
+    message = dispatch_event(frame)
     assert message is not None
     assert message["message_id"] == "live-1"
     assert message["message"] == "hello world :PogU:"
-
-
-def test_chat_message_event_with_object_data() -> None:
-    # Some frames may provide an already-decoded object instead of a string.
-    data = load_fixture("chat_message_event_data.json")
-    message = dispatch_event({"event": CHAT_MESSAGE_EVENT, "data": data})
-    assert message is not None
-    assert message["message_id"] == "live-1"
 
 
 def test_unknown_chat_message_type_records_diagnostic() -> None:
@@ -60,79 +77,104 @@ def test_unknown_chat_message_type_records_diagnostic() -> None:
     assert diagnostics == ["unknown_message_type_count", "parsed_event_count"]
 
 
-def test_reply_context_survives_event_dispatch() -> None:
-    data = load_fixture("reply_message_event_data.json")
-
-    message = dispatch_event(pusher_frame(CHAT_MESSAGE_EVENT, data))
-
-    assert message is not None
-    assert message["in_reply_to"]["message_id"] == "original-message"
-    assert message["in_reply_to"]["author"]["display_name"] == "OriginalAuthor"
-
-
-def test_celebration_context_survives_event_dispatch() -> None:
-    diagnostics: list[str] = []
-    data = load_fixture("celebration_message_event_data.json")
-
+@pytest.mark.parametrize(
+    ("event", "fixture", "expected"),
+    [
+        (
+            CHAT_MESSAGE_EVENT,
+            "reply_message_event_data.json",
+            {
+                ("in_reply_to", "message_id"): "original-message",
+                ("in_reply_to", "author", "display_name"): "OriginalAuthor",
+            },
+        ),
+        (
+            CHAT_MESSAGE_EVENT,
+            "celebration_message_event_data.json",
+            {
+                ("message_type",): "text_message",
+                ("metadata", "celebration", "total_months"): 20,
+            },
+        ),
+        (
+            MESSAGE_DELETED_EVENT,
+            "message_deleted_event_ai.json",
+            {
+                ("metadata", "ai_moderated"): True,
+                ("metadata", "violated_rules"): ["hate", "harassment"],
+            },
+        ),
+    ],
+)
+def test_nested_context_survives_event_dispatch(event, fixture, expected):
+    diagnostics = []
     message = dispatch_event(
-        pusher_frame(CHAT_MESSAGE_EVENT, data),
-        record_diagnostic=diagnostics.append,
+        pusher_frame(event, load_fixture(fixture)), record_diagnostic=diagnostics.append
     )
-
     assert message is not None
-    assert message["message_type"] == "text_message"
-    assert message["metadata"]["celebration"]["total_months"] == 20
+    for path, value in expected.items():
+        actual = message
+        for key in path:
+            actual = actual[key]
+        assert actual == value
+        if isinstance(value, bool):
+            assert actual is value
     assert diagnostics == ["parsed_event_count"]
 
 
-def test_ai_moderation_context_survives_event_dispatch() -> None:
-    data = load_fixture("message_deleted_event_ai.json")
-
-    message = dispatch_event(pusher_frame(MESSAGE_DELETED_EVENT, data))
-
-    assert message is not None
-    assert message["metadata"]["ai_moderated"] is True
-    assert message["metadata"]["violated_rules"] == ["hate", "harassment"]
-
-
-def test_compact_subscription_uses_receive_time_fallback_id() -> None:
-    data = load_fixture("subscription_event_compact.json")
-    diagnostics: list[str] = []
-
+@pytest.mark.parametrize(
+    ("event", "fixture", "received", "expected"),
+    [
+        (
+            SUBSCRIPTION_EVENT,
+            "subscription_event_compact.json",
+            1_789_000_000_000_001,
+            {
+                "message_id": "kick-subscription:1789000000000001",
+                "message_type": "subscription",
+                "message": "",
+                "author": {
+                    "display_name": "compactsubscriber",
+                    "name": "compactsubscriber",
+                },
+                "metadata": {"months": 1},
+            },
+        ),
+        (
+            PINNED_MESSAGE_DELETED_EVENT,
+            "pinned_message_deleted_event_empty.json",
+            1_789_000_000_000_002,
+            {
+                "message_id": "kick-unpin:1789000000000002",
+                "message_type": "pinned_message_deleted",
+                "message": "",
+            },
+        ),
+        (
+            STREAM_HOST_EVENT,
+            "stream_host_event_compact.json",
+            123,
+            {
+                "message_id": "kick-stream-host:123",
+                "message_type": "stream_host",
+                "message": "",
+                "author": {"display_name": "hosting_user", "name": "hosting_user"},
+                "metadata": {"host_username": "hosting_user", "number_viewers": 1044},
+            },
+        ),
+    ],
+)
+def test_compact_context_and_receive_time_fallback(event, fixture, received, expected):
+    data = load_fixture(fixture)
+    original = json.loads(json.dumps(data))
+    diagnostics = []
     message = dispatch_event(
-        pusher_frame(SUBSCRIPTION_EVENT, data),
+        pusher_frame(event, data),
+        received_timestamp=received,
         record_diagnostic=diagnostics.append,
-        received_timestamp=1_789_000_000_000_001,
     )
-
-    assert message == {
-        "message_id": "kick-subscription:1789000000000001",
-        "message_type": "subscription",
-        "message": "",
-        "author": {
-            "display_name": "compactsubscriber",
-            "name": "compactsubscriber",
-        },
-        "metadata": {"months": 1},
-    }
-    assert diagnostics == ["parsed_event_count"]
-
-
-def test_empty_pin_deletion_uses_receive_time_fallback_id() -> None:
-    data = load_fixture("pinned_message_deleted_event_empty.json")
-    diagnostics: list[str] = []
-
-    message = dispatch_event(
-        pusher_frame(PINNED_MESSAGE_DELETED_EVENT, data),
-        record_diagnostic=diagnostics.append,
-        received_timestamp=1_789_000_000_000_002,
-    )
-
-    assert message == {
-        "message_id": "kick-unpin:1789000000000002",
-        "message_type": "pinned_message_deleted",
-        "message": "",
-    }
+    assert message == expected
+    assert data == original
     assert diagnostics == ["parsed_event_count"]
 
 
@@ -176,111 +218,70 @@ def test_poll_deleted_ignores_payload_shape(payload: object) -> None:
 
 
 @pytest.mark.parametrize("received_timestamp", [None, True, -1])
-def test_compact_variants_require_valid_receive_timestamp(
-    received_timestamp: int | None,
-) -> None:
-    subscription = pusher_frame(
-        SUBSCRIPTION_EVENT,
-        load_fixture("subscription_event_compact.json"),
-    )
-    pin_deleted = pusher_frame(
-        PINNED_MESSAGE_DELETED_EVENT,
-        load_fixture("pinned_message_deleted_event_empty.json"),
-    )
-
-    assert (
-        dispatch_event(
-            subscription,
-            received_timestamp=received_timestamp,
-        )
-        is None
-    )
-    assert (
-        dispatch_event(
-            pin_deleted,
-            received_timestamp=received_timestamp,
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize("received_timestamp", [None, True, -1])
 @pytest.mark.parametrize(
     ("event", "payload"),
     [
+        (SUBSCRIPTION_EVENT, load_fixture("subscription_event_compact.json")),
+        (
+            PINNED_MESSAGE_DELETED_EVENT,
+            load_fixture("pinned_message_deleted_event_empty.json"),
+        ),
         (POLL_UPDATE_EVENT, {"poll": {"title": "Poll"}}),
         (POLL_DELETE_EVENT, None),
+        (STREAM_HOST_EVENT, load_fixture("stream_host_event_compact.json")),
     ],
 )
-def test_poll_events_require_valid_receive_timestamp(
-    event: str,
-    payload: object,
-    received_timestamp: int | None,
-) -> None:
-    diagnostics: list[str] = []
-
+def test_compact_events_require_valid_receive_timestamp(
+    event, payload, received_timestamp
+):
+    frame = pusher_frame(event, payload)
+    diagnostics = []
     assert (
         dispatch_event(
-            pusher_frame(event, payload),
-            record_diagnostic=diagnostics.append,
+            frame,
             received_timestamp=received_timestamp,
+            record_diagnostic=diagnostics.append,
         )
         is None
     )
-    expected_type = "poll_update" if event == POLL_UPDATE_EVENT else "poll_deleted"
-    assert diagnostics == [
-        "malformed_event_count",
-        f"malformed_event_type:{expected_type}",
-    ]
+    if event in (POLL_UPDATE_EVENT, POLL_DELETE_EVENT):
+        expected_type = "poll_update" if event == POLL_UPDATE_EVENT else "poll_deleted"
+        assert diagnostics == [
+            "malformed_event_count",
+            f"malformed_event_type:{expected_type}",
+        ]
 
 
 @pytest.mark.parametrize(
-    "payload",
+    ("event", "payload", "received", "kind"),
     [
-        {"chatroom_id": 1, "username": "subscriber", "months": 0},
-        {"chatroom_id": 1, "username": "subscriber", "months": True},
-        {"chatroom_id": 1, "username": "", "months": 1},
-        {"username": "subscriber", "months": 1},
-        {
-            "chatroom_id": 1,
-            "username": "subscriber",
-            "months": 1,
-            "sender": {},
-        },
+        *[
+            (SUBSCRIPTION_EVENT, payload, 1_789_000_000_000_003, "subscription")
+            for payload in [
+                {"chatroom_id": 1, "username": "subscriber", "months": 0},
+                {"chatroom_id": 1, "username": "subscriber", "months": True},
+                {"chatroom_id": 1, "username": "", "months": 1},
+                {"username": "subscriber", "months": 1},
+                {"chatroom_id": 1, "username": "subscriber", "months": 1, "sender": {}},
+            ]
+        ],
+        (
+            PINNED_MESSAGE_DELETED_EVENT,
+            [{"id": "unexpected"}],
+            1_789_000_000_000_004,
+            "pinned_message_deleted",
+        ),
     ],
 )
-def test_invalid_compact_subscription_shape_remains_malformed(
-    payload: dict[str, object],
-) -> None:
-    diagnostics: list[str] = []
-
+def test_invalid_compact_shape_remains_malformed(event, payload, received, kind):
+    diagnostics = []
     message = dispatch_event(
-        pusher_frame(SUBSCRIPTION_EVENT, payload),
+        pusher_frame(event, payload),
+        received_timestamp=received,
         record_diagnostic=diagnostics.append,
-        received_timestamp=1_789_000_000_000_003,
     )
-
     assert message is None
-    assert diagnostics == [
-        "malformed_event_count",
-        "malformed_event_type:subscription",
-    ]
-
-
-def test_nonempty_pin_deletion_array_remains_malformed() -> None:
-    diagnostics: list[str] = []
-
-    message = dispatch_event(
-        pusher_frame(PINNED_MESSAGE_DELETED_EVENT, [{"id": "unexpected"}]),
-        record_diagnostic=diagnostics.append,
-        received_timestamp=1_789_000_000_000_004,
-    )
-
-    assert message is None
-    assert diagnostics == [
-        "malformed_event_count",
-        "malformed_event_type:pinned_message_deleted",
-    ]
+    assert diagnostics == ["malformed_event_count", f"malformed_event_type:{kind}"]
 
 
 def test_malformed_nested_json_is_skipped() -> None:
@@ -293,14 +294,7 @@ def test_unparseable_chat_payload_is_skipped() -> None:
     assert dispatch_event(pusher_frame(CHAT_MESSAGE_EVENT, {"content": "x"})) is None
 
 
-def test_pusher_error_is_captured_before_raise(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured = []
-    monkeypatch.setattr(
-        events,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
-    )
-
+def test_pusher_error_is_captured_before_raise(captured) -> None:
     with pytest.raises(KickError):
         dispatch_event(pusher_frame(PUSHER_ERROR, {"message": "bad"}))
 
@@ -316,15 +310,7 @@ def test_control_events_are_ignored(event: str) -> None:
     assert dispatch_event(pusher_frame(event, {})) is None
 
 
-def test_unknown_event_is_captured_and_skipped(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured = []
-    monkeypatch.setattr(
-        events,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
-    )
+def test_unknown_event_is_captured_and_skipped(captured) -> None:
     frame = pusher_frame("App\\Events\\FutureEvent", {"future": True})
 
     assert dispatch_event(frame) is None
@@ -340,66 +326,26 @@ def test_unknown_event_is_captured_and_skipped(
     }
 
 
-def test_malformed_known_event_is_captured(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured = []
-    monkeypatch.setattr(
-        events,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
-    )
+def test_malformed_known_event_is_captured(captured) -> None:
     frame = pusher_frame("App\\Events\\SubscriptionEvent", {})
 
-    assert dispatch_event(frame) is None
+    diagnostics = []
+    assert dispatch_event(frame, record_diagnostic=diagnostics.append) is None
+    assert diagnostics == ["malformed_event_count", "malformed_event_type:subscription"]
 
     assert captured[0][0][0] == "kick-malformed-event"
     assert captured[0][0][1]["raw"] == frame
     assert captured[0][0][1]["message_type"] == "subscription"
 
 
-def test_malformed_known_event_records_its_normalized_type() -> None:
-    diagnostics: list[str] = []
-
-    assert (
-        dispatch_event(
-            pusher_frame(SUBSCRIPTION_EVENT, {}),
-            record_diagnostic=diagnostics.append,
-        )
-        is None
-    )
-
-    assert diagnostics == [
-        "malformed_event_count",
-        "malformed_event_type:subscription",
-    ]
-
-
-def test_frame_without_event_is_captured_and_skipped(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured = []
-    monkeypatch.setattr(
-        events,
-        "capture_debug_sample",
-        lambda *args, **kwargs: captured.append((args, kwargs)),
-    )
-
+def test_frame_without_event_is_captured_and_skipped(captured) -> None:
     assert dispatch_event({"data": "{}"}) is None
 
     assert captured[0][0][0] == "kick-unknown-event"
     assert captured[0][0][1]["reason"] == "missing or non-string event name"
 
 
-def test_unknown_event_capture_is_sanitized_on_disk(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    sample_dir = tmp_path / "samples"
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
-    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
-    caplog.set_level("DEBUG", logger=events.logger.name)
+def test_unknown_event_capture_is_sanitized_on_disk(sample_dir) -> None:
     frame = {
         "event": "App\\Events\\FutureEvent",
         "data": {
@@ -426,16 +372,7 @@ def test_unknown_event_capture_is_sanitized_on_disk(
     assert stat.S_IMODE(samples[0].stat().st_mode) == 0o600
 
 
-def test_unknown_event_capture_is_bounded(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    sample_dir = tmp_path / "samples"
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
-    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
-    caplog.set_level("DEBUG", logger=events.logger.name)
-
+def test_unknown_event_capture_is_bounded(sample_dir, caplog) -> None:
     for index in range(12):
         dispatch_event(pusher_frame(f"App\\Events\\Future{index}", {"index": index}))
 
@@ -443,55 +380,13 @@ def test_unknown_event_capture_is_bounded(
     assert "Debug sample limit reached" in caplog.text
 
 
-def test_unknown_event_capture_isolated_by_event_name(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    sample_dir = tmp_path / "samples"
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
-    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(sample_dir))
-    caplog.set_level("DEBUG", logger=events.logger.name)
-
+def test_unknown_event_capture_isolated_by_event_name(sample_dir) -> None:
     for index in range(5):
         dispatch_event(pusher_frame("App\\Events\\NoisyEvent", {"index": index}))
     dispatch_event(pusher_frame("App\\Events\\DifferentEvent", {"value": 1}))
 
     assert len(list(sample_dir.glob("kick-unknown-event-noisyevent-*.json"))) == 3
     assert len(list(sample_dir.glob("kick-unknown-event-differentevent-*.json"))) == 1
-
-
-def test_compact_host_preserves_context_without_mutating_payload() -> None:
-    data = load_fixture("stream_host_event_compact.json")
-    original = dict(data)
-    diagnostics: list[str] = []
-    message = dispatch_event(
-        pusher_frame(STREAM_HOST_EVENT, data),
-        received_timestamp=123,
-        record_diagnostic=diagnostics.append,
-    )
-    assert data == original
-    assert message == {
-        "message_id": "kick-stream-host:123",
-        "message_type": "stream_host",
-        "message": "",
-        "author": {"display_name": "hosting_user", "name": "hosting_user"},
-        "metadata": {"host_username": "hosting_user", "number_viewers": 1044},
-    }
-    assert diagnostics == ["parsed_event_count"]
-
-
-@pytest.mark.parametrize("received", [None, True, -1])
-def test_compact_host_requires_live_receive_time(received) -> None:
-    assert (
-        dispatch_event(
-            pusher_frame(
-                STREAM_HOST_EVENT, load_fixture("stream_host_event_compact.json")
-            ),
-            received_timestamp=received,
-        )
-        is None
-    )
 
 
 @pytest.mark.parametrize(
@@ -507,25 +402,17 @@ def test_compact_host_requires_live_receive_time(received) -> None:
         {"sender": {}},
         {"metadata": {}},
         {"id": ""},
+        None,
     ],
 )
 def test_compact_host_does_not_repair_invalid_fields(overrides) -> None:
-    data = load_fixture("stream_host_event_compact.json") | overrides
-    assert (
-        dispatch_event(
-            pusher_frame(STREAM_HOST_EVENT, data),
-            received_timestamp=123,
-        )
-        is None
+    data = (
+        []
+        if overrides is None
+        else load_fixture("stream_host_event_compact.json") | overrides
     )
-
-
-def test_compact_host_non_object_remains_malformed() -> None:
     assert (
-        dispatch_event(
-            pusher_frame(STREAM_HOST_EVENT, []),
-            received_timestamp=123,
-        )
+        dispatch_event(pusher_frame(STREAM_HOST_EVENT, data), received_timestamp=123)
         is None
     )
 

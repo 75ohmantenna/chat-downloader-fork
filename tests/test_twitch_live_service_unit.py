@@ -40,6 +40,57 @@ def _request(**overrides):
     )
 
 
+def _stream_request(channel: str, max_attempts: int = 1) -> ChatRequest:
+    return ChatRequest(
+        url=f"https://www.twitch.tv/{channel}", max_attempts=max_attempts
+    )
+
+
+def _stream_downloader(*gql_effects):
+    return SimpleNamespace(
+        _download_gql=Mock(side_effect=list(gql_effects)),
+        _update_badge_info=Mock(),
+        _get_chat_messages_by_stream_id=Mock(return_value=iter(())),
+        retry=Mock(),
+    )
+
+
+def _irc_factory(*effects):
+    if not effects:
+        return cast("live_service._IRCFactory", Mock(return_value=Mock()))
+    return cast("live_service._IRCFactory", Mock(side_effect=list(effects)))
+
+
+def _message_generator(*effects):
+    """Each effect is either an exception to raise or an iterable of messages."""
+    if not effects:
+        return cast("live_service._MessageGenerator", Mock(return_value=iter(())))
+    side_effects = [
+        effect if isinstance(effect, BaseException) else iter(effect)
+        for effect in effects
+    ]
+    return cast("live_service._MessageGenerator", Mock(side_effect=side_effects))
+
+
+def _run_live(
+    downloader, request, *, irc_factory=None, message_generator=None, diagnostics=None
+):
+    return list(
+        live_service.iter_stream_chat_messages(
+            cast("Any", downloader),
+            "example",
+            request,
+            irc_factory=irc_factory if irc_factory is not None else _irc_factory(),
+            message_generator=(
+                message_generator
+                if message_generator is not None
+                else _message_generator()
+            ),
+            diagnostics=diagnostics,
+        )
+    )
+
+
 class _FakeIRC:
     def __init__(self, responses: list[str]) -> None:
         self.responses = iter(responses)
@@ -128,31 +179,8 @@ def _optional_metadata_error() -> dict[str, object]:
 def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnects() -> (
     None
 ):
-    first_irc = Mock()
-    second_irc = Mock()
-    irc_factory = cast(
-        "live_service._IRCFactory",
-        Mock(side_effect=[OSError("temporary"), first_irc, second_irc]),
-    )
+    first_irc, second_irc = Mock(), Mock()
     downloader = _downloader()
-    request = _request(max_attempts=3, message_receive_timeout=1.5)
-    message_generator = cast(
-        "live_service._MessageGenerator",
-        Mock(
-            side_effect=[
-                ConnectionError("reconnect"),
-                iter(
-                    [
-                        {
-                            "message_type": "text_message",
-                            "message_id": "kept",
-                            "extra": "x",
-                        }
-                    ],
-                ),
-            ],
-        ),
-    )
     diagnostics = live_service._TwitchLiveDiagnostics()
 
     with (
@@ -163,58 +191,54 @@ def test_live_service_iter_stream_chat_messages_retries_connection_and_reconnect
         ),
         patch.object(live_service, "debug_log") as mock_debug_log,
     ):
-        result = list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                request,
-                irc_factory=irc_factory,
-                message_generator=message_generator,
-                diagnostics=diagnostics,
+        result = _run_live(
+            downloader,
+            _request(max_attempts=3, message_receive_timeout=1.5),
+            irc_factory=_irc_factory(OSError("temporary"), first_irc, second_irc),
+            message_generator=_message_generator(
+                ConnectionError("reconnect"),
+                [{"message_type": "text_message", "message_id": "kept", "extra": "x"}],
             ),
+            diagnostics=diagnostics,
         )
 
     assert result == [
-        {"message_type": "text_message", "message_id": "kept", "extra": "x"},
+        {"message_type": "text_message", "message_id": "kept", "extra": "x"}
     ]
     downloader.retry.assert_called_once()
     first_irc.close_connection.assert_called_once()
     second_irc.close_connection.assert_called_once()
     mock_debug_log.assert_called_once()
-    assert diagnostics.summary["connection_attempt_count"] == 3
-    assert diagnostics.summary["connection_success_count"] == 2
-    assert diagnostics.summary["connection_setup_failure_count"] == 1
-    assert diagnostics.summary["reconnect_count"] == 1
-    assert diagnostics.summary["live_emitted_count"] == 1
+    summary = diagnostics.summary
+    assert (
+        summary["connection_attempt_count"],
+        summary["connection_success_count"],
+    ) == (3, 2)
+    assert (summary["connection_setup_failure_count"], summary["reconnect_count"]) == (
+        1,
+        1,
+    )
+    assert summary["live_emitted_count"] == 1
 
 
 def test_successful_irc_frame_capture_is_bounded_across_reconnects(
-    monkeypatch: pytest.MonkeyPatch,
-    captured_frames,
+    monkeypatch: pytest.MonkeyPatch, captured_frames
 ) -> None:
     first_frames = [_privmsg(str(index), f"message {index}") for index in range(2)]
     second_frames = [_privmsg(str(index), f"message {index}") for index in range(2, 5)]
     ircs = [
-        _FakeIRC(
-            [
-                "\r\n".join(first_frames) + "\r\nPING :tmi.twitch.tv\r",
-                "",
-            ]
-        ),
+        _FakeIRC(["\r\n".join(first_frames) + "\r\nPING :tmi.twitch.tv\r", ""]),
         _FakeIRC(["\n" + "\r\n".join(second_frames) + "\r\n", ""]),
     ]
     downloader = _downloader(badge_cache=SimpleNamespace(snapshot=lambda: None))
-    request = _request(max_attempts=2)
-    captured = captured_frames
-
     diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "yes")
 
     messages = live_service.iter_stream_chat_messages(
         cast("Any", downloader),
         "example",
-        request,
-        irc_factory=cast("live_service._IRCFactory", Mock(side_effect=ircs)),
+        _request(max_attempts=2),
+        irc_factory=_irc_factory(*ircs),
         diagnostics=diagnostics,
     )
     received = [next(messages) for _ in range(5)]
@@ -223,29 +247,31 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
     assert [message["message_id"] for message in received] == [
         str(index) for index in range(5)
     ]
-    assert captured == [
-        (
-            ("twitch-irc-frame", {"raw": f"{frame}\r\n"}),
-            {"sample_limit": 3},
-        )
+    assert captured_frames == [
+        (("twitch-irc-frame", {"raw": f"{frame}\r\n"}), {"sample_limit": 3})
         for frame in [*first_frames, second_frames[0]]
     ]
     assert all(irc.closed for irc in ircs)
     assert all(irc.sent == [] for irc in ircs)
-    assert diagnostics.summary["connection_attempt_count"] == 2
-    assert diagnostics.summary["connection_success_count"] == 2
-    assert diagnostics.summary["reconnect_count"] == 1
-    assert diagnostics.summary["received_irc_chunk_count"] == 2
-    assert diagnostics.summary["received_irc_frame_count"] == 5
-    assert diagnostics.summary["parsed_irc_message_count"] == 5
-    assert diagnostics.summary["keepalive_ping_received_count"] == 0
-    assert diagnostics.summary["keepalive_pong_sent_count"] == 0
-    assert diagnostics.summary["live_emitted_count"] == 5
+    summary = diagnostics.summary
+    assert (
+        summary["connection_attempt_count"],
+        summary["connection_success_count"],
+    ) == (2, 2)
+    assert (summary["reconnect_count"], summary["received_irc_chunk_count"]) == (1, 2)
+    assert (
+        summary["received_irc_frame_count"],
+        summary["parsed_irc_message_count"],
+    ) == (5, 5)
+    assert (
+        summary["keepalive_ping_received_count"],
+        summary["keepalive_pong_sent_count"],
+    ) == (0, 0)
+    assert summary["live_emitted_count"] == 5
 
 
 def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
-    monkeypatch: pytest.MonkeyPatch,
-    captured_frames,
+    monkeypatch: pytest.MonkeyPatch, captured_frames
 ) -> None:
     resub_one = _usernotice("resub-1", "resub", "First resub")
     text_message = _privmsg("text-1", "Hello")
@@ -256,17 +282,14 @@ def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
         _FakeIRC([f"{resub_two}\r\n{milestone}\r\n", ""]),
     ]
     downloader = _downloader(badge_cache=SimpleNamespace(snapshot=lambda: None))
-    request = _request(max_attempts=2, message_groups=["all"])
-    captured = captured_frames
-
     diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "on")
 
     messages = live_service.iter_stream_chat_messages(
         cast("Any", downloader),
         "example",
-        request,
-        irc_factory=cast("live_service._IRCFactory", Mock(side_effect=ircs)),
+        _request(max_attempts=2, message_groups=["all"]),
+        irc_factory=_irc_factory(*ircs),
         diagnostics=diagnostics,
     )
     received = [next(messages) for _ in range(4)]
@@ -278,7 +301,7 @@ def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
         "resubscription",
         "viewermilestone",
     ]
-    assert captured == [
+    assert captured_frames == [
         (
             (f"twitch-irc-event-message-{label}", {"raw": f"{frame}\r\n"}),
             {
@@ -294,33 +317,26 @@ def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
         ]
     ]
     assert all(irc.closed for irc in ircs)
-    assert diagnostics.summary["reconnect_count"] == 1
-    assert diagnostics.summary["parsed_irc_message_count"] == 4
+    assert (
+        diagnostics.summary["reconnect_count"],
+        diagnostics.summary["parsed_irc_message_count"],
+    ) == (
+        1,
+        4,
+    )
 
 
 def test_live_service_passes_effective_proxy_to_irc_factory() -> None:
     irc = Mock()
-    irc_factory = cast("live_service._IRCFactory", Mock(return_value=irc))
+    irc_factory = _irc_factory(irc)
     downloader = _downloader(
         session=SimpleNamespace(
             proxies={"https": "socks5h://proxy.test:1080"},
             trust_env=False,
         ),
     )
-    request = _request()
 
-    result = list(
-        live_service.iter_stream_chat_messages(
-            cast("Any", downloader),
-            "example",
-            request,
-            irc_factory=irc_factory,
-            message_generator=cast(
-                "live_service._MessageGenerator",
-                Mock(return_value=iter(())),
-            ),
-        )
-    )
+    result = _run_live(downloader, _request(), irc_factory=irc_factory)
 
     assert result == []
     irc_factory.assert_called_once_with(
@@ -335,43 +351,21 @@ def test_live_service_raises_runtime_error_if_retry_returns() -> None:
         patch.object(live_service, "_attempt_numbers", return_value=iter([1])),
         pytest.raises(RuntimeError, match="unreachable"),
     ):
-        list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                _request(),
-                irc_factory=cast(
-                    "live_service._IRCFactory",
-                    Mock(side_effect=OSError("connection refused")),
-                ),
-                message_generator=cast(
-                    "live_service._MessageGenerator",
-                    Mock(return_value=iter(())),
-                ),
-            ),
+        _run_live(
+            downloader,
+            _request(),
+            irc_factory=_irc_factory(OSError("connection refused")),
         )
 
 
 def test_live_service_logs_effective_clamped_receive_timeout() -> None:
     irc = Mock()
-    downloader = _downloader()
-    request = _request(message_receive_timeout=0.1)
 
     with patch.object(live_service, "log") as mock_log:
-        result = list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                request,
-                irc_factory=cast(
-                    "live_service._IRCFactory",
-                    Mock(return_value=irc),
-                ),
-                message_generator=cast(
-                    "live_service._MessageGenerator",
-                    Mock(return_value=iter(())),
-                ),
-            ),
+        result = _run_live(
+            _downloader(),
+            _request(message_receive_timeout=0.1),
+            irc_factory=_irc_factory(irc),
         )
 
     assert result == []
@@ -383,34 +377,22 @@ def test_live_service_logs_effective_clamped_receive_timeout() -> None:
 
 
 def test_live_service_default_messages_include_social_sharing_badge() -> None:
-    irc = Mock()
-    downloader = _downloader()
-    request = _request()
     social_sharing_badge = {
         "action_type": "user_notice",
         "message_type": "social_sharing_badge",
         "message_id": "social-badge-1",
     }
 
-    result = list(
-        live_service.iter_stream_chat_messages(
-            cast("Any", downloader),
-            "example",
-            request,
-            irc_factory=cast("live_service._IRCFactory", Mock(return_value=irc)),
-            message_generator=cast(
-                "live_service._MessageGenerator",
-                Mock(return_value=iter([social_sharing_badge])),
-            ),
-        )
+    result = _run_live(
+        _downloader(),
+        _request(),
+        message_generator=_message_generator([social_sharing_badge]),
     )
 
     assert result == [social_sharing_badge]
 
 
 def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -> None:
-    irc = Mock()
-    downloader = _downloader()
     request = _request(max_attempts=2)
     messages = [
         {"message_type": "text_message", "message_id": str(index)}
@@ -422,22 +404,11 @@ def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -
     with (
         patch.object(live_service, "log") as mock_log,
         patch.object(
-            live_service.MessageFilter,
-            "from_request",
-            return_value=fake_filter,
+            live_service.MessageFilter, "from_request", return_value=fake_filter
         ),
     ):
-        result = list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                request,
-                irc_factory=cast("live_service._IRCFactory", Mock(return_value=irc)),
-                message_generator=cast(
-                    "live_service._MessageGenerator",
-                    Mock(return_value=iter(messages)),
-                ),
-            ),
+        result = _run_live(
+            _downloader(), request, message_generator=_message_generator(messages)
         )
 
     assert len(result) == 250
@@ -447,31 +418,16 @@ def test_live_service_iter_stream_chat_messages_filters_and_logs_every_250th() -
 def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message() -> (
     None
 ):
-    first_irc = Mock()
-    second_irc = Mock()
-    downloader = _downloader()
-    request = _request(max_attempts=2, message_groups=["messages", "other"])
-    message_generator = cast(
-        "live_service._MessageGenerator",
-        Mock(
-            side_effect=[
-                iter([{"action_type": "reconnect", "message_type": "reconnect"}]),
-                iter([{"message_type": "text_message", "message_id": "kept"}]),
-            ],
-        ),
-    )
+    first_irc, second_irc = Mock(), Mock()
 
     with patch.object(live_service, "log") as mock_log:
-        result = list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                request,
-                irc_factory=cast(
-                    "live_service._IRCFactory",
-                    Mock(side_effect=[first_irc, second_irc]),
-                ),
-                message_generator=message_generator,
+        result = _run_live(
+            _downloader(),
+            _request(max_attempts=2, message_groups=["messages", "other"]),
+            irc_factory=_irc_factory(first_irc, second_irc),
+            message_generator=_message_generator(
+                [{"action_type": "reconnect", "message_type": "reconnect"}],
+                [{"message_type": "text_message", "message_id": "kept"}],
             ),
         )
 
@@ -485,45 +441,26 @@ def test_live_service_iter_stream_chat_messages_reconnects_on_reconnect_message(
 
 
 def test_live_service_iter_stream_chat_messages_deduplicates_by_message_id() -> None:
-    irc = Mock()
-    downloader = _downloader()
-    request = _request()
     messages = [
-        {
-            "message_type": "text_message",
-            "message_id": "dup",
-            "message": "first",
-        },
-        {
-            "message_type": "text_message",
-            "message_id": "dup",
-            "message": "duplicate",
-        },
-        {
-            "message_type": "text_message",
-            "message_id": "unique",
-            "message": "second",
-        },
+        {"message_type": "text_message", "message_id": "dup", "message": "first"},
+        {"message_type": "text_message", "message_id": "dup", "message": "duplicate"},
+        {"message_type": "text_message", "message_id": "unique", "message": "second"},
     ]
     diagnostics = live_service._TwitchLiveDiagnostics()
 
-    result = list(
-        live_service.iter_stream_chat_messages(
-            cast("Any", downloader),
-            "example",
-            request,
-            irc_factory=cast("live_service._IRCFactory", Mock(return_value=irc)),
-            message_generator=cast(
-                "live_service._MessageGenerator",
-                Mock(return_value=iter(messages)),
-            ),
-            diagnostics=diagnostics,
-        ),
+    result = _run_live(
+        _downloader(),
+        _request(),
+        message_generator=_message_generator(messages),
+        diagnostics=diagnostics,
     )
 
     assert result == [messages[0], messages[2]]
-    assert diagnostics.summary["duplicate_message_suppressed_count"] == 1
-    assert diagnostics.summary["live_emitted_count"] == 2
+    summary = diagnostics.summary
+    assert (
+        summary["duplicate_message_suppressed_count"],
+        summary["live_emitted_count"],
+    ) == (1, 2)
 
 
 def test_live_service_iter_stream_chat_messages_rejects_zero_attempts() -> None:
@@ -555,10 +492,7 @@ def test_real_live_get_chat_reports_content_free_metadata_diagnostics(
 
     chat = downloader.get_chat_by_stream_id(
         "northernlion",
-        _request(
-            url="https://www.twitch.tv/northernlion",
-            max_attempts=len(payloads),
-        ),
+        _request(url="https://www.twitch.tv/northernlion", max_attempts=len(payloads)),
     )
 
     assert session_post.call_count == len(payloads)
@@ -573,144 +507,71 @@ def test_real_live_get_chat_reports_content_free_metadata_diagnostics(
     downloader.close()
 
 
-def test_live_service_get_chat_by_stream_id_handles_rerun_and_updates_badges(
-    caplog,
-) -> None:
-    downloader = SimpleNamespace(
-        _download_gql=Mock(
-            return_value=[
-                {
-                    "data": {
-                        "user": {
-                            "id": "channel-123",
-                            "stream": {"type": "rerun"},
-                            "lastBroadcast": {"title": "Rerun Title"},
-                        },
-                    },
-                },
-            ],
-        ),
-        _update_badge_info=Mock(),
-        _get_chat_messages_by_stream_id=Mock(return_value=iter(())),
-        retry=Mock(),
-    )
-
-    with caplog.at_level(logging.INFO, logger=live_service.logger.name):
-        chat = live_service.get_chat_by_stream_id(
-            cast("Any", downloader),
+@pytest.mark.parametrize(
+    ("channel", "user", "failure", "title", "status", "warning"),
+    [
+        (
             "example",
-            ChatRequest(url="https://www.twitch.tv/example", max_attempts=1),
-        )
-
-    assert chat.title == "Rerun Title"
-    assert chat.status == "live"
-    assert chat.diagnostics["connection_attempt_count"] == 0
-    diagnostics = downloader._get_chat_messages_by_stream_id.call_args.kwargs[
-        "diagnostics"
-    ]
-    assert chat.diagnostics is diagnostics.summary
-    downloader._update_badge_info.assert_called_once_with("example", "channel-123")
-    assert any("broadcasting a rerun" in r.message for r in caplog.records)
-
-
-def test_live_service_get_chat_by_stream_id_retries_then_raises_user_not_found() -> (
-    None
-):
-    downloader = SimpleNamespace(
-        _download_gql=Mock(
-            side_effect=[
-                RequestException("temporary"),
-                [{"data": {"user": None}}],
-            ],
+            {
+                "id": "channel-123",
+                "stream": {"type": "rerun"},
+                "lastBroadcast": {"title": "Rerun Title"},
+            },
+            None,
+            "Rerun Title",
+            "live",
+            "broadcasting a rerun",
         ),
-        _update_badge_info=Mock(),
-        _get_chat_messages_by_stream_id=Mock(return_value=iter(())),
-        retry=Mock(),
-    )
-
-    with pytest.raises(live_service.UserNotFound):
-        live_service.get_chat_by_stream_id(
-            cast("Any", downloader),
-            "missing-channel",
-            ChatRequest(url="https://www.twitch.tv/missing-channel", max_attempts=2),
-        )
-
-    downloader.retry.assert_called_once()
-    downloader._update_badge_info.assert_not_called()
-
-
-def test_live_service_get_chat_by_stream_id_marks_offline_stream_upcoming(
-    caplog,
-) -> None:
-    downloader = SimpleNamespace(
-        _download_gql=Mock(
-            return_value=[
-                {
-                    "data": {
-                        "user": {
-                            "stream": {"type": None},
-                            "lastBroadcast": {"title": "Ignored"},
-                        },
-                    },
-                },
-            ],
-        ),
-        _update_badge_info=Mock(),
-        _get_chat_messages_by_stream_id=Mock(return_value=iter(())),
-        retry=Mock(),
-    )
-
-    with caplog.at_level(logging.WARNING, logger="chat_downloader"):
-        chat = live_service.get_chat_by_stream_id(
-            cast("Any", downloader),
+        (
             "offline-channel",
-            ChatRequest(url="https://www.twitch.tv/offline-channel", max_attempts=1),
-        )
-
-    assert chat.title == "offline-channel"
-    assert chat.status == "upcoming"
-    assert any("not currently live" in r.message for r in caplog.records)
-
-
-def test_live_service_get_chat_by_stream_id_retries_on_key_error_from_gql_schema_change() -> (  # noqa: E501
-    None
-):
-    """KeyError from unexpected GQL schema is retried, not surfaced."""
-    downloader = SimpleNamespace(
-        _download_gql=Mock(
-            side_effect=[
-                [{}],  # missing "data" key → KeyError on [0]["data"]["user"]
-                [
-                    {
-                        "data": {
-                            "user": {
-                                "stream": {"type": "live"},
-                                "lastBroadcast": {"title": "Live Title"},
-                            },
-                        },
-                    },
-                ],
-            ],
+            {"stream": {"type": None}, "lastBroadcast": {"title": "Ignored"}},
+            None,
+            "offline-channel",
+            "upcoming",
+            "not currently live",
         ),
-        _update_badge_info=Mock(),
-        _get_chat_messages_by_stream_id=Mock(return_value=iter(())),
-        retry=Mock(),
-    )
-
-    chat = live_service.get_chat_by_stream_id(
-        cast("Any", downloader),
-        "example",
-        ChatRequest(url="https://www.twitch.tv/example", max_attempts=2),
-    )
-
-    assert chat.title == "Live Title"
-    downloader.retry.assert_called_once()
+        (
+            "example",
+            {"stream": {"type": "live"}, "lastBroadcast": {"title": "Live Title"}},
+            [{}],
+            "Live Title",
+            "live",
+            None,
+        ),
+        ("missing-channel", None, RequestException("temporary"), None, None, None),
+    ],
+    ids=["rerun", "offline", "schema-retry", "missing-user-retry"],
+)
+def test_live_metadata(caplog, channel, user, failure, title, status, warning):
+    responses = [[{"data": {"user": user}}]]
+    if failure is not None:
+        responses.insert(0, failure)
+    downloader = _stream_downloader(*responses)
+    request = _stream_request(channel, len(responses))
+    if user is None:
+        with pytest.raises(live_service.UserNotFound):
+            live_service.get_chat_by_stream_id(
+                cast("Any", downloader), channel, request
+            )
+        downloader._update_badge_info.assert_not_called()
+    else:
+        with caplog.at_level(logging.INFO, logger="chat_downloader"):
+            chat = live_service.get_chat_by_stream_id(
+                cast("Any", downloader), channel, request
+            )
+        assert (chat.title, chat.status) == (title, status)
+        if warning:
+            assert any(warning in record.message for record in caplog.records)
+        if "id" in user:
+            assert chat.diagnostics["connection_attempt_count"] == 0
+            downloader._update_badge_info.assert_called_once_with(channel, user["id"])
+    if failure is not None:
+        downloader.retry.assert_called_once()
 
 
 def test_live_service_reconnect_refreshes_badge_set() -> None:
     """Reconnect must call _update_badge_info and take a fresh snapshot."""
-    first_irc = Mock()
-    second_irc = Mock()
+    first_irc, second_irc = Mock(), Mock()
 
     initial_badges = {"old": True}
     refreshed_badges = {"old": True, "new": True}
@@ -719,7 +580,6 @@ def test_live_service_reconnect_refreshes_badge_set() -> None:
         snapshot=Mock(side_effect=[initial_badges, refreshed_badges])
     )
     downloader = _downloader(badge_cache=badge_cache)
-    request = _request(max_attempts=2, message_receive_timeout=1.5)
 
     captured_badge_sets: list[Any] = []
 
@@ -729,17 +589,11 @@ def test_live_service_reconnect_refreshes_badge_set() -> None:
             raise ConnectionError("reconnect")
         yield from [{"message_type": "text_message", "message_id": "kept"}]
 
-    result = list(
-        live_service.iter_stream_chat_messages(
-            cast("Any", downloader),
-            "example",
-            request,
-            irc_factory=cast(
-                "live_service._IRCFactory",
-                Mock(side_effect=[first_irc, second_irc]),
-            ),
-            message_generator=cast("live_service._MessageGenerator", message_generator),
-        ),
+    result = _run_live(
+        downloader,
+        _request(max_attempts=2, message_receive_timeout=1.5),
+        irc_factory=_irc_factory(first_irc, second_irc),
+        message_generator=cast("live_service._MessageGenerator", message_generator),
     )
 
     assert result == [{"message_type": "text_message", "message_id": "kept"}]
@@ -751,20 +605,8 @@ def test_live_service_reconnect_refreshes_badge_set() -> None:
 def test_is_duplicate_live_message_ignores_invalid_message_ids() -> None:
     seen_message_cache = live_service._SeenMessageCache(limit=2)
 
-    assert (
-        live_service._is_duplicate_live_message(
-            None,
-            seen_message_cache,
-        )
-        is False
-    )
-    assert (
-        live_service._is_duplicate_live_message(
-            "",
-            seen_message_cache,
-        )
-        is False
-    )
+    assert live_service._is_duplicate_live_message(None, seen_message_cache) is False
+    assert live_service._is_duplicate_live_message("", seen_message_cache) is False
     assert list(seen_message_cache.message_ids) == []
 
 
@@ -788,25 +630,15 @@ def test_is_duplicate_live_message_evicts_oldest_seen_message() -> None:
 def test_live_service_repeated_disconnects_exhaust_reconnect_budget() -> None:
     ircs = [Mock(), Mock()]
     downloader = _downloader()
-    request = _request(max_attempts=2)
 
     with pytest.raises(RetriesExceeded):
-        list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                request,
-                irc_factory=cast("live_service._IRCFactory", Mock(side_effect=ircs)),
-                message_generator=cast(
-                    "live_service._MessageGenerator",
-                    Mock(
-                        side_effect=[
-                            ConnectionError("drop one"),
-                            ConnectionError("drop two"),
-                        ]
-                    ),
-                ),
-            )
+        _run_live(
+            downloader,
+            _request(max_attempts=2),
+            irc_factory=_irc_factory(*ircs),
+            message_generator=_message_generator(
+                ConnectionError("drop one"), ConnectionError("drop two")
+            ),
         )
 
     assert all(irc.close_connection.called for irc in ircs)
@@ -815,27 +647,12 @@ def test_live_service_repeated_disconnects_exhaust_reconnect_budget() -> None:
 def test_live_service_closes_partial_connection_when_join_fails() -> None:
     failed_irc = Mock()
     failed_irc.join_channel.side_effect = OSError("join failed")
-    healthy_irc = Mock()
-    downloader = _downloader()
-    request = _request(max_attempts=2)
 
-    assert (
-        list(
-            live_service.iter_stream_chat_messages(
-                cast("Any", downloader),
-                "example",
-                request,
-                irc_factory=cast(
-                    "live_service._IRCFactory",
-                    Mock(side_effect=[failed_irc, healthy_irc]),
-                ),
-                message_generator=cast(
-                    "live_service._MessageGenerator",
-                    Mock(return_value=iter(())),
-                ),
-            )
-        )
-        == []
+    result = _run_live(
+        _downloader(),
+        _request(max_attempts=2),
+        irc_factory=_irc_factory(failed_irc, Mock()),
     )
 
+    assert result == []
     failed_irc.close_connection.assert_called_once()

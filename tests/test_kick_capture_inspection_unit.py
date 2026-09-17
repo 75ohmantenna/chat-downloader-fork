@@ -32,7 +32,23 @@ def _text(message_id="one", timestamp=1000):
     }
 
 
-def _log(path, received=5, benign=2, parsed=3):
+def _update_summary(summary, changes):
+    for key, value in changes.items():
+        target = summary if key in summary else summary["provider_diagnostics"]
+        target[key] = value
+
+
+@pytest.fixture
+def capture(tmp_path):
+    return _write(tmp_path / "chat.jsonl", _clean_rows())
+
+
+def _assert_bad_summary(capture, log, capsys):
+    assert main([str(capture), "--debug-log", str(log)]) == 2
+    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
+
+
+def _log(path, received=5, benign=2, parsed=3, **changes):
     summary = {
         "success": True,
         "message_count": 3,
@@ -54,6 +70,7 @@ def _log(path, received=5, benign=2, parsed=3):
             "reconnect_backfill_emitted_count": 0,
         },
     }
+    _update_summary(summary, changes)
     path.write_text("[DEBUG] Run summary: " + repr(summary) + "\n", encoding="utf-8")
     return path
 
@@ -61,11 +78,7 @@ def _log(path, received=5, benign=2, parsed=3):
 def test_clean_inspection_counts_shapes_and_keeps_timestamp_backsteps_informational(
     tmp_path,
 ):
-    rows = [
-        {"message_type": "poll_deleted", "message_id": "poll"},
-        _text(),
-        _text("two", 982),
-    ]
+    rows = _clean_rows()
     rows[-1]["in_reply_to"] = {"message_id": "parent"}
     report = inspect_capture(
         _write(tmp_path / "chat.jsonl", rows), _log(tmp_path / "debug.log")
@@ -109,24 +122,22 @@ def test_inspection_scans_past_bad_records_and_never_echoes_content(tmp_path, ca
 
 
 @pytest.mark.parametrize(
-    "emotes",
+    ("fields", "emotes"),
     [
-        None,
-        {},
-        [None],
-        [{}],
-        [{"id": "1", "name": "Kappa", "locations": []}],
-        [{"id": "1", "name": "Kappa", "locations": "4-8"}],
-        [{"id": "1", "name": "Kappa", "locations": [None]}],
-        [{"id": "1", "name": "Kappa", "locations": ["-1-3"]}],
-        [{"id": "1", "name": "Kappa", "locations": ["8-4"]}],
-        [{"id": "1", "name": "Wrong", "locations": ["4-8"]}],
-        [{"id": "1", "name": "Kappa", "locations": ["1" * 5000 + "-8"]}],
+        *[({}, value) for value in [None, {}, [None], [{}]]],
+        *[
+            ({}, [{"id": "1", "name": "Kappa", "locations": locations}])
+            for locations in [[], "4-8", [None], ["-1-3"], ["8-4"], ["1" * 5000 + "-8"]]
+        ],
+        ({}, [{"id": "1", "name": "Wrong", "locations": ["4-8"]}]),
+        *[
+            ({"message": "::"}, [{"id": "1", "name": name, "locations": ["0-1"]}])
+            for name in [None, "", 42, {}, []]
+        ],
     ],
 )
-def test_invalid_emote_shapes_are_findings_not_crashes(tmp_path, emotes):
-    row = _text()
-    row["emotes"] = emotes
+def test_invalid_emote_shapes_are_findings_not_crashes(tmp_path, fields, emotes):
+    row = _text() | fields | {"emotes": emotes}
     report = inspect_capture(_write(tmp_path / "chat.jsonl", [row]))
     assert report["issues"]["invalid_emote_locations"]["count"] == 1
 
@@ -154,16 +165,7 @@ def test_bad_summary_fails_without_echoing_input(tmp_path, capsys, summary):
     path = _write(tmp_path / "chat.jsonl", [])
     log = tmp_path / "debug.log"
     log.write_text(summary, encoding="utf-8")
-    assert main([str(path), "--debug-log", str(log)]) == 2
-    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
-
-
-def test_appended_run_summaries_are_rejected(tmp_path, capsys):
-    path = _write(tmp_path / "chat.jsonl", [])
-    log = _log(tmp_path / "debug.log")
-    log.write_text(log.read_text() * 2)
-    assert main([str(path), "--debug-log", str(log)]) == 2
-    assert "invalid_run_summary" in capsys.readouterr().out
+    _assert_bad_summary(path, log, capsys)
 
 
 def test_io_and_usage_errors_are_content_free(tmp_path, capsys):
@@ -175,23 +177,20 @@ def test_io_and_usage_errors_are_content_free(tmp_path, capsys):
     assert "PRIVATE_SENTINEL" not in capsys.readouterr().out
 
 
-def test_script_entry_point_handles_empty_capture(tmp_path):
-    path = _write(tmp_path / "chat.jsonl", [])
-    result = subprocess.run(  # noqa: S603 - fixed interpreter and project script
-        [
-            sys.executable,
-            str(
-                Path(__file__).resolve().parents[1]
-                / "scripts"
-                / "inspect_kick_capture.py"
-            ),
-            str(path),
-        ],
+def _run_inspector(path, timeout):
+    script = Path(__file__).resolve().parents[1] / "scripts" / "inspect_kick_capture.py"
+    return subprocess.run(  # noqa: S603 - fixed interpreter and project script
+        [sys.executable, str(script), str(path)],
         capture_output=True,
         text=True,
         check=False,
-        timeout=10,
+        timeout=timeout,
     )
+
+
+def test_script_entry_point_handles_empty_capture(tmp_path):
+    path = _write(tmp_path / "chat.jsonl", [])
+    result = _run_inspector(path, timeout=10)
     assert result.returncode == 0
     report = json.loads(result.stdout)
     assert report["status"] == "ok"
@@ -223,8 +222,7 @@ def test_ambiguous_or_unencodable_json_is_a_bounded_finding(tmp_path, raw):
 def test_invalid_frame_counter_values_are_input_errors(tmp_path, capsys, counter):
     path = _write(tmp_path / "chat.jsonl", [])
     log = _log(tmp_path / "debug.log", received=counter)
-    assert main([str(path), "--debug-log", str(log)]) == 2
-    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
+    _assert_bad_summary(path, log, capsys)
 
 
 def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_path):
@@ -241,14 +239,7 @@ def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_p
 def test_fifo_input_fails_promptly_without_waiting_for_a_writer(tmp_path):
     path = tmp_path / "input.fifo"
     os.mkfifo(path)
-    script = Path(__file__).resolve().parents[1] / "scripts" / "inspect_kick_capture.py"
-    result = subprocess.run(  # noqa: S603 - fixed interpreter and project script
-        [sys.executable, str(script), str(path)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=5,
-    )
+    result = _run_inspector(path, timeout=5)
     assert result.returncode == 2
     assert json.loads(result.stdout) == {"error": "input_or_temporary_storage_io"}
     assert result.stderr == ""
@@ -261,20 +252,6 @@ def test_directory_input_is_an_io_error(tmp_path, capsys):
     }
 
 
-def _alter_log(path, **changes):
-    import ast
-
-    prefix = "[DEBUG] Run summary: "
-    summary = ast.literal_eval(path.read_text()[len(prefix) :])
-    for key, value in changes.items():
-        if key in {"success", "message_count", "message_type_counts"}:
-            summary[key] = value
-        else:
-            summary["provider_diagnostics"][key] = value
-    path.write_text(prefix + repr(summary) + "\n")
-    return path
-
-
 def _clean_rows():
     return [
         {"message_type": "poll_deleted", "message_id": "poll"},
@@ -283,10 +260,10 @@ def _clean_rows():
     ]
 
 
-def test_accounted_parser_drop_still_requires_review(tmp_path):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
-    log = _alter_log(
-        _log(tmp_path / "debug.log", received=6),
+def test_accounted_parser_drop_still_requires_review(tmp_path, capture):
+    log = _log(
+        tmp_path / "debug.log",
+        received=6,
         malformed_event_count=1,
         malformed_event_type_counts={"stream_host": 1},
     )
@@ -297,59 +274,55 @@ def test_accounted_parser_drop_still_requires_review(tmp_path):
     assert report["frame_accounting"]["malformed_event_count"] == 1
 
 
-def test_reconnect_backfill_is_informational_with_consistent_totals(tmp_path):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
-    log = _alter_log(
-        _log(tmp_path / "debug.log"),
-        websocket_reconnect_count=1,
-        live_emitted_count=1,
-        reconnect_backfill_emitted_count=1,
-    )
-    assert inspect_capture(capture, log)["status"] == "ok"
-
-
 @pytest.mark.parametrize(
-    "changes",
+    ("changes", "status"),
     [
-        {"success": False},
-        {"message_count": 4},
-        {"message_type_counts": {"text_message": 3}},
-        {"live_emitted_count": 3},
-        {"unsupported_event_count": 1},
-        {"unknown_message_type_count": 1},
-        {"invalid_websocket_frame_count": 1},
-        {"pusher_error_count": 1},
-        {"malformed_event_type_counts": {"stream_host": 1}},
+        *[
+            (changes, "review")
+            for changes in [
+                {"success": False},
+                {"message_count": 4},
+                {"message_type_counts": {"text_message": 3}},
+                {"live_emitted_count": 3},
+                {"unsupported_event_count": 1},
+                {"unknown_message_type_count": 1},
+                {"invalid_websocket_frame_count": 1},
+                {"pusher_error_count": 1},
+                {"malformed_event_type_counts": {"stream_host": 1}},
+            ]
+        ],
+        *[
+            (changes, "error")
+            for changes in [
+                {"success": 1},
+                {"message_count": True},
+                {"message_type_counts": []},
+                {"message_type_counts": {"text_message": -1}},
+                {"malformed_event_type_counts": {1: 1}},
+            ]
+        ],
+        (
+            {
+                "websocket_reconnect_count": 1,
+                "live_emitted_count": 1,
+                "reconnect_backfill_emitted_count": 1,
+            },
+            "ok",
+        ),
     ],
 )
-def test_summary_anomalies_require_review(tmp_path, changes):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
-    log = _alter_log(_log(tmp_path / "debug.log"), **changes)
-    assert inspect_capture(capture, log)["status"] == "review"
+def test_live_summary_findings(tmp_path, capsys, capture, changes, status):
+    log = _log(tmp_path / "debug.log", **changes)
+    if status == "error":
+        _assert_bad_summary(capture, log, capsys)
+    else:
+        assert inspect_capture(capture, log)["status"] == status
 
 
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"success": 1},
-        {"message_count": True},
-        {"message_type_counts": []},
-        {"message_type_counts": {"text_message": -1}},
-        {"malformed_event_type_counts": {1: 1}},
-    ],
-)
-def test_invalid_summary_shapes_fail_closed(tmp_path, capsys, changes):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
-    log = _alter_log(_log(tmp_path / "debug.log"), **changes)
-    assert main([str(capture), "--debug-log", str(log)]) == 2
-    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
-
-
-def test_summary_never_echoes_unknown_types_or_other_log_content(tmp_path, capsys):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
-    log = _alter_log(
-        _log(tmp_path / "debug.log"), message_type_counts={"PRIVATE_SENTINEL": 3}
-    )
+def test_summary_never_echoes_unknown_types_or_other_log_content(
+    tmp_path, capsys, capture
+):
+    log = _log(tmp_path / "debug.log", message_type_counts={"PRIVATE_SENTINEL": 3})
     log.write_text("PRIVATE_SENTINEL" * 10000 + "\n" + log.read_text())
     assert main([str(capture), "--debug-log", str(log)]) == 1
     assert "PRIVATE_SENTINEL" not in capsys.readouterr().out
@@ -386,39 +359,29 @@ def test_receive_timestamp_validation(tmp_path):
     }
 
 
-@pytest.mark.parametrize("name", [None, "", 42, {}, []])
-def test_empty_or_invalid_emote_name_cannot_validate_bare_colons(tmp_path, name):
-    row = _text()
-    row.update(message="::", emotes=[{"id": "1", "name": name, "locations": ["0-1"]}])
-    report = inspect_capture(_write(tmp_path / "chat.jsonl", [row]))
-    assert "invalid_emote_locations" in report["issues"]
-
-
-def test_duplicate_summary_keys_are_rejected(tmp_path, capsys):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
+@pytest.mark.parametrize(
+    "corruption", ["duplicate-key", "long-prefix", "appended-summary"]
+)
+def test_corrupted_summary_is_rejected(tmp_path, capsys, capture, corruption):
     log = _log(tmp_path / "debug.log")
-    log.write_text(
-        log.read_text().replace(
+    text = log.read_text()
+    if corruption == "duplicate-key":
+        text = text.replace(
             "'malformed_event_count': 0",
             "'malformed_event_count': 1, 'malformed_event_count': 0",
         )
-    )
-    assert main([str(capture), "--debug-log", str(log)]) == 2
-    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
+    elif corruption == "long-prefix":
+        text = "x" * 65537 + text
+    else:
+        text *= 2
+    log.write_text(text)
+    _assert_bad_summary(capture, log, capsys)
 
 
-def test_log_line_tail_cannot_forge_summary(tmp_path, capsys):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
-    log = _log(tmp_path / "debug.log")
-    log.write_bytes(b"x" * 65537 + log.read_bytes())
-    assert main([str(capture), "--debug-log", str(log)]) == 2
-    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
-
-
-def test_malformed_type_names_are_bounded_and_content_free(tmp_path, capsys):
-    capture = _write(tmp_path / "chat.jsonl", _clean_rows())
-    log = _alter_log(
-        _log(tmp_path / "debug.log", received=7),
+def test_malformed_type_names_are_bounded_and_content_free(tmp_path, capsys, capture):
+    log = _log(
+        tmp_path / "debug.log",
+        received=7,
         malformed_event_count=2,
         malformed_event_type_counts={"stream_host": 1, "PRIVATE_SENTINEL": 1},
     )
@@ -428,7 +391,7 @@ def test_malformed_type_names_are_bounded_and_content_free(tmp_path, capsys):
     assert json.loads(output)["frame_accounting"]["malformed_stream_host"] == 1
 
 
-def _replay_log(path, count=1, **changes):
+def _replay_log(path, count=1, termination_reason="completed", **changes):
     state = {
         "protocol": "reverse",
         "pages": 1,
@@ -443,7 +406,7 @@ def _replay_log(path, count=1, **changes):
     state.update(changes)
     summary = {
         "success": True,
-        "termination_reason": "completed",
+        "termination_reason": termination_reason,
         "parity_status": "passed",
         "message_count": count,
         "message_type_counts": {"text_message": count},
@@ -464,50 +427,60 @@ def test_replay_summary_reconciles_legacy_capture_without_live_counters(tmp_path
 
 
 @pytest.mark.parametrize(
-    "changes",
+    ("changes", "status"),
     [
-        {"parse_error": 1},
-        {"malformed_timestamp": 1},
-        {"history_complete": False},
-        {"raw_records": 99},
-        {"emitted_records": 0},
-        {"skipped_records": 0},
-        {"requested_end": "1970-01-01T00:00:00Z"},
+        *[
+            (changes, "review")
+            for changes in [
+                {"parse_error": 1},
+                {"malformed_timestamp": 1},
+                {"history_complete": False},
+                {"raw_records": 99},
+                {"emitted_records": 0},
+                {"skipped_records": 0},
+                {"requested_end": "1970-01-01T00:00:00Z"},
+                {"prior_record_loss": True},
+            ]
+        ],
+        *[
+            ({"termination_reason": reason}, "review")
+            for reason in [
+                "timeout",
+                "inactivity_timeout",
+                "message_limit",
+                "interrupted",
+                "error",
+            ]
+        ],
+        *[
+            (changes, "error")
+            for changes in [
+                {"pages": True},
+                {"history_complete": "yes"},
+                {"requested_start": "PRIVATE_SENTINEL"},
+                {"requested_end": None},
+                {"requested_start": "1970-01-01T00:00:00"},
+                {"transport": {"http_status_counts": {"PRIVATE_SENTINEL": 1}}},
+            ]
+        ],
     ],
 )
-def test_replay_accounting_reports_loss_and_inconsistent_counts(tmp_path, changes):
-    report = inspect_capture(
-        _write(tmp_path / "chat.jsonl", [_text()]),
-        _replay_log(tmp_path / "debug.log", **changes),
-    )
-    assert report["status"] == "review"
-
-
-@pytest.mark.parametrize(
-    "changes",
-    [
-        {"pages": True},
-        {"history_complete": "yes"},
-        {"requested_start": "PRIVATE_SENTINEL"},
-        {"requested_end": None},
-        {"requested_start": "1970-01-01T00:00:00"},
-        {"transport": {"http_status_counts": {"PRIVATE_SENTINEL": 1}}},
-    ],
-)
-def test_malformed_replay_summary_does_not_echo_input(tmp_path, capsys, changes):
+def test_replay_summary_findings(tmp_path, capsys, changes, status):
     path = _write(tmp_path / "chat.jsonl", [_text()])
     log = _replay_log(tmp_path / "debug.log", **changes)
-    assert main([str(path), "--debug-log", str(log)]) == 2
-    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
+    if status == "error":
+        _assert_bad_summary(path, log, capsys)
+    else:
+        assert inspect_capture(path, log)["status"] == status
 
 
 def test_replay_resumed_logs_reconcile_overlap_and_full_output(tmp_path):
-    import ast
-
-    first = _replay_log(tmp_path / "first.log", selected_records=2, raw_records=3)
-    summary = ast.literal_eval(first.read_text().removeprefix("[DEBUG] Run summary: "))
-    summary["termination_reason"] = "message_limit"
-    first.write_text("[DEBUG] Run summary: " + repr(summary))
+    first = _replay_log(
+        tmp_path / "first.log",
+        selected_records=2,
+        raw_records=3,
+        termination_reason="message_limit",
+    )
     second = _replay_log(
         tmp_path / "second.log",
         emitted_records=2,
@@ -537,25 +510,3 @@ def test_opposite_raw_accounting_errors_cannot_cancel_across_runs(tmp_path):
     )
     assert report["replay_accounting"]["raw_accounting_gap"] == 0
     assert report["status"] == "review"
-
-
-def test_prior_loss_cannot_be_hidden_by_clean_resumed_pages(tmp_path):
-    path = _write(tmp_path / "capture", [_text()])
-    log = _replay_log(tmp_path / "log", prior_record_loss=True)
-    assert inspect_capture(path, log)["status"] == "review"
-
-
-@pytest.mark.parametrize(
-    "reason", ["timeout", "inactivity_timeout", "message_limit", "interrupted", "error"]
-)
-def test_parity_pass_does_not_certify_incomplete_replay(tmp_path, reason):
-    import ast
-
-    log = _replay_log(tmp_path / "log")
-    summary = ast.literal_eval(log.read_text().removeprefix("[DEBUG] Run summary: "))
-    summary["termination_reason"] = reason
-    log.write_text("[DEBUG] Run summary: " + repr(summary))
-    assert (
-        inspect_capture(_write(tmp_path / "capture", [_text()]), log)["status"]
-        == "review"
-    )

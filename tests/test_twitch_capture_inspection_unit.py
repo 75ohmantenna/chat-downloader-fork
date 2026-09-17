@@ -32,22 +32,38 @@ def _text(message_id="one", timestamp=1000):
     }
 
 
-def _log(path, received=5, benign=2, parsed=3):
-    summary = {
-        "provider_diagnostics": dict(
-            zip(
-                [
-                    "received_irc_frame_count",
-                    "benign_irc_control_frame_count",
-                    "parsed_irc_message_count",
-                ],
-                [received, benign, parsed],
-                strict=True,
-            )
+def _summary(received=5, benign=2, parsed=3):
+    return (
+        "[DEBUG] Run summary: "
+        + repr(
+            {
+                "provider_diagnostics": {
+                    "received_irc_frame_count": received,
+                    "benign_irc_control_frame_count": benign,
+                    "parsed_irc_message_count": parsed,
+                }
+            }
         )
-    }
-    path.write_text("[DEBUG] Run summary: " + repr(summary) + "\n", encoding="utf-8")
+        + "\n"
+    )
+
+
+def _log(path, received=5, benign=2, parsed=3):
+    path.write_text(_summary(received, benign, parsed), encoding="utf-8")
     return path
+
+
+def _run_script(path, timeout):
+    script = (
+        Path(__file__).resolve().parents[1] / "scripts" / "inspect_twitch_capture.py"
+    )
+    return subprocess.run(  # noqa: S603 - fixed interpreter and project script
+        [sys.executable, str(script), str(path)],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+    )
 
 
 def test_clean_inspection_counts_shapes_and_keeps_timestamp_backsteps_informational(
@@ -143,6 +159,8 @@ def test_positive_and_negative_frame_gaps_need_review(tmp_path, received):
         "[DEBUG] Run summary: {'provider_diagnostics': {}}\n",
         "[DEBUG] Run summary: __import__('os').system('PRIVATE_SENTINEL')\n",
         "[DEBUG] Run summary: " + "x" * 65536,
+        _summary() * 2,
+        *[_summary(received=value) for value in (True, -1, "5", None)],
     ],
 )
 def test_bad_summary_fails_without_echoing_input(tmp_path, capsys, summary):
@@ -151,14 +169,6 @@ def test_bad_summary_fails_without_echoing_input(tmp_path, capsys, summary):
     log.write_text(summary, encoding="utf-8")
     assert main([str(path), "--debug-log", str(log)]) == 2
     assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
-
-
-def test_appended_run_summaries_are_rejected(tmp_path, capsys):
-    path = _write(tmp_path / "chat.jsonl", [])
-    log = _log(tmp_path / "debug.log")
-    log.write_text(log.read_text() * 2)
-    assert main([str(path), "--debug-log", str(log)]) == 2
-    assert "invalid_run_summary" in capsys.readouterr().out
 
 
 def test_io_and_usage_errors_are_content_free(tmp_path, capsys):
@@ -172,21 +182,7 @@ def test_io_and_usage_errors_are_content_free(tmp_path, capsys):
 
 def test_script_entry_point_handles_empty_capture(tmp_path):
     path = _write(tmp_path / "chat.jsonl", [])
-    result = subprocess.run(  # noqa: S603 - fixed interpreter and project script
-        [
-            sys.executable,
-            str(
-                Path(__file__).resolve().parents[1]
-                / "scripts"
-                / "inspect_twitch_capture.py"
-            ),
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=10,
-    )
+    result = _run_script(path, timeout=10)
     assert result.returncode == 0
     report = json.loads(result.stdout)
     assert report["status"] == "ok"
@@ -214,14 +210,6 @@ def test_ambiguous_or_unencodable_json_is_a_bounded_finding(tmp_path, raw):
     assert report["issues"] == {"invalid_jsonl": {"count": 1, "first_line": 1}}
 
 
-@pytest.mark.parametrize("counter", [True, -1, "5", None])
-def test_invalid_frame_counter_values_are_input_errors(tmp_path, capsys, counter):
-    path = _write(tmp_path / "chat.jsonl", [])
-    log = _log(tmp_path / "debug.log", received=counter)
-    assert main([str(path), "--debug-log", str(log)]) == 2
-    assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
-
-
 def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_path):
     rows = [_text(str(i)) for i in range(12000)]
     rows.extend([_text("0"), _text("'); DROP TABLE ids; --"), _text("12001")])
@@ -236,16 +224,7 @@ def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_p
 def test_fifo_input_fails_promptly_without_waiting_for_a_writer(tmp_path):
     path = tmp_path / "input.fifo"
     os.mkfifo(path)
-    script = (
-        Path(__file__).resolve().parents[1] / "scripts" / "inspect_twitch_capture.py"
-    )
-    result = subprocess.run(  # noqa: S603 - fixed interpreter and project script
-        [sys.executable, str(script), str(path)],
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=5,
-    )
+    result = _run_script(path, timeout=5)
     assert result.returncode == 2
     assert json.loads(result.stdout) == {"error": "input_or_temporary_storage_io"}
     assert result.stderr == ""

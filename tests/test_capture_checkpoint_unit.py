@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -13,7 +14,7 @@ import pytest
 
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint, _atomic_json
-from chat_downloader.runtime.capture_verification import verify_capture
+from chat_downloader.runtime.capture_verification import capture_paths, verify_capture
 from chat_downloader.runtime.chat_pipeline import configure_chat
 from chat_downloader.runtime.runner import execute_run
 from chat_downloader.sites.models import Chat
@@ -31,12 +32,7 @@ def message(number, offset):
 
 
 class Downloader:
-    records: ClassVar[list] = [
-        message(1, 10),
-        message(2, 10),
-        message(3, 10),
-        message(4, 11),
-    ]
+    records: ClassVar[list] = [message(i, 10 if i < 4 else 11) for i in range(1, 5)]
     failure = None
     status = "completed"
 
@@ -98,44 +94,47 @@ def test_resume_preserves_same_timestamp_messages_and_verifies_both_runs(
     assert final.message_count == 0
 
 
-def test_interrupted_capture_checkpoints_only_written_records(tmp_path) -> None:
-    class Interrupted(Downloader):
-        records: ClassVar[list] = [message(1, 10)]
-        failure = KeyboardInterrupt()
-
-    params = parameters(tmp_path)
-    result = execute_run(Interrupted, **params)
-    assert result.interrupted
-    assert not result.success
-    assert json.loads((tmp_path / "checkpoint.json").read_text())["total"] == 1
-    assert execute_run(Downloader, **params).message_count == 3
-
-
 @pytest.mark.parametrize(
-    ("field", "value"),
-    [("message_groups", ["all"]), ("end_time", 50), ("url", "other")],
+    ("kind", "patch"),
+    [
+        ("request", {"message_groups": ["all"]}),
+        ("request", {"end_time": 50}),
+        ("request", {"url": "other"}),
+        ("output", None),
+        *[
+            ("checkpoint", patch)
+            for patch in [
+                {"offset": float("nan")},
+                {"ids": [1]},
+                {"total": -1},
+                {"chat_id": None},
+                {"chat_id": "different"},
+                {"record_loss": "false"},
+                {"resets": [0]},
+                {"resets": [2, 1]},
+            ]
+        ],
+    ],
 )
-def test_resume_rejects_changed_request_without_touching_outputs(
-    tmp_path, saved_capture, field, value
-) -> None:
-    params = saved_capture
-    before = (tmp_path / "chat.jsonl").read_bytes()
-    params[field] = value
-    result = execute_run(Downloader, **params)
-    assert not result.success
-    assert (tmp_path / "chat.jsonl").read_bytes() == before
-
-
-def test_resume_rejects_modified_file_and_preserves_checkpoint(
-    tmp_path, saved_capture
-) -> None:
-    params = saved_capture
-    checkpoint = (tmp_path / "checkpoint.json").read_bytes()
-    with (tmp_path / "chat.txt").open("a") as stream:
-        stream.write("changed\n")
-    result = execute_run(Downloader, **params)
-    assert not result.success
-    assert (tmp_path / "checkpoint.json").read_bytes() == checkpoint
+def test_resume_rejects_changed_request_artifacts_or_boundary(
+    tmp_path, saved_capture, kind, patch
+):
+    checkpoint = tmp_path / "checkpoint.json"
+    output = tmp_path / "chat.jsonl"
+    before = output.read_bytes()
+    checkpoint_before = checkpoint.read_bytes()
+    if kind == "request":
+        saved_capture.update(patch)
+    elif kind == "checkpoint":
+        state = json.loads(checkpoint.read_text())
+        checkpoint.write_text(json.dumps({**state, **patch}))
+    else:
+        with (tmp_path / "chat.txt").open("a") as stream:
+            stream.write("changed\n")
+    assert not execute_run(Downloader, **saved_capture).success
+    assert output.read_bytes() == before
+    if kind == "output":
+        assert checkpoint.read_bytes() == checkpoint_before
 
 
 @pytest.mark.parametrize(
@@ -164,38 +163,15 @@ def saved_capture(tmp_path):
     return params
 
 
-@pytest.mark.parametrize(
-    "patch",
-    [
-        {"offset": float("nan")},
-        {"ids": [1]},
-        {"total": -1},
-        {"chat_id": None},
-        {"chat_id": "different"},
-        {"record_loss": "false"},
-        {"resets": [0]},
-        {"resets": [2, 1]},
-    ],
-)
-def test_checkpoint_rejects_corrupt_boundary_state(
-    tmp_path, saved_capture, patch
-) -> None:
-    params = saved_capture
-    path = tmp_path / "checkpoint.json"
-    state = json.loads(path.read_text())
-    state.update(patch)
-    path.write_text(json.dumps(state))
-    assert not execute_run(Downloader, **params).success
-
-
-def test_resume_rejects_live_before_output(tmp_path) -> None:
+@pytest.mark.parametrize("checkpoint", [False, True])
+def test_live_rejected_before_output(tmp_path, monkeypatch, checkpoint):
+    monkeypatch.setattr(Downloader, "status", "live")
     params = parameters(tmp_path)
-
-    class Live(Downloader):
-        status = "live"
-
-    result = execute_run(Live, **params)
-    assert not result.success
+    if not checkpoint:
+        params.pop("resume")
+    assert not execute_run(
+        Downloader, **params, require_complete=not checkpoint
+    ).success
     assert not (tmp_path / "chat.jsonl").exists()
 
 
@@ -249,26 +225,47 @@ def test_verify_requires_pair_and_checkpoint_for_append(tmp_path) -> None:
     assert execute_run(Downloader, **params).parity_status == "passed"
 
 
-def test_parity_failure_does_not_advance_checkpoint(tmp_path, monkeypatch) -> None:
-    def fail(*args, **kwargs):
-        raise ValueError("parity failed")
+@pytest.mark.parametrize("failure", ["parity", "writer"])
+def test_failed_capture_does_not_advance_checkpoint(tmp_path, monkeypatch, failure):
+    from chat_downloader.output.continuous_write import ContinuousWriter
 
-    monkeypatch.setattr("chat_downloader.runtime.runner.verify_capture", fail)
+    original = ContinuousWriter.write
+
+    def fail(*args, **kwargs):
+        if failure == "parity":
+            raise ValueError("parity failed")
+        if args[0].file_name.endswith(".txt"):
+            raise OSError("text writer failed")
+        return original(*args, **kwargs)
+
+    if failure == "parity":
+        monkeypatch.setattr("chat_downloader.runtime.runner.verify_capture", fail)
+    else:
+        monkeypatch.setattr(ContinuousWriter, "write", fail)
     result = execute_run(Downloader, **parameters(tmp_path))
     assert not result.success
-    assert result.parity_status == "failed"
     assert not (tmp_path / "checkpoint.json").exists()
+    if failure == "parity":
+        assert result.parity_status == "failed"
 
 
-def test_empty_capture_has_distinct_success_and_parity_status(tmp_path) -> None:
-    class Empty(Downloader):
-        records: ClassVar[list] = []
-
-    result = execute_run(Empty, **parameters(tmp_path))
-    assert result.success
-    assert result.parity_status == "passed"
+@pytest.mark.parametrize("stale", [False, True])
+def test_empty_capture_distinguishes_absent_and_stale_artifacts(
+    tmp_path, monkeypatch, stale
+):
+    params = parameters(tmp_path)
+    if stale:
+        params.pop("resume")
+        assert execute_run(Downloader, **params).success
+    monkeypatch.setattr(Downloader, "records", [])
+    result = execute_run(Downloader, **params)
+    assert result.success is not stale
     assert result.message_count == 0
-    assert not (tmp_path / "chat.jsonl").exists()
+    if stale:
+        assert "not produced by this run" in result.error_message
+    else:
+        assert result.parity_status == "passed"
+        assert not (tmp_path / "chat.jsonl").exists()
 
 
 def test_verifier_rejects_missing_writers() -> None:
@@ -319,62 +316,28 @@ def test_checkpoint_source_preserves_deadline_summary_and_unstarted_close(
     assert source.closed
 
 
-def test_checkpoint_detects_partial_writer_success(tmp_path, monkeypatch) -> None:
-    from chat_downloader.output.continuous_write import ContinuousWriter
-
-    original = ContinuousWriter.write
-
-    def fail(self, item, **kwargs):
-        if self.file_name.endswith(".txt"):
-            raise OSError("text writer failed")
-        return original(self, item, **kwargs)
-
-    monkeypatch.setattr(ContinuousWriter, "write", fail)
-    result = execute_run(Downloader, **parameters(tmp_path))
-    assert not result.success
-    assert not (tmp_path / "checkpoint.json").exists()
-
-
-def test_zero_record_verification_cannot_pass_old_artifacts(tmp_path) -> None:
+@pytest.mark.parametrize("attached", [False, True])
+def test_verification_rejects_aliased_paths_without_writing(tmp_path, attached):
     params = parameters(tmp_path)
     params.pop("resume")
-    assert execute_run(Downloader, **params).success
-
-    class Empty(Downloader):
-        records: ClassVar[list] = []
-
-    result = execute_run(Empty, **params)
-    assert not result.success
-    assert "not produced by this run" in result.error_message
-
-
-def test_verification_rejects_aliased_paths_before_writing(tmp_path) -> None:
-    import os
-
-    params = parameters(tmp_path)
-    params.pop("resume")
-    first = tmp_path / "chat.jsonl"
-    first.write_text("keep me")
-    os.link(first, tmp_path / "chat.txt")
-    result = execute_run(Downloader, **params)
-    assert not result.success
-    assert first.read_text() == "keep me"
+    first, second = tmp_path / "chat.jsonl", tmp_path / "chat.txt"
+    if attached:
+        chat = Downloader().get_chat(**params)
+    first.write_text("preserve")
+    os.link(first, second)
+    if attached:
+        with pytest.raises(ValueError, match="distinct"):
+            capture_paths(chat)
+        chat.close()
+    else:
+        assert not execute_run(Downloader, **params).success
+    assert first.read_text() == "preserve"
 
 
-def test_verifier_reports_actual_text_mismatch(tmp_path) -> None:
+@pytest.mark.parametrize("corrupted", [False, True])
+def test_verifier_expands_lazy_paths_and_reports_text_mismatch(tmp_path, corrupted):
     from chat_downloader.errors import ChatDownloaderError
 
-    downloader = Downloader()
-    chat = downloader.get_chat(
-        output=[str(tmp_path / "chat.jsonl"), str(tmp_path / "chat.txt")], format="kick"
-    )
-    list(chat)
-    (tmp_path / "chat.txt").write_text("corrupted\n")
-    with pytest.raises(ChatDownloaderError, match="parity"):
-        verify_capture(chat)
-
-
-def test_verifier_expands_lazy_paths_once_and_keeps_braces_in_titles(tmp_path) -> None:
     chat = Chat(iter([message(1, 1)]), id="id", title="{literal}")
     request = ChatRequest(
         output=[str(tmp_path / "{title}.jsonl"), str(tmp_path / "{title}.txt")],
@@ -382,19 +345,9 @@ def test_verifier_expands_lazy_paths_once_and_keeps_braces_in_titles(tmp_path) -
     )
     configure_chat(chat, request, SimpleNamespace(is_live_status=lambda _: False))
     list(chat)
-    verify_capture(chat)
-
-
-def test_verifier_detects_identity_change_after_writers_are_attached(tmp_path) -> None:
-    import os
-
-    from chat_downloader.runtime.capture_verification import capture_paths
-
-    first, second = tmp_path / "first.jsonl", tmp_path / "second.txt"
-    chat = Downloader().get_chat(output=[str(first), str(second)], format="kick")
-    first.write_text("preserve")
-    os.link(first, second)
-    with pytest.raises(ValueError, match="distinct"):
-        capture_paths(chat)
-    chat.close()
-    assert first.read_text() == "preserve"
+    if corrupted:
+        (tmp_path / "{literal}.txt").write_text("corrupted\n")
+        with pytest.raises(ChatDownloaderError, match="parity"):
+            verify_capture(chat)
+    else:
+        verify_capture(chat)

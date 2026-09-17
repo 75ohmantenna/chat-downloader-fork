@@ -10,8 +10,30 @@ import pytest
 
 from chat_downloader.errors import ParsingError, UserNotFound, VideoNotFound
 from chat_downloader.models import ChatRequest
+from chat_downloader.sites.twitch import graphql_client as gql
 from chat_downloader.sites.twitch.constants import CLIENT_ID, OPERATION_HASHES
+from chat_downloader.sites.twitch.discovery import get_user_clips
 from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
+from chat_downloader.sites.twitch.irc_transport import (
+    _READBUFFER_MAX_BYTES,
+    TwitchChatIRC,
+    get_chat_messages_by_stream_id,
+)
+from chat_downloader.sites.twitch.parsing.message_irc_resolve import _parse_irc_int_flag
+from chat_downloader.sites.twitch.replay_service import (
+    get_chat_by_clip_id,
+    iter_vod_chat_messages,
+)
+
+
+def _post(payload):
+    response = Mock(status_code=200, text="")
+    response.json.return_value = payload
+    return Mock(return_value=response)
+
+
+def _operations():
+    return [{"operationName": next(iter(OPERATION_HASHES)), "variables": {}}]
 
 
 def _comment_edge(edge_type="VideoCommentEdge", node_type="Comment"):
@@ -39,8 +61,7 @@ def vod_page(monkeypatch):
         )
     )
     monkeypatch.setattr(
-        "chat_downloader.sites.twitch.extractor.get_chat_messages_by_vod_id",
-        fetch,
+        "chat_downloader.sites.twitch.extractor.get_chat_messages_by_vod_id", fetch
     )
     return fetch
 
@@ -63,20 +84,19 @@ def _vod_messages():
         ("UnexpectedEdgeType", "Comment"),
         ("VideoCommentEdge", "UnexpectedNodeType"),
     ],
-    ids=["valid", "missing-typenames", "invalid-edge", "invalid-node"],
 )
-def test_vod_typenames(vod_page, edge_type, node_type, monkeypatch) -> None:
+def test_vod_typenames(vod_page, edge_type, node_type, monkeypatch):
     logger = Mock()
     monkeypatch.setattr("chat_downloader.sites.twitch.extractor.logger", logger)
     edge = _comment_edge(edge_type, node_type)
-    edges = [edge]
-    if edge_type == "UnexpectedEdgeType" or node_type == "UnexpectedNodeType":
+    unexpected = {edge_type, node_type} & {"UnexpectedEdgeType", "UnexpectedNodeType"}
+    if unexpected:
         edge["node"]["id"] = "invalid"
         edge["node"]["message"]["fragments"][0]["text"] = "Should be skipped"
-        edges.append(_comment_edge())
-    vod_page.return_value[0]["edges"] = edges
+    vod_page.return_value[0]["edges"] = [edge] + (
+        [_comment_edge()] if unexpected else []
+    )
     assert [message["message"] for message in _vod_messages()] == ["Valid message"]
-    unexpected = {edge_type, node_type} & {"UnexpectedEdgeType", "UnexpectedNodeType"}
     if unexpected:
         assert any(
             value in str(call)
@@ -85,7 +105,7 @@ def test_vod_typenames(vod_page, edge_type, node_type, monkeypatch) -> None:
         )
 
 
-def test_vod_channel_not_found(vod_page) -> None:
+def test_vod_channel_not_found(vod_page):
     vod_page.return_value[1]["creator"]["id"] = ""
     with pytest.raises(UserNotFound, match="vod123"):
         _vod_messages()
@@ -93,23 +113,21 @@ def test_vod_channel_not_found(vod_page) -> None:
 
 @pytest.mark.parametrize("method", ["_download_base_gql", "_download_gql"])
 @pytest.mark.parametrize("client_id", [None, "client-123"])
-def test_extractor_gql_request_headers(monkeypatch, method, client_id) -> None:
-    options = {} if client_id is None else {"twitch_client_id": client_id}
-    downloader = TwitchChatDownloader(**options)
-    response = Mock(status_code=200, text="")
-    response.json.return_value = [{"data": {}}]
-    post = Mock(return_value=response)
+def test_extractor_gql_request_headers(monkeypatch, method, client_id):
+    downloader = TwitchChatDownloader(
+        **({} if client_id is None else {"twitch_client_id": client_id})
+    )
+    post = _post([{"data": {}}])
     monkeypatch.setattr(downloader, "_session_post", post)
     monkeypatch.setattr(downloader, "get_cookie_value", lambda _name: "test-token")
-    ops = [{"operationName": next(iter(OPERATION_HASHES)), "variables": {}}]
-    assert getattr(downloader, method)(ops) == [{"data": {}}]
+    assert getattr(downloader, method)(_operations()) == [{"data": {}}]
     headers = post.call_args.kwargs["headers"]
     assert headers["Client-ID"] == (client_id or CLIENT_ID)
     assert headers["Authorization"] == "OAuth test-token"
 
 
 @pytest.mark.parametrize("client_id", [None, "client-123"])
-def test_extractor_gql_records_optional_degradation(monkeypatch, client_id) -> None:
+def test_extractor_gql_records_optional_degradation(monkeypatch, client_id):
     downloader = TwitchChatDownloader(twitch_client_id=client_id)
     payload = [
         {
@@ -119,25 +137,18 @@ def test_extractor_gql_records_optional_degradation(monkeypatch, client_id) -> N
             ],
         }
     ]
-    response = Mock(status_code=200, text="")
-    response.json.return_value = payload
-    monkeypatch.setattr(downloader, "_session_post", Mock(return_value=response))
+    monkeypatch.setattr(downloader, "_session_post", _post(payload))
     callback = Mock()
-    result = downloader._download_gql(
-        [{"operationName": next(iter(OPERATION_HASHES)), "variables": {}}],
-        record_optional_degradation=callback,
+    assert (
+        downloader._download_gql(_operations(), record_optional_degradation=callback)
+        == payload
     )
-    assert result == payload
     callback.assert_called_once_with()
 
 
-def test_badge_refresh_uses_configured_client_id(monkeypatch) -> None:
+def test_badge_refresh_uses_configured_client_id(monkeypatch):
     downloader = TwitchChatDownloader(twitch_client_id="client-123")
-    response = Mock(status_code=200, text="")
-    response.json.return_value = [
-        {"data": {"badges": [], "user": {"broadcastBadges": []}}}
-    ]
-    post = Mock(return_value=response)
+    post = _post([{"data": {"badges": [], "user": {"broadcastBadges": []}}}])
     monkeypatch.setattr(downloader, "_session_post", post)
     downloader._update_badge_info("channel-name")
     assert post.call_count == 2
@@ -147,171 +158,100 @@ def test_badge_refresh_uses_configured_client_id(monkeypatch) -> None:
     )
 
 
-def test_twitch_badge_refresh_reuses_known_channel_id(monkeypatch) -> None:
+def test_twitch_badge_refresh_reuses_known_channel_id(monkeypatch):
     downloader = TwitchChatDownloader()
     downloader._session_post = object()
-    calls = []
+    update = Mock()
     monkeypatch.setattr(
-        "chat_downloader.sites.twitch.extractor.update_badge_info",
-        lambda *args, **kwargs: calls.append(kwargs),
+        "chat_downloader.sites.twitch.extractor.update_badge_info", update
     )
-
     downloader._update_badge_info("CaseOh_", "123")
     downloader._update_badge_info("caseoh_")
-
-    assert calls == [{"channel_id": "123"}, {"channel_id": "123"}]
-
-
-def test_get_user_clips_breaks_when_clips_none() -> None:
-    from unittest.mock import MagicMock
-
-    from chat_downloader.sites.twitch.discovery import get_user_clips
-
-    def mock_download_gql(session_post, query):
-        return [{"data": {"user": {"clips": None}}}]
-
-    results = list(get_user_clips(MagicMock(), mock_download_gql, "testuser"))
-    assert results == []
+    assert [call.kwargs for call in update.call_args_list] == [
+        {"channel_id": "123"}
+    ] * 2
 
 
-def test_twitch_contains_challenge_text_non_string() -> None:
-    from chat_downloader.sites.twitch.graphql_client import (
-        _contains_challenge_text,
+def test_get_user_clips_breaks_when_clips_none():
+    assert (
+        list(
+            get_user_clips(
+                Mock(),
+                Mock(return_value=[{"data": {"user": {"clips": None}}}]),
+                "testuser",
+            )
+        )
+        == []
     )
 
-    assert _contains_challenge_text(None) is False
-    assert _contains_challenge_text(42) is False
-    assert _contains_challenge_text([]) is False
+
+@pytest.mark.parametrize("value", [None, 42, []])
+def test_twitch_contains_challenge_text_non_string(value):
+    assert gql._contains_challenge_text(value) is False
 
 
-def test_download_base_gql_adds_auth_header() -> None:
-    from unittest.mock import MagicMock
-
-    from chat_downloader.sites.twitch.graphql_client import _download_base_gql
-
-    captured: dict = {}
-    auth_value = "test-value"
-
-    def mock_post(url, json, headers):
-        captured["headers"] = headers
-        response = MagicMock()
-        response.status_code = 200
-        response.json.return_value = []
-        return response
-
-    _download_base_gql(mock_post, [], auth_token=auth_value)
-    assert captured["headers"].get("Authorization") == f"OAuth {auth_value}"
+def test_download_base_gql_adds_auth_header():
+    post = _post([])
+    gql._download_base_gql(post, [], auth_token="test-value")  # noqa: S106 - literal test token, not a credential
+    assert post.call_args.kwargs["headers"]["Authorization"] == "OAuth test-value"
 
 
-def test_describe_operation_names_empty() -> None:
-    from chat_downloader.sites.twitch.graphql_client import (
-        _describe_operation_names,
-    )
-
-    assert _describe_operation_names(None) == "unknown operation"
-    assert _describe_operation_names([]) == "unknown operation"
-    assert _describe_operation_names(["One", "Two"]) == "One, Two"
-
-
-def test_handle_gql_errors_empty_list_is_noop() -> None:
-    from chat_downloader.sites.twitch.graphql_client import _handle_gql_errors
-
-    assert _handle_gql_errors([]) is False
+@pytest.mark.parametrize(
+    ("names", "expected"),
+    [
+        (None, "unknown operation"),
+        ([], "unknown operation"),
+        (["One", "Two"], "One, Two"),
+    ],
+)
+def test_describe_operation_names(names, expected):
+    assert gql._describe_operation_names(names) == expected
 
 
-def test_download_gql_dict_response_with_errors() -> None:
-    from unittest.mock import MagicMock
+def test_handle_gql_errors_empty_list_is_noop():
+    assert gql._handle_gql_errors([]) is False
 
-    from chat_downloader.errors import ParsingError
-    from chat_downloader.sites.twitch.constants import OPERATION_HASHES
-    from chat_downloader.sites.twitch.graphql_client import _download_gql
 
-    op_name = next(iter(OPERATION_HASHES))
-
-    def mock_post(url, json, headers):
-        response = MagicMock()
-        response.status_code = 200
-        response.json.return_value = {
-            "errors": [{"message": "some generic field error", "path": []}]
-        }
-        return response
-
-    ops = [{"operationName": op_name, "variables": {}}]
+def test_download_gql_dict_response_with_errors():
+    post = _post({"errors": [{"message": "some generic field error", "path": []}]})
     with pytest.raises(ParsingError):
-        _download_gql(mock_post, ops)
+        gql._download_gql(post, _operations())
 
 
-def test_close_connection_swallows_oserror() -> None:
-    from unittest.mock import MagicMock
-
-    from chat_downloader.sites.twitch.irc_transport import TwitchChatIRC
-
+def test_close_connection_swallows_oserror():
     irc = TwitchChatIRC.__new__(TwitchChatIRC)
-    mock_socket = MagicMock()
-    irc.socket = mock_socket
+    irc.socket = MagicMock()
     irc.current_channel = None
-
-    # sendall raises OSError → should be swallowed by except OSError: pass
-    mock_socket.sendall.side_effect = OSError("connection reset")
-    irc.close_connection()  # Must not re-raise
+    irc.socket.sendall.side_effect = OSError("connection reset")
+    irc.close_connection()
 
 
-def test_irc_buffer_overflow_truncation() -> None:
-    from unittest.mock import MagicMock
-
-    from chat_downloader.sites.twitch.irc_transport import (
-        _READBUFFER_MAX_BYTES,
-        get_chat_messages_by_stream_id,
-    )
-
-    mock_irc = MagicMock()
-    # First recv: oversized buffer → triggers overflow truncation
-    # Second recv: empty → raises ConnectionError to stop the loop
-    mock_irc.recv.side_effect = ["x" * (_READBUFFER_MAX_BYTES + 100), ""]
-
-    gen = get_chat_messages_by_stream_id(mock_irc, "channel", {"max_attempts": 1})
+def test_irc_buffer_overflow_truncation():
+    irc = MagicMock()
+    irc.recv.side_effect = ["x" * (_READBUFFER_MAX_BYTES + 100), ""]
     with pytest.raises(ConnectionError):
-        for _ in gen:
-            pass
+        list(get_chat_messages_by_stream_id(irc, "channel", {"max_attempts": 1}))
 
 
-def test_parse_irc_int_flag_returns_default_for_other_types() -> None:
-    from chat_downloader.sites.twitch.parsing.message_irc_resolve import (
-        _parse_irc_int_flag,
-    )
-
-    assert _parse_irc_int_flag(None, default=42) == 42
-    assert _parse_irc_int_flag([], default=-1) == -1
-    assert _parse_irc_int_flag(3.14, default=0) == 0
+@pytest.mark.parametrize(("value", "default"), [(None, 42), ([], -1), (3.14, 0)])
+def test_parse_irc_int_flag_returns_default_for_other_types(value, default):
+    assert _parse_irc_int_flag(value, default=default) == default
 
 
-def test_iter_vod_chat_messages_with_offset_branch() -> None:
-    from unittest.mock import MagicMock
-
-    from chat_downloader.models import ChatRequest
-    from chat_downloader.sites.twitch.replay_service import (
-        iter_vod_chat_messages,
-    )
-
-    mock_downloader = MagicMock()
+def test_iter_vod_chat_messages_with_offset_branch():
     request = ChatRequest(url="https://www.twitch.tv/videos/12345")
-
-    # _fetch_vod_page returns empty comments → loop breaks immediately,
-    # but offset-branch code (lines 153-154) already ran before the loop.
     with patch(
         "chat_downloader.sites.twitch.replay_service._fetch_vod_page",
         return_value=(None, {}),
     ):
-        result = list(
-            iter_vod_chat_messages(
-                mock_downloader,
-                "12345",
-                request,
-                max_duration=None,
-                offset=10.0,
+        assert (
+            list(
+                iter_vod_chat_messages(
+                    MagicMock(), "12345", request, max_duration=None, offset=10.0
+                )
             )
+            == []
         )
-    assert result == []
 
 
 @pytest.mark.parametrize(
@@ -320,63 +260,36 @@ def test_iter_vod_chat_messages_with_offset_branch() -> None:
         ({"errors": [{"message": "clip not found"}]}, VideoNotFound),
         ({"data": {"clip": None}}, ParsingError),
     ],
-    ids=["graphql-error", "missing-clip"],
 )
-def test_clip_response_errors(payload, error) -> None:
-    from chat_downloader.sites.twitch.replay_service import get_chat_by_clip_id
-
+def test_clip_response_errors(payload, error):
     downloader = MagicMock()
     downloader._download_base_gql.return_value = payload
-    request = ChatRequest(url="https://www.twitch.tv/clip/test")
     with pytest.raises(error):
-        get_chat_by_clip_id(downloader, "test_clip", request)
+        get_chat_by_clip_id(
+            downloader, "test_clip", ChatRequest(url="https://www.twitch.tv/clip/test")
+        )
 
 
-def test_extractor_routing_wrappers_delegate(monkeypatch) -> None:
+@pytest.mark.parametrize("kind", ["vod", "clip", "stream"])
+def test_extractor_routing_wrappers_delegate(monkeypatch, kind):
     downloader = TwitchChatDownloader()
     request = ChatRequest(url="https://www.twitch.tv/example")
-
-    class Match:
-        def __init__(self, value: str) -> None:
-            self.value = value
-
-        def group(self, _name: str) -> str:
-            return self.value
-
-    for name, item_id, public_method, wrapper_name in [
-        ("build_vod_chat", "v1", "get_chat_by_vod_id", "_get_chat_by_vod_id"),
-        ("build_clip_chat", "c1", "get_chat_by_clip_id", "_get_chat_by_clip_id"),
-        ("build_stream_chat", "s1", "get_chat_by_stream_id", "_get_chat_by_stream_id"),
-    ]:
-        seen: dict[str, object] = {}
-
-        def fake_build(owner, seen_id, params, _seen=seen):
-            _seen.update(owner=owner, item_id=seen_id, params=params)
-            return "chat"
-
-        monkeypatch.setattr(
-            f"chat_downloader.sites.twitch.extractor.{name}",
-            fake_build,
-        )
-        assert getattr(downloader, public_method)(item_id, request) == "chat"
-        assert seen["item_id"] == item_id
-        assert seen["params"] is request
-        match = Match(item_id + "2")
-        assert getattr(downloader, wrapper_name)(match, request) == "chat"
-        assert seen["item_id"] == match.value
+    build = Mock(return_value="chat")
+    monkeypatch.setattr(
+        f"chat_downloader.sites.twitch.extractor.build_{kind}_chat", build
+    )
+    assert getattr(downloader, f"get_chat_by_{kind}_id")("id1", request) == "chat"
+    assert build.call_args.args[1] == "id1"
+    assert build.call_args.args[2] is request
+    match = Mock()
+    match.group.return_value = "id2"
+    assert getattr(downloader, f"_get_chat_by_{kind}_id")(match, request) == "chat"
+    assert build.call_args.args[1] == "id2"
 
 
-def test_extractor_generate_urls_delegates_to_url_generation(monkeypatch) -> None:
-    downloader = TwitchChatDownloader()
+def test_extractor_generate_urls_delegates_to_url_generation(monkeypatch):
     monkeypatch.setattr(
         "chat_downloader.sites.twitch.extractor.generate_twitch_urls",
-        lambda owner, livestream, vod, clip: iter(
-            [owner._NAME, livestream, vod, clip],
-        ),
+        lambda owner, livestream, vod, clip: iter([owner._NAME, livestream, vod, clip]),
     )
-    assert list(downloader.generate_urls(1, 2, 3)) == [
-        "twitch.tv",
-        1,
-        2,
-        3,
-    ]
+    assert list(TwitchChatDownloader().generate_urls(1, 2, 3)) == ["twitch.tv", 1, 2, 3]

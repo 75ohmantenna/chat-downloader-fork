@@ -25,10 +25,6 @@ def test_generated_help_preserves_key_argument_groups() -> None:
         "Initialization Arguments:",
     ):
         assert heading in help_text
-
-
-def test_generated_help_lists_only_supported_output_formats() -> None:
-    help_text = _build_arg_parser().format_help()
     normalized_help = " ".join(help_text.split())
 
     assert ".jsonl/.txt" in normalized_help

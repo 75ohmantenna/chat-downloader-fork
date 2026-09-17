@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
 from unittest.mock import Mock
 
@@ -32,6 +31,26 @@ def _video_metadata(*, channel_id: int = 1227772) -> dict[str, Any]:
     }
 
 
+def _client() -> Mock:
+    client = Mock()
+    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
+    client.fetch_video_metadata.return_value = _video_metadata()
+    client.fetch_mobile_clip_metadata.return_value = load_fixture(
+        "clip_metadata_mobile.json"
+    )
+    client.fetch_message_page.return_value = {"data": {"messages": []}}
+    return client
+
+
+def _get_chat(client, *, request=None, clip_id=CLIP_ID):
+    return clip_service.get_clip_chat(
+        "n3on",
+        clip_id,
+        request or ChatRequest(max_attempts=1, interruptible_retry=False),
+        api_client=client,
+    )
+
+
 def _raw_message(message_id: str, created_at: str) -> dict[str, Any]:
     return {
         "id": message_id,
@@ -41,34 +60,36 @@ def _raw_message(message_id: str, created_at: str) -> dict[str, Any]:
     }
 
 
-def test_clip_replay_composes_real_client_metadata_cursor_and_parser() -> None:
-    page = {
-        "data": {
-            "messages": [
-                _raw_message("at-end", "2026-08-18T22:55:23Z"),
-                _raw_message("inside", "2026-08-18T22:55:22Z"),
-                _raw_message("at-start", "2026-08-18T22:54:23Z"),
-                _raw_message("before", "2026-08-18T22:54:22Z"),
-            ],
-            "cursor": None,
-        }
-    }
+@pytest.mark.parametrize(
+    ("web_status", "timestamps", "cursor"),
+    [
+        (200, ["22:55:23", "22:55:22", "22:54:23", "22:54:22"], "1787093724000000"),
+        (404, ["22:55:21", "22:54:22", "22:54:21", "22:54:20"], "1787093722000000"),
+        (500, ["22:55:21", "22:54:22", "22:54:21", "22:54:20"], "1787093722000000"),
+    ],
+)
+def test_clip_replay_composes_metadata_cursor_and_parser(
+    web_status, timestamps, cursor
+):
+    records = [
+        _raw_message(message_id, f"2026-08-18T{timestamp}Z")
+        for message_id, timestamp in zip(
+            ["at-end", "inside", "at-start", "before"], timestamps, strict=True
+        )
+    ]
+    page = {"data": {"messages": records, "cursor": None}}
+    web = web_status == 200
     session = FakeKickSession(
         [
-            FakeResponse(200, load_fixture("clip_metadata.json")),
-            FakeResponse(200, _video_metadata()),
+            FakeResponse(web_status, load_fixture("clip_metadata.json") if web else {}),
+            FakeResponse(
+                200,
+                _video_metadata() if web else load_fixture("clip_metadata_mobile.json"),
+            ),
             FakeResponse(200, page),
         ]
     )
-    client = KickApiClient(session=session, mobile_session=session)
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
-
+    chat = _get_chat(KickApiClient(session=session, mobile_session=session))
     assert chat.title == "woah"
     assert chat.status == "completed"
     assert chat.video_type == "clip"
@@ -80,118 +101,51 @@ def test_clip_replay_composes_real_client_metadata_cursor_and_parser() -> None:
         "inside",
         "at-end",
     ]
+    metadata_url = (
+        f"https://kick.com/api/v1/video/{VIDEO_ID}"
+        if web
+        else f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}"
+    )
     assert session.calls == [
         (
             f"https://kick.com/api/v2/clips/{CLIP_ID}",
             {"params": None, "timeout": (10.0, 30.0)},
         ),
-        (
-            f"https://kick.com/api/v1/video/{VIDEO_ID}",
-            {"params": None, "timeout": (10.0, 30.0)},
-        ),
+        (metadata_url, {"params": None, "timeout": (10.0, 30.0)}),
         (
             "https://kick.com/api/v2/channels/1227772/messages",
             {
-                "params": {"cursor": "1787093724000000"},
+                "params": {"cursor": cursor},
                 "timeout": (10.0, 30.0),
             },
         ),
     ]
 
 
-@pytest.mark.parametrize("web_status", [404, 500])
-def test_clip_replay_falls_back_to_mobile_metadata_and_absolute_time(
-    web_status: int,
-) -> None:
-    page = {
-        "data": {
-            "messages": [
-                _raw_message("at-end", "2026-08-18T22:55:21Z"),
-                _raw_message("inside", "2026-08-18T22:54:22Z"),
-                _raw_message("at-start", "2026-08-18T22:54:21Z"),
-                _raw_message("before", "2026-08-18T22:54:20Z"),
-            ],
-            "cursor": None,
-        }
-    }
-    session = FakeKickSession(
-        [
-            FakeResponse(web_status, {}),
-            FakeResponse(200, load_fixture("clip_metadata_mobile.json")),
-            FakeResponse(200, page),
-        ]
-    )
-    client = KickApiClient(session=session, mobile_session=session)
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
-
-    assert chat.title == "woah"
-    assert chat.start_time == 0
-    assert chat.duration == 60
-    assert [message["message_id"] for message in chat] == [
-        "at-start",
-        "inside",
-        "at-end",
-    ]
-    assert session.calls == [
-        (
-            f"https://kick.com/api/v2/clips/{CLIP_ID}",
-            {"params": None, "timeout": (10.0, 30.0)},
-        ),
-        (
-            f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}",
-            {"params": None, "timeout": (10.0, 30.0)},
-        ),
-        (
-            "https://kick.com/api/v2/channels/1227772/messages",
-            {
-                "params": {"cursor": "1787093722000000"},
-                "timeout": (10.0, 30.0),
-            },
-        ),
-    ]
-
-
-def test_clip_bounds_are_relative_clamped_and_do_not_mutate_request() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
-    client.fetch_video_metadata.return_value = _video_metadata()
-    client.fetch_message_page.return_value = {"data": {"messages": []}}
+@pytest.mark.parametrize(
+    ("mobile", "cursor"),
+    [(False, "1787093724000000"), (True, "1787093722000000")],
+)
+def test_clip_bounds_are_relative_clamped_and_do_not_mutate_request(mobile, cursor):
+    client = _client()
+    if mobile:
+        client.fetch_clip_metadata.side_effect = KickError("web unavailable")
     request = ChatRequest(
-        start_time=10,
-        end_time=90,
-        max_attempts=1,
-        interruptible_retry=False,
+        start_time=10, end_time=90, max_attempts=1, interruptible_retry=False
     )
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        request,
-        api_client=client,
-    )
-
+    chat = _get_chat(client, request=request)
     assert request.start_time == 10
     assert request.end_time == 90
     assert chat.start_time == 10
     assert chat.duration == 50
     assert list(chat) == []
-    client.fetch_message_page.assert_called_once_with(
-        "1227772",
-        cursor="1787093724000000",
-    )
-    client.fetch_mobile_clip_metadata.assert_not_called()
+    client.fetch_message_page.assert_called_once_with("1227772", cursor=cursor)
+    if not mobile:
+        client.fetch_mobile_clip_metadata.assert_not_called()
 
 
 def test_clip_bounds_beyond_duration_yield_no_endpoint_messages() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
-    client.fetch_video_metadata.return_value = _video_metadata()
+    client = _client()
     client.fetch_message_page.return_value = {
         "data": {
             "messages": [
@@ -200,16 +154,11 @@ def test_clip_bounds_beyond_duration_yield_no_endpoint_messages() -> None:
         }
     }
 
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(
-            start_time=70,
-            end_time=90,
-            max_attempts=1,
-            interruptible_retry=False,
+    chat = _get_chat(
+        client,
+        request=ChatRequest(
+            start_time=70, end_time=90, max_attempts=1, interruptible_retry=False
         ),
-        api_client=client,
     )
 
     assert chat.start_time == 60
@@ -219,58 +168,39 @@ def test_clip_bounds_beyond_duration_yield_no_endpoint_messages() -> None:
 
 
 def test_clip_window_is_truncated_at_source_vod_end() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
+    client = _client()
     video = _video_metadata()
     video["livestream"]["duration"] = 2_068_000
     client.fetch_video_metadata.return_value = video
-    client.fetch_message_page.return_value = {"data": {"messages": []}}
 
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
+    chat = _get_chat(client)
 
     assert chat.duration == 30
     assert list(chat) == []
 
 
 def test_clip_source_channel_mismatch_is_rejected() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
+    client = _client()
     client.fetch_video_metadata.return_value = _video_metadata(channel_id=999)
 
     with pytest.raises(KickError, match="channel does not match"):
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
+        _get_chat(client)
 
     client.fetch_message_page.assert_not_called()
 
 
 def test_clip_offset_outside_source_vod_is_rejected() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
+    client = _client()
     video = _video_metadata()
     video["livestream"]["duration"] = 1_000
     client.fetch_video_metadata.return_value = video
 
     with pytest.raises(KickError, match="outside its source VOD"):
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
+        _get_chat(client)
 
 
 def test_resolve_clip_metadata_accepts_zero_offset() -> None:
-    payload = deepcopy(load_fixture("clip_metadata.json"))
+    payload = load_fixture("clip_metadata.json")
     payload["clip"]["vod_starts_at"] = 0
 
     metadata = clip_service._resolve_clip_metadata(payload, CLIP_ID)
@@ -293,54 +223,27 @@ def test_resolve_mobile_clip_metadata_normalizes_timestamp() -> None:
 
 
 @pytest.mark.parametrize(
-    "started_at",
+    ("field", "value", "message"),
     [
-        "2026-08-18T22:54:21",
-        "0001-01-01T00:00:00+01:00",
+        ("started_at", "2026-08-18T22:54:21", "invalid started_at"),
+        ("started_at", "0001-01-01T00:00:00+01:00", "invalid started_at"),
+        *[
+            ("started_at", value, "unusable started_at sentinel")
+            for value in [
+                "0001-01-01T00:00:00Z",
+                "0001-01-01T01:00:00+01:00",
+                "1970-01-01T00:00:00.000Z",
+                "1970-01-01T01:00:00+01:00",
+            ]
+        ],
+        ("started_at", "9999-12-31T23:59:59Z", "unusable time window"),
+        ("duration", 181, "180-second duration limit"),
     ],
 )
-def test_resolve_mobile_clip_metadata_rejects_invalid_absolute_timestamp(
-    started_at: str,
-) -> None:
-    payload = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    payload["data"]["started_at"] = started_at
-
-    with pytest.raises(KickError, match="invalid started_at"):
-        clip_service._resolve_mobile_clip_metadata(payload, CLIP_ID)
-
-
-@pytest.mark.parametrize(
-    "started_at",
-    [
-        "0001-01-01T00:00:00Z",
-        "0001-01-01T01:00:00+01:00",
-        "1970-01-01T00:00:00.000Z",
-        "1970-01-01T01:00:00+01:00",
-    ],
-)
-def test_resolve_mobile_clip_metadata_rejects_start_sentinel(
-    started_at: str,
-) -> None:
-    payload = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    payload["data"]["started_at"] = started_at
-
-    with pytest.raises(KickError, match="unusable started_at sentinel"):
-        clip_service._resolve_mobile_clip_metadata(payload, CLIP_ID)
-
-
-def test_resolve_mobile_clip_metadata_rejects_overflowing_window() -> None:
-    payload = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    payload["data"]["started_at"] = "9999-12-31T23:59:59Z"
-
-    with pytest.raises(KickError, match="unusable time window"):
-        clip_service._resolve_mobile_clip_metadata(payload, CLIP_ID)
-
-
-def test_resolve_mobile_clip_metadata_rejects_overlong_duration() -> None:
-    payload = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    payload["data"]["duration"] = 181
-
-    with pytest.raises(KickError, match="180-second duration limit"):
+def test_resolve_mobile_clip_metadata_rejects_unusable_window(field, value, message):
+    payload = load_fixture("clip_metadata_mobile.json")
+    payload["data"][field] = value
+    with pytest.raises(KickError, match=message):
         clip_service._resolve_mobile_clip_metadata(payload, CLIP_ID)
 
 
@@ -373,141 +276,105 @@ def test_resolve_mobile_clip_metadata_rejects_invalid_contract(
         clip_service._resolve_mobile_clip_metadata(payload, CLIP_ID)
 
 
-def test_mobile_clip_fallback_handles_missing_web_vod() -> None:
-    primary = {"clip": {"id": CLIP_ID}}
-    client = Mock()
-    client.fetch_clip_metadata.return_value = primary
-    client.fetch_mobile_clip_metadata.return_value = load_fixture(
-        "clip_metadata_mobile.json"
-    )
-    client.fetch_message_page.return_value = {"data": {"messages": []}}
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
-
-    assert chat.start_time == 0
-    assert list(chat) == []
-    client.fetch_video_metadata.assert_not_called()
-
-
 @pytest.mark.parametrize(
-    ("field", "value"),
+    "changes",
     [
-        ("vod_starts_at", None),
-        ("vod_starts_at", -1),
-        ("duration", None),
-        ("duration", 0),
+        None,
+        {"vod_starts_at": None},
+        {"vod_starts_at": -1},
+        {"duration": None},
+        {"duration": 0},
     ],
 )
-def test_mobile_clip_fallback_handles_invalid_web_replay_field(
-    field: str,
-    value: object,
-) -> None:
-    primary = deepcopy(load_fixture("clip_metadata.json"))
-    primary["clip"][field] = value
-    client = Mock()
-    client.fetch_clip_metadata.return_value = primary
-    client.fetch_mobile_clip_metadata.return_value = load_fixture(
-        "clip_metadata_mobile.json"
-    )
-    client.fetch_message_page.return_value = {"data": {"messages": []}}
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
-
+def test_mobile_clip_fallback_handles_unusable_web_metadata(changes):
+    client = _client()
+    if changes is None:
+        client.fetch_clip_metadata.return_value = {"clip": {"id": CLIP_ID}}
+    else:
+        client.fetch_clip_metadata.return_value["clip"].update(changes)
+    chat = _get_chat(client)
+    assert chat.start_time == 0
     assert chat.duration == 60
     assert list(chat) == []
     client.fetch_video_metadata.assert_not_called()
 
 
-def test_invalid_web_replay_field_preserves_channel_disagreement() -> None:
-    primary = deepcopy(load_fixture("clip_metadata.json"))
-    primary["clip"]["duration"] = 0
-    mobile = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    mobile["data"]["channel"]["id"] = 999
-    client = Mock()
-    client.fetch_clip_metadata.return_value = primary
-    client.fetch_mobile_clip_metadata.return_value = mobile
-
-    with pytest.raises(KickError, match="different channel ids") as captured:
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    assert isinstance(captured.value.__cause__, KickError)
-    assert "duration" in str(captured.value.__cause__)
-    client.fetch_message_page.assert_not_called()
-
-
-def test_missing_web_channel_preserves_duration_for_reconciliation() -> None:
-    primary = deepcopy(load_fixture("clip_metadata.json"))
-    primary["clip"]["channel_id"] = 0
-    primary["clip"]["channel"] = {}
-    mobile = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    mobile["data"]["duration"] = 30
-    client = Mock()
-    client.fetch_clip_metadata.return_value = primary
-    client.fetch_mobile_clip_metadata.return_value = mobile
-
-    with pytest.raises(KickError, match="different durations") as captured:
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    assert isinstance(captured.value.__cause__, KickError)
-    assert "channel id" in str(captured.value.__cause__)
-    client.fetch_message_page.assert_not_called()
-
-
-def test_mobile_clip_fallback_rejects_web_channel_disagreement() -> None:
-    primary = deepcopy(load_fixture("clip_metadata.json"))
-    primary["clip"]["vod"] = {}
-    mobile = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    mobile["data"]["channel"]["id"] = 999
-    client = Mock()
-    client.fetch_clip_metadata.return_value = primary
-    client.fetch_mobile_clip_metadata.return_value = mobile
-
-    with pytest.raises(KickError, match="different channel ids") as captured:
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    assert isinstance(captured.value.__cause__, NoChatReplay)
-    client.fetch_video_metadata.assert_not_called()
+@pytest.mark.parametrize(
+    (
+        "web_changes",
+        "mobile_changes",
+        "vod_error",
+        "message",
+        "cause",
+        "cause_text",
+        "skip_vod",
+    ),
+    [
+        (
+            {"duration": 0},
+            {"channel": {"id": 999}},
+            False,
+            "different channel ids",
+            KickError,
+            "duration",
+            False,
+        ),
+        (
+            {"channel_id": 0, "channel": {}},
+            {"duration": 30},
+            False,
+            "different durations",
+            KickError,
+            "channel id",
+            False,
+        ),
+        (
+            {"vod": {}},
+            {"channel": {"id": 999}},
+            False,
+            "different channel ids",
+            NoChatReplay,
+            None,
+            True,
+        ),
+        ({}, {"duration": 30}, True, "different durations", KickError, None, False),
+        (
+            {"vod": {}},
+            {"duration": 30},
+            False,
+            "different durations",
+            NoChatReplay,
+            None,
+            False,
+        ),
+    ],
+)
+def test_fallback_reconciles_web_metadata(
+    web_changes, mobile_changes, vod_error, message, cause, cause_text, skip_vod
+):
+    client = _client()
+    client.fetch_clip_metadata.return_value["clip"].update(web_changes)
+    client.fetch_mobile_clip_metadata.return_value["data"].update(mobile_changes)
+    if vod_error:
+        client.fetch_video_metadata.side_effect = KickError("VOD unavailable")
+    with pytest.raises(KickError, match=message) as captured:
+        _get_chat(client)
+    assert isinstance(captured.value.__cause__, cause)
+    if cause_text:
+        assert cause_text in str(captured.value.__cause__)
+    if skip_vod:
+        client.fetch_video_metadata.assert_not_called()
     client.fetch_message_page.assert_not_called()
 
 
 def test_web_clip_identity_mismatch_does_not_fall_back() -> None:
-    primary = deepcopy(load_fixture("clip_metadata.json"))
+    primary = load_fixture("clip_metadata.json")
     primary["clip"]["id"] = "clip_other"
-    client = Mock()
+    client = _client()
     client.fetch_clip_metadata.return_value = primary
 
     with pytest.raises(KickError, match="returned id"):
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
+        _get_chat(client)
 
     client.fetch_mobile_clip_metadata.assert_not_called()
 
@@ -523,12 +390,7 @@ def test_source_vod_unavailability_falls_back_to_mobile_metadata() -> None:
     )
     client = KickApiClient(session=session, mobile_session=session)
 
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
+    chat = _get_chat(client)
 
     assert chat.title == "woah"
     assert list(chat) == []
@@ -541,232 +403,58 @@ def test_source_vod_unavailability_falls_back_to_mobile_metadata() -> None:
 
 
 @pytest.mark.parametrize(
-    "duration",
-    [None, "60000", True, 0, -1, float("nan"), float("inf"), 1e20],
+    "changes",
+    [
+        *[
+            {"duration": value}
+            for value in [None, "60000", True, 0, -1, float("nan"), float("inf"), 1e20]
+        ],
+        *[
+            {"start_time": value, "duration": 1_000}
+            for value in [
+                "9999-12-31T23:59:59Z",
+                "0001-01-01T00:00:00+01:00",
+            ]
+        ],
+    ],
 )
-def test_invalid_source_vod_duration_falls_back_to_mobile_metadata(
-    duration: object,
-) -> None:
-    video = _video_metadata()
-    video["livestream"]["duration"] = duration
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
-    client.fetch_video_metadata.return_value = video
-    client.fetch_mobile_clip_metadata.return_value = load_fixture(
-        "clip_metadata_mobile.json"
-    )
-    client.fetch_message_page.return_value = {"data": {"messages": []}}
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
-
+def test_unusable_source_vod_falls_back_to_mobile_metadata(changes):
+    client = _client()
+    client.fetch_video_metadata.return_value["livestream"].update(changes)
+    chat = _get_chat(client)
     assert chat.duration == 60
     assert list(chat) == []
+
+
+@pytest.mark.parametrize("endpoint", ["fetch_clip_metadata", "fetch_video_metadata"])
+@pytest.mark.parametrize(
+    ("error", "message"),
+    [(CaptchaChallengeRequired, "blocked"), (KickCountryBlocked, "country blocked")],
+)
+def test_security_failure_does_not_fall_back_to_mobile(
+    endpoint, error, message
+) -> None:
+    client = _client()
+    getattr(client, endpoint).side_effect = error(message)
+    with pytest.raises(error, match=message):
+        _get_chat(client)
+    client.fetch_mobile_clip_metadata.assert_not_called()
 
 
 @pytest.mark.parametrize(
-    "start_time",
-    [
-        "9999-12-31T23:59:59Z",
-        "0001-01-01T00:00:00+01:00",
-    ],
+    ("error", "message"),
+    [(KickError, "mobile unavailable"), (CaptchaChallengeRequired, "blocked")],
 )
-def test_unusable_source_vod_window_falls_back_to_mobile_metadata(
-    start_time: str,
-) -> None:
-    video = _video_metadata()
-    video["livestream"]["start_time"] = start_time
-    video["livestream"]["duration"] = 1_000
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
-    client.fetch_video_metadata.return_value = video
-    client.fetch_mobile_clip_metadata.return_value = load_fixture(
-        "clip_metadata_mobile.json"
-    )
-    client.fetch_message_page.return_value = {"data": {"messages": []}}
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        ChatRequest(max_attempts=1, interruptible_retry=False),
-        api_client=client,
-    )
-
-    assert chat.duration == 60
-    assert list(chat) == []
-
-
-def test_source_vod_fallback_rejects_mobile_duration_disagreement() -> None:
-    mobile = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    mobile["data"]["duration"] = 30
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
-    client.fetch_video_metadata.side_effect = KickError("VOD unavailable")
-    client.fetch_mobile_clip_metadata.return_value = mobile
-
-    with pytest.raises(KickError, match="different durations") as captured:
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    assert isinstance(captured.value.__cause__, KickError)
-    client.fetch_message_page.assert_not_called()
-
-
-def test_missing_web_vod_preserves_duration_for_mobile_reconciliation() -> None:
-    primary = deepcopy(load_fixture("clip_metadata.json"))
-    primary["clip"]["vod"] = {}
-    mobile = deepcopy(load_fixture("clip_metadata_mobile.json"))
-    mobile["data"]["duration"] = 30
-    client = Mock()
-    client.fetch_clip_metadata.return_value = primary
-    client.fetch_mobile_clip_metadata.return_value = mobile
-
-    with pytest.raises(KickError, match="different durations") as captured:
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    assert isinstance(captured.value.__cause__, NoChatReplay)
-    client.fetch_message_page.assert_not_called()
-
-
-def test_source_vod_challenge_does_not_fall_back_to_mobile_endpoint() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
-    client.fetch_video_metadata.side_effect = CaptchaChallengeRequired("blocked")
-
-    with pytest.raises(CaptchaChallengeRequired, match="blocked"):
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    client.fetch_mobile_clip_metadata.assert_not_called()
-
-
-def test_source_vod_country_block_does_not_fall_back_to_mobile_endpoint() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.return_value = load_fixture("clip_metadata.json")
-    client.fetch_video_metadata.side_effect = KickCountryBlocked("country blocked")
-
-    with pytest.raises(KickCountryBlocked, match="country blocked"):
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    client.fetch_mobile_clip_metadata.assert_not_called()
-
-
-def test_dual_metadata_failure_retains_primary_error_as_cause() -> None:
-    client = Mock()
+def test_dual_metadata_failure_retains_primary_error_as_cause(error, message):
+    client = _client()
     client.fetch_clip_metadata.side_effect = KickError("web unavailable")
-    client.fetch_mobile_clip_metadata.side_effect = KickError("mobile unavailable")
-
-    with pytest.raises(KickError, match="mobile unavailable") as captured:
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
+    client.fetch_mobile_clip_metadata.side_effect = error(message)
+    with pytest.raises(error, match=message) as captured:
+        _get_chat(client)
     assert isinstance(captured.value.__cause__, KickError)
     assert str(captured.value.__cause__) == "web unavailable"
-
-
-def test_mobile_challenge_is_terminal_and_retains_primary_cause() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.side_effect = KickError("web unavailable")
-    client.fetch_mobile_clip_metadata.side_effect = CaptchaChallengeRequired("blocked")
-
-    with pytest.raises(CaptchaChallengeRequired, match="blocked") as captured:
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    assert isinstance(captured.value.__cause__, KickError)
-    client.fetch_video_metadata.assert_not_called()
-
-
-def test_mobile_clip_bounds_are_relative_and_clamped() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.side_effect = KickError("web unavailable")
-    client.fetch_mobile_clip_metadata.return_value = load_fixture(
-        "clip_metadata_mobile.json"
-    )
-    client.fetch_message_page.return_value = {"data": {"messages": []}}
-    request = ChatRequest(
-        start_time=10,
-        end_time=90,
-        max_attempts=1,
-        interruptible_retry=False,
-    )
-
-    chat = clip_service.get_clip_chat(
-        "n3on",
-        CLIP_ID,
-        request,
-        api_client=client,
-    )
-
-    assert request.start_time == 10
-    assert request.end_time == 90
-    assert chat.start_time == 10
-    assert chat.duration == 50
-    assert list(chat) == []
-    client.fetch_message_page.assert_called_once_with(
-        "1227772",
-        cursor="1787093722000000",
-    )
-
-
-def test_clip_challenge_does_not_fall_back_to_mobile_endpoint() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.side_effect = CaptchaChallengeRequired("blocked")
-
-    with pytest.raises(CaptchaChallengeRequired, match="blocked"):
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    client.fetch_mobile_clip_metadata.assert_not_called()
-
-
-def test_clip_country_block_does_not_fall_back_to_mobile_endpoint() -> None:
-    client = Mock()
-    client.fetch_clip_metadata.side_effect = KickCountryBlocked("country blocked")
-
-    with pytest.raises(KickCountryBlocked, match="country blocked"):
-        clip_service.get_clip_chat(
-            "n3on",
-            CLIP_ID,
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
-
-    client.fetch_mobile_clip_metadata.assert_not_called()
+    if error is CaptchaChallengeRequired:
+        client.fetch_video_metadata.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -812,7 +500,7 @@ def test_resolve_clip_metadata_rejects_invalid_numeric_fields(
     value: object,
     message: str,
 ) -> None:
-    payload = deepcopy(load_fixture("clip_metadata.json"))
+    payload = load_fixture("clip_metadata.json")
     payload["clip"][field] = value
 
     with pytest.raises(KickError, match=message):
@@ -820,7 +508,7 @@ def test_resolve_clip_metadata_rejects_invalid_numeric_fields(
 
 
 def test_resolve_clip_metadata_rejects_unsafe_vod_id() -> None:
-    payload = deepcopy(load_fixture("clip_metadata.json"))
+    payload = load_fixture("clip_metadata.json")
     payload["clip"]["vod"]["id"] = "../channel"
 
     with pytest.raises(KickError, match="invalid source VOD id"):
@@ -828,7 +516,7 @@ def test_resolve_clip_metadata_rejects_unsafe_vod_id() -> None:
 
 
 def test_resolve_clip_metadata_rejects_disagreeing_channel_ids() -> None:
-    payload = deepcopy(load_fixture("clip_metadata.json"))
+    payload = load_fixture("clip_metadata.json")
     payload["clip"]["channel"]["id"] = 999
 
     with pytest.raises(KickError, match="conflicting channel ids"):
@@ -836,7 +524,7 @@ def test_resolve_clip_metadata_rejects_disagreeing_channel_ids() -> None:
 
 
 def test_resolve_clip_metadata_requires_a_numeric_channel_id() -> None:
-    payload = deepcopy(load_fixture("clip_metadata.json"))
+    payload = load_fixture("clip_metadata.json")
     payload["clip"]["channel_id"] = 0
     payload["clip"]["channel"] = {}
 
@@ -845,14 +533,9 @@ def test_resolve_clip_metadata_requires_a_numeric_channel_id() -> None:
 
 
 def test_get_clip_chat_rejects_unsafe_clip_id_before_request() -> None:
-    client = Mock()
+    client = _client()
 
     with pytest.raises(KickError, match="Invalid Kick clip id"):
-        clip_service.get_clip_chat(
-            "n3on",
-            "../clip",
-            ChatRequest(max_attempts=1, interruptible_retry=False),
-            api_client=client,
-        )
+        _get_chat(client, clip_id="../clip")
 
     client.fetch_clip_metadata.assert_not_called()

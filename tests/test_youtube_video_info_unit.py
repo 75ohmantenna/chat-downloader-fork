@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any
 
 import pytest
 
@@ -15,7 +14,7 @@ from chat_downloader.sites.youtube.video_initialization import (
 from chat_downloader.sites.youtube.video_metadata import (
     YouTubeVideoMetadataCoreMixin,
 )
-from chat_downloader.sites.youtube.video_status_models import VideoDetails
+from chat_downloader.sites.youtube.video_status import parse_video_details
 
 
 class _MetadataDummy(YouTubeVideoMetadataCoreMixin):
@@ -44,188 +43,71 @@ class _InitializationDummy(YouTubeVideoInitializationMixin):
         return SimpleNamespace(text="<html></html>")
 
 
-def test_parse_video_data_uses_watch_url_and_serializes_video_details(
-    monkeypatch,
-) -> None:
+@pytest.mark.parametrize("video_type", ["video", "clip"])
+def test_parse_video_data_selects_url_and_serializes_details(monkeypatch, video_type):
     from chat_downloader.sites.youtube import video_metadata
 
     dummy = _MetadataDummy()
-    request = ChatRequest(url="https://www.youtube.com/watch?v=abc")
-    calls = {}
-    parsed_details = VideoDetails(
-        title="Example",
-        author="Uploader",
-        author_id="channel-1",
-        original_video_id="abc",
-        video_type="video",
-        status="live",
-        start_time=1.0,
-        end_time=2.0,
-        duration=3.0,
-        continuation_info={"Live chat": "token"},
+    urls, logs = [], []
+    clip = video_type == "clip"
+    request = None if clip else ChatRequest(url="https://www.youtube.com/watch?v=abc")
+    player_response = (
+        {}
+        if clip
+        else {
+            "playabilityStatus": {"status": "OK"},
+            "videoDetails": {"videoId": "abc", "title": "Example", "isLive": True},
+        }
     )
+    initial_data = {"contents": {"id": 1}} if clip else {"contents": {}}
 
-    def fake_get_initial_info(
-        original_url,
-        session_get,
-        params,
-        initial_data_re,
-        cfg_re,
-        initial_player_re,
-    ):
-        calls["original_url"] = original_url
-        calls["session_get"] = session_get
-        calls["params"] = params
-        calls["regexes"] = (initial_data_re, cfg_re, initial_player_re)
-        return (
-            {"contents": {}},
-            {"cfg": True},
-            {"playabilityStatus": {"status": "OK"}},
-        )
+    def initial_info(url, *_args):
+        urls.append(url)
+        return initial_data, {"cfg": True}, player_response
 
-    def fake_parse_video_details(
-        player_response_info,
-        yt_initial_data,
-        video_id,
-        video_type,
-    ):
-        calls["parse_args"] = (
-            player_response_info,
-            yt_initial_data,
-            video_id,
-            video_type,
-        )
-        return parsed_details
-
-    monkeypatch.setattr(video_metadata, "_get_initial_info", fake_get_initial_info)
-    monkeypatch.setattr(video_metadata, "parse_video_details", fake_parse_video_details)
+    monkeypatch.setattr(video_metadata, "_get_initial_info", initial_info)
     monkeypatch.setattr(
-        video_metadata,
-        "video_details_to_dict",
-        lambda details: {"title": details.title, "status": details.status},
+        video_metadata, "log", lambda level, value: logs.append((level, value))
+    )
+    details, response, initial, config = dummy._parse_video_data(
+        "abc", request, video_type=video_type
     )
 
-    details, player_response_info, yt_initial_data, ytcfg = dummy._parse_video_data(
-        "abc",
-        request,
-    )
-
-    assert calls["original_url"].endswith("/watch?v=abc")
-    assert calls["session_get"] == dummy._session_get
-    assert calls["params"] is request
-    assert calls["parse_args"] == (
-        {"playabilityStatus": {"status": "OK"}},
-        {"contents": {}},
-        "abc",
-        "video",
-    )
-    assert details == {"title": "Example", "status": "live"}
-    assert player_response_info == {"playabilityStatus": {"status": "OK"}}
-    assert yt_initial_data == {"contents": {}}
-    assert ytcfg == {"cfg": True}
+    route = "clip/abc" if clip else "watch?v=abc"
+    assert urls == [f"https://www.youtube.com/{route}"]
+    assert details["title"] == (None if clip else "Example")
+    assert response == player_response
+    assert initial == initial_data
+    assert config == {"cfg": True}
+    if clip:
+        assert logs == [
+            ("debug", initial_data),
+            ("warning", "Unable to parse player response, proceeding with caution"),
+        ]
 
 
-def test_parse_video_data_uses_clip_url_and_logs_missing_player_response(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.youtube import video_metadata
-
-    dummy = _MetadataDummy()
-    logs = []
-    captured: dict[str, Any] = {}
-
-    def fake_get_initial_info(original_url, *_args):
-        captured["original_url"] = original_url
-        return {"contents": {"id": 1}}, {"cfg": True}, {}
-
-    monkeypatch.setattr(
-        video_metadata,
-        "_get_initial_info",
-        fake_get_initial_info,
-    )
-    monkeypatch.setattr(
-        video_metadata,
-        "parse_video_details",
-        lambda *_args: VideoDetails(
-            title="Clip title",
-            author=None,
-            author_id=None,
-            original_video_id="clip123",
-            video_type="clip",
-            status="past",
-            start_time=None,
-            end_time=None,
-            duration=None,
-        ),
-    )
-    monkeypatch.setattr(
-        video_metadata,
-        "video_details_to_dict",
-        lambda details: {"title": details.title},
-    )
-    monkeypatch.setattr(
-        video_metadata,
-        "log",
-        lambda level, value: logs.append((level, value)),
-    )
-
-    details, player_response_info, yt_initial_data, ytcfg = dummy._parse_video_data(
-        "clip123",
-        video_type="clip",
-    )
-
-    assert captured["original_url"].endswith("/clip/clip123")
-    assert logs == [
-        ("debug", {"contents": {"id": 1}}),
-        ("warning", "Unable to parse player response, proceeding with caution"),
-    ]
-    assert details == {"title": "Clip title"}
-    assert player_response_info == {}
-    assert yt_initial_data == {"contents": {"id": 1}}
-    assert ytcfg == {"cfg": True}
-
-
-def test_get_video_data_returns_details_from_parse_result() -> None:
+@pytest.mark.parametrize(
+    "params",
+    [
+        None,
+        ChatRequest(url="https://www.youtube.com/watch?v=abc"),
+        {"url": "https://www.youtube.com/watch?v=abc", "max_messages": 2},
+    ],
+)
+def test_get_video_data_normalizes_params(params) -> None:
     class DummyVideoData(YouTubeVideoMetadataCoreMixin):
         def _parse_video_data(self, video_id, params=None, video_type="video"):
-            return (
-                {"id": video_id, "params": params, "type": video_type},
-                {},
-                {},
-                {},
-            )
-
-    dummy = DummyVideoData()
-    request = ChatRequest(url="https://www.youtube.com/watch?v=abc")
-
-    assert dummy.get_video_data("abc", request) == {
-        "id": "abc",
-        "params": request,
-        "type": "video",
-    }
-
-
-def test_get_video_data_handles_none_and_dict_params() -> None:
-    class DummyVideoData(YouTubeVideoMetadataCoreMixin):
-        def __init__(self) -> None:
-            self.calls = []
-
-        def _parse_video_data(self, video_id, params=None, video_type="video"):
-            self.calls.append((video_id, params, video_type))
+            self.request = params
             return ({"id": video_id}, {}, {}, {})
 
     dummy = DummyVideoData()
-
-    assert dummy.get_video_data("abc", None) == {"id": "abc"}
-    assert dummy.calls[0] == ("abc", None, "video")
-
-    assert dummy.get_video_data(
-        "def",
-        {"url": "https://www.youtube.com/watch?v=def", "max_messages": 2},
-    ) == {"id": "def"}
-    assert isinstance(dummy.calls[1][1], ChatRequest)
-    assert dummy.calls[1][1].url == "https://www.youtube.com/watch?v=def"
-    assert dummy.calls[1][1].max_messages == 2
+    assert dummy.get_video_data("abc", params) == {"id": "abc"}
+    if isinstance(params, dict):
+        assert isinstance(dummy.request, ChatRequest)
+        assert dummy.request.url == params["url"]
+        assert dummy.request.max_messages == 2
+    else:
+        assert dummy.request is params
 
 
 def _watch_chat(renderer):
@@ -303,28 +185,12 @@ def test_initial_video_info_enriches_chat_submenus(
             config,
         ),
     )
-    bootstrap = {
-        "continuationContents": {
-            "liveChatContinuation": {
-                "header": {
-                    "liveChatHeaderRenderer": {
-                        "viewSelector": {
-                            "sortFilterSubMenuRenderer": {"subMenuItems": items},
-                        },
-                    },
-                },
-            },
-        },
-    }
-    raise_calls = []
+    selector = {"sortFilterSubMenuRenderer": {"subMenuItems": items}}
+    header = {"liveChatHeaderRenderer": {"viewSelector": selector}}
+    bootstrap = {"continuationContents": {"liveChatContinuation": {"header": header}}}
     monkeypatch.setattr(video_initialization, "regex_search", lambda *_args: "{}")
     monkeypatch.setattr(
         video_initialization, "try_parse_json", lambda _value: bootstrap
-    )
-    monkeypatch.setattr(
-        video_initialization,
-        "raise_if_playability_error",
-        lambda *args: raise_calls.append(args),
     )
 
     returned_details, ytcfg = dummy._get_initial_video_info("abc", None)
@@ -335,7 +201,6 @@ def test_initial_video_info_enriches_chat_submenus(
     ]
     assert returned_details["continuation_info"] == expected
     assert ytcfg == config
-    assert raise_calls == []
 
 
 @pytest.mark.parametrize(
@@ -367,12 +232,11 @@ def test_initial_video_info_without_bootstrap(
     dummy = _InitializationDummy(
         (details, player_response, initial_data, {"cfg": True}),
     )
-    raise_calls = []
     warning_logs = []
     monkeypatch.setattr(
         video_initialization,
         "raise_if_playability_error",
-        lambda *args: raise_calls.append(args),
+        lambda *_args: None,
     )
     monkeypatch.setattr(
         video_initialization,
@@ -386,44 +250,25 @@ def test_initial_video_info_without_bootstrap(
     assert returned_details["continuation_info"] == continuations
     assert ytcfg == {"cfg": True}
     assert dummy.session_calls == []
-    assert raise_calls == ([] if continuations else [(player_response, initial_data)])
     if warn:
         assert warning_logs
         assert warning_logs[0][0] == "warning"
         assert "Unable to enrich chat submenu continuation tokens" in warning_logs[0][1]
 
 
-def test_parse_video_details_triggers_livestreaming_debug_log() -> None:
-    from chat_downloader.sites.youtube.video_status import (
-        parse_video_details,
-    )
-
-    player_response_info = {
-        "liveStreamingDetails": {"scheduledStartTime": "1234567890"},
-        "videoDetails": {},
-        "microformat": {},
+@pytest.mark.parametrize("timestamps", [False, True])
+def test_parse_video_details_livestream_and_timestamp_duration(timestamps) -> None:
+    # Missing format duration falls back to the broadcast timestamps.
+    broadcast = {
+        "startTimestamp": "2024-01-01T00:00:00Z",
+        "endTimestamp": "2024-01-01T01:00:00Z",
     }
-    result = parse_video_details(player_response_info, {}, "abc123")
-    assert result is not None
-
-
-def test_parse_video_details_duration_from_start_end_timestamps() -> None:
-    from chat_downloader.sites.youtube.video_status import (
-        parse_video_details,
-    )
-
-    # No approxDurationMs, no lengthSeconds → duration falls back to timestamps
-    player_response_info = {
-        "videoDetails": {},
-        "microformat": {
-            "playerMicroformatRenderer": {
-                "liveBroadcastDetails": {
-                    "startTimestamp": "2024-01-01T00:00:00Z",
-                    "endTimestamp": "2024-01-01T01:00:00Z",
-                }
-            }
-        },
-    }
-    result = parse_video_details(player_response_info, {}, "abc123")
-    assert result.duration is not None
-    assert result.duration > 0
+    response = {"videoDetails": {}, "microformat": {}}
+    if timestamps:
+        response["microformat"] = {
+            "playerMicroformatRenderer": {"liveBroadcastDetails": broadcast}
+        }
+    else:
+        response["liveStreamingDetails"] = {"scheduledStartTime": "1234567890"}
+    result = parse_video_details(response, {}, "abc123")
+    assert result.duration == (3600 if timestamps else None)

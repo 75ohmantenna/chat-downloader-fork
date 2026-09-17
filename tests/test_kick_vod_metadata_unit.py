@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from unittest.mock import Mock
 
 import pytest
@@ -18,6 +17,17 @@ from tests.kick_helpers import FakeKickSession, FakeResponse, load_fixture
 
 VIDEO = "01a09138-ec70-7c4c-a2b7-47a9ed4fc9b4"
 REQUEST = ChatRequest(max_attempts=1, interruptible_retry=False)
+
+
+@pytest.fixture
+def fallback_client():
+    client = Mock()
+    client.fetch_video_metadata.side_effect = KickVideoNotFound("missing")
+    client.fetch_channel.return_value = {"id": 12345, "slug": "examplechannel"}
+    client.fetch_web_video_metadata.return_value = load_fixture(
+        "video_metadata_web.json"
+    )
+    return client
 
 
 def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup(
@@ -34,17 +44,15 @@ def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup(
                     "data": {
                         "messages": [
                             {
-                                "id": "last",
+                                "id": identifier,
                                 "type": "message",
-                                "content": "second",
-                                "created_at": "2026-09-11T16:07:32Z",
-                            },
-                            {
-                                "id": "first",
-                                "type": "message",
-                                "content": "first",
-                                "created_at": "2026-09-11T16:07:31Z",
-                            },
+                                "content": content,
+                                "created_at": f"2026-09-11T16:07:{second}Z",
+                            }
+                            for identifier, content, second in [
+                                ("last", "second", 32),
+                                ("first", "first", 31),
+                            ]
                         ],
                         "cursor": None,
                     }
@@ -100,15 +108,12 @@ def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup(
         ("duration", float("nan")),
     ],
 )
-def test_new_metadata_rejects_wrong_identity_state_and_duration(field, value) -> None:
-    payload = deepcopy(load_fixture("video_metadata_web.json"))
-    payload["data"][field] = value
-    client = Mock()
-    client.fetch_video_metadata.side_effect = KickVideoNotFound("missing")
-    client.fetch_channel.return_value = {"id": 12345, "slug": "examplechannel"}
-    client.fetch_web_video_metadata.return_value = payload
+def test_new_metadata_rejects_wrong_identity_state_and_duration(
+    fallback_client, field, value
+) -> None:
+    fallback_client.fetch_web_video_metadata.return_value["data"][field] = value
     with pytest.raises(KickError):
-        fetch_vod_metadata(client, "examplechannel", VIDEO, REQUEST)
+        fetch_vod_metadata(fallback_client, "examplechannel", VIDEO, REQUEST)
 
 
 @pytest.mark.parametrize(
@@ -119,13 +124,11 @@ def test_new_metadata_rejects_wrong_identity_state_and_duration(field, value) ->
         (VIDEO, {"id": 1, "slug": "different"}),
     ],
 )
-def test_fallback_validates_endpoint_path_and_channel(video, channel) -> None:
-    client = Mock()
-    client.fetch_video_metadata.side_effect = KickVideoNotFound("missing")
-    client.fetch_channel.return_value = channel
+def test_fallback_validates_endpoint_path_and_channel(fallback_client, video, channel):
+    fallback_client.fetch_channel.return_value = channel
     with pytest.raises(KickError):
-        fetch_vod_metadata(client, "examplechannel", video, REQUEST)
-    client.fetch_web_video_metadata.assert_not_called()
+        fetch_vod_metadata(fallback_client, "examplechannel", video, REQUEST)
+    fallback_client.fetch_web_video_metadata.assert_not_called()
 
 
 def test_web_session_injection_closed_once_and_never_uses_bearer() -> None:
@@ -167,18 +170,16 @@ def test_web_endpoint_rejects_path_injection_and_redirects() -> None:
 @pytest.mark.parametrize(
     "end", ["2026-09-11T23:24:00Z", "bad", None, "2026-09-11T23:24:00"]
 )
-def test_metadata_explains_disagreement_without_changing_cutoff(monkeypatch, end):
+def test_metadata_explains_disagreement_without_changing_cutoff(
+    monkeypatch, fallback_client, end
+):
     from chat_downloader.sites.kick import vod_metadata
 
-    payload = deepcopy(load_fixture("video_metadata_web.json"))
+    payload = fallback_client.fetch_web_video_metadata.return_value
     payload["data"]["end_time"] = end
-    client = Mock()
-    client.fetch_video_metadata.side_effect = KickVideoNotFound("missing")
-    client.fetch_channel.return_value = {"id": 12345, "slug": "examplechannel"}
-    client.fetch_web_video_metadata.return_value = payload
     logs = []
     monkeypatch.setattr(vod_metadata, "log", lambda level, text: logs.append(text))
-    result = fetch_vod_metadata(client, "examplechannel", VIDEO, REQUEST)
+    result = fetch_vod_metadata(fallback_client, "examplechannel", VIDEO, REQUEST)
     assert result["livestream"]["duration"] == payload["data"]["duration"] * 1000
     assert "trying website metadata" in logs[0]
     assert len(logs) == (2 if end == "2026-09-11T23:24:00Z" else 1)
