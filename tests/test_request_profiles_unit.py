@@ -10,6 +10,7 @@ from chat_downloader.request_profiles import (
     get_next_request_profile,
     get_request_profile_headers,
     get_request_profile_innertube_client_id,
+    get_request_profile_innertube_context,
     normalize_request_profile,
 )
 
@@ -61,4 +62,8 @@ def test_youtube_profiles_match_current_innertube_clients():
             REQUEST_PROFILE_INNERTUBE_CONTEXTS[profile]["client"]["clientVersion"]
             == version
         )
+
+
+def test_unknown_profile_context_is_empty():
+    assert get_request_profile_innertube_context("missing") == {}
     assert get_request_profile_innertube_client_id("missing") is None

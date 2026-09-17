@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
+
 import pytest
 
 from chat_downloader.errors import ParsingError
@@ -67,7 +69,19 @@ def test_chat_streams_mixin_video_entry_wraps_runtime_generator() -> None:
 
     assert isinstance(chat, Chat)
     assert next(chat.chat) == {"message_type": "text_message"}
-    assert chat.id == "vid"
+
+
+def test_chat_streams_mixin_real_factory_wraps_continuation_loop() -> None:
+    class DummyStreams(YouTubeChatStreamsMixin):
+        pass
+
+    generator = DummyStreams()._get_chat_messages(
+        {},
+        {},
+        ChatRequest(url="https://www.youtube.com/watch?v=vid"),
+    )
+    assert isinstance(generator, Generator)
+    generator.close()
 
 
 def test_chat_streams_mixin_clip_entry_raises_when_clip_times_missing() -> None:

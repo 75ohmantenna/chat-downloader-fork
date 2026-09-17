@@ -9,7 +9,6 @@ remain active offline.
 
 from __future__ import annotations
 
-import os
 import time
 from datetime import UTC, datetime, timedelta
 from functools import partial
@@ -25,7 +24,7 @@ from chat_downloader.errors import (
     ParsingError,
     RetriesExceeded,
 )
-from chat_downloader.redaction import capture_debug_sample
+from chat_downloader.redaction import BoundedSampleCapture, capture_debug_sample
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
@@ -66,7 +65,6 @@ if TYPE_CHECKING:
 _KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
 _SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES"
 _SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
-_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 _RECONNECT_BACKFILL_MICROSECONDS = 10_000_000
 _RECONNECT_BACKFILL_RECORD_LIMIT = _KICK_LIVE_SEEN_MESSAGE_LIMIT
 _RECONNECT_BACKFILL_PAGE_LIMIT = 100
@@ -473,9 +471,7 @@ def _iter_reconnect_backfill(
         }
         fallback_messages = (
             message
-            for message in reversed(
-                list(iter_preloaded_messages(preloaded.messages))
-            )
+            for message in reversed(list(iter_preloaded_messages(preloaded.messages)))
             if _is_in_timestamp_window(
                 message,
                 start_timestamp,
@@ -520,11 +516,9 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
 
     msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     seen_message_cache = _SeenMessageCache(limit=_KICK_LIVE_SEEN_MESSAGE_LIMIT)
-    capture_successful_frames = (
-        os.environ.get(_SUCCESSFUL_FRAME_CAPTURE_ENV, "").strip().lower()
-        in _TRUTHY_ENV_VALUES
+    successful_frame_capture = BoundedSampleCapture(
+        _SUCCESSFUL_FRAME_CAPTURE_ENV, _SUCCESSFUL_FRAME_CAPTURE_LIMIT
     )
-    successful_frame_capture_attempts: dict[str, int] = {}
 
     def emit(message: dict[str, Any]) -> bool:
         message_id = message.get("message_id")
@@ -653,18 +647,10 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                                 "received_timestamp",
                                 received_timestamp,
                             )
-                        if capture_successful_frames:
+                        if successful_frame_capture.enabled:
                             for label in _successful_frame_labels(live_message):
-                                attempts = successful_frame_capture_attempts.get(
-                                    label, 0
-                                )
-                                if attempts >= _SUCCESSFUL_FRAME_CAPTURE_LIMIT:
-                                    continue
-                                successful_frame_capture_attempts[label] = attempts + 1
-                                capture_debug_sample(
-                                    "kick-websocket-frame-" + label,
-                                    frame,
-                                    sample_limit=_SUCCESSFUL_FRAME_CAPTURE_LIMIT,
+                                successful_frame_capture.capture(
+                                    "kick-websocket-frame-" + label, frame
                                 )
                         pusher_error_recoveries = 0
                         if emit(live_message):

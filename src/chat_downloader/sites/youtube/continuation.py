@@ -11,7 +11,6 @@ functions here are stateless and downloader-independent for isolated testing.
 from __future__ import annotations
 
 import math
-import os
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -23,7 +22,7 @@ from chat_downloader.errors import (
     NoChatReplay,
     NoContinuation,
 )
-from chat_downloader.redaction import capture_debug_sample
+from chat_downloader.redaction import BoundedSampleCapture, capture_debug_sample
 from chat_downloader.request_profiles import get_next_request_profile
 from chat_downloader.sites.common import check_for_invalid_types
 from chat_downloader.utils.dict_utils import multi_get
@@ -82,7 +81,6 @@ if TYPE_CHECKING:
 _MS_PER_SECOND = 1000
 _SUCCESSFUL_RESPONSE_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES"
 _SUCCESSFUL_RESPONSE_CAPTURE_LIMIT = 3
-_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 
 @dataclass
@@ -395,11 +393,10 @@ class _ContinuationLoop:
         self.progress = _ContinuationProgress(
             _YT_MAX_NO_PROGRESS_POLLS, _YT_MAX_PROFILE_FALLBACKS
         )
-        self._capture_successful_responses = (
-            os.environ.get(_SUCCESSFUL_RESPONSE_CAPTURE_ENV, "").strip().lower()
-            in _TRUTHY_ENV_VALUES
+        self._capture = BoundedSampleCapture(
+            _SUCCESSFUL_RESPONSE_CAPTURE_ENV,
+            _SUCCESSFUL_RESPONSE_CAPTURE_LIMIT,
         )
-        self._successful_response_capture_attempts = 0
 
     # -- setup --------------------------------------------------------------
 
@@ -536,22 +533,6 @@ class _ContinuationLoop:
         log("debug", f"Logged-in info: {logged_in_info}")
         _raise_if_api_error(yt_info)
 
-    def _capture_successful_response(self, yt_info: JSONDict) -> None:
-        """Capture one of the first bounded, explicitly requested responses."""
-        if (
-            not self._capture_successful_responses
-            or self._successful_response_capture_attempts
-            >= _SUCCESSFUL_RESPONSE_CAPTURE_LIMIT
-        ):
-            return
-
-        self._successful_response_capture_attempts += 1
-        capture_debug_sample(
-            "youtube-continuation-response",
-            yt_info,
-            sample_limit=_SUCCESSFUL_RESPONSE_CAPTURE_LIMIT,
-        )
-
     # -- profile fallback ---------------------------------------------------
 
     def _attempt_profile_fallback(
@@ -678,7 +659,7 @@ class _ContinuationLoop:
                 )
                 raise IncompleteContinuationError(msg)
 
-            self._capture_successful_response(yt_info)
+            self._capture.capture("youtube-continuation-response", yt_info)
 
             actions = info.get("actions") or []
             stop_requested: bool = yield from _process_actions(

@@ -154,5 +154,3 @@ def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -
     assert first_message["message_type"] == "text_message"
     assert downloader.discovery_params is request
     assert downloader.video_request is request
-
-

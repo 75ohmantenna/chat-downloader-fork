@@ -20,8 +20,6 @@ from .constants import (
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-_SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES"
-_SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
 _EVENT_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES"
 _EVENT_FRAME_CAPTURE_LIMIT = 12
 _EVENT_FRAME_CAPTURE_ATTEMPTS_PER_KEY = 2
@@ -150,28 +148,6 @@ class _TwitchLiveDiagnostics:
                 self._frame_prefix += character
             self._previous_character_was_cr = character == "\r"
         return completed_ping_count
-
-
-class _SuccessfulIrcFrameCapture:
-    """Bound sanitized capture attempts across one Twitch live-chat run."""
-
-    def __init__(self) -> None:
-        self._enabled = (
-            os.environ.get(_SUCCESSFUL_FRAME_CAPTURE_ENV, "").strip().lower()
-            in _TRUTHY_ENV_VALUES
-        )
-        self._attempts = 0
-
-    def capture(self, raw_frame: str) -> None:
-        """Capture one of the first explicitly requested valid IRC frames."""
-        if not self._enabled or self._attempts >= _SUCCESSFUL_FRAME_CAPTURE_LIMIT:
-            return
-        self._attempts += 1
-        capture_debug_sample(
-            "twitch-irc-frame",
-            {"raw": raw_frame},
-            sample_limit=_SUCCESSFUL_FRAME_CAPTURE_LIMIT,
-        )
 
 
 def _bounded_event_component(value: str) -> str:

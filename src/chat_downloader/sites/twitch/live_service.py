@@ -12,6 +12,7 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import debug_log, log, logger
 from chat_downloader.errors import ParsingError, UserNotFound
+from chat_downloader.redaction import BoundedSampleCapture
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
@@ -24,7 +25,6 @@ from .capture_inspection import inspect_capture
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
 from .irc_diagnostics import (
     _EventDiverseIrcFrameCapture,
-    _SuccessfulIrcFrameCapture,
     _TwitchLiveDiagnostics,
 )
 from .irc_transport import (
@@ -37,6 +37,8 @@ from .irc_transport import (
 # Twitch live IRC deduplication window. Tuned for multi-day captures and reconnect
 # storms; ~5 MB of IDs in memory at full capacity.
 _LIVE_SEEN_MESSAGE_LIMIT = 50_000
+_SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES"
+_SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
 
 
 class _IRCFactory(Protocol):
@@ -100,7 +102,9 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
             "_MessageGenerator",
             partial(
                 message_generator,
-                successful_frame_capture=_SuccessfulIrcFrameCapture(),
+                successful_frame_capture=BoundedSampleCapture(
+                    _SUCCESSFUL_FRAME_CAPTURE_ENV, _SUCCESSFUL_FRAME_CAPTURE_LIMIT
+                ),
                 event_frame_capture=_EventDiverseIrcFrameCapture(),
                 diagnostics=diagnostics,
             ),

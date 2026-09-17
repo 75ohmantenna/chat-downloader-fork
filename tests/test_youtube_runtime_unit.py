@@ -123,10 +123,12 @@ def polling(monkeypatch, _disable_youtube_poll_sleep):
         monkeypatch, "_get_innertube_context", {"client": {"visitorData": "visitor"}}
     )
     monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", raising=False)
+    capture = _patch(monkeypatch, "capture_debug_sample", Mock())
+    monkeypatch.setattr("chat_downloader.redaction.capture_debug_sample", capture)
     return SimpleNamespace(
         downloader=_DummyDownloader(),
         fetch=_patch(monkeypatch, "_get_continuation_info", Mock()),
-        capture=_patch(monkeypatch, "capture_debug_sample", Mock()),
+        capture=capture,
         sleep=_disable_youtube_poll_sleep,
     )
 
@@ -173,13 +175,14 @@ def test_handle_continuation_response_headers_and_request_context(
 @pytest.mark.parametrize("enabled", [False, True])
 def test_successful_response_capture_opt_in_and_limit(monkeypatch, enabled):
     captured = _patch(monkeypatch, "capture_debug_sample", Mock())
+    monkeypatch.setattr("chat_downloader.redaction.capture_debug_sample", captured)
     if enabled:
         monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "yes")
     else:
         monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", raising=False)
     loop = _loop(object())
     for index in range(5):
-        loop._capture_successful_response({"response": index})
+        loop._capture.capture("youtube-continuation-response", {"response": index})
     assert captured.call_args_list == [
         call("youtube-continuation-response", {"response": index}, sample_limit=3)
         for index in range(3 if enabled else 0)

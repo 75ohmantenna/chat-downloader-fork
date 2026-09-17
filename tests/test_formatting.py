@@ -327,12 +327,7 @@ def test_field_separator(formatter, field, value, separator, expected) -> None:
 
 def test_omit_if_false_after_badge_separator(formatter):
     config = {"separator": ", ", "template": "({})", "omit_if_false": True}
-    assert (
-        formatter._format_field_value(
-            "author.badges", [{"name": "level"}], {"author.badges": config}
-        )
-        == ""
-    )
+    assert format_field(formatter, "author.badges", [{"name": "level"}], config) == ""
 
 
 @pytest.mark.parametrize(
@@ -395,13 +390,9 @@ def test_singular_template_selection(formatter, value, singular_template, expect
     assert format_field(formatter, "count", value, config) == expected
 
 
-def test_apply_format_by_type_unknown_field(formatter):
-    assert (
-        formatter._apply_format_by_type(
-            "custom.field", "some_value", {"format": "%s", "template": "{}"}
-        )
-        == "some_value"
-    )
+def test_format_unknown_field_ignores_type_format(formatter):
+    config = {"format": "%s", "template": "{}"}
+    assert format_field(formatter, "custom", "some_value", config) == "some_value"
 
 
 @pytest.mark.parametrize("template", ["{0.attr}", "{0[key]}"])

@@ -133,7 +133,7 @@ def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any
 
     Args:
         time: Seconds or 'hh:mm:ss'.
-        default: Value returned when time is None or unparseable.
+        default: Value returned when time is None or unparsable.
     """
     if time is None:
         return default

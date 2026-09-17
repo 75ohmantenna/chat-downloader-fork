@@ -119,6 +119,9 @@ def captured_frames(monkeypatch):
         "chat_downloader.sites.twitch.irc_diagnostics.capture_debug_sample",
         record_capture,
     )
+    monkeypatch.setattr(
+        "chat_downloader.redaction.capture_debug_sample", record_capture
+    )
     return captured
 
 

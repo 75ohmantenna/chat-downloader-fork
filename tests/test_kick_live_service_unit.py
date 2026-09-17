@@ -138,10 +138,13 @@ class _NoRetryDownloader(FakeDownloader):
 @pytest.fixture
 def captured(monkeypatch):
     calls = []
+
+    def record_capture(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(live_service, "capture_debug_sample", record_capture)
     monkeypatch.setattr(
-        live_service,
-        "capture_debug_sample",
-        lambda *args, **kwargs: calls.append((args, kwargs)),
+        "chat_downloader.redaction.capture_debug_sample", record_capture
     )
     return calls
 
@@ -540,6 +543,9 @@ def test_get_chat_by_channel_default_transport_binds_diagnostics() -> None:
 
 def test_successful_frame_capture_requires_explicit_scope_opt_in(monkeypatch, captured):
     monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES", raising=False)
+    monkeypatch.setattr(
+        live_service, "_successful_frame_labels", MagicMock(side_effect=AssertionError)
+    )
     frame = pusher_frame(
         CHAT_MESSAGE_EVENT,
         {"id": "live", "content": "message"},

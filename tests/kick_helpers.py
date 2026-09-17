@@ -331,6 +331,7 @@ def frame_series(event, count, payload):
 def successful_captures(captured, kind=""):
     label = f"kick-websocket-frame-{kind}"
     return [
-        call for call in captured
+        call
+        for call in captured
         if (call[0][0] == label if kind else call[0][0].startswith(label))
     ]

@@ -525,4 +525,39 @@ def capture_debug_sample(
         return None
 
 
-__all__ = ["REDACTED", "capture_debug_sample", "render_for_log", "sanitize_for_log"]
+class BoundedSampleCapture:
+    """Bind explicit env opt-in to per-label, per-run attempt quotas.
+
+    Attempts are consumed before the sink, even when it declines to write.
+    """
+
+    def __init__(self, env_name: str, limit: int) -> None:
+        """Resolve the opt-in once for this run."""
+        self.enabled = (
+            os.environ.get(env_name, "").strip().lower() in _TRUTHY_ENV_VALUES
+        )
+        self._limit = limit
+        self._attempts: dict[str, int] = {}
+
+    def capture(self, label: str, payload: object) -> str | None:
+        """Attempt one bounded capture of a successful payload."""
+        if not self.enabled:
+            return None
+        attempts = self._attempts.get(label, 0)
+        if attempts >= self._limit:
+            return None
+        self._attempts[label] = attempts + 1
+        return capture_debug_sample(
+            label,
+            payload,
+            sample_limit=self._limit,
+        )
+
+
+__all__ = [
+    "REDACTED",
+    "BoundedSampleCapture",
+    "capture_debug_sample",
+    "render_for_log",
+    "sanitize_for_log",
+]

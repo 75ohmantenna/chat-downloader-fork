@@ -83,6 +83,7 @@ def captured_frames(monkeypatch):
         return f"/samples/{len(captured)}.json"
 
     monkeypatch.setattr(irc_diagnostics, "capture_debug_sample", record_capture)
+    monkeypatch.setattr(red, "capture_debug_sample", record_capture)
     return captured
 
 
@@ -113,7 +114,9 @@ def test_frame_capture_requires_explicit_scope_opt_in(
             irc_diagnostics._EventDiverseIrcFrameCapture(), "valid frame\r\n"
         )
     else:
-        irc_diagnostics._SuccessfulIrcFrameCapture().capture("valid frame\r\n")
+        red.BoundedSampleCapture(f"CHAT_DOWNLOADER_CAPTURE_{scope}", 3).capture(
+            "twitch-irc-frame", {"raw": "valid frame\r\n"}
+        )
 
     assert captured_frames == []
 
@@ -420,14 +423,22 @@ def test_successful_capture_modes_have_additive_fifteen_frame_limit(
 ):
     captured = captured_frames
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "1")
-    first_frame_capture = irc_diagnostics._SuccessfulIrcFrameCapture()
+    first_frame_capture = red.BoundedSampleCapture(
+        "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", 3
+    )
     for index in range(20):
-        raw_frame = f"frame {index}\r\n"
-        first_frame_capture.capture(raw_frame)
+        raw_frame = _privmsg(str(index), f"frame {index}") + "\r\n"
+        irc_transport._parse_irc_matches(
+            list(irc_transport.MESSAGE_REGEX.finditer(raw_frame)),
+            None,
+            0,
+            successful_frame_capture=first_frame_capture,
+        )
         event_capture.capture(raw_frame, {}, f"ACTION-{index}", "")
 
     assert len(captured) == 15
-    assert [args[1]["raw"] for args, _kwargs in captured].count("frame 0\r\n") == 2
+    first_raw = _privmsg("0", "frame 0") + "\r\n"
+    assert [args[1]["raw"] for args, _kwargs in captured].count(first_raw) == 2
     assert sum(args[0] == "twitch-irc-frame" for args, _kwargs in captured) == 3
     assert (
         sum(args[0].startswith("twitch-irc-event-") for args, _kwargs in captured) == 12

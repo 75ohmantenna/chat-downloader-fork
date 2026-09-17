@@ -89,24 +89,18 @@ class ItemFormatter:
         Raises:
             FormatFileNotFound: The custom format file does not exist.
         """
-        self.format_file = self._load_format_files(path)
-
-    def _load_format_files(self, custom_path: str | None) -> dict[str, Any]:
-        """Load default and optional custom format files, merged."""
         default_path = Path(__file__).parent / "custom_formats.json"
 
         with default_path.open(encoding="utf-8") as default_formats:
-            format_file: dict[str, Any] = json.load(default_formats)
+            self.format_file: dict[str, Any] = json.load(default_formats)
 
-        if custom_path is not None:
-            if not Path(custom_path).exists():
-                msg = f'Format file not found: "{custom_path}"'
+        if path is not None:
+            if not Path(path).exists():
+                msg = f'Format file not found: "{path}"'
                 raise FormatFileNotFound(msg)
 
-            with Path(custom_path).open(encoding="utf-8") as custom_formats:
-                format_file.update(json.load(custom_formats))
-
-        return format_file
+            with Path(path).open(encoding="utf-8") as custom_formats:
+                self.format_file.update(json.load(custom_formats))
 
     def format(
         self,
@@ -119,77 +113,48 @@ class ItemFormatter:
         Raises:
             FormatNotFound: format_name is not found.
         """
-        format_object = self._resolve_format_object(format_name, format_object, item)
-
-        if not format_object:
-            msg = f'No valid format found for "{format_name}"'
-            raise FormatNotFound(msg)
-
-        format_object = self._apply_inheritance(format_object)
-
-        return self._sanitize_output(self._apply_template(format_object, item))
-
-    def _sanitize_output(self, text: str) -> str:
-        """Remove unsupported control characters from formatted output lines."""
-        visible_line_breaks = text.translate(self.LINE_SEPARATOR_TRANSLATION)
-        return self.CONTROL_CHARS_RE.sub("", visible_line_breaks)
-
-    def _resolve_format_object(
-        self,
-        format_name: str,
-        format_object: dict[str, Any] | list[Any] | None,
-        item: JSONDict,
-    ) -> dict[str, Any] | None:
-        """Return the format object to use, by name or matched from list."""
+        selected = format_object
         if format_object is None:
-            format_object = self.format_file.get(format_name)
-            if not format_object and format_name != self.DEFAULT_FORMAT_NAME:
+            selected = self.format_file.get(format_name)
+            if not selected and format_name != self.DEFAULT_FORMAT_NAME:
                 msg = f'Format not found: "{format_name}"'
                 raise FormatNotFound(msg)
 
-        if isinstance(format_object, list):
-            return self._match_format_from_list(format_object, item)
+        candidates: Any = selected
+        if isinstance(candidates, list):
+            message_type = item.get(self.KEY_MESSAGE_TYPE)
+            for candidate in candidates:
+                matching = candidate.get(self.KEY_MATCHING)
+                if matching == self.MATCH_ALL or (
+                    message_type in matching
+                    if isinstance(matching, list)
+                    else matching == message_type
+                ):
+                    selected = cast("dict[str, Any]", candidate)
+                    break
+            else:
+                selected = self.format_file.get(self.DEFAULT_FORMAT_NAME)
 
-        return format_object
+        if not selected:
+            msg = f'No valid format found for "{format_name}"'
+            raise FormatNotFound(msg)
 
-    def _match_format_from_list(
-        self,
-        format_list: list[Any],
-        item: JSONDict,
-    ) -> dict[str, Any] | None:
-        """Return the first matching format from *format_list* for *item*."""
-        message_type = item.get(self.KEY_MESSAGE_TYPE)
+        inherit = selected.get(self.KEY_INHERIT)
 
-        for format_candidate in format_list:
-            matching = format_candidate.get(self.KEY_MATCHING)
-            if matching == self.MATCH_ALL or (
-                message_type in matching
-                if isinstance(matching, list)
-                else matching == message_type
-            ):
-                return cast("dict[str, Any]", format_candidate)
+        if inherit:
+            parent = self.format_file.get(inherit) or {}
+            selected = nested_update(deepcopy(parent), selected)
 
-        return self.format_file.get(self.DEFAULT_FORMAT_NAME)
+        template = selected.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
+        keys = selected.get(self.KEY_KEYS, {})
 
-    def _apply_inheritance(self, format_object: dict[str, Any]) -> dict[str, Any]:
-        """Return *format_object* merged onto its inherited parent, if any."""
-        inherit = format_object.get(self.KEY_INHERIT)
-
-        if not inherit:
-            return format_object
-
-        parent = self.format_file.get(inherit) or {}
-        return nested_update(deepcopy(parent), format_object)
-
-    def _apply_template(self, format_object: dict[str, Any], item: JSONDict) -> str:
-        """Substitute template placeholders with values from *item*."""
-        template = format_object.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
-        keys = format_object.get(self.KEY_KEYS, {})
-
-        return re.sub(
+        text = re.sub(
             self._INDEX_REGEX,
             lambda match: self._replace_placeholder(match, item, keys),
             template,
+        )
+        return self.CONTROL_CHARS_RE.sub(
+            "", text.translate(self.LINE_SEPARATOR_TRANSLATION)
         )
 
     def _replace_placeholder(
@@ -240,57 +205,29 @@ class ItemFormatter:
         ):
             template = singular
 
-        value = self._apply_format_by_type(field_path, value, field_config)
-        value = self._apply_separator(field_path, value, field_config)
+        format_string = field_config.get(self.KEY_FORMAT)
+        if format_string:
+            if field_path in {self.FIELD_TIMESTAMP, self.FIELD_RECEIVED_TIMESTAMP}:
+                value = microseconds_to_timestamp(value, format_string)
+            elif field_path == self.FIELD_TIME_TEXT:
+                value = seconds_to_time(
+                    time_to_seconds(value),
+                    format=format_string,
+                    remove_leading_zeroes=bool(
+                        field_config.get(self.KEY_COLLAPSE_LEADING_ZEROES)
+                    ),
+                )
+
+        separator = field_config.get(self.KEY_SEPARATOR)
+        if separator and field_path == self.FIELD_AUTHOR_BADGES:
+            value = separator.join(
+                filter(None, (badge.get("title") for badge in value))
+            )
+        elif separator and isinstance(value, (tuple, list)):
+            value = separator.join(map(str, value))
+
         return (
             ""
             if omit_if_false and not value
             else _SAFE_FORMATTER.format(template, value)
         )
-
-    def _apply_format_by_type(
-        self,
-        field_path: str,
-        value: Any,
-        field_config: dict[str, Any],
-    ) -> Any:
-        """Apply timestamp or time-text formatting when configured."""
-        format_string = field_config.get(self.KEY_FORMAT)
-
-        if not format_string:
-            return value
-
-        if field_path in {self.FIELD_TIMESTAMP, self.FIELD_RECEIVED_TIMESTAMP}:
-            return microseconds_to_timestamp(value, format_string)
-
-        if field_path == self.FIELD_TIME_TEXT:
-            collapse_leading_zeroes: bool = bool(
-                field_config.get(self.KEY_COLLAPSE_LEADING_ZEROES)
-            )
-            return seconds_to_time(
-                time_to_seconds(value),
-                format=format_string,
-                remove_leading_zeroes=collapse_leading_zeroes,
-            )
-
-        return value
-
-    def _apply_separator(
-        self,
-        field_path: str,
-        value: Any,
-        field_config: dict[str, Any],
-    ) -> Any:
-        """Join list/tuple values with a separator when configured."""
-        separator = field_config.get(self.KEY_SEPARATOR)
-
-        if not separator:
-            return value
-
-        if field_path == self.FIELD_AUTHOR_BADGES:
-            return separator.join(filter(None, (badge.get("title") for badge in value)))
-
-        if isinstance(value, (tuple, list)):
-            return separator.join(map(str, value))
-
-        return value

@@ -308,3 +308,10 @@ def test_youtube_profile_context_adds_client_when_missing(monkeypatch) -> None:
         "timeZone": "UTC",
         "utcOffsetMinutes": 0,
     }
+
+
+def test_youtube_profile_context_without_client_fields_is_returned_copied() -> None:
+    original = {"client": {"visitorData": "v"}}
+    result = apply_request_profile_to_innertube_context(original, None)
+    assert result == original
+    assert result is original

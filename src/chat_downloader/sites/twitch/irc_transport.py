@@ -32,10 +32,10 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.redaction import BoundedSampleCapture
 
     from .irc_diagnostics import (
         _EventDiverseIrcFrameCapture,
-        _SuccessfulIrcFrameCapture,
         _TwitchLiveDiagnostics,
     )
     from .types import BadgeSet
@@ -128,7 +128,7 @@ def _parse_irc_matches(
     matches: list[re.Match[str]],
     badge_set: BadgeSet | None,
     message_count: int,
-    successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
+    successful_frame_capture: BoundedSampleCapture | None = None,
     event_frame_capture: _EventDiverseIrcFrameCapture | None = None,
     diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
@@ -137,8 +137,8 @@ def _parse_irc_matches(
     for match in matches:
         item = _parse_irc_item(match, badge_set)
         raw_frame = f"{match.group(0)}\r\n"
-        if successful_frame_capture is not None:
-            successful_frame_capture.capture(raw_frame)
+        if successful_frame_capture is not None and successful_frame_capture.enabled:
+            successful_frame_capture.capture("twitch-irc-frame", {"raw": raw_frame})
         if event_frame_capture is not None:
             event_frame_capture.capture(raw_frame, item, match.group(2), match.group(1))
         items.append(item)
@@ -261,7 +261,7 @@ def get_chat_messages_by_stream_id(
     params: ChatRequest | dict[str, Any],
     badge_set: BadgeSet | None = None,
     *,
-    successful_frame_capture: _SuccessfulIrcFrameCapture | None = None,
+    successful_frame_capture: BoundedSampleCapture | None = None,
     event_frame_capture: _EventDiverseIrcFrameCapture | None = None,
     diagnostics: _TwitchLiveDiagnostics | None = None,
 ) -> Generator[dict[str, Any], None, None]:

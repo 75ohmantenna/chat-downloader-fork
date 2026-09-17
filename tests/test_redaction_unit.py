@@ -292,6 +292,35 @@ def test_capture_debug_sample_writes_sanitized_json_deterministically(sample_dir
     }
 
 
+def test_bounded_capture_composes_opt_in_attempt_limits_and_sanitization(
+    sample_dir, monkeypatch
+):
+    env_name = "CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES"
+    monkeypatch.delenv(env_name, raising=False)
+    disabled = red.BoundedSampleCapture(env_name, 2)
+    payload = {"authorization": "private-token", "value": 1}
+    assert disabled.capture("first", payload) is None
+    assert not sample_dir.exists()
+
+    monkeypatch.setenv(env_name, " YES ")
+    capture = red.BoundedSampleCapture(env_name, 2)
+    monkeypatch.delenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES")
+    assert capture.capture("first", payload) is None
+    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
+    assert disabled.capture("first", payload) is None
+    first = capture.capture("first", payload)
+    assert first is not None
+    assert json.loads(Path(first).read_text(encoding="utf-8")) == {
+        "authorization": red.REDACTED,
+        "value": 1,
+    }
+    assert capture.capture("first", {"value": 2}) is None
+    for value in (1, 2):
+        assert capture.capture("second", {"value": value}) is not None
+    assert capture.capture("second", {"value": 3}) is None
+    assert len(list(sample_dir.glob("*.json"))) == 3
+
+
 @pytest.mark.parametrize("grouped", [False, True])
 def test_capture_debug_sample_limits_unique_payloads(sample_dir, grouped):
     bounds = {"sample_limit": 2}

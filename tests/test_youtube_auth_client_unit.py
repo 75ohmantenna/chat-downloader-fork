@@ -260,6 +260,13 @@ def test_request_profile_keeps_body_and_headers_aligned():
     assert original["INNERTUBE_CONTEXT"]["client"]["clientName"] == "WEB"
 
 
+def test_request_profile_unknown_leaves_ytcfg_values_copied():
+    original = {"INNERTUBE_CONTEXT_CLIENT_NAME": 1}
+    updated = context.apply_request_profile_to_ytcfg(original, "missing")
+    assert updated == original
+    assert updated is not original
+
+
 @pytest.mark.parametrize(
     "failure",
     ["http", "json-retry", "json", "network"],
