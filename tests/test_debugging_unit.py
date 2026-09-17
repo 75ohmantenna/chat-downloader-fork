@@ -5,23 +5,20 @@
 from __future__ import annotations
 
 import logging
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
 
 import chat_downloader.debugging as dbg
+from tests.core_third_helpers import restore_loggers
 
 
 @pytest.fixture(autouse=True)
 def _restore_logging_state():
-    mode = dbg.get_testing_mode()
-    state = [(logger, logger.level, logger.disabled) for logger in dbg.loggers]
-    yield
-    dbg.set_testing_mode(mode)
-    for logger, level, disabled in state:
-        logger.setLevel(level)
-        logger.disabled = disabled
+    with restore_loggers():
+        yield
 
 
 @pytest.mark.parametrize("level", ["debug", "info", "warning", "nonexistent_level"])
@@ -43,19 +40,10 @@ def test_log_emits_each_item_at_supported_levels(caplog, level, items):
 def test_log_testing_controls(mode_name, enabled):
     mode = dbg.TestingModes[mode_name]
     dbg.set_testing_mode(mode)
-    exits = enabled and mode in (
-        dbg.TestingModes.EXIT_ON_DEBUG,
-        dbg.TestingModes.EXIT_ON_ERROR,
-    )
-    pauses = enabled and mode in (
-        dbg.TestingModes.PAUSE_ON_DEBUG,
-        dbg.TestingModes.PAUSE_ON_ERROR,
-    )
+    exits = enabled and mode_name.startswith("EXIT_")
+    pauses = enabled and mode_name.startswith("PAUSE_")
     with patch.object(dbg, "pause") as pause:
-        if exits:
-            with pytest.raises(dbg.TestingException):
-                dbg.log("debug", "trigger", to_exit=enabled, to_pause=enabled)
-        else:
+        with pytest.raises(dbg.TestingException) if exits else nullcontext():
             dbg.log("debug", "trigger", to_exit=enabled, to_pause=enabled)
         assert pause.call_count == int(pauses)
 
@@ -69,32 +57,19 @@ def test_disable_logger_suppresses_output(caplog):
 
 
 @pytest.mark.parametrize(
-    ("stdout", "platform", "colorama", "environment", "expected"),
+    ("tty", "platform", "colorama", "environment", "expected"),
     [
-        (SimpleNamespace(isatty=lambda: False), "linux", False, {}, False),
-        (object(), "linux", False, {}, False),
-        (SimpleNamespace(isatty=lambda: True), "linux", False, {}, True),
-        (SimpleNamespace(isatty=lambda: True), "win32", True, {}, True),
-        (SimpleNamespace(isatty=lambda: True), "win32", False, {"ANSICON": "1"}, True),
-        (
-            SimpleNamespace(isatty=lambda: True),
-            "win32",
-            False,
-            {"WT_SESSION": "guid"},
-            True,
-        ),
-        (
-            SimpleNamespace(isatty=lambda: True),
-            "win32",
-            False,
-            {"TERM_PROGRAM": "vscode"},
-            True,
-        ),
+        (False, "linux", False, {}, False),
+        (None, "linux", False, {}, False),
+        (True, "linux", False, {}, True),
+        (True, "win32", True, {}, True),
+        (True, "win32", False, {"ANSICON": "1"}, True),
+        (True, "win32", False, {"WT_SESSION": "guid"}, True),
+        (True, "win32", False, {"TERM_PROGRAM": "vscode"}, True),
     ],
 )
-def test_supports_colour(
-    monkeypatch, stdout, platform, colorama, environment, expected
-):
+def test_supports_colour(monkeypatch, tty, platform, colorama, environment, expected):
+    stdout = object() if tty is None else SimpleNamespace(isatty=lambda: tty)
     monkeypatch.setattr(dbg.sys, "stdout", stdout)
     monkeypatch.setattr(dbg.sys, "platform", platform)
     monkeypatch.setattr(dbg, "HAS_COLORAMA", colorama)

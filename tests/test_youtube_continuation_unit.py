@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -29,6 +28,7 @@ from chat_downloader.sites.youtube.client_requests_initial import (
 )
 from chat_downloader.sites.youtube.continuations import _extract_next_continuation
 from chat_downloader.utils.retry_utils import RetryPolicy
+from tests.youtube_third_helpers import http_response
 
 
 @pytest.fixture
@@ -37,11 +37,7 @@ def policy():
 
 
 def _make_response(status_code=200, json_body=None, text=""):
-    return SimpleNamespace(
-        status_code=status_code,
-        text=text,
-        json=lambda: {} if json_body is None else json_body,
-    )
+    return http_response(status_code, {} if json_body is None else json_body, text)
 
 
 @pytest.mark.parametrize(
@@ -136,7 +132,7 @@ def test_extract_next_continuation_skips_malformed_entries(entry) -> None:
 
 
 def test_get_initial_info_raises_parsing_error_when_html_unparseable() -> None:
-    response = SimpleNamespace(text="<html>nothing useful</html>", status_code=200)
+    response = http_response(text="<html>nothing useful</html>")
     with pytest.raises(ParsingError, match="Unable to parse initial video data"):
         _get_initial_info(
             url="https://www.youtube.com/watch?v=abc",

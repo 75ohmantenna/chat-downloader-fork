@@ -6,24 +6,30 @@ from __future__ import annotations
 
 import pytest
 
-from chat_downloader.sites.twitch.constants import MESSAGE_REGEX
 from chat_downloader.sites.twitch.parsing.badges import (
     _parse_badge_info,
     _parse_irc_badges,
 )
-from chat_downloader.sites.twitch.parsing.messages import _parse_irc_item, _parse_item
+from chat_downloader.sites.twitch.parsing.messages import _parse_item
 from chat_downloader.sites.twitch.types import BadgeCache, BadgeSet
+from tests.twitch_third_helpers import (
+    badge_record,
+    gql_comment,
+    gql_message,
+    irc_frame,
+    parse_irc,
+)
 
 
 @pytest.fixture
 def badge_set():
     def badge(title):
-        return {
-            "title": title,
-            "clickAction": "visit_url",
-            "clickURL": "https://twitch.tv",
+        return badge_record(
+            title,
+            clickAction="visit_url",
+            clickURL="https://twitch.tv",
             **{f"image{size}x": "https://example.com/img.png" for size in (1, 2, 4)},
-        }
+        )
 
     return BadgeSet(
         global_badges={("moderator", "1"): badge("CORRECT_GLOBAL")},
@@ -47,34 +53,29 @@ def test_parse_badge_info_uses_badge_set(badge_set, name, version, title):
 @pytest.mark.parametrize("irc", [True, False], ids=["irc", "replay"])
 def test_message_parsers_use_badge_set(badge_set, irc):
     if irc:
-        raw = (
-            "@badge-info=subscriber/12;badges=moderator/1,subscriber/12;"
-            "color=#FF0000;display-name=TestUser;emotes=;flags=;id=abc123;"
-            "mod=1;room-id=999;subscriber=1;tmi-sent-ts=1700000000000;"
-            "turbo=0;user-id=12345;user-type=mod "
-            ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG #channel :hello\r\n"
+        raw = irc_frame(
+            "badge-info=subscriber/12;badges=moderator/1,subscriber/12;"
+            "color=#FF0000;id=abc123;mod=1;subscriber=1;"
+            "tmi-sent-ts=1700000000000;user-type=mod"
         )
-        match = MESSAGE_REGEX.search(raw)
-        assert match is not None
-        result = _parse_irc_item(match, badge_set=badge_set)
+        result = parse_irc(raw, badge_set=badge_set)
     else:
-        node = {
-            "id": "msg-001",
-            "createdAt": "2024-01-01T00:00:00Z",
-            "contentOffsetSeconds": 0.0,
-            "commenter": {
+        node = gql_comment(
+            id="msg-001",
+            createdAt="2024-01-01T00:00:00Z",
+            contentOffsetSeconds=0.0,
+            commenter={
                 "id": "12345",
                 "login": "testuser",
                 "displayName": "TestUser",
                 "profileImageURL": "",
                 "primaryColorHex": None,
             },
-            "message": {
-                "userColor": "#FF0000",
-                "userBadges": [{"setID": "subscriber", "version": "12"}],
-                "fragments": [{"text": "hello"}],
-            },
-        }
+            message=gql_message(
+                userColor="#FF0000",
+                userBadges=[{"setID": "subscriber", "version": "12"}],
+            ),
+        )
         result = _parse_item(node, offset=0.0, channel_id="999", badge_set=badge_set)
     assert result["author"]["badges"][0]["title"] == (
         "CORRECT_GLOBAL" if irc else "CORRECT_CHANNEL"

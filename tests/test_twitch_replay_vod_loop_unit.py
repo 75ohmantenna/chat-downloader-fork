@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import pytest
 
-from chat_downloader.models import ChatRequest
 from chat_downloader.sites.twitch._replay_vod_loop import (
     _classify_empty_page,
     _init_vod_loop,
 )
+from tests.twitch_third_helpers import chat_request
 
 
 @pytest.mark.parametrize(
@@ -26,11 +26,8 @@ from chat_downloader.sites.twitch._replay_vod_loop import (
 def test_init_vod_loop_offsets(
     start, max_duration, offset, content_offset, expected_offset
 ):
-    request = ChatRequest(
-        url="https://www.twitch.tv/videos/1",
-        max_attempts=1,
-        start_time=start,
-        message_groups=["messages"],
+    request = chat_request(
+        url="https://www.twitch.tv/videos/1", max_attempts=1, start_time=start
     )
     plan = _init_vod_loop(request, max_duration=max_duration, offset=offset)
     assert plan.content_offset_seconds == content_offset

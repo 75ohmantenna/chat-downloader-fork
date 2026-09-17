@@ -12,61 +12,39 @@ from types import SimpleNamespace
 import pytest
 
 import chat_downloader.debugging as dbg
-
-
-class _TtyAwareStringIO(io.StringIO):
-    """Stream matching the tty decision under simulation."""
-
-    def __init__(self, tty: bool) -> None:
-        super().__init__()
-        self._tty = tty
-
-    def isatty(self) -> bool:
-        return self._tty
+from tests.core_third_helpers import restore_loggers
 
 
 @pytest.fixture
 def logging_state():
-    mode = dbg.get_testing_mode()
-    levels = [logger.level for logger in dbg.loggers]
-    yield
-    dbg.set_testing_mode(mode)
-    for logger, level in zip(dbg.loggers, levels, strict=True):
-        logger.setLevel(level)
+    with restore_loggers():
+        yield
 
 
 @contextmanager
 def _reload_debugging(monkeypatch, *, colorama, tty=False):
-    state = [
-        (logger, list(logger.handlers), logger.level, logger.disabled)
-        for logger in dbg.loggers
-    ]
-    mode = dbg.get_testing_mode()
-    stream = _TtyAwareStringIO(tty)
-    try:
-        with monkeypatch.context() as isolated:
-            isolated.setattr(sys, "stdout", SimpleNamespace(isatty=lambda: tty))
-            isolated.setattr(sys, "stderr", stream)
-            isolated.setattr(
-                dbg.os,
-                "environ",
-                {
-                    k: v
-                    for k, v in dbg.os.environ.items()
-                    if k not in {"NO_COLOR", "FORCE_COLOR"}
-                },
-            )
-            isolated.setitem(sys.modules, "colorama", colorama)
+    stream = io.StringIO()
+    stream.isatty = lambda: tty
+    with restore_loggers(), monkeypatch.context() as isolated:
+        isolated.setattr(sys, "stdout", SimpleNamespace(isatty=lambda: tty))
+        isolated.setattr(sys, "stderr", stream)
+        isolated.setattr(
+            dbg.os,
+            "environ",
+            {
+                k: v
+                for k, v in dbg.os.environ.items()
+                if k not in {"NO_COLOR", "FORCE_COLOR"}
+            },
+        )
+        isolated.setitem(sys.modules, "colorama", colorama)
+        try:
             module = importlib.reload(dbg)
             module.set_log_level("debug")
             yield module, stream
-    finally:
-        importlib.reload(dbg)
-        dbg.set_testing_mode(mode)
-        for logger, handlers, level, disabled in state:
-            logger.handlers = handlers
-            logger.setLevel(level)
-            logger.disabled = disabled
+        finally:
+            isolated.undo()
+            importlib.reload(dbg)
 
 
 @pytest.mark.parametrize("registry", ["enabled", "missing-value", "missing-module"])

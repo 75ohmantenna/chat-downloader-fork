@@ -1,12 +1,5 @@
 # SPDX-License-Identifier: MIT
-
-"""Opt-in live Kick checks.
-
-These require outbound network access and a public channel. They are skipped by
-default; run with ``--run-network``. Only explicit environmental failures
-(challenge responses, blocked handshakes, or a missing override channel) are
-skipped; unexpected Kick protocol errors fail.
-"""
+"""Opt-in live Kick checks (--run-network); unexpected protocol failures fail."""
 
 from __future__ import annotations
 
@@ -20,7 +13,6 @@ from chat_downloader.errors import (
     RetriesExceeded,
     UserNotFound,
 )
-from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick.extractor import KickChatDownloader
 from chat_downloader.sites.kick.live_service import (
     _fetch_channel_with_retry,
@@ -29,64 +21,47 @@ from chat_downloader.sites.kick.live_service import (
     _resolve_ws_proxy,
 )
 from chat_downloader.sites.kick.websocket_transport import KickPusherTransport
+from tests.kick_helpers import request
 
-pytestmark = [
-    pytest.mark.network,
-    pytest.mark.network_live,
-    pytest.mark.timeout(45),
-]
-
-# Override with KICK_TEST_CHANNEL to point at a channel that is live right now.
+pytestmark = [pytest.mark.network, pytest.mark.network_live, pytest.mark.timeout(45)]
+# Override with a currently live public channel.
 _CHANNEL = os.environ.get("KICK_TEST_CHANNEL", "xqc")
 
 
-def _caused_by_websocket_http(error: BaseException, status: int) -> bool:
-    """Return whether an exception chain contains the given handshake status."""
-    current: BaseException | None = error
-    while current is not None:
+def _caused_by_websocket_http(error, status):
+    while error is not None:
         if (
-            isinstance(current, WebSocketBadStatusException)
-            and current.status_code == status
+            isinstance(error, WebSocketBadStatusException)
+            and error.status_code == status
         ):
             return True
-        current = current.__cause__
+        error = error.__cause__
     return False
 
 
-def test_live_channel_connects_and_subscribes() -> None:
-    """Resolve channel metadata and complete a Pusher subscription handshake."""
-    downloader = KickChatDownloader()
-    request = ChatRequest(
-        url=f"https://kick.com/{_CHANNEL}",
-        max_attempts=1,
-        message_receive_timeout=1,
+def test_live_channel_connects_and_subscribes():
+    downloader, transport = KickChatDownloader(), None
+    options = request(
+        url=f"https://kick.com/{_CHANNEL}", max_attempts=1, message_receive_timeout=1
     )
-    transport = None
     try:
-        channel = _fetch_channel_with_retry(downloader, _CHANNEL, request)
+        channel = _fetch_channel_with_retry(downloader, _CHANNEL, options)
         channel_id, chatroom_id, title = _resolve_channel(channel, _CHANNEL)
         assert channel_id.isdigit()
         assert chatroom_id.isdigit()
         assert title
-
         transport = _open_subscribed_transport(
             downloader,
             chatroom_id,
-            request,
+            options,
             KickPusherTransport,
             proxy_url=_resolve_ws_proxy(downloader),
         )
     except CaptchaChallengeRequired as error:
-        pytest.skip(
-            "Kick returned a Cloudflare/challenge block — likely VPN/proxy "
-            f"endpoint reputation or rate limiting. Try a fresh endpoint. ({error})"
-        )
+        pytest.skip(f"Kick challenge block: try a fresh VPN/proxy endpoint. ({error})")
     except RetriesExceeded as error:
         if _caused_by_websocket_http(error, 403):
-            pytest.skip(
-                "Kick Pusher rejected this runner IP with HTTP 403; "
-                "retry through a different network or --proxy."
-            )
+            pytest.skip("Kick Pusher HTTP 403: try a different network or --proxy.")
         raise
     except UserNotFound:
         pytest.skip(f"Kick channel {_CHANNEL!r} not found; set KICK_TEST_CHANNEL.")

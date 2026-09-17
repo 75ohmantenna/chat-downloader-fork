@@ -29,33 +29,73 @@ def _replay(download, *, cursor=None, offset=0, session_post=None):
 
 
 @pytest.mark.parametrize(
-    ("cursor", "offset", "variables", "edges", "metadata"),
+    ("mobile", "cursor", "offset", "variables", "edges", "metadata", "has_next"),
     [
-        ("cursor-1", 99, {"cursor": "cursor-1"}, [], {"id": "vod"}),
-        (None, None, {"contentOffsetSeconds": 0}, [1], {}),
+        (False, "cursor-1", 99, {"cursor": "cursor-1"}, [], {"id": "vod"}, None),
+        (False, None, None, {"contentOffsetSeconds": 0}, [1], {}, None),
+        (
+            True,
+            "legacy-cursor",
+            4.5,
+            {"after": "legacy-cursor"},
+            [{"cursor": "mobile-cursor", "node": {}}],
+            {},
+            True,
+        ),
+        (
+            True,
+            None,
+            4.9,
+            {"contentOffsetSeconds": 4},
+            [{"cursor": "", "node": {}}],
+            {},
+            False,
+        ),
+        (True, None, 0, {"contentOffsetSeconds": 0}, [], {}, False),
     ],
-    ids=["cursor-precedes-offset", "missing-offset-defaults-to-zero"],
+    ids=[
+        "cursor-precedes-offset",
+        "missing-offset-defaults-to-zero",
+        "continuing-cursor",
+        "empty-cursor-terminal",
+        "empty-edges-terminal",
+    ],
 )
-def test_replay_request_position(cursor, offset, variables, edges, metadata) -> None:
+def test_replay_request_position(
+    mobile, cursor, offset, variables, edges, metadata, has_next
+) -> None:
     expected = {"edges": edges}
-    download = Mock(return_value=_video_payload(expected, **metadata))
+    replies = [_video_payload(expected, **metadata)]
+    if mobile:
+        replies.insert(0, _PersistedQueryUnavailable("rotated"))
+    download = Mock(side_effect=replies)
     comments, info = _replay(download, cursor=cursor, offset=offset)
-    download.assert_called_once_with(
-        [
-            {
-                "operationName": "VideoCommentsByOffsetOrCursor",
-                "variables": {"videoID": "123", **variables},
-            }
-        ]
-    )
-    assert comments == expected
-    assert info == {"comments": expected, **metadata}
+    assert download.call_count == (2 if mobile else 1)
+    assert download.call_args.args[0] == [
+        {
+            "operationName": (
+                "VideoCommentsQuery" if mobile else "VideoCommentsByOffsetOrCursor"
+            ),
+            "variables": {"vodId" if mobile else "videoID": "123", **variables},
+        }
+    ]
+    if mobile:
+        assert comments == {"edges": edges, "pageInfo": {"hasNextPage": has_next}}
+    else:
+        assert comments == expected
+        assert info == {"comments": expected, **metadata}
 
 
 @pytest.mark.parametrize("mobile", [False, True])
 @pytest.mark.parametrize(
     "payload",
-    [[], [{}], [{"data": {}}], [{"data": {"video": None}}], _video_payload(None)],
+    [
+        [],
+        [{}],
+        [{"data": {}}],
+        [{"data": {"video": None}}],
+        _video_payload(None),
+    ],
     ids=["empty", "missing-data", "missing-video", "null-video", "null-comments"],
 )
 def test_replay_returns_none_for_malformed_or_empty_payloads(payload, mobile):
@@ -63,40 +103,6 @@ def test_replay_returns_none_for_malformed_or_empty_payloads(payload, mobile):
         [_PersistedQueryUnavailable("rotated"), payload] if mobile else [payload]
     )
     assert _replay(Mock(side_effect=responses), offset=1.5) == (None, None)
-
-
-@pytest.mark.parametrize(
-    ("edges", "cursor", "offset", "variables", "has_next"),
-    [
-        (
-            [{"cursor": "mobile-cursor", "node": {}}],
-            "legacy-cursor",
-            4.5,
-            {"after": "legacy-cursor"},
-            True,
-        ),
-        ([{"cursor": "", "node": {}}], None, 4.9, {"contentOffsetSeconds": 4}, False),
-        ([], None, 0, {"contentOffsetSeconds": 0}, False),
-    ],
-    ids=["continuing-cursor", "empty-cursor-terminal", "empty-edges-terminal"],
-)
-def test_mobile_replay_normalizes_page(
-    edges, cursor, offset, variables, has_next
-) -> None:
-    download = Mock(
-        side_effect=[
-            _PersistedQueryUnavailable("rotated"),
-            _video_payload({"edges": edges}),
-        ]
-    )
-    comments, _info = _replay(download, cursor=cursor, offset=offset)
-    assert download.call_args.args[0] == [
-        {
-            "operationName": "VideoCommentsQuery",
-            "variables": {"vodId": "123", **variables},
-        }
-    ]
-    assert comments == {"edges": edges, "pageInfo": {"hasNextPage": has_next}}
 
 
 def test_replay_fallback_composes_persisted_and_full_document_requests() -> None:

@@ -9,14 +9,19 @@ from unittest.mock import Mock
 
 import pytest
 
-from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import history
 from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.errors import (
     KickForwardHistoryRejected,
     KickServerError,
 )
-from tests.kick_helpers import FakeKickSession, FakeResponse, load_fixture
+from tests.kick_helpers import (
+    FakeKickSession,
+    FakeResponse,
+    load_fixture,
+    message_page,
+    request,
+)
 
 START = datetime(2026, 9, 11, 16, 7, 2, tzinfo=UTC)
 
@@ -30,7 +35,7 @@ def message(identifier, offset=0):
 
 def page_client(messages):
     client = Mock()
-    client.fetch_message_page.return_value = {"data": {"messages": messages}}
+    client.fetch_message_page.return_value = message_page(messages)
     return client
 
 
@@ -41,7 +46,7 @@ def collect(client, *, seconds=9, **kwargs):
             "12345",
             START,
             START + timedelta(seconds=seconds),
-            ChatRequest(max_attempts=2, retry_timeout=0, interruptible_retry=False),
+            request(),
             **kwargs,
         )
     )
@@ -87,7 +92,7 @@ def test_history_retries_and_preserves_idless_raw_records() -> None:
     client = Mock()
     client.fetch_message_page.side_effect = [
         OSError("transient"),
-        {"data": {"messages": [raw]}},
+        message_page([raw]),
     ]
     assert collect(client, seconds=1) == [raw]
     assert client.fetch_message_page.call_count == 2
@@ -119,15 +124,13 @@ def test_history_validates_page_contract(data) -> None:
         history.fetch_validated_page(client, "1", cursor="reverse")
 
 
-def test_history_format_normalizes_naive_and_offset_times() -> None:
-    assert (
-        history.format_history_start(START.replace(tzinfo=None))
-        == "2026-09-11T16:07:02.000000Z"
-    )
-    assert (
-        history.format_history_start(
-            datetime.fromisoformat("2026-09-11T17:07:02+01:00")
-        )
-        == "2026-09-11T16:07:02.000000Z"
-    )
+@pytest.mark.parametrize(
+    "timestamp",
+    [START.replace(tzinfo=None), datetime.fromisoformat("2026-09-11T17:07:02+01:00")],
+)
+def test_history_format_normalizes_naive_and_offset_times(timestamp):
+    assert history.format_history_start(timestamp) == "2026-09-11T16:07:02.000000Z"
+
+
+def test_history_message_timestamp_assumes_naive_utc():
     assert history._message_timestamp({"created_at": "2026-09-11T16:07:02"}) == START

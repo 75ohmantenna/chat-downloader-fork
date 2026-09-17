@@ -1,7 +1,4 @@
 # SPDX-License-Identifier: MIT
-
-"""Tests for the shared Kick service-request retry policy."""
-
 from __future__ import annotations
 
 from unittest.mock import Mock
@@ -9,42 +6,25 @@ from unittest.mock import Mock
 import pytest
 
 from chat_downloader.errors import RetriesExceeded
-from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import request_retry
 from chat_downloader.sites.kick.errors import KickCountryBlocked, KickServerError
+from tests.kick_helpers import request
 
 
-def test_fetch_with_retry_recovers_from_temporary_failure() -> None:
-    fetch = Mock(side_effect=[OSError("timeout"), {"ok": True}])
-    request = ChatRequest(
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-    )
-
-    assert request_retry.fetch_with_retry(fetch, request) == {"ok": True}
-    assert fetch.call_count == 2
-
-
-def test_fetch_with_retry_exhausts_transient_failures() -> None:
-    fetch = Mock(side_effect=KickServerError("rate limited"))
-    request = ChatRequest(
-        max_attempts=2,
-        retry_timeout=0,
-        interruptible_retry=False,
-    )
-
-    with pytest.raises(RetriesExceeded):
-        request_retry.fetch_with_retry(fetch, request)
-
-    assert fetch.call_count == 2
-
-
-def test_fetch_with_retry_does_not_retry_terminal_failure() -> None:
-    fetch = Mock(side_effect=KickCountryBlocked("country blocked"))
-    request = ChatRequest(max_attempts=3, retry_timeout=0)
-
-    with pytest.raises(KickCountryBlocked, match="country blocked"):
-        request_retry.fetch_with_retry(fetch, request)
-
-    fetch.assert_called_once()
+@pytest.mark.parametrize(
+    ("effects", "error", "attempts", "calls"),
+    [
+        ([OSError("timeout"), {"ok": True}], None, 2, 2),
+        (KickServerError("rate limited"), RetriesExceeded, 2, 2),
+        (KickCountryBlocked("country blocked"), KickCountryBlocked, 3, 1),
+    ],
+)
+def test_fetch_retry_outcomes(effects, error, attempts, calls):
+    fetch = Mock(side_effect=effects)
+    options = request(max_attempts=attempts)
+    if error:
+        with pytest.raises(error):
+            request_retry.fetch_with_retry(fetch, options)
+    else:
+        assert request_retry.fetch_with_retry(fetch, options) == {"ok": True}
+    assert fetch.call_count == calls

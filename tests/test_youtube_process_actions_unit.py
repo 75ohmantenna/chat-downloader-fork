@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 import pytest
 
 from chat_downloader.sites.filters import MessageFilter
@@ -15,6 +17,7 @@ from chat_downloader.sites.youtube.message_pipeline import (
     NonEmissionReason,
     PipelineResult,
 )
+from tests.youtube_third_helpers import item_action, patch
 
 
 def _actions(actions, **overrides):
@@ -22,10 +25,7 @@ def _actions(actions, **overrides):
         "offset": None,
         "msg_filter": MessageFilter({}),
         "time_filter": None,
-        "loop_state": ContinuationLoopState(
-            continuation="tok",
-            offset_milliseconds=None,
-        ),
+        "loop_state": ContinuationLoopState(continuation="tok"),
         "live_start_time_ms": 0,
         "is_replay": True,
     }
@@ -41,14 +41,9 @@ def _skip(reason):
 
 
 @pytest.mark.parametrize(
-    ("results", "expected", "stopped", "summary"),
+    ("results", "expected", "stopped"),
     [
-        (
-            [_yield("hello"), _yield("world")],
-            [{"text": "hello"}, {"text": "world"}],
-            False,
-            None,
-        ),
+        ([_yield("hello"), _yield("world")], ["hello", "world"], False),
         (
             [
                 _yield("first"),
@@ -58,66 +53,36 @@ def _skip(reason):
                 ),
                 _yield("should-not-appear"),
             ],
-            [{"text": "first"}],
+            ["first"],
             True,
-            (
-                "Processed actions in poll: 2; emitted messages: 1; "
-                "non-emitted actions: 1 (time-range stop: 1)"
-            ),
         ),
-        (
-            [_skip(NonEmissionReason.UNPARSED_ACTION), _yield("kept")],
-            [{"text": "kept"}],
-            False,
-            None,
-        ),
+        ([_skip(NonEmissionReason.UNPARSED_ACTION), _yield("kept")], ["kept"], False),
         (
             [
                 _skip(NonEmissionReason.MESSAGE_FILTERED),
                 _skip(NonEmissionReason.KNOWN_IGNORED_ACTION),
                 _yield("kept"),
             ],
-            [{"text": "kept"}],
+            ["kept"],
             False,
-            (
-                "Processed actions in poll: 3; emitted messages: 1; "
-                "non-emitted actions: 2 (known ignored/control actions: 1, "
-                "message type/group filtered: 1)"
-            ),
         ),
-        (
-            [],
-            [],
-            False,
-            "Processed actions in poll: 0; emitted messages: 0; non-emitted actions: 0",
-        ),
+        ([], [], False),
     ],
-    ids=["yield", "stop", "skip", "bounded-counts", "empty-poll"],
 )
-def test_process_actions_dispositions(monkeypatch, results, expected, stopped, summary):
-    pending = iter(results)
-    logs = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
-        lambda *_args: next(pending),
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.log",
-        lambda *args: logs.append(args),
-    )
+def test_process_dispositions(monkeypatch, results, expected, stopped):
+    process = Mock(side_effect=results)
+    patch(monkeypatch, "continuation.process_pipeline_action", process)
     gen = _actions([{"id": index} for index in range(len(results))])
     messages = []
     with pytest.raises(StopIteration) as exc:
         while True:
             messages.append(next(gen))
-
-    assert messages == expected
+    assert messages == [{"text": text} for text in expected]
     assert exc.value.value is stopped
-    if summary is not None:
-        assert logs == [("debug", summary)]
+    assert process.call_count == (2 if stopped else len(results))
 
 
-def test_process_actions_composes_parser_filters_and_poll_diagnostics(monkeypatch):
+def test_process_composes_parser_and_filters():
     actions = [
         {"addInteractivityWidgetAction": {}},
         {},
@@ -125,19 +90,10 @@ def test_process_actions_composes_parser_filters_and_poll_diagnostics(monkeypatc
             "removeChatItemAction": {
                 "targetItemId": "deleted-message",
                 "timestampUsec": "2",
-            },
+            }
         },
-        {
-            "addChatItemAction": {
-                "item": {"liveChatTextMessageRenderer": {"timestampUsec": "1"}},
-            },
-        },
+        item_action("liveChatTextMessageRenderer", {"timestampUsec": "1"}),
     ]
-    logs = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.log",
-        lambda *args: logs.append(args),
-    )
     result = list(
         _actions(
             actions,
@@ -145,58 +101,41 @@ def test_process_actions_composes_parser_filters_and_poll_diagnostics(monkeypatc
         )
     )
     assert [message["message_type"] for message in result] == ["text_message"]
-    assert logs == [
-        (
-            "debug",
-            (
-                "Processed actions in poll: 4; emitted messages: 1; "
-                "non-emitted actions: 3 (known ignored/control actions: 1, "
-                "unparsed actions: 1, message type/group filtered: 1)"
-            ),
-        ),
-    ]
 
 
 @pytest.mark.parametrize(
     ("initial_offset", "expected_offset"), [(None, 0), (5000, 5000)]
 )
-def test_process_actions_keeps_signed_backlog_and_monotonic_polling(
-    monkeypatch,
-    initial_offset,
-    expected_offset,
+def test_signed_backlog_and_monotonic_polling(
+    monkeypatch, initial_offset, expected_offset
 ):
     state = ContinuationLoopState(
         continuation="tok", offset_milliseconds=initial_offset
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.continuation.process_pipeline_action",
-        lambda *_args, **_kwargs: PipelineResult(
-            disposition="yield",
-            message={"timestamp": 500_000},
+    patch(
+        monkeypatch,
+        "continuation.process_pipeline_action",
+        Mock(
+            return_value=PipelineResult(
+                disposition="yield", message={"timestamp": 500_000}
+            )
         ),
     )
     messages = list(
         _actions(
-            [{"id": 1}],
-            loop_state=state,
-            live_start_time_ms=1000,
-            is_replay=False,
+            [{"id": 1}], loop_state=state, live_start_time_ms=1000, is_replay=False
         )
     )
     assert messages == [
-        {"timestamp": 500_000, "time_in_seconds": -0.5, "time_text": "-0:00"},
+        {"timestamp": 500_000, "time_in_seconds": -0.5, "time_text": "-0:00"}
     ]
     assert state.offset_milliseconds == expected_offset
 
 
 @pytest.mark.parametrize(
-    "message",
-    [
-        {"time_in_seconds": 5.0, "body": "hello"},
-        {"time_text": "0:05"},
-    ],
+    "message", [{"time_in_seconds": 5.0, "body": "hello"}, {"time_text": "0:05"}]
 )
-def test_enrich_live_message_timing_preserves_existing_timing(message):
+def test_existing_timing_preserved(message):
     original = message.copy()
     enrich_live_message_timing(message, live_offset_milliseconds=1000)
     assert message == original

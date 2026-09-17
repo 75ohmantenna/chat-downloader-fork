@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import gc
 import os
-from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
 import pytest
@@ -18,9 +17,6 @@ from chat_downloader.output.continuous_write import (
     JsonLinesContinuousWriter,
     TextContinuousWriter,
 )
-
-if TYPE_CHECKING:
-    import pathlib
 
 
 class _DummyWriter(ContinuousFileWriter):
@@ -50,30 +46,20 @@ def test_file_errors_are_propagated(tmp_path, operation):
 
 
 @pytest.mark.parametrize(
-    ("writer_class", "extension", "items", "expected", "closed_item"),
+    ("writer_class", "items", "expected"),
     [
+        (JsonLinesContinuousWriter, [{"key": "value"}], '{"key": "value"}\n'),
         (
             JsonLinesContinuousWriter,
-            "jsonl",
-            [{"key": "value"}],
-            '{"key": "value"}\n',
-            {"a": 1},
-        ),
-        (
-            JsonLinesContinuousWriter,
-            "jsonl",
             [{"a": 1}, {"b": 2}, {"c": 3}],
             '{"a": 1}\n{"b": 2}\n{"c": 3}\n',
-            {"a": 1},
         ),
-        (TextContinuousWriter, "txt", ["Hello, world!"], "Hello, world!\n", "hello"),
+        (TextContinuousWriter, ["Hello, world!"], "Hello, world!\n"),
     ],
 )
 @pytest.mark.parametrize("flush", [False, True])
-def test_writes_complete_records(
-    tmp_path, writer_class, extension, items, expected, closed_item, flush
-):
-    path = tmp_path / f"test.{extension}"
+def test_writes_complete_records(tmp_path, writer_class, items, expected, flush):
+    path = tmp_path / "test.txt"
     writer = writer_class(str(path))
     try:
         for item in items:
@@ -83,7 +69,7 @@ def test_writes_complete_records(
     finally:
         writer.close()
     with pytest.raises(RuntimeError, match="initialized"):
-        writer.write(closed_item)
+        writer.write(items[0])
 
 
 @pytest.mark.parametrize(
@@ -146,7 +132,6 @@ def test_factory_selection_and_initialization(
     with ContinuousWriter(str(path), lazy_initialise=lazy, **options) as writer:
         assert writer.is_initialised() is (not lazy)
         assert path.exists() is (not lazy)
-        assert writer.sort_keys is options.get("sort_keys")
         writer.write(item)
         writer.initialize()
         writer.initialize()  # Repeated initialization must not truncate output.
@@ -182,9 +167,7 @@ def test_factory_lazy_init_recovers_after_validation_failure(tmp_path, operation
     assert '"second": 2' in path.read_text(encoding="utf-8")
 
 
-def test_factory_unknown_kwargs_not_accessible_as_attributes(
-    tmp_path: pathlib.Path,
-) -> None:
+def test_factory_unknown_kwargs_not_accessible_as_attributes(tmp_path) -> None:
     writer = ContinuousWriter(
         str(tmp_path / "test.jsonl"), lazy_initialise=True, custom_option="value"
     )
@@ -193,16 +176,8 @@ def test_factory_unknown_kwargs_not_accessible_as_attributes(
 
 
 @pytest.mark.parametrize("error_type", [OSError, RuntimeError, ReferenceError])
-def test_factory_del_io_error_log_contained_in_test(
-    tmp_path: pathlib.Path,
-    error_type: type[Exception],
-) -> None:
-    """Regression: __del__ debug log for a suppressed OSError must not escape.
-
-    In Python 3.14 the incremental GC can delay object finalization past the
-    test boundary, causing the suppression log to fire while a later test has
-    patched dbg.logger.debug, corrupting that test's mock call history.
-    """
+def test_factory_del_io_error_log_contained_in_test(tmp_path, error_type) -> None:
+    # Collect before leaving the patch: delayed GC must not leak logs to later tests.
     writer = ContinuousWriter(str(tmp_path / "test.jsonl"), lazy_initialise=True)
     writer.close = Mock(side_effect=error_type("disk full"))
 

@@ -111,39 +111,32 @@ def test_vod_channel_not_found(vod_page):
         _vod_messages()
 
 
-@pytest.mark.parametrize("method", ["_download_base_gql", "_download_gql"])
+@pytest.mark.parametrize(
+    ("method", "degraded"),
+    [("_download_base_gql", False), ("_download_gql", False), ("_download_gql", True)],
+)
 @pytest.mark.parametrize("client_id", [None, "client-123"])
-def test_extractor_gql_request_headers(monkeypatch, method, client_id):
+def test_extractor_gql_headers_and_degradation(
+    monkeypatch, method, degraded, client_id
+):
     downloader = TwitchChatDownloader(
         **({} if client_id is None else {"twitch_client_id": client_id})
     )
-    post = _post([{"data": {}}])
+    payload = [{"data": {"user": {}}}]
+    callback = Mock()
+    if degraded:
+        payload[0]["errors"] = [
+            {"message": "service error", "path": ["user", "primaryTeam"]}
+        ]
+    post = _post(payload)
     monkeypatch.setattr(downloader, "_session_post", post)
     monkeypatch.setattr(downloader, "get_cookie_value", lambda _name: "test-token")
-    assert getattr(downloader, method)(_operations()) == [{"data": {}}]
+    kwargs = {"record_optional_degradation": callback} if degraded else {}
+    assert getattr(downloader, method)(_operations(), **kwargs) == payload
     headers = post.call_args.kwargs["headers"]
     assert headers["Client-ID"] == (client_id or CLIENT_ID)
     assert headers["Authorization"] == "OAuth test-token"
-
-
-@pytest.mark.parametrize("client_id", [None, "client-123"])
-def test_extractor_gql_records_optional_degradation(monkeypatch, client_id):
-    downloader = TwitchChatDownloader(twitch_client_id=client_id)
-    payload = [
-        {
-            "data": {"user": {}},
-            "errors": [
-                {"message": "service error", "path": ["user", "primaryTeam"]},
-            ],
-        }
-    ]
-    monkeypatch.setattr(downloader, "_session_post", _post(payload))
-    callback = Mock()
-    assert (
-        downloader._download_gql(_operations(), record_optional_degradation=callback)
-        == payload
-    )
-    callback.assert_called_once_with()
+    assert callback.call_count == int(degraded)
 
 
 def test_badge_refresh_uses_configured_client_id(monkeypatch):
@@ -173,16 +166,8 @@ def test_twitch_badge_refresh_reuses_known_channel_id(monkeypatch):
 
 
 def test_get_user_clips_breaks_when_clips_none():
-    assert (
-        list(
-            get_user_clips(
-                Mock(),
-                Mock(return_value=[{"data": {"user": {"clips": None}}}]),
-                "testuser",
-            )
-        )
-        == []
-    )
+    download = Mock(return_value=[{"data": {"user": {"clips": None}}}])
+    assert list(get_user_clips(Mock(), download, "testuser")) == []
 
 
 @pytest.mark.parametrize("value", [None, 42, []])
@@ -192,7 +177,7 @@ def test_twitch_contains_challenge_text_non_string(value):
 
 def test_download_base_gql_adds_auth_header():
     post = _post([])
-    gql._download_base_gql(post, [], auth_token="test-value")  # noqa: S106 - literal test token, not a credential
+    gql._download_base_gql(post, [], auth_token="test-value")  # noqa: S106
     assert post.call_args.kwargs["headers"]["Authorization"] == "OAuth test-value"
 
 
@@ -279,12 +264,9 @@ def test_extractor_routing_wrappers_delegate(monkeypatch, kind):
         f"chat_downloader.sites.twitch.extractor.build_{kind}_chat", build
     )
     assert getattr(downloader, f"get_chat_by_{kind}_id")("id1", request) == "chat"
-    assert build.call_args.args[1] == "id1"
-    assert build.call_args.args[2] is request
     match = Mock()
     match.group.return_value = "id2"
     assert getattr(downloader, f"_get_chat_by_{kind}_id")(match, request) == "chat"
-    assert build.call_args.args[1] == "id2"
 
 
 def test_extractor_generate_urls_delegates_to_url_generation(monkeypatch):

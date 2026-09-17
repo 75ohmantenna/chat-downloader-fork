@@ -13,7 +13,14 @@ from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.errors import KickError, KickVideoNotFound
 from chat_downloader.sites.kick.replay_service import get_vod_chat
 from chat_downloader.sites.kick.vod_metadata import fetch_vod_metadata
-from tests.kick_helpers import FakeKickSession, FakeResponse, load_fixture
+from tests.kick_helpers import (
+    FakeKickSession,
+    FakeResponse,
+    load_fixture,
+    message_page,
+    raw_message,
+    session_patch,
+)
 
 VIDEO = "01a09138-ec70-7c4c-a2b7-47a9ed4fc9b4"
 REQUEST = ChatRequest(max_attempts=1, interruptible_retry=False)
@@ -30,9 +37,7 @@ def fallback_client():
     return client
 
 
-def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup(
-    monkeypatch,
-) -> None:
+def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup():
     web = FakeKickSession([FakeResponse(200, load_fixture("video_metadata_web.json"))])
     primary = FakeKickSession(
         [
@@ -40,34 +45,18 @@ def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup(
             FakeResponse(200, {"id": 12345, "slug": "examplechannel"}),
             FakeResponse(
                 200,
-                {
-                    "data": {
-                        "messages": [
-                            {
-                                "id": identifier,
-                                "type": "message",
-                                "content": content,
-                                "created_at": f"2026-09-11T16:07:{second}Z",
-                            }
-                            for identifier, content, second in [
-                                ("last", "second", 32),
-                                ("first", "first", 31),
-                            ]
-                        ],
-                        "cursor": None,
-                    }
-                },
+                message_page(
+                    [
+                        raw_message(identifier, f"2026-09-11T16:07:{second}Z", content)
+                        for identifier, content, second in [
+                            ("last", "second", 32),
+                            ("first", "first", 31),
+                        ]
+                    ],
+                    cursor=None,
+                ),
             ),
         ]
-    )
-    captured = []
-
-    def create(**kwargs):
-        captured.append(kwargs)
-        return web
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.kick.api_client.create_kick_session", create
     )
     client = KickApiClient(
         session=primary,
@@ -78,13 +67,14 @@ def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup(
         },
         trust_env=False,
     )
-    chat = get_vod_chat("examplechannel", VIDEO, REQUEST, api_client=client)
+    with session_patch(web) as create:
+        chat = get_vod_chat("examplechannel", VIDEO, REQUEST, api_client=client)
     assert chat.id == VIDEO
     assert chat.duration == 26152
     messages = list(chat)
     assert [item["time_in_seconds"] for item in messages] == [29, 30]
     assert messages[0]["time_text"] == "0:29"
-    assert captured[0]["extra_headers"] == {"User-Agent": "custom"}
+    assert create.call_args.kwargs["extra_headers"] == {"User-Agent": "custom"}
     assert (
         web.calls[0][0] == f"https://web.kick.com/api/v1/channels/12345/videos/{VIDEO}"
     )
@@ -168,7 +158,8 @@ def test_web_endpoint_rejects_path_injection_and_redirects() -> None:
 
 
 @pytest.mark.parametrize(
-    "end", ["2026-09-11T23:24:00Z", "bad", None, "2026-09-11T23:24:00"]
+    "end",
+    ["2026-09-11T23:24:00Z", "bad", None, "2026-09-11T23:24:00"],
 )
 def test_metadata_explains_disagreement_without_changing_cutoff(
     monkeypatch, fallback_client, end

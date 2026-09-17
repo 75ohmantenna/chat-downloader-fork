@@ -24,22 +24,15 @@ from chat_downloader.sites.models import SiteDefault as CompatSiteDefault
 
 
 @pytest.mark.parametrize(
-    "values",
+    ("headers", "cookies", "proxy"),
     [
-        {"headers": None, "cookies": None, "proxy": None},
-        {
-            "headers": {"User-Agent": "TestBot/1.0"},
-            "cookies": "/tmp/cookies.txt",
-            "proxy": "socks5://127.0.0.1:1080",
-        },
-        {
-            "headers": {"Accept": "application/json"},
-            "cookies": "c.txt",
-            "proxy": "http://proxy:8080",
-        },
+        (None, None, None),
+        ({"User-Agent": "TestBot/1.0"}, "/tmp/cookies.txt", "socks5://127.0.0.1:1080"),
+        ({"Accept": "application/json"}, "c.txt", "http://proxy:8080"),
     ],
 )
-def test_downloader_config_serialization(values):
+def test_downloader_config_serialization(headers, cookies, proxy):
+    values = {"headers": headers, "cookies": cookies, "proxy": proxy}
     cfg = DownloaderConfig(**values)
     result = cfg.as_dict()
     assert set(result) == {
@@ -58,12 +51,16 @@ def test_downloader_config_serialization(values):
     assert cfg.proxy == values["proxy"]
 
 
-def test_get_field_default_for_required_field():
+def test_get_field_default_for_required_and_factory_fields():
     @dataclasses.dataclass
-    class Required:
+    class Model:
         required: int
+        items: list = dataclasses.field(default_factory=list)
 
-    assert get_field_default(dataclasses.fields(Required)[0]) is None
+    required, items = dataclasses.fields(Model)
+    assert get_field_default(required) is None
+    assert get_field_default(items) == []
+    assert isinstance(get_field_default(items), list)
 
 
 @pytest.fixture
@@ -262,58 +259,43 @@ def test_request_boundaries_allowed(name, value):
 
 
 @pytest.mark.parametrize(
-    ("field_name", "values"),
+    ("model", "field_name", "values"),
     [
-        ("max_messages", [0, -1, True]),
-        ("max_attempts", [0, -5, 1.5, True]),
-        ("buffer_size", [0, -1, 1.5, True]),
-        ("retry_timeout", ["manual", True, float("nan")]),
-        ("timeout", ["forever"]),
-        ("inactivity_timeout", [True]),
-        ("message_receive_timeout", ["slow"]),
-        ("start_time", ["not-a-time", "1:not-a-number", True]),
-        ("end_time", [float("nan"), float("inf")]),
-        ("chat_type", ["invalid", ""]),
-        (
-            "youtube_replay_poll_interval",
-            [0.0, 0.49, 8.01, float("nan"), float("inf"), float("-inf")],
-        ),
+        (ChatRequest, name, values)
+        for name, values in [
+            ("max_messages", [0, -1, True]),
+            ("max_attempts", [0, -5, 1.5, True]),
+            ("buffer_size", [0, -1, 1.5, True]),
+            ("retry_timeout", ["manual", True, float("nan")]),
+            ("timeout", ["forever"]),
+            ("inactivity_timeout", [True]),
+            ("message_receive_timeout", ["slow"]),
+            ("start_time", ["not-a-time", "1:not-a-number", True]),
+            ("end_time", [float("nan"), float("inf")]),
+            ("chat_type", ["invalid", ""]),
+            (
+                "youtube_replay_poll_interval",
+                [0.0, 0.49, 8.01, float("nan"), float("inf"), float("-inf")],
+            ),
+        ]
+    ]
+    + [
+        (ChatRequest, name, [0.0, -1.0, float("nan"), float("inf"), float("-inf")])
+        for name in ("timeout", "inactivity_timeout", "message_receive_timeout")
+    ]
+    + [
+        (DownloaderConfig, name, values)
+        for name, values in [
+            ("request_profile", ["unknown", "YOUTUBE_WEB", 7]),
+            ("connect_timeout", [0.0, -1.0, float("nan"), float("inf")]),
+            ("read_timeout", [0.0, -5.0, float("nan"), float("inf")]),
+        ]
     ],
 )
-def test_request_rejects_invalid_runtime_values(field_name, values):
+def test_models_reject_invalid_runtime_values(model, field_name, values):
     for value in values:
         with pytest.raises(ValueError, match=field_name):
-            ChatRequest(**{field_name: value})
-
-
-@pytest.mark.parametrize(
-    "field_name",
-    [
-        "timeout",
-        "inactivity_timeout",
-        "message_receive_timeout",
-    ],
-)
-@pytest.mark.parametrize(
-    "value", [0.0, -1.0, float("nan"), float("inf"), float("-inf")]
-)
-def test_request_timeout_invalid_raises(field_name, value):
-    with pytest.raises(ValueError, match=field_name):
-        ChatRequest(**{field_name: value})
-
-
-@pytest.mark.parametrize(
-    ("field_name", "values"),
-    [
-        ("request_profile", ["unknown", "YOUTUBE_WEB", 7]),
-        ("connect_timeout", [0.0, -1.0, float("nan"), float("inf")]),
-        ("read_timeout", [0.0, -5.0, float("nan"), float("inf")]),
-    ],
-)
-def test_downloader_config_invalid_values(field_name, values):
-    for value in values:
-        with pytest.raises(ValueError, match=field_name):
-            DownloaderConfig(**{field_name: value})
+            model(**{field_name: value})
 
 
 def test_downloader_config_valid_timeouts():

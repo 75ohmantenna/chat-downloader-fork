@@ -3,49 +3,28 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING
 
 import pytest
 
 import chat_downloader.debugging as dbg
-from chat_downloader.sites.youtube.constants_actions_messages_core import (
-    _KNOWN_ACTION_TYPES,
-)
-from chat_downloader.sites.youtube.constants_message import (
-    build_video_remapping,
-)
+from chat_downloader.sites.youtube.constants_message import build_video_remapping
 from chat_downloader.sites.youtube.parsing.actions_handlers_validation import (
     validate_and_finalize_message,
 )
-from chat_downloader.sites.youtube.parsing.actions_router import (
-    process_action,
-)
-
-if TYPE_CHECKING:
-    from chat_downloader.utils.json_types import JSONDict
+from chat_downloader.sites.youtube.parsing.actions_router import process_action
+from tests.youtube_third_helpers import item_action, wrap
 
 
-def _renderer_with_timestamp(usec: str = "1234567890") -> dict:
-    # timestampUsec is a known remapping key and avoids "empty parse" debug
-    # logging.
-    return {"timestampUsec": usec}
+def _jewels_action(attribution):
+    return wrap(
+        "updateOrAddInteractivityWidgetAction.widgetRenderer."
+        "interactivityWidgetRenderer.content.giftAttributionItemViewModel",
+        attribution,
+    )
 
 
-def _jewels_action(attribution: JSONDict) -> JSONDict:
-    return {
-        "updateOrAddInteractivityWidgetAction": {
-            "widgetRenderer": {
-                "interactivityWidgetRenderer": {
-                    "content": {
-                        "giftAttributionItemViewModel": attribution,
-                    },
-                },
-            },
-        },
-    }
-
-
-def _finalize(result):
+def _finalize(action):
+    result = process_action(action)
     assert result is not None
     return validate_and_finalize_message(
         result.parsed_data,
@@ -53,6 +32,15 @@ def _finalize(result):
         result.message_type,
         result.action_type,
     )
+
+
+def _assert_fields(result, expected):
+    assert result is not None
+    for path, value in expected.items():
+        actual = result
+        for key in path.split("."):
+            actual = actual[int(key)] if isinstance(actual, list) else actual[key]
+        assert actual == value, path
 
 
 @pytest.fixture
@@ -70,443 +58,366 @@ def diagnostics(monkeypatch):
     return capture
 
 
-def _item_action(renderer, content):
-    return {"addChatItemAction": {"item": {renderer: content}}}
-
-
 def setup_module() -> None:
-    # Ensure debug_log never escalates to TestingException during unit tests.
     dbg.set_testing_mode(dbg.TestingModes.NONE)
 
 
 def test_build_video_remapping_returns_mapping_with_expected_keys() -> None:
-    """build_video_remapping() lazy-imports and returns the mapping."""
     mapping = build_video_remapping()
     assert isinstance(mapping, Mapping)
-    assert "videoId" in mapping
-    assert "title" in mapping
+    assert {"videoId", "title"} <= mapping.keys()
 
 
 @pytest.mark.parametrize("replay", [None, {}, {"videoOffsetTimeMsec": "2345"}])
 def test_process_action_add_chat_item_with_optional_replay(replay) -> None:
-    action = _item_action("liveChatTextMessageRenderer", _renderer_with_timestamp())
+    action = item_action("liveChatTextMessageRenderer", {"timestampUsec": "1234567890"})
     if replay is not None:
         action = {"replayChatItemAction": {**replay, "actions": [action]}}
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "add_chat_item"
-    assert finalized["message_type"] == "text_message"
-    assert finalized["timestamp"] == 1234567890
+    finalized = _finalize(action)
+    _assert_fields(
+        finalized,
+        {
+            "action_type": "add_chat_item",
+            "message_type": "text_message",
+            "timestamp": 1234567890,
+        },
+    )
     if replay:
         assert finalized["time_in_seconds"] == pytest.approx(2.345)
     else:
         assert "time_in_seconds" not in finalized
 
 
-def test_process_action_empty_interactivity_widget_is_skipped() -> None:
-    action: JSONDict = {
-        "updateOrAddInteractivityWidgetAction": {
-            "widgetRenderer": {},
-        },
-    }
-
-    assert _finalize(process_action(action)) is None
-
-
 @pytest.mark.parametrize(
-    "attribution",
+    "action",
     [
-        {"unexpected": True},
-        {
-            "id": "gift-1",
-            "authorName": {"content": "@sender"},
-        },
-        {
-            "id": "gift-1",
-            "detailText": {"content": "Sent a gift"},
-        },
+        wrap("updateOrAddInteractivityWidgetAction.widgetRenderer", {}),
+        _jewels_action({"unexpected": True}),
+        _jewels_action({"id": "gift-1", "authorName": {"content": "@sender"}}),
+        _jewels_action({"id": "gift-1", "detailText": {"content": "Sent a gift"}}),
+        {"addBannerToLiveChatCommand": {}},
     ],
 )
-def test_process_action_incomplete_jewels_widget_is_skipped(
-    attribution: JSONDict,
-) -> None:
-    assert _finalize(process_action(_jewels_action(attribution))) is None
+def test_incomplete_widget_or_banner_is_skipped(action):
+    assert _finalize(action) is None
 
 
-def test_process_action_minimal_jewels_widget_omits_optional_fields() -> None:
+def test_process_action_minimal_jewels_widget_omits_optional_fields():
     finalized = _finalize(
-        process_action(
-            _jewels_action(
-                {
-                    "id": "gift-1",
-                    "authorName": {"content": "@sender"},
-                    "detailText": {"content": "Sent a gift"},
-                }
-            )
+        _jewels_action(
+            {
+                "id": "gift-1",
+                "authorName": {"content": "@sender"},
+                "detailText": {"content": "Sent a gift"},
+            }
         )
     )
-
-    assert finalized is not None
-    assert finalized["message_id"] == "gift-1"
-    assert finalized["message"] == "Sent a gift"
-    assert finalized["author"]["name"] == "@sender"
+    _assert_fields(
+        finalized,
+        {
+            "message_id": "gift-1",
+            "message": "Sent a gift",
+            "author.name": "@sender",
+        },
+    )
     assert "combo_count" not in finalized
 
 
-def test_process_action_gift_message_view_model(diagnostics) -> None:
-    logs, samples = diagnostics("actions_handlers_validation")
-
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "giftMessageViewModel": {
-                    "id": "gift-1",
-                    "authorName": {"content": "@K1NGBOB1212 "},
-                    "text": {"content": "sent 100 for 2 Jewels"},
-                    "rendererContext": {},
-                    "image": {},
-                    "imageA11yLabel": "Jewels",
-                    "authorAvatar": {"avatarViewModel": {}},
-                    "giftImage": {"sources": []},
-                    "giftImageA11yLabel": "Image of Jewels",
+@pytest.mark.parametrize(
+    ("renderer", "content", "expected"),
+    [
+        (
+            "giftMessageViewModel",
+            {
+                "id": "gift-1",
+                "authorName": {"content": "@K1NGBOB1212 "},
+                "text": {"content": "sent 100 for 2 Jewels"},
+                "rendererContext": {},
+                "image": {},
+                "imageA11yLabel": "Jewels",
+                "authorAvatar": {"avatarViewModel": {}},
+                "giftImage": {"sources": []},
+                "giftImageA11yLabel": "Image of Jewels",
+            },
+            {
+                "action_type": "add_chat_item",
+                "message_type": "gift_message_view_model",
+                "message_id": "gift-1",
+                "message": "sent 100 for 2 Jewels",
+                "author.name": "@K1NGBOB1212 ",
+            },
+        ),
+        (
+            "liveChatProductItemRenderer",
+            {
+                "title": "Channel hoodie",
+                "accessibilityTitle": "Channel hoodie product",
+                "thumbnail": {
+                    "thumbnails": [
+                        {
+                            "url": "https://example.invalid/hoodie=s88",
+                            "width": 88,
+                            "height": 88,
+                        }
+                    ]
+                },
+                "price": "$25.00",
+                "vendorName": "Creator shop",
+                "fromVendorText": "from Creator shop",
+                "onClickCommand": wrap(
+                    "commandMetadata.webCommandMetadata.url",
+                    "https://example.invalid/product",
+                ),
+                "creatorMessage": "Pinned product",
+                "creatorName": "Creator",
+                "creatorCustomMessage": {"content": "New merch"},
+                "authorPhoto": {"thumbnails": []},
+                "informationButton": {},
+                "informationDialog": {},
+                "isVerified": True,
+                "timestampUsec": "11",
+            },
+            {
+                "message_type": "purchased_product_message",
+                "product_title": "Channel hoodie",
+                "product_accessibility_title": "Channel hoodie product",
+                "price": "$25.00",
+                "vendor_name": "Creator shop",
+                "url": "https://example.invalid/product",
+                "message": "New merch",
+                "product_images.0.url": "https://example.invalid/hoodie",
+            },
+        ),
+        (
+            "liveChatRestrictedParticipationRenderer",
+            {
+                "message": {"runs": [{"text": "Only subscribers can send messages"}]},
+                "icon": {"iconType": "SUBSCRIBERS_ONLY"},
+                "timestampUsec": "12",
+            },
+            {
+                "message_type": "restricted_participation",
+                "icon": "SUBSCRIBERS_ONLY",
+                "message": "Only subscribers can send messages",
+            },
+        ),
+        (
+            "liveChatAutoModMessageRenderer",
+            {
+                "id": "auto-1",
+                "headerText": {"content": "Held for review"},
+                "timestampUsec": "13",
+                "contextMenuEndpoint": {},
+                "moderationButtons": [{"buttonRenderer": {}}],
+                "autoModeratedItem": {
+                    "liveChatTextMessageRenderer": {
+                        "id": "held-1",
+                        "authorName": {"simpleText": "@HeldUser"},
+                        "message": {"runs": [{"text": "blocked text"}]},
+                        "timestampUsec": "13",
+                    }
                 },
             },
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "add_chat_item"
-    assert finalized["message_type"] == "gift_message_view_model"
-    assert finalized["message_id"] == "gift-1"
-    assert finalized["message"] == "sent 100 for 2 Jewels"
-    assert finalized["author"]["name"] == "@K1NGBOB1212 "
-    assert logs == []
-    assert samples == []
-
-
-def test_process_action_product_item_renderer(diagnostics) -> None:
-    logs, samples = diagnostics("actions_handlers_validation")
-
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "liveChatProductItemRenderer": {
-                    "title": "Channel hoodie",
-                    "accessibilityTitle": "Channel hoodie product",
-                    "thumbnail": {
-                        "thumbnails": [
-                            {
-                                "url": "https://example.invalid/hoodie=s88",
-                                "width": 88,
-                                "height": 88,
-                            },
-                        ],
-                    },
-                    "price": "$25.00",
-                    "vendorName": "Creator shop",
-                    "fromVendorText": "from Creator shop",
-                    "onClickCommand": {
-                        "commandMetadata": {
-                            "webCommandMetadata": {
-                                "url": "https://example.invalid/product",
-                            },
-                        },
-                    },
-                    "creatorMessage": "Pinned product",
-                    "creatorName": "Creator",
-                    "creatorCustomMessage": {"content": "New merch"},
-                    "authorPhoto": {"thumbnails": []},
-                    "informationButton": {},
-                    "informationDialog": {},
-                    "isVerified": True,
-                    "timestampUsec": "11",
-                },
+            {
+                "message_type": "auto_mod_message",
+                "message_id": "auto-1",
+                "header_text": "Held for review",
+                "auto_moderated_item.message_id": "held-1",
+                "auto_moderated_item.message": "blocked text",
+                "auto_moderated_item.author.name": "@HeldUser",
             },
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["message_type"] == "purchased_product_message"
-    assert finalized["product_title"] == "Channel hoodie"
-    assert finalized["product_accessibility_title"] == ("Channel hoodie product")
-    assert finalized["price"] == "$25.00"
-    assert finalized["vendor_name"] == "Creator shop"
-    assert finalized["url"] == "https://example.invalid/product"
-    assert finalized["message"] == "New merch"
-    assert finalized["product_images"][0]["url"] == ("https://example.invalid/hoodie")
-    assert logs == []
-    assert samples == []
-
-
-def test_process_action_restricted_participation_renderer(diagnostics) -> None:
-    logs, samples = diagnostics("actions_handlers_validation")
-
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "liveChatRestrictedParticipationRenderer": {
-                    "message": {
-                        "runs": [
-                            {"text": "Only subscribers can send messages"},
-                        ],
-                    },
-                    "icon": {"iconType": "SUBSCRIBERS_ONLY"},
-                    "timestampUsec": "12",
+        ),
+        (
+            "liveChatPaidStickerRenderer",
+            {
+                "id": "sticker-1",
+                "authorExternalChannelId": "UC123",
+                "authorName": {"simpleText": "@viewer"},
+                "purchaseAmountText": {"simpleText": "$1.99"},
+                "sticker": {
+                    "thumbnails": [
+                        {
+                            "url": "https://img.example/sticker=s64",
+                            "width": 64,
+                            "height": 64,
+                        }
+                    ]
                 },
+                "timestampUsec": "12",
+                "pdgPurchasedNoveltyLoggingDirectives": {"trackingParams": "opaque"},
             },
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["message_type"] == "restricted_participation"
-    assert finalized["message"] == "Only subscribers can send messages"
-    assert finalized["icon"] == "SUBSCRIBERS_ONLY"
-    assert logs == []
-    assert samples == []
-
-
-def test_process_action_auto_mod_message_renderer(diagnostics) -> None:
+            {
+                "action_type": "add_chat_item",
+                "message_type": "paid_sticker",
+                "message_id": "sticker-1",
+                "author": {"id": "UC123", "name": "@viewer"},
+                "money": {
+                    "amount": 1.99,
+                    "currency": "USD",
+                    "currency_symbol": "$",
+                    "text": "$1.99",
+                },
+                "sticker_images.0.id": "source",
+                "sticker_images.1.id": "64x64",
+            },
+        ),
+    ],
+)
+def test_recognized_item_renderers_without_diagnostics(
+    diagnostics, renderer, content, expected
+):
     logs, samples = diagnostics("actions_handlers_validation")
+    _assert_fields(_finalize(item_action(renderer, content)), expected)
+    assert logs == samples == []
 
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "liveChatAutoModMessageRenderer": {
-                    "id": "auto-1",
-                    "headerText": {"content": "Held for review"},
-                    "timestampUsec": "13",
-                    "contextMenuEndpoint": {},
-                    "moderationButtons": [{"buttonRenderer": {}}],
-                    "autoModeratedItem": {
-                        "liveChatTextMessageRenderer": {
-                            "id": "held-1",
-                            "authorName": {"simpleText": "@HeldUser"},
-                            "message": {"runs": [{"text": "blocked text"}]},
-                            "timestampUsec": "13",
-                        },
+
+@pytest.mark.parametrize(
+    ("action", "expected"),
+    [
+        (
+            wrap("removeChatItemAction", {"targetItemId": "abc", "timestampUsec": "2"}),
+            {
+                "action_type": "remove_chat_item",
+                "message_type": "ban_user",
+                "target_message_id": "abc",
+                "timestamp": 2,
+            },
+        ),
+        (
+            wrap(
+                "markChatItemAsDeletedAction",
+                {
+                    "targetItemId": "def",
+                    "timestampUsec": "3",
+                },
+            ),
+            {
+                "action_type": "mark_chat_item_as_deleted",
+                "message_type": "deleted_message",
+                "target_message_id": "def",
+                "timestamp": 3,
+            },
+        ),
+        (
+            wrap(
+                "removeChatItemByAuthorAction.externalChannelId",
+                "UCzIZTkKIFheFCx7GwQ6Obrw",
+            ),
+            {
+                "action_type": "remove_chat_item_by_author",
+                "message_type": "ban_user",
+                "author.id": "UCzIZTkKIFheFCx7GwQ6Obrw",
+                "author.name": "",
+                "message": None,
+            },
+        ),
+        (
+            wrap(
+                "markChatItemsByAuthorAsDeletedAction",
+                {
+                    "externalChannelId": "UCzIZTkKIFheFCx7GwQ6Obrw",
+                    "deletedStateMessage": {
+                        "runs": [{"text": "Message deleted by a moderator."}]
                     },
                 },
+            ),
+            {
+                "action_type": "mark_chat_items_by_author_as_deleted",
+                "message_type": "ban_user",
+                "author.id": "UCzIZTkKIFheFCx7GwQ6Obrw",
+                "message": "Message deleted by a moderator.",
             },
-        },
-    }
+        ),
+        (
+            wrap(
+                "replaceChatItemAction.replacementItem.liveChatTextMessageRenderer",
+                {
+                    "timestampUsec": "4",
+                },
+            ),
+            {
+                "action_type": "replace_chat_item",
+                "message_type": "text_message",
+                "timestamp": 4,
+            },
+        ),
+        (
+            wrap(
+                "showLiveChatTooltipCommand.tooltip.tooltipRenderer",
+                {
+                    "detailsText": {"simpleText": "Hello"},
+                    "timestampUsec": "5",
+                },
+            ),
+            {
+                "action_type": "show_live_chat_tooltip",
+                "message_type": "tooltip",
+                "timestamp": 5,
+            },
+        ),
+        (
+            wrap(
+                "addBannerToLiveChatCommand.bannerRenderer.liveChatBannerRenderer."
+                "contents.liveChatTextMessageRenderer",
+                {"timestampUsec": "6"},
+            ),
+            {
+                "action_type": "add_banner_to_live_chat",
+                "message_type": "banner",
+                "timestamp": 6,
+            },
+        ),
+        (
+            wrap(
+                "removeBannerForLiveChatCommand",
+                {
+                    "targetActionId": "xyz",
+                    "timestampUsec": "7",
+                },
+            ),
+            {
+                "action_type": "remove_banner_for_live_chat",
+                "message_type": "remove_banner",
+                "target_message_id": "xyz",
+                "timestamp": 7,
+            },
+        ),
+        (
+            wrap("closeLiveChatActionPanelAction.targetPanelId", "panel-123"),
+            {
+                "action_type": "close_live_chat_action_panel",
+                "message_type": "poll_closed_event",
+                "poll_id": "panel-123",
+            },
+        ),
+    ],
+)
+def test_action_finalization(action, expected):
+    _assert_fields(_finalize(action), expected)
 
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["message_type"] == "auto_mod_message"
-    assert finalized["message_id"] == "auto-1"
-    assert finalized["header_text"] == "Held for review"
-    assert finalized["auto_moderated_item"]["message_id"] == "held-1"
-    assert finalized["auto_moderated_item"]["message"] == "blocked text"
-    assert finalized["auto_moderated_item"]["author"]["name"] == "@HeldUser"
-    assert logs == []
-    assert samples == []
 
-
-def test_process_action_ignores_interactivity_widget_action(diagnostics) -> None:
-    logs, samples = diagnostics("actions_router")
-
-    action = {
-        "addInteractivityWidgetAction": {
-            "widgetRenderer": {
-                "interactivityWidgetRenderer": {
+@pytest.mark.parametrize(
+    ("action", "silent"),
+    [
+        ({}, False),
+        ({"clickTrackingParams": "abc"}, False),
+        ({"liveChatReportModerationStateCommand": {"someData": True}}, False),
+        (
+            wrap(
+                "addInteractivityWidgetAction.widgetRenderer.interactivityWidgetRenderer",
+                {
                     "id": "gift-overlay",
                     "content": {"giftOverlayItemViewModel": {}},
                     "type": "INTERACTIVITY_WIDGET_TYPE_GIFT",
                 },
-            },
-        },
-    }
-
-    assert process_action(action) is None
-    assert logs == []
-    assert samples == []
-
-
-@pytest.mark.parametrize(
-    ("action_type", "target", "timestamp", "normalized", "message_type"),
-    [
-        ("removeChatItemAction", "abc", "2", "remove_chat_item", "ban_user"),
-        (
-            "markChatItemAsDeletedAction",
-            "def",
-            "3",
-            "mark_chat_item_as_deleted",
-            "deleted_message",
+            ),
+            True,
         ),
-    ],
-)
-def test_process_action_remove_actions(
-    action_type, target, timestamp, normalized, message_type
-):
-    finalized = _finalize(
-        process_action(
-            {action_type: {"targetItemId": target, "timestampUsec": timestamp}}
-        )
-    )
-    assert finalized is not None
-    assert finalized["action_type"] == normalized
-    assert finalized["message_type"] == message_type
-    assert finalized["target_message_id"] == target
-    assert finalized["timestamp"] == int(timestamp)
-
-
-def test_process_action_remove_chat_item_by_author_action() -> None:
-    action = {
-        "removeChatItemByAuthorAction": {
-            "externalChannelId": "UCzIZTkKIFheFCx7GwQ6Obrw",
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "remove_chat_item_by_author"
-    assert finalized["message_type"] == "ban_user"
-    assert finalized["author"]["id"] == "UCzIZTkKIFheFCx7GwQ6Obrw"
-    assert finalized["author"]["name"] == ""
-    assert finalized["message"] is None
-
-
-def test_process_action_mark_chat_items_by_author_as_deleted_action() -> None:
-    action = {
-        "markChatItemsByAuthorAsDeletedAction": {
-            "externalChannelId": "UCzIZTkKIFheFCx7GwQ6Obrw",
-            "deletedStateMessage": {
-                "runs": [{"text": "Message deleted by a moderator."}],
-            },
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "mark_chat_items_by_author_as_deleted"
-    assert finalized["message_type"] == "ban_user"
-    assert finalized["author"]["id"] == "UCzIZTkKIFheFCx7GwQ6Obrw"
-    assert finalized["message"] == "Message deleted by a moderator."
-
-
-def test_process_action_replace_action() -> None:
-    action = {
-        "replaceChatItemAction": {
-            "replacementItem": {
-                "liveChatTextMessageRenderer": _renderer_with_timestamp("4"),
-            },
-        },
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "replace_chat_item"
-    assert finalized["message_type"] == "text_message"
-    assert finalized["timestamp"] == 4
-
-
-def test_process_action_tooltip_action() -> None:
-    action = {
-        "showLiveChatTooltipCommand": {
-            "tooltip": {
-                "tooltipRenderer": {
-                    "detailsText": {"simpleText": "Hello"},
-                    "timestampUsec": "5",
-                },
-            },
-        },
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "show_live_chat_tooltip"
-    assert finalized["message_type"] == "tooltip"
-    assert finalized["timestamp"] == 5
-
-
-def test_process_action_add_and_remove_banner_actions() -> None:
-    action_add = {
-        "addBannerToLiveChatCommand": {
-            "bannerRenderer": {
-                "liveChatBannerRenderer": {
-                    "contents": {
-                        "liveChatTextMessageRenderer": _renderer_with_timestamp("6"),
-                    },
-                },
-            },
-        },
-    }
-    finalized = _finalize(process_action(action_add))
-    assert finalized is not None
-    assert finalized["action_type"] == "add_banner_to_live_chat"
-    assert finalized["message_type"] == "banner"
-    assert finalized["timestamp"] == 6
-
-    # Missing bannerRenderer should still return a ProcessedAction, but won't
-    # have a message type.
-    action_add_missing = {"addBannerToLiveChatCommand": {}}
-    result = process_action(action_add_missing)
-    assert result is not None
-    assert result.message_type is None
-    assert _finalize(result) is None
-
-    action_remove = {
-        "removeBannerForLiveChatCommand": {
-            "targetActionId": "xyz",
-            "timestampUsec": "7",
-        },
-    }
-    finalized2 = _finalize(process_action(action_remove))
-    assert finalized2 is not None
-    assert finalized2["action_type"] == "remove_banner_for_live_chat"
-    assert finalized2["message_type"] == "remove_banner"
-    assert finalized2["target_message_id"] == "xyz"
-    assert finalized2["timestamp"] == 7
-
-
-def test_process_action_unknown_action_type_returns_none() -> None:
-    assert process_action({"someNewAction": {}}) is None
-
-
-def test_process_action_unknown_action_type_captures_debug_sample(
-    monkeypatch,
-) -> None:
-    captures = []
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.parsing.actions_router.capture_debug_sample",
-        lambda label, payload, **kwargs: captures.append((label, payload, kwargs)),
-    )
-
-    assert process_action({"someNewAction": {"foo": "bar"}}) is None
-    assert captures == [
         (
-            "youtube-unknown-action-someNewAction",
-            {
-                "action": {"someNewAction": {"foo": "bar"}},
-                "parsed_data": {"action_type": "some_new"},
-            },
-            {"sample_limit": 10},
-        ),
-    ]
-
-
-@pytest.mark.parametrize(
-    "action",
-    [
-        {},
-        {"clickTrackingParams": "abc"},
-        {"liveChatReportModerationStateCommand": {"someData": True}},
-    ],
-    ids=["empty", "tracking-only", "known-ignore"],
-)
-def test_process_action_ignores_empty_or_known_action(action) -> None:
-    assert process_action(action) is None
-
-
-def test_process_action_creator_goal_ticker_chip_is_known_ignored(diagnostics) -> None:
-    logs, captures = diagnostics("actions_router")
-
-    action = {
-        "showCreatorGoalTickerChipCommand": {
-            "creatorGoalTickerChip": {
-                "liveChatTickerCreatorGoalViewModel": {
+            wrap(
+                "showCreatorGoalTickerChipCommand.creatorGoalTickerChip."
+                "liveChatTickerCreatorGoalViewModel",
+                {
                     "initialTickerText": {"simpleText": "Goal"},
                     "tickerIcon": {"iconType": "TARGET_ADD"},
                     "creatorGoalEntityKey": "goal-key",
@@ -518,35 +429,49 @@ def test_process_action_creator_goal_ticker_chip_is_known_ignored(diagnostics) -
                         ),
                     },
                 },
-            },
-        },
-    }
-
+            ),
+            True,
+        ),
+    ],
+)
+def test_known_ignored_actions(diagnostics, action, silent):
+    logs, samples = diagnostics("actions_router")
     assert process_action(action) is None
-    assert "showCreatorGoalTickerChipCommand" in _KNOWN_ACTION_TYPES
-    assert captures == []
-    assert logs == []
+    if silent:
+        assert logs == samples == []
 
 
-def test_process_action_show_live_chat_action_panel_poll() -> None:
-    action = {
-        "showLiveChatActionPanelAction": {
-            "panelToShow": {
-                "liveChatActionPanelRenderer": {
+@pytest.mark.parametrize("content", [{}, {"foo": "bar"}])
+def test_unknown_action_captures_debug_sample(diagnostics, content):
+    _, captures = diagnostics("actions_router")
+    action = {"someNewAction": content}
+    assert process_action(action) is None
+    assert captures == [
+        (
+            "youtube-unknown-action-someNewAction",
+            {"action": action, "parsed_data": {"action_type": "some_new"}},
+            {"sample_limit": 10},
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("action", "expected", "missing"),
+    [
+        (
+            wrap(
+                "showLiveChatActionPanelAction.panelToShow.liveChatActionPanelRenderer",
+                {
                     "id": "panel-123",
                     "contents": {
                         "pollRenderer": {
                             "liveChatPollId": "poll-456",
-                            "header": {
-                                "pollHeaderRenderer": {
-                                    "pollQuestion": {"runs": [{"text": "Best color?"}]}
-                                }
-                            },
+                            "header": wrap(
+                                "pollHeaderRenderer.pollQuestion.runs",
+                                [{"text": "Best color?"}],
+                            ),
                             "choices": [
-                                {
-                                    "text": {"runs": [{"text": "Red"}]},
-                                    "voteRatio": 0.6,
-                                },
+                                {"text": {"runs": [{"text": "Red"}]}, "voteRatio": 0.6},
                                 {
                                     "text": {"runs": [{"text": "Blue"}]},
                                     "voteRatio": 0.4,
@@ -554,59 +479,42 @@ def test_process_action_show_live_chat_action_panel_poll() -> None:
                             ],
                         }
                     },
-                }
-            }
-        }
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "show_live_chat_action_panel"
-    assert finalized["message_type"] == "poll"
-    assert finalized["poll_id"] == "poll-456"
-    assert finalized["poll_question"] == "Best color?"
-    assert finalized["poll_choices"] == [
-        {"text": "Red", "vote_ratio": 0.6, "selected": False},
-        {"text": "Blue", "vote_ratio": 0.4, "selected": False},
-    ]
-
-
-def test_process_action_show_live_chat_action_panel_without_panel_is_empty_poll() -> (
-    None
-):
-    finalized = _finalize(process_action({"showLiveChatActionPanelAction": {}}))
-
-    assert finalized["action_type"] == "show_live_chat_action_panel"
-    assert finalized["message_type"] == "poll"
-    assert finalized["poll_choices"] == []
-    assert "poll_id" not in finalized
-
-
-def test_process_action_show_live_chat_action_panel_uses_panel_id_without_poll_id() -> (
-    None
-):
-    action = {
-        "showLiveChatActionPanelAction": {
-            "panelToShow": {
-                "liveChatActionPanelRenderer": {
+                },
+            ),
+            {
+                "action_type": "show_live_chat_action_panel",
+                "poll_id": "poll-456",
+                "poll_question": "Best color?",
+                "poll_choices": [
+                    {"text": "Red", "vote_ratio": 0.6, "selected": False},
+                    {"text": "Blue", "vote_ratio": 0.4, "selected": False},
+                ],
+            },
+            (),
+        ),
+        (
+            {"showLiveChatActionPanelAction": {}},
+            {
+                "action_type": "show_live_chat_action_panel",
+                "poll_choices": [],
+            },
+            ("poll_id",),
+        ),
+        (
+            wrap(
+                "showLiveChatActionPanelAction.panelToShow.liveChatActionPanelRenderer",
+                {
                     "id": "panel-123",
                     "contents": {"pollRenderer": {"choices": []}},
                 },
-            },
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-
-    assert finalized["message_type"] == "poll"
-    assert finalized["poll_id"] == "panel-123"
-    assert finalized["poll_choices"] == []
-
-
-def test_process_action_update_live_chat_poll() -> None:
-    action = {
-        "updateLiveChatPollAction": {
-            "pollToUpdate": {
-                "pollRenderer": {
+            ),
+            {"poll_id": "panel-123", "poll_choices": []},
+            (),
+        ),
+        (
+            wrap(
+                "updateLiveChatPollAction.pollToUpdate.pollRenderer",
+                {
                     "liveChatPollId": "poll-456",
                     "choices": [
                         {
@@ -614,35 +522,24 @@ def test_process_action_update_live_chat_poll() -> None:
                             "voteRatio": 0.7,
                             "selected": True,
                         },
-                        {
-                            "text": {"runs": [{"text": "Blue"}]},
-                            "voteRatio": 0.3,
-                        },
+                        {"text": {"runs": [{"text": "Blue"}]}, "voteRatio": 0.3},
                     ],
-                }
-            }
-        }
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "update_live_chat_poll"
-    assert finalized["message_type"] == "poll"
-    assert finalized["poll_id"] == "poll-456"
-    assert finalized["poll_choices"][0]["vote_ratio"] == 0.7
-    assert finalized["poll_choices"][0]["selected"] is True
-
-
-def test_process_action_close_live_chat_action_panel() -> None:
-    action = {
-        "closeLiveChatActionPanelAction": {
-            "targetPanelId": "panel-123",
-        }
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "close_live_chat_action_panel"
-    assert finalized["message_type"] == "poll_closed_event"
-    assert finalized["poll_id"] == "panel-123"
+                },
+            ),
+            {
+                "action_type": "update_live_chat_poll",
+                "poll_id": "poll-456",
+                "poll_choices.0.vote_ratio": 0.7,
+                "poll_choices.0.selected": True,
+            },
+            (),
+        ),
+    ],
+)
+def test_poll_actions(action, expected, missing):
+    finalized = _finalize(action)
+    _assert_fields(finalized, {"message_type": "poll", **expected})
+    assert all(key not in finalized for key in missing)
 
 
 @pytest.mark.parametrize(
@@ -653,169 +550,119 @@ def test_process_action_close_live_chat_action_panel() -> None:
         ("UNKNOWN_NEW_MODE", "mode_change_message"),
     ],
 )
-def test_process_action_mode_change(icon, message_type) -> None:
-    action = _item_action(
-        "liveChatModeChangeMessageRenderer",
-        {
-            "id": "mode-1",
-            "icon": {"iconType": icon},
-            "timestampUsec": "9",
-        },
-    )
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["message_type"] == message_type
-
-
-def test_process_action_paid_sticker_with_pdg_logging_directives(diagnostics) -> None:
-    logs, captures = diagnostics("actions_handlers_validation")
-
-    action = {
-        "addChatItemAction": {
-            "item": {
-                "liveChatPaidStickerRenderer": {
-                    "id": "sticker-1",
-                    "authorExternalChannelId": "UC123",
-                    "authorName": {"simpleText": "@viewer"},
-                    "purchaseAmountText": {"simpleText": "$1.99"},
-                    "sticker": {
-                        "thumbnails": [
-                            {
-                                "url": "https://img.example/sticker=s64",
-                                "width": 64,
-                                "height": 64,
-                            },
-                        ],
-                    },
-                    "timestampUsec": "12",
-                    "pdgPurchasedNoveltyLoggingDirectives": {
-                        "trackingParams": "opaque",
-                    },
-                },
+def test_process_action_mode_change(icon, message_type):
+    finalized = _finalize(
+        item_action(
+            "liveChatModeChangeMessageRenderer",
+            {
+                "id": "mode-1",
+                "icon": {"iconType": icon},
+                "timestampUsec": "9",
             },
-        },
-    }
-
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "add_chat_item"
-    assert finalized["message_type"] == "paid_sticker"
-    assert finalized["message_id"] == "sticker-1"
-    assert finalized["author"] == {"id": "UC123", "name": "@viewer"}
-    assert finalized["money"] == {
-        "amount": 1.99,
-        "currency": "USD",
-        "currency_symbol": "$",
-        "text": "$1.99",
-    }
-    assert finalized["sticker_images"][0]["id"] == "source"
-    assert finalized["sticker_images"][1]["id"] == "64x64"
-    assert captures == []
-    assert logs == []
+        )
+    )
+    assert finalized["message_type"] == message_type
 
 
 @pytest.mark.parametrize(
     ("data", "renderer"),
-    [({}, {}), ({"timestamp": 1}, {"unknownField2026XYZ": "value"})],
-    ids=["empty-data", "unknown-keys"],
+    [
+        ({}, {}),
+        ({"timestamp": 1}, {"unknownField2026XYZ": "value"}),
+    ],
 )
-def test_validate_and_finalize_message_continues_with_text_type(data, renderer) -> None:
+def test_validate_and_finalize_message_continues_with_text_type(data, renderer):
     result = validate_and_finalize_message(
         data,
         {"liveChatTextMessageRenderer": renderer},
         "liveChatTextMessageRenderer",
         "addChatItemAction",
     )
-    assert result is not None
-    assert result.get("message_type") == "text_message"
+    assert result["message_type"] == "text_message"
 
 
-def test_validate_and_finalize_message_without_message_type_returns_none(diagnostics):
+@pytest.mark.parametrize(
+    ("message_type", "item", "expected_logs"),
+    [
+        (
+            None,
+            {"someRenderer": {}},
+            [("No message type", "Action type: addChatItemAction")],
+        ),
+        (
+            "liveChatPlaceholderItemRenderer",
+            {"liveChatPlaceholderItemRenderer": {}},
+            None,
+        ),
+    ],
+)
+def test_finalize_missing_or_ignored_message_type(
+    diagnostics, message_type, item, expected_logs
+):
     logs, _ = diagnostics("actions_handlers_validation")
-
-    result = validate_and_finalize_message(
-        {"timestamp": 1},
-        {"someRenderer": {}},
-        None,
-        "addChatItemAction",
+    assert (
+        validate_and_finalize_message(
+            {"timestamp": 1}, item, message_type, "addChatItemAction"
+        )
+        is None
     )
-
-    assert result is None
-    assert logs == [("No message type", "Action type: addChatItemAction")]
-
-
-def test_validate_and_finalize_message_known_ignore_message_type_returns_none() -> None:
-    """Line 218: messages in _KNOWN_IGNORE_MESSAGE_TYPES are dropped."""
-    result = validate_and_finalize_message(
-        {"timestamp": 1},
-        {"liveChatPlaceholderItemRenderer": {}},
-        "liveChatPlaceholderItemRenderer",
-        "addChatItemAction",
-    )
-    assert result is None
+    if expected_logs is not None:
+        assert logs == expected_logs
 
 
-def test_validate_and_finalize_message_unknown_message_type_does_not_throw() -> None:
-    action = {
-        "replayChatItemAction": {
-            "videoOffsetTimeMsec": "1",
-            "actions": [
-                _item_action("liveChatMadeUpRenderer", _renderer_with_timestamp("8"))
-            ],
-        },
-    }
-    finalized = _finalize(process_action(action))
-    assert finalized is not None
-    assert finalized["action_type"] == "add_chat_item"
-    # Normalized from "liveChatMadeUpRenderer" -> "made_up"
-    assert finalized["message_type"] == "made_up"
-
-
-def test_validate_and_finalize_message_missing_keys_captures_debug_sample(diagnostics):
-    _, captures = diagnostics("actions_handlers_validation")
-
-    result = validate_and_finalize_message(
-        {"timestamp": 1},
-        {"liveChatMadeUpRenderer": {"unknownField2026XYZ": "value"}},
-        "liveChatMadeUpRenderer",
-        "addChatItemAction",
-    )
-
-    assert result is not None
-    assert captures[0] == (
-        "youtube-missing-keys-liveChatMadeUpRenderer",
+def test_unknown_replay_message_type_does_not_throw():
+    finalized = _finalize(
         {
-            "original_item": {
-                "liveChatMadeUpRenderer": {"unknownField2026XYZ": "value"},
-            },
-            "original_action_type": "addChatItemAction",
-            "original_message_type": "liveChatMadeUpRenderer",
-            "missing_keys": ["unknownField2026XYZ"],
-        },
-        {"sample_limit": 10},
+            "replayChatItemAction": {
+                "videoOffsetTimeMsec": "1",
+                "actions": [
+                    item_action("liveChatMadeUpRenderer", {"timestampUsec": "8"})
+                ],
+            }
+        }
+    )
+    _assert_fields(
+        finalized, {"action_type": "add_chat_item", "message_type": "made_up"}
     )
 
 
-def test_validate_and_finalize_message_unknown_message_type_captures_debug_sample(
-    diagnostics,
+@pytest.mark.parametrize(
+    ("renderer", "index", "label", "details"),
+    [
+        (
+            {"unknownField2026XYZ": "value"},
+            0,
+            "missing-keys",
+            {
+                "missing_keys": ["unknownField2026XYZ"],
+            },
+        ),
+        (
+            {},
+            -1,
+            "unknown-message-type",
+            {
+                "data": {"timestamp": 1, "message_type": "made_up"},
+            },
+        ),
+    ],
+)
+def test_finalize_unknown_renderer_debug_samples(
+    diagnostics, renderer, index, label, details
 ):
     _, captures = diagnostics("actions_handlers_validation")
-
+    item = {"liveChatMadeUpRenderer": renderer}
     result = validate_and_finalize_message(
-        {"timestamp": 1},
-        {"liveChatMadeUpRenderer": {}},
-        "liveChatMadeUpRenderer",
-        "addChatItemAction",
+        {"timestamp": 1}, item, "liveChatMadeUpRenderer", "addChatItemAction"
     )
-
     assert result is not None
-    assert captures[-1] == (
-        "youtube-unknown-message-type-liveChatMadeUpRenderer",
+    assert captures[index] == (
+        f"youtube-{label}-liveChatMadeUpRenderer",
         {
-            "data": {"timestamp": 1, "message_type": "made_up"},
-            "original_item": {"liveChatMadeUpRenderer": {}},
+            "original_item": item,
             "original_action_type": "addChatItemAction",
             "original_message_type": "liveChatMadeUpRenderer",
+            **details,
         },
         {"sample_limit": 10},
     )

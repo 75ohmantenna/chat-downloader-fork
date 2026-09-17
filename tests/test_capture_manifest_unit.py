@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 
 import pytest
 
 from chat_downloader.runtime.runner import execute_run
-from tests.test_capture_checkpoint_unit import Downloader, message, parameters
+from tests.test_capture_checkpoint_unit import (
+    Downloader,
+    capture_params,  # noqa: F401 - pytest discovers this imported fixture
+    load_json,
+    message,
+)
 
 
 @pytest.fixture
@@ -33,16 +37,15 @@ def manifest(tmp_path):
 
     def run(downloader=Downloader, **kwargs):
         result = execute_run(downloader, run_manifest=str(path), **kwargs)
-        return result, json.loads(path.read_text())
+        return result, load_json(path)
 
     return run
 
 
 @pytest.mark.parametrize("resumed", [False, True], ids=["fresh", "exhausted-resume"])
 def test_manifest_certifies_closed_files_and_completed_run(
-    tmp_path, resumed, manifest, chat_state
+    tmp_path, resumed, manifest, chat_state, params
 ):
-    params = parameters(tmp_path)
     if resumed:
         assert execute_run(Downloader, **params).success
     result, report = manifest(**params, require_complete=True)
@@ -60,8 +63,9 @@ def test_manifest_certifies_closed_files_and_completed_run(
 
 
 @pytest.mark.parametrize("checkpoint", [False, True], ids=["plain", "checkpointed"])
-def test_require_complete_rejects_limit_but_preserves_resume(tmp_path, checkpoint):
-    params = parameters(tmp_path)
+def test_require_complete_rejects_limit_but_preserves_resume(
+    tmp_path, checkpoint, params
+):
     if not checkpoint:
         params.pop("resume")
     count = 2 if checkpoint else 4
@@ -72,26 +76,26 @@ def test_require_complete_rejects_limit_but_preserves_resume(tmp_path, checkpoin
     assert result.parity_status == "passed"
     assert result.termination_reason == "message_limit"
     if checkpoint:
-        assert json.loads((tmp_path / "checkpoint.json").read_text())["total"] == count
+        assert load_json(tmp_path / "checkpoint.json")["total"] == count
         assert execute_run(Downloader, **params, require_complete=True).success
 
 
 @pytest.mark.parametrize(
-    "state",
+    ("key", "value"),
     [
-        {"termination_reason": "timeout"},
-        {"termination_reason": "inactivity_timeout"},
-        {"history_complete": False},
-        {"parse_error": 1},
-        {"malformed_timestamp": 1},
-        {"malformed_object": 1},
+        ("termination_reason", "timeout"),
+        ("termination_reason", "inactivity_timeout"),
+        ("history_complete", False),
+        ("parse_error", 1),
+        ("malformed_timestamp", 1),
+        ("malformed_object", 1),
     ],
 )
 def test_completeness_does_not_certify_partial_or_lossy_replay(
-    tmp_path, chat_state, state
+    params, chat_state, key, value
 ):
-    chat_state.update(state)
-    result = execute_run(Downloader, **parameters(tmp_path), require_complete=True)
+    chat_state[key] = value
+    result = execute_run(Downloader, **params, require_complete=True)
     assert not result.success
     assert result.parity_status == "passed"
 
@@ -108,15 +112,9 @@ def test_empty_manifest_does_not_hash_stale_outputs(tmp_path, monkeypatch, manif
 
 @pytest.mark.parametrize(
     "target",
-    [
-        "chat.jsonl",
-        "checkpoint.json",
-        "checkpoint.json.lock",
-        "video.jsonl",
-    ],
+    ["chat.jsonl", "checkpoint.json", "checkpoint.json.lock", "video.jsonl"],
 )
-def test_manifest_cannot_alias_outputs_or_checkpoint(tmp_path, target):
-    params = parameters(tmp_path)
+def test_manifest_cannot_alias_outputs_or_checkpoint(tmp_path, target, params):
     if target == "video.jsonl":
         params.pop("resume")
         params.pop("verify_output")
@@ -161,15 +159,15 @@ def test_failed_metadata_still_has_failure_manifest(monkeypatch, manifest):
 
 
 def test_interrupted_manifest_reports_failure_and_written_prefix(
-    tmp_path, monkeypatch, manifest
+    tmp_path, monkeypatch, manifest, params
 ):
     monkeypatch.setattr(Downloader, "records", [message(1, 10)])
     monkeypatch.setattr(Downloader, "failure", KeyboardInterrupt())
-    result, report = manifest(**parameters(tmp_path))
+    result, report = manifest(**params)
     assert not result.success
-    assert json.loads((tmp_path / "checkpoint.json").read_text())["total"] == 1
+    assert load_json(tmp_path / "checkpoint.json")["total"] == 1
     monkeypatch.undo()
-    assert execute_run(Downloader, **parameters(tmp_path)).message_count == 3
+    assert execute_run(Downloader, **params).message_count == 3
     assert result.interrupted
     assert report["termination_reason"] == "interrupted"
     assert not report["replay_complete"]
@@ -177,20 +175,19 @@ def test_interrupted_manifest_reports_failure_and_written_prefix(
 
 
 def test_known_loss_survives_resume_without_reappearing_in_later_pages(
-    tmp_path, chat_state
+    tmp_path, chat_state, params
 ):
     chat_state["parse_error"] = 1
-    params = parameters(tmp_path)
     first = execute_run(Downloader, **params, max_messages=2)
     assert first.success
-    state = json.loads((tmp_path / "checkpoint.json").read_text())
+    state = load_json(tmp_path / "checkpoint.json")
     assert state["record_loss"]
     assert not state["completed"]
     chat_state.clear()
     second = execute_run(Downloader, **params, require_complete=True)
     assert not second.success
     assert second.parity_status == "passed"
-    assert json.loads((tmp_path / "checkpoint.json").read_text())["record_loss"]
+    assert load_json(tmp_path / "checkpoint.json")["record_loss"]
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="POSIX special-file contract")

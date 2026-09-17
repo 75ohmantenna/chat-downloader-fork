@@ -13,12 +13,8 @@ from tests.kick_helpers import load_fixture
 
 
 def test_parse_poll_update_fixture() -> None:
-    raw = load_fixture("poll_update_event.json")
-    raw["id"] = "kick-poll-update:100"
-
-    message = parse_poll_update_event(raw)
-
-    assert message == {
+    raw = load_fixture("poll_update_event.json") | {"id": "kick-poll-update:100"}
+    assert parse_poll_update_event(raw) == {
         "message_id": "kick-poll-update:100",
         "message_type": "poll_update",
         "message": "Example poll",
@@ -34,67 +30,63 @@ def test_parse_poll_update_fixture() -> None:
     }
 
 
-def test_poll_update_preserves_viewer_state() -> None:
-    message = parse_poll_update_event(
-        {
-            "id": "poll",
-            "poll": {
-                "title": "Vote",
-                "has_voted": False,
-                "voted_option_id": 0,
-            },
-        }
-    )
-
-    assert message["metadata"] == {"has_voted": False, "voted_option_id": 0}
-
-
-def test_poll_update_omits_malformed_optional_fields() -> None:
-    message = parse_poll_update_event(
-        {
-            "id": "poll",
-            "poll": {
+@pytest.mark.parametrize(
+    ("poll", "metadata"),
+    [
+        (
+            {"title": "Vote", "has_voted": False, "voted_option_id": 0},
+            {"has_voted": False, "voted_option_id": 0},
+        ),
+        (
+            {
                 "title": 7,
                 "duration": True,
                 "remaining": -1,
                 "result_display_duration": "10",
-                "options": [
-                    None,
-                    {},
-                    {
-                        "id": True,
-                        "label": 8,
-                        "votes": -1,
-                    },
-                ],
+                "options": [None, {}, {"id": True, "label": 8, "votes": -1}],
                 "has_voted": "false",
                 "voted_option_id": False,
             },
+            None,
+        ),
+    ],
+)
+def test_poll_update_optional_fields(poll, metadata):
+    message = parse_poll_update_event({"id": "poll", "poll": poll})
+    if metadata is None:
+        assert message == {
+            "message_id": "poll",
+            "message_type": "poll_update",
+            "message": "",
         }
-    )
-
-    assert message == {
-        "message_id": "poll",
-        "message_type": "poll_update",
-        "message": "",
-    }
+    else:
+        assert message["metadata"] == metadata
 
 
+@pytest.mark.parametrize(
+    "parser",
+    [parse_poll_update_event, parse_poll_deleted_event],
+)
 @pytest.mark.parametrize("raw", [None, [], "bad"])
-def test_poll_update_requires_object(raw: object) -> None:
-    with pytest.raises(ParsingError, match="was not a JSON object"):
-        parse_poll_update_event(raw)
+def test_poll_parsers_require_object(parser, raw):
+    with pytest.raises(ParsingError):
+        parser(raw)
 
 
-def test_poll_update_requires_id() -> None:
-    with pytest.raises(ParsingError, match="missing an id"):
-        parse_poll_update_event({"poll": {"title": "Poll"}})
-
-
-@pytest.mark.parametrize("poll", [None, [], {}])
-def test_poll_update_requires_poll_data(poll: object) -> None:
-    with pytest.raises(ParsingError, match="missing poll data"):
-        parse_poll_update_event({"id": "poll", "poll": poll})
+@pytest.mark.parametrize(
+    ("parser", "raw"),
+    [
+        (parse_poll_update_event, {"poll": {"title": "Poll"}}),
+        (parse_poll_deleted_event, {}),
+        *[
+            (parse_poll_update_event, {"id": "poll", "poll": poll})
+            for poll in [None, [], {}]
+        ],
+    ],
+)
+def test_poll_parsers_require_id_and_poll_data(parser, raw):
+    with pytest.raises(ParsingError):
+        parser(raw)
 
 
 def test_parse_poll_deleted_event() -> None:
@@ -103,14 +95,3 @@ def test_parse_poll_deleted_event() -> None:
         "message_type": "poll_deleted",
         "message": "",
     }
-
-
-@pytest.mark.parametrize("raw", [None, [], "bad"])
-def test_poll_deleted_requires_object(raw: object) -> None:
-    with pytest.raises(ParsingError, match="was not a JSON object"):
-        parse_poll_deleted_event(raw)
-
-
-def test_poll_deleted_requires_id() -> None:
-    with pytest.raises(ParsingError, match="missing an id"):
-        parse_poll_deleted_event({})

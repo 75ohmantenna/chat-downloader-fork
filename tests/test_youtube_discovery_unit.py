@@ -2,266 +2,204 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pytest
 
 from chat_downloader.errors import InvalidParameter, NoVideos, UserNotFound
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.youtube.chat_users_router import (
-    YouTubeChatUsersRouterMixin,
-)
-from chat_downloader.sites.youtube.discovery import (
-    YouTubeDiscoveryMixin,
-)
+from chat_downloader.sites.youtube import discovery, discovery_playlists, helpers
+from chat_downloader.sites.youtube.chat_users_router import YouTubeChatUsersRouterMixin
+from chat_downloader.sites.youtube.discovery import YouTubeDiscoveryMixin
 from chat_downloader.sites.youtube.discovery_playlists import (
     YouTubePlaylistDiscoveryMixin,
 )
+from tests.youtube_third_helpers import returns, wrap
+
+PLAYLIST = "https://www.youtube.com/playlist?list=PL123"
 
 
 def _browse(tabs):
-    return {"contents": {"twoColumnBrowseResultsRenderer": {"tabs": tabs}}}
+    return wrap("contents.twoColumnBrowseResultsRenderer.tabs", tabs)
 
 
-def _tab(content, *, title="Videos", selected=True):
+def _tab(content, title="Videos", selected=True):
     return {"tabRenderer": {"selected": selected, "title": title, "content": content}}
 
 
 def _rich_video(video_id):
-    return {"richItemRenderer": {"content": {"videoRenderer": {"videoId": video_id}}}}
+    return wrap("richItemRenderer.content.videoRenderer.videoId", video_id)
 
 
 def _continuation(token):
-    return {
-        "continuationItemRenderer": {
-            "continuationEndpoint": {"continuationCommand": {"token": token}},
-        },
-    }
+    return wrap(
+        "continuationItemRenderer.continuationEndpoint.continuationCommand.token", token
+    )
 
 
 def _shelf(url):
-    return {
-        "shelfRenderer": {
-            "endpoint": {"commandMetadata": {"webCommandMetadata": {"url": url}}},
-        },
-    }
+    return wrap("shelfRenderer.endpoint.commandMetadata.webCommandMetadata.url", url)
 
 
 def _section(items):
-    return {
-        "sectionListRenderer": {
-            "contents": [{"itemSectionRenderer": {"contents": items}}],
-        },
-    }
+    return wrap(
+        "sectionListRenderer.contents", [wrap("itemSectionRenderer.contents", items)]
+    )
 
 
 def _rich_section(content):
+    return wrap(
+        "richGridRenderer.contents", [wrap("richSectionRenderer.content", content)]
+    )
+
+
+def _append(items, key="onResponseReceivedActions"):
+    return {key: [wrap("appendContinuationItemsAction.continuationItems", items)]}
+
+
+def _playlist_response(token):
     return {
-        "richGridRenderer": {
-            "contents": [{"richSectionRenderer": {"content": content}}],
-        },
+        **_append([]),
+        **wrap(
+            "continuationContents.playlistVideoListContinuation.contents",
+            [_continuation(token)],
+        ),
     }
 
 
 def _patch_browse(monkeypatch, tabs, *, ytcfg=None, context=None):
-    from chat_downloader.sites.youtube import discovery
-
-    monkeypatch.setattr(
-        discovery,
-        "_get_initial_info",
-        lambda *_a, **_k: (
-            _browse(tabs),
-            ytcfg if ytcfg is not None else {"INNERTUBE_API_KEY": "key"},
-            {},
-        ),
+    returns(
+        monkeypatch,
+        "discovery._get_initial_info",
+        (_browse(tabs), {"INNERTUBE_API_KEY": "key"} if ytcfg is None else ytcfg, {}),
     )
     if context is not None:
+        returns(monkeypatch, "discovery._get_innertube_context", context)
+
+
+def _patch_playlist(monkeypatch, items, *, parse=False):
+    returns(
+        monkeypatch,
+        "discovery_playlists._get_rendered_content",
+        wrap("playlistVideoListRenderer.contents", items),
+    )
+    returns(
+        monkeypatch,
+        "discovery_playlists._get_initial_info",
+        ({}, {"INNERTUBE_API_KEY": "key"}, {}),
+    )
+    returns(
+        monkeypatch,
+        "discovery_playlists._get_innertube_context",
+        {"client": {"visitorData": "visitor"}},
+    )
+    if parse:
         monkeypatch.setattr(
-            discovery,
-            "_get_innertube_context",
-            lambda _ytcfg: context,
+            discovery_playlists, "_parse_video", lambda v: {"video_id": v["videoId"]}
         )
 
 
 @pytest.fixture(autouse=True)
-def _disable_browse_cookie_auth(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers._generate_sapisidhash_header",
-        lambda *_args, **_kwargs: None,
-    )
+def _disable_browse_cookie_auth(monkeypatch):
+    returns(monkeypatch, "helpers._generate_sapisidhash_header", None)
 
 
-class _DummyMatch:
-    def __init__(self, match_id: str, match_type: str | None) -> None:
-        self._groups = {"id": match_id, "type": match_type}
-
-    def group(self, name: str) -> str | None:
-        return self._groups[name]
-
-
-def get_user_videos(owner, **kwargs):
-    """Invoke the real mixin method on lightweight discovery test doubles."""
-    return YouTubeDiscoveryMixin.get_user_videos(owner, **kwargs)
-
-
-class _DummyDiscoveryBase(YouTubeDiscoveryMixin):
+class _Discovery(YouTubeDiscoveryMixin):
     _session_get = object()
     _session_post = object()
 
     @staticmethod
     def _coerce_chat_request(params):
-        if isinstance(params, ChatRequest):
-            return params
-        return ChatRequest.from_kwargs(**params)
+        return (
+            params
+            if isinstance(params, ChatRequest)
+            else ChatRequest.from_kwargs(**params)
+        )
 
 
-class DummyPlaylistDiscovery(YouTubePlaylistDiscoveryMixin):
+class _Playlist(YouTubePlaylistDiscoveryMixin):
     _session_get = object()
     _session_post = object()
-
-
-class _DummyUserRouter(YouTubeChatUsersRouterMixin):
-    def get_chat_by_channel_id(self, match_id, params):
-        return ("channel", match_id, params)
-
-    def get_chat_by_user_id(self, match_id, params):
-        return ("user", match_id, params)
-
-    def get_chat_by_custom_username(self, match_id, params):
-        return ("custom", match_id, params)
-
-    def get_chat_by_handle(self, match_id, params):
-        return ("handle", match_id, params)
 
 
 @pytest.mark.parametrize(
     ("selector", "kind"),
     [
-        ("channel/", "channel"),
-        ("user/", "user"),
-        ("c/", "custom"),
-        (None, "custom"),
+        ("channel/", "channel_id"),
+        ("user/", "user_id"),
+        ("c/", "custom_username"),
+        (None, "custom_username"),
         ("@/", "handle"),
+        ("unsupported/", None),
     ],
 )
-def test_user_router_dispatches_supported_user_types(selector, kind) -> None:
-    router = _DummyUserRouter()
+def test_user_router_dispatch(selector, kind):
+    router = YouTubeChatUsersRouterMixin()
     request = ChatRequest(url="https://www.youtube.com/@example/live")
+    match = SimpleNamespace(group=lambda name: "abc" if name == "id" else selector)
+    if kind is None:
+        with pytest.raises(ValueError, match="Invalid user_type"):
+            router._get_chat_by_user(match, request)
+    else:
+        handler = Mock(return_value=(kind, "abc", request))
+        setattr(router, f"get_chat_by_{kind}", handler)
+        assert router._get_chat_by_user(match, request) == (kind, "abc", request)
+        handler.assert_called_once_with("abc", request)
 
-    assert router._get_chat_by_user(_DummyMatch("abc", selector), request) == (
-        kind,
-        "abc",
-        request,
-    )
+
+@pytest.mark.parametrize(
+    ("kwargs", "match"),
+    [
+        ({}, "No user type specified"),
+        ({"channel_id": "abc", "video_type": "unknown"}, "Invalid argument"),
+        *[
+            ({"channel_id": "abc", "video_type": v}, "non-empty string")
+            for v in ("", None, 123)
+        ],
+        ({"handle": "@"}, "Invalid YouTube handle"),
+    ],
+)
+def test_invalid_discovery_selectors(kwargs, match):
+    with pytest.raises(InvalidParameter, match=match):
+        list(YouTubeDiscoveryMixin.get_user_videos(object(), **kwargs))
 
 
-def test_user_router_rejects_unknown_user_type() -> None:
-    router = _DummyUserRouter()
+@pytest.mark.parametrize(
+    "params", [None, {"url": "https://www.youtube.com/channel/abc"}]
+)
+def test_discovery_coerces_only_supplied_params(monkeypatch, params):
+    owner = _Discovery()
+    owner._coerce_chat_request = Mock(side_effect=lambda value: ChatRequest(**value))
+    _patch_browse(monkeypatch, [_tab({})])
+    assert list(owner.get_user_videos(channel_id="abc", params=params)) == []
+    if params is None:
+        owner._coerce_chat_request.assert_not_called()
+    else:
+        owner._coerce_chat_request.assert_called_once_with(params)
 
-    with pytest.raises(ValueError, match="Invalid user_type"):
-        router._get_chat_by_user(
-            _DummyMatch("abc", "unsupported/"),
-            ChatRequest(url="https://www.youtube.com/unsupported/abc"),
+
+@pytest.mark.parametrize(
+    ("tabs", "error", "match"),
+    [
+        ([], UserNotFound, "Unable to find user"),
+        ([_tab({}, "Streams")], NoVideos, "has no videos of the requested type"),
+    ],
+)
+def test_missing_requested_tab(monkeypatch, tabs, error, match):
+    _patch_browse(monkeypatch, tabs, ytcfg={})
+    with pytest.raises(error, match=match):
+        list(_Discovery().get_user_videos(channel_id="abc"))
+
+
+def test_tab_selection_skips_malformed_entries():
+    content = wrap("richGridRenderer.contents", [])
+    assert (
+        discovery._select_videos_tab(
+            _browse(["malformed", None, _tab(content)]), "channel", "videos"
         )
-
-
-def test_get_user_videos_requires_user_selector() -> None:
-    with pytest.raises(InvalidParameter, match="No user type specified"):
-        list(get_user_videos(object()))
-
-
-def test_channel_discovery_mixin_coerces_dict_params(monkeypatch) -> None:
-    captured = []
-
-    class DummyDiscovery(YouTubeDiscoveryMixin):
-        _session_get = object()
-        _session_post = object()
-
-        def _coerce_chat_request(self, params):
-            request = ChatRequest(**params)
-            captured.append(request)
-            return request
-
-    _patch_browse(monkeypatch, [_tab({}, title="Videos", selected=True)])
-
-    result = list(
-        DummyDiscovery().get_user_videos(
-            channel_id="abc",
-            params={"url": "https://www.youtube.com/channel/abc/videos"},
-        ),
+        == content
     )
-
-    assert result == []
-    assert len(captured) == 1
-    assert isinstance(captured[0], ChatRequest)
-
-
-def test_channel_discovery_mixin_passes_none_params_without_coercion(
-    monkeypatch,
-) -> None:
-    class DummyDiscovery(YouTubeDiscoveryMixin):
-        _session_get = object()
-        _session_post = object()
-
-        def _coerce_chat_request(self, params):
-            raise AssertionError("should not coerce None")
-
-    _patch_browse(monkeypatch, [_tab({}, title="Videos", selected=True)])
-
-    assert list(DummyDiscovery().get_user_videos(channel_id="abc", params=None)) == []
-
-
-def test_get_user_videos_rejects_invalid_video_type() -> None:
-    with pytest.raises(
-        InvalidParameter, match="Invalid argument passed for video_type"
-    ):
-        list(get_user_videos(object(), channel_id="abc", video_type="unknown"))
-
-
-@pytest.mark.parametrize("video_type", ["", None, 123])
-def test_get_user_videos_rejects_empty_or_non_string_video_type(video_type) -> None:
-    with pytest.raises(InvalidParameter, match="non-empty string"):
-        list(get_user_videos(object(), channel_id="abc", video_type=video_type))
-
-
-def test_get_user_videos_rejects_empty_normalized_handle() -> None:
-    with pytest.raises(InvalidParameter, match="Invalid YouTube handle"):
-        list(get_user_videos(object(), handle="@"))
-
-
-def test_get_user_videos_raises_user_not_found(monkeypatch) -> None:
-
-    _patch_browse(monkeypatch, [], ytcfg={})
-
-    with pytest.raises(UserNotFound, match="Unable to find user"):
-        list(get_user_videos(_DummyDiscoveryBase(), channel_id="abc"))
-
-
-def test_get_user_videos_raises_no_videos_when_selected_tab_mismatch(
-    monkeypatch,
-) -> None:
-
-    _patch_browse(monkeypatch, [_tab({}, title="Streams", selected=True)])
-
-    with pytest.raises(NoVideos, match="has no videos of the requested type"):
-        list(
-            get_user_videos(
-                _DummyDiscoveryBase(), channel_id="abc", video_type="videos"
-            )
-        )
-
-
-def test_tab_selection_skips_malformed_entries() -> None:
-    from chat_downloader.sites.youtube.discovery import _select_videos_tab
-
-    content = {"richGridRenderer": {"contents": []}}
-    yt_info = _browse(
-        [
-            "malformed",
-            None,
-            _tab(content, title="Videos", selected=True),
-        ]
-    )
-
-    assert _select_videos_tab(yt_info, "channel", "videos") == content
 
 
 @pytest.mark.parametrize("playlist", [False, True])
@@ -269,222 +207,98 @@ def test_tab_selection_skips_malformed_entries() -> None:
     ("prefix", "video_id"),
     [
         (
-            [{"continuationItemRenderer": {"continuationEndpoint": {}}}],
+            [wrap("continuationItemRenderer.continuationEndpoint", {})],
             "after-empty-token",
         ),
         (["malformed", None, {"unknownRenderer": {}}], "after-unknown"),
     ],
 )
 def test_item_processing_skips_invalid_entries(monkeypatch, playlist, prefix, video_id):
-    from chat_downloader.sites.youtube import discovery, discovery_playlists
-
     module = discovery_playlists if playlist else discovery
-    monkeypatch.setattr(
-        module,
-        "_parse_video",
-        lambda video: {"video_id": video["videoId"]},
+    monkeypatch.setattr(module, "_parse_video", lambda v: {"video_id": v["videoId"]})
+    process = module._extract_playlist_items if playlist else module._process_page_items
+    item = (
+        wrap("playlistVideoRenderer.videoId", video_id)
+        if playlist
+        else _rich_video(video_id)
     )
-    if playlist:
-        process = module._extract_playlist_items
-        item = {"playlistVideoRenderer": {"videoId": video_id}}
-    else:
-        process = module._process_page_items
-        item = _rich_video(video_id)
     assert process([*prefix, item]) == ([{"video_id": video_id}], None)
 
 
-def test_get_user_videos_returns_empty_when_no_selected_tab_has_content(
-    monkeypatch,
-) -> None:
-
+def test_no_selected_tab_content(monkeypatch):
     _patch_browse(
         monkeypatch,
         [
-            _tab(
-                {"richGridRenderer": {"contents": []}}, title="Videos", selected=False
-            ),
-            _tab(
-                {"richGridRenderer": {"contents": []}}, title="Shorts", selected=False
-            ),
+            _tab(wrap("richGridRenderer.contents", []), title, False)
+            for title in ("Videos", "Shorts")
         ],
     )
-
-    assert (
-        list(
-            get_user_videos(
-                _DummyDiscoveryBase(), channel_id="abc", video_type="videos"
-            )
-        )
-        == []
-    )
+    assert list(_Discovery().get_user_videos(channel_id="abc")) == []
 
 
-def test_get_user_videos_yields_items_from_initial_page_and_continuation(
-    monkeypatch,
-) -> None:
-
+def test_initial_page_and_continuation(monkeypatch):
     request = ChatRequest(url="https://www.youtube.com/channel/abc/videos")
-    continuation_calls = []
-
     _patch_browse(
         monkeypatch,
         [
             _tab(
-                {
-                    "richGridRenderer": {
-                        "contents": [
-                            _rich_video("one"),
-                            {
-                                "richItemRenderer": {
-                                    "content": {
-                                        "lockupViewModel": {
-                                            "contentId": "lockup-one",
-                                        },
-                                    },
-                                },
-                            },
-                            _continuation("cont-1"),
-                        ],
-                    },
-                },
-                title="Videos",
-                selected=True,
+                wrap(
+                    "richGridRenderer.contents",
+                    [
+                        _rich_video("one"),
+                        wrap(
+                            "richItemRenderer.content.lockupViewModel.contentId",
+                            "lockup-one",
+                        ),
+                        _continuation("cont-1"),
+                    ],
+                )
             )
         ],
+        context={"client": {"visitorData": "visitor"}},
     )
-
-    def fake_get_continuation_info(_url, _session_post, params, **kwargs):
-        continuation_calls.append((params, kwargs["json"]["continuation"]))
-        return {
-            "onResponseReceivedActions": [
-                {
-                    "appendContinuationItemsAction": {
-                        "continuationItems": [
-                            _rich_video("two"),
-                        ],
-                    },
-                },
-            ],
-        }
-
+    fetch = Mock(return_value=_append([_rich_video("two")]))
+    monkeypatch.setattr(helpers, "_get_continuation_info", fetch)
     monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers._get_continuation_info",
-        fake_get_continuation_info,
+        discovery,
+        "_parse_video",
+        lambda v: {"video_id": v.get("videoId") or v["lockupViewModel"]["contentId"]},
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery._get_innertube_context",
-        lambda _ytcfg: {"client": {"visitorData": "visitor"}},
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery._parse_video",
-        lambda video: {
-            "video_id": video.get("videoId") or video["lockupViewModel"]["contentId"]
-        },
-    )
-
-    videos = list(
-        get_user_videos(
-            _DummyDiscoveryBase(),
-            channel_id="abc",
-            video_type="videos",
-            params=request,
-        ),
-    )
-
-    assert videos == [
-        {"video_id": "one"},
-        {"video_id": "lockup-one"},
-        {"video_id": "two"},
+    assert list(_Discovery().get_user_videos(channel_id="abc", params=request)) == [
+        {"video_id": v} for v in ("one", "lockup-one", "two")
     ]
-    assert continuation_calls == [(request, "cont-1")]
+    assert fetch.call_args.args[2] is request
+    assert fetch.call_args.kwargs["json"]["continuation"] == "cont-1"
 
 
-def _patch_playlist(monkeypatch, items, *, parse=False):
-    from chat_downloader.sites.youtube import discovery_playlists
-
-    monkeypatch.setattr(
-        discovery_playlists,
-        "_get_rendered_content",
-        lambda _yt_info, tab_index=0: {
-            "playlistVideoListRenderer": {"contents": items}
-        },
-    )
-    monkeypatch.setattr(
-        discovery_playlists,
-        "_get_initial_info",
-        lambda *_args, **_kwargs: ({}, {"INNERTUBE_API_KEY": "key"}, {}),
-    )
-    monkeypatch.setattr(
-        discovery_playlists,
-        "_get_innertube_context",
-        lambda _ytcfg: {"client": {"visitorData": "visitor"}},
-    )
-    if parse:
-        monkeypatch.setattr(
-            discovery_playlists,
-            "_parse_video",
-            lambda video: {"video_id": video["videoId"]},
-        )
-
-
-def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_response(
-    monkeypatch,
-) -> None:
-    request = ChatRequest(url="https://www.youtube.com/playlist?list=PL123")
-    continuation_calls = []
-
+def test_playlist_follows_continuation_only_response(monkeypatch):
+    request = ChatRequest(url=PLAYLIST)
     _patch_playlist(
         monkeypatch,
-        [{"playlistVideoRenderer": {"videoId": "one"}}, _continuation("cont-1")],
+        [wrap("playlistVideoRenderer.videoId", "one"), _continuation("cont-1")],
         parse=True,
     )
-
+    calls = []
     responses = iter(
         [
-            {
-                "onResponseReceivedActions": [
-                    {"appendContinuationItemsAction": {"continuationItems": []}},
-                ],
-                "continuationContents": {
-                    "playlistVideoListContinuation": {
-                        "contents": [
-                            _continuation("cont-2"),
-                        ],
-                    },
-                },
-            },
-            {
-                "onResponseReceivedEndpoints": [
-                    {
-                        "appendContinuationItemsAction": {
-                            "continuationItems": [
-                                {"playlistVideoRenderer": {"videoId": "two"}},
-                            ],
-                        },
-                    },
-                ],
-            },
-        ],
+            _playlist_response("cont-2"),
+            _append(
+                [wrap("playlistVideoRenderer.videoId", "two")],
+                "onResponseReceivedEndpoints",
+            ),
+        ]
     )
 
-    def fake_get_continuation_info(_url, _session_post, params, **kwargs):
-        continuation_calls.append((params, kwargs["json"]["continuation"]))
+    def fetch(_url, _post, params, **kwargs):
+        calls.append((params, kwargs["json"]["continuation"]))
         return next(responses)
 
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers._get_continuation_info",
-        fake_get_continuation_info,
-    )
-
-    videos = list(
-        DummyPlaylistDiscovery().get_playlist_items(
-            "https://www.youtube.com/playlist?list=PL123",
-            request,
-        ),
-    )
-
-    assert videos == [{"video_id": "one"}, {"video_id": "two"}]
-    assert continuation_calls == [(request, "cont-1"), (request, "cont-2")]
+    monkeypatch.setattr(helpers, "_get_continuation_info", fetch)
+    assert list(_Playlist().get_playlist_items(PLAYLIST, request)) == [
+        {"video_id": "one"},
+        {"video_id": "two"},
+    ]
+    assert calls == [(request, "cont-1"), (request, "cont-2")]
 
 
 @pytest.mark.parametrize(
@@ -494,361 +308,178 @@ def test_playlist_discovery_accepts_chat_request_and_follows_continuation_only_r
         (_rich_section(_shelf("/playlist?list=PL999")), "PL999", "xyz789"),
     ],
 )
-def test_get_testing_items_finds_playlists(monkeypatch, content, playlist_id, video_id):
-    class DummyDiscoveryHelpers(YouTubeDiscoveryMixin):
-        _session_get = object()
-
-        def __init__(self):
-            self.playlist_urls = []
-
-        def get_playlist_items(self, playlist_url):
-            self.playlist_urls.append(playlist_url)
-            yield {"video_id": video_id}
-
-    _patch_browse(monkeypatch, [{"tabRenderer": {"content": content}}], ytcfg={})
-    helpers = DummyDiscoveryHelpers()
-    assert list(helpers._get_testing_items()) == [{"video_id": video_id}]
-    assert helpers.playlist_urls == [
-        f"https://www.youtube.com/playlist?list={playlist_id}",
-    ]
-
-
-def test_get_testing_items_yields_direct_video_renderers_from_rich_shelf(
-    monkeypatch,
-) -> None:
-    class DummyDiscoveryHelpers(YouTubeDiscoveryMixin):
-        _session_get = object()
-
-        def get_playlist_items(self, playlist_url):
-            raise AssertionError(f"unexpected playlist load: {playlist_url}")
-
-    content = _rich_section(
-        {
-            "richShelfRenderer": {
-                "contents": [_rich_video(i) for i in ("one", "two", "one")]
-            }
-        },
+def test_testing_items_finds_playlists(monkeypatch, content, playlist_id, video_id):
+    owner = _Discovery()
+    owner.get_playlist_items = Mock(return_value=[{"video_id": video_id}])
+    _patch_browse(monkeypatch, [_tab(content)], ytcfg={})
+    assert list(owner._get_testing_items()) == [{"video_id": video_id}]
+    owner.get_playlist_items.assert_called_once_with(
+        f"https://www.youtube.com/playlist?list={playlist_id}"
     )
-    _patch_browse(monkeypatch, [{"tabRenderer": {"content": content}}], ytcfg={})
 
-    assert list(DummyDiscoveryHelpers()._get_testing_items()) == [
+
+def test_testing_items_deduplicates_direct_videos(monkeypatch):
+    owner = _Discovery()
+    owner.get_playlist_items = Mock(side_effect=AssertionError("unexpected playlist"))
+    content = _rich_section(
+        wrap(
+            "richShelfRenderer.contents",
+            [_rich_video(v) for v in ("one", "two", "one")],
+        )
+    )
+    _patch_browse(monkeypatch, [_tab(content)], ytcfg={})
+    assert list(owner._get_testing_items()) == [
         {"video_id": "one"},
         {"video_id": "two"},
     ]
 
 
-def test_get_rendered_content_extracts_selected_tab_content() -> None:
-    from chat_downloader.sites.youtube.discovery import (
-        _get_rendered_content,
-    )
+def test_rendered_content():
+    assert discovery._get_rendered_content(
+        _browse([_tab(_section([{"target": "value"}]))])
+    ) == {"target": "value"}
 
-    rendered = _get_rendered_content(
-        _browse([{"tabRenderer": {"content": _section([{"target": "value"}])}}]),
-    )
 
-    assert rendered == {"target": "value"}
+@pytest.mark.parametrize("params", [{"url": PLAYLIST}, None])
+def test_playlist_stops_on_empty_continuation(monkeypatch, params):
+    _patch_playlist(
+        monkeypatch,
+        [wrap("playlistVideoRenderer.videoId", "one"), _continuation("cont-1")],
+        parse=True,
+    )
+    fetch = Mock(return_value=_append([]))
+    monkeypatch.setattr(helpers, "_get_continuation_info", fetch)
+    assert list(_Playlist().get_playlist_items(PLAYLIST, params)) == [
+        {"video_id": "one"}
+    ]
+    assert isinstance(fetch.call_args.args[2], ChatRequest)
+    assert fetch.call_count == 1
+    assert fetch.call_args.kwargs["json"]["continuation"] == "cont-1"
+
+
+@pytest.mark.parametrize("repeat", [False, True])
+def test_playlist_without_items_or_repeated_token(monkeypatch, repeat):
+    _patch_playlist(monkeypatch, [_continuation("loop")] if repeat else [])
+    returns(monkeypatch, "helpers._get_continuation_info", _playlist_response("loop"))
+    params = {"url": PLAYLIST} if repeat else None
+    assert list(_Playlist().get_playlist_items(PLAYLIST, params)) == []
 
 
 @pytest.mark.parametrize(
-    "params",
-    [{"url": "https://www.youtube.com/playlist?list=PL123"}, None],
-    ids=["dict-request", "default-request"],
+    ("selector", "value", "route"),
+    [
+        ("user_id", "user123", "user/user123"),
+        ("custom_username", "creator", "c/creator"),
+        ("handle", "name", "@name"),
+        ("handle", "@name", "@name"),
+    ],
 )
-def test_playlist_discovery_stops_on_empty_continuation(monkeypatch, params) -> None:
-    calls = []
-
-    _patch_playlist(
-        monkeypatch,
-        [{"playlistVideoRenderer": {"videoId": "one"}}, _continuation("cont-1")],
-        parse=True,
-    )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers._get_continuation_info",
-        lambda _url, _session_post, request, **kwargs: (
-            calls.append((request, kwargs["json"]["continuation"]))
-            or {
-                "onResponseReceivedActions": [
-                    {"appendContinuationItemsAction": {"continuationItems": []}}
-                ]
-            }
-        ),
-    )
-
-    videos = list(
-        DummyPlaylistDiscovery().get_playlist_items(
-            "https://www.youtube.com/playlist?list=PL123",
-            params,
-        ),
-    )
-
-    assert videos == [{"video_id": "one"}]
-    assert isinstance(calls[0][0], ChatRequest)
-    assert calls == [(calls[0][0], "cont-1")]
-
-
-def test_playlist_discovery_accepts_none_params_without_continuation(
-    monkeypatch,
-) -> None:
-    _patch_playlist(monkeypatch, [])
-
-    assert (
-        list(
-            DummyPlaylistDiscovery().get_playlist_items(
-                "https://www.youtube.com/playlist?list=PL123",
-                None,
-            ),
-        )
-        == []
-    )
-
-
-def test_playlist_discovery_breaks_on_repeated_continuation(
-    monkeypatch,
-) -> None:
-    _patch_playlist(monkeypatch, [_continuation("loop")])
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers._get_continuation_info",
-        lambda *_args, **_kwargs: {
-            "onResponseReceivedActions": [
-                {"appendContinuationItemsAction": {"continuationItems": []}},
-            ],
-            "continuationContents": {
-                "playlistVideoListContinuation": {
-                    "contents": [
-                        _continuation("loop"),
-                    ],
-                },
-            },
-        },
-    )
-
-    assert (
-        list(
-            DummyPlaylistDiscovery().get_playlist_items(
-                "https://www.youtube.com/playlist?list=PL123",
-                {"url": "https://www.youtube.com/playlist?list=PL123"},
-            ),
-        )
-        == []
-    )
-
-
-def test_youtube_discovery_supports_non_channel_selectors(monkeypatch) -> None:
-    seen_urls: list[str] = []
-
-    def fake_initial_info(url, *_args, **_kwargs):
-        seen_urls.append(url)
-        return (
+def test_non_channel_selectors(monkeypatch, selector, value, route):
+    fetch = Mock(
+        return_value=(
             _browse(
                 [
-                    {
-                        "tabRenderer": {
-                            "selected": False,
-                            "title": "Home",
-                        }
-                    },
-                    _tab(
-                        {"richGridRenderer": {"contents": []}},
-                        title="Videos",
-                        selected=True,
-                    ),
+                    {"tabRenderer": {"selected": False, "title": "Home"}},
+                    _tab(wrap("richGridRenderer.contents", [])),
                 ]
             ),
             {"INNERTUBE_API_KEY": "key"},
             {},
         )
-
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery._get_initial_info",
-        fake_initial_info,
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery._get_innertube_context",
-        lambda _ytcfg: {"client": {}},
-    )
-
-    assert list(get_user_videos(_DummyDiscoveryBase(), user_id="user123")) == []
-    assert list(get_user_videos(_DummyDiscoveryBase(), custom_username="creator")) == []
-    assert list(get_user_videos(_DummyDiscoveryBase(), handle="name")) == []
-    assert list(get_user_videos(_DummyDiscoveryBase(), handle="@name")) == []
-    assert seen_urls == [
-        "https://www.youtube.com/user/user123/videos",
-        "https://www.youtube.com/c/creator/videos",
-        "https://www.youtube.com/@name/videos",
-        "https://www.youtube.com/@name/videos",
-    ]
+    monkeypatch.setattr(discovery, "_get_initial_info", fetch)
+    returns(monkeypatch, "discovery._get_innertube_context", {"client": {}})
+    assert list(_Discovery().get_user_videos(**{selector: value})) == []
+    assert fetch.call_args.args[0] == f"https://www.youtube.com/{route}/videos"
 
 
-def test_youtube_discovery_breaks_on_continuation_loop(monkeypatch) -> None:
-
-    continuation_payloads = iter(
-        [
-            {"onResponseReceivedActions": [{}]},
-        ]
-    )
-    logs: list[str] = []
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers._get_continuation_info",
-        lambda *_args, **_kwargs: next(continuation_payloads),
-    )
-
+def test_discovery_breaks_continuation_loop(monkeypatch):
+    fetch = Mock(side_effect=[{"onResponseReceivedActions": [{}]}])
+    monkeypatch.setattr(helpers, "_get_continuation_info", fetch)
     _patch_browse(
         monkeypatch,
-        [
-            _tab(
-                {
-                    "richGridRenderer": {"contents": [_continuation("loop-token")]},
-                },
-                title="Videos",
-                selected=True,
-            ),
-        ],
+        [_tab(wrap("richGridRenderer.contents", [_continuation("loop-token")]))],
         context={"client": {}},
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery."
-        "_extract_browse_continuation_token_from_response",
-        lambda _yt_info: "loop-token",
+    returns(
+        monkeypatch,
+        "discovery._extract_browse_continuation_token_from_response",
+        "loop-token",
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.helpers.log",
-        lambda _level, message: logs.append(message),
+    assert list(_Discovery().get_user_videos(channel_id="abc")) == []
+    assert fetch.call_count == 1
+
+
+def test_generate_watch_urls():
+    owner = _Discovery()
+    owner._get_testing_items = Mock(
+        return_value=[{"video_id": "abc123"}, {"video_id": "def456"}]
     )
-
-    assert list(get_user_videos(_DummyDiscoveryBase(), channel_id="abc")) == []
-    assert any("continuation loop" in message for message in logs)
-
-
-def test_generate_urls_yields_watch_urls() -> None:
-    from chat_downloader.sites.youtube.constants_patterns import _YT_HOME
-    from chat_downloader.sites.youtube.discovery import (
-        YouTubeDiscoveryMixin,
-    )
-
-    class _MockDiscovery(YouTubeDiscoveryMixin):
-        def _get_testing_items(self):
-            return [{"video_id": "abc123"}, {"video_id": "def456"}]
-
-    obj = _MockDiscovery()
-    urls = list(obj.generate_urls())
-    assert urls == [
-        f"{_YT_HOME}/watch?v=abc123",
-        f"{_YT_HOME}/watch?v=def456",
+    assert list(owner.generate_urls()) == [
+        f"https://www.youtube.com/watch?v={v}" for v in ("abc123", "def456")
     ]
 
 
-def test_discovery_item_processing_supports_continuation_view_models() -> None:
-    from chat_downloader.sites.youtube.discovery import _process_page_items
-    from chat_downloader.sites.youtube.discovery_playlists import (
-        _extract_playlist_items,
+def test_continuation_view_models():
+    item = wrap(
+        "continuationItemViewModel.continuationCommand.innertubeCommand."
+        "continuationCommand.token",
+        "view-model-token",
     )
-    from chat_downloader.sites.youtube.helpers import (
-        _extract_browse_continuation_token_from_item,
-    )
-
-    continuation = {
-        "continuationItemViewModel": {
-            "continuationCommand": {
-                "innertubeCommand": {
-                    "continuationCommand": {"token": "view-model-token"},
-                },
-            },
-        },
-    }
-
-    assert _process_page_items([continuation]) == ([], "view-model-token")
-    assert _extract_playlist_items([continuation]) == ([], "view-model-token")
-    assert _extract_browse_continuation_token_from_item("malformed") is None
+    for process in (
+        discovery._process_page_items,
+        discovery_playlists._extract_playlist_items,
+    ):
+        assert process([item]) == ([], "view-model-token")
+    assert helpers._extract_browse_continuation_token_from_item("malformed") is None
 
 
-def test_discovery_is_composed_on_youtube_downloader(monkeypatch) -> None:
+def test_discovery_composed_on_downloader(monkeypatch):
     from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
 
     _patch_browse(
         monkeypatch,
-        [
-            _tab(
-                {
-                    "richGridRenderer": {"contents": [_rich_video("assembled")]},
-                },
-                title="Videos",
-                selected=True,
-            )
-        ],
+        [_tab(wrap("richGridRenderer.contents", [_rich_video("assembled")]))],
     )
-    monkeypatch.setattr(
-        "chat_downloader.sites.youtube.discovery._parse_video",
-        lambda item: {"video_id": item["videoId"]},
-    )
-    downloader = object.__new__(YouTubeChatDownloader)
-
-    assert list(downloader.get_user_videos(channel_id="channel-id")) == [
-        {"video_id": "assembled"}
-    ]
+    monkeypatch.setattr(discovery, "_parse_video", lambda v: {"video_id": v["videoId"]})
+    assert list(
+        object.__new__(YouTubeChatDownloader).get_user_videos(channel_id="channel-id")
+    ) == [{"video_id": "assembled"}]
 
 
-def test_discovery_recurse_past_non_matching_entries() -> None:
-    from chat_downloader.sites.youtube.discovery import (
-        _iter_playlist_urls,
-        _iter_video_ids,
-    )
-
+def test_recursion_past_nonmatching_entries():
     content = {
-        "shelfRenderer": {
-            "endpoint": {
-                "commandMetadata": {
-                    "webCommandMetadata": {"url": "/watch?v=not-playlist"},
-                },
-            },
-        },
+        **_shelf("/watch?v=not-playlist"),
         "nested": [
-            {"videoRenderer": {"videoId": ""}},
+            wrap("videoRenderer.videoId", ""),
             _shelf("/playlist?list=PL123"),
-            {"videoRenderer": {"videoId": "abc123"}},
+            wrap("videoRenderer.videoId", "abc123"),
         ],
     }
-
-    assert list(_iter_playlist_urls(content)) == [
-        "https://www.youtube.com/playlist?list=PL123",
-    ]
-    assert list(_iter_video_ids(content)) == ["abc123"]
+    assert list(discovery._iter_playlist_urls(content)) == [PLAYLIST]
+    assert list(discovery._iter_video_ids(content)) == ["abc123"]
 
 
-def test_fetch_browse_continuation_passes_empty_token_without_marking_seen(
-    monkeypatch,
-) -> None:
-    from chat_downloader.sites.youtube import helpers
-    from chat_downloader.sites.youtube.helpers import _fetch_browse_continuation
+def test_empty_token_does_not_mark_seen_and_refreshes_visitor(monkeypatch):
+    calls, configs = [], []
 
-    calls = []
-
-    def fake_get_continuation_info(*_args, **kwargs):
+    def fetch(*_args, **kwargs):
         calls.append((kwargs["json"], kwargs["headers"]))
         return {
             "responseContext": {"visitorData": "visitor-2"},
-            "onResponseReceivedActions": [
-                {
-                    "appendContinuationItemsAction": {
-                        "continuationItems": [
-                            {"richItemRenderer": {"content": {}}},
-                        ],
-                    },
-                },
-            ],
+            **_append([wrap("richItemRenderer.content", {})]),
         }
 
-    monkeypatch.setattr(helpers, "_get_continuation_info", fake_get_continuation_info)
-    generated_configs = []
+    monkeypatch.setattr(helpers, "_get_continuation_info", fetch)
     monkeypatch.setattr(
         helpers,
         "_generate_headers",
-        lambda ytcfg, *_args: generated_configs.append(ytcfg) or {"X-Test": "api"},
+        lambda config, *_: configs.append(config) or {"X-Test": "api"},
     )
-    seen: set[str] = set()
+    seen = set()
     params = {"context": {"client": {"visitorData": "visitor-1"}}}
-
-    items, yt_info = _fetch_browse_continuation(
-        type("Downloader", (), {"_session_post": object()})(),
+    items, info = helpers._fetch_browse_continuation(
+        SimpleNamespace(_session_post=object()),
         "",
         "https://www.youtube.com/youtubei/v1/browse?key=key",
         params,
@@ -856,20 +487,14 @@ def test_fetch_browse_continuation_passes_empty_token_without_marking_seen(
         ChatRequest(url="https://www.youtube.com/@example/videos"),
         seen,
     )
-
-    assert items == [{"richItemRenderer": {"content": {}}}]
-    assert yt_info is not None
+    assert items == [wrap("richItemRenderer.content", {})]
+    assert info is not None
     assert calls == [
         (
-            {
-                "context": {"client": {"visitorData": "visitor-2"}},
-                "continuation": "",
-            },
+            {"context": {"client": {"visitorData": "visitor-2"}}, "continuation": ""},
             {"X-Test": "api"},
         )
     ]
-    assert generated_configs[0]["INNERTUBE_CONTEXT"]["client"]["visitorData"] == (
-        "visitor-1"
-    )
+    assert configs[0]["INNERTUBE_CONTEXT"]["client"]["visitorData"] == "visitor-1"
     assert params["context"]["client"]["visitorData"] == "visitor-2"
     assert seen == set()

@@ -10,7 +10,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from requests.exceptions import (
-    ConnectionError,  # noqa: A004 — intentional: requests.ConnectionError shadows builtin; test needs the requests type
+    ConnectionError,  # noqa: A004 — requests.ConnectionError is intentional here
     RequestException,
 )
 
@@ -59,22 +59,14 @@ def downloader():
     """Build a downloader around a supplied chat or acquisition failure."""
 
     def make(chat=None, *, error=None, close_error=None):
-        class Downloader:
-            instance = None
-
-            def __init__(self, **kwargs) -> None:
-                self.closed = False
+        class Downloader(_FakeChat):
+            def __init__(self, **kwargs):
+                super().__init__(close_error=close_error)
                 Downloader.instance = self
-
-            def get_chat(self, **kwargs):
-                if error is not None:
-                    raise error
-                return chat if chat is not None else _FakeChat()
-
-            def close(self) -> None:
-                self.closed = True
-                if close_error is not None:
-                    raise close_error
+                self.get_chat = MagicMock(
+                    side_effect=error,
+                    return_value=chat if chat is not None else _FakeChat(),
+                )
 
         return Downloader
 

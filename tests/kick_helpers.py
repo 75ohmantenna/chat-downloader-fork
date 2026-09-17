@@ -7,6 +7,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from unittest.mock import patch
+
+from chat_downloader.models import ChatRequest
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -206,3 +209,33 @@ def make_frame_iterator(
 def pusher_frame(event: str, data: Any) -> dict[str, Any]:
     """Build a Pusher frame whose ``data`` is a JSON-encoded string."""
     return {"event": event, "data": json.dumps(data)}
+
+
+def raw_message(message_id, created_at=None, content="hi", **fields):
+    message = {"id": message_id, "content": content, "type": "message"}
+    if created_at is not None:
+        message["created_at"] = created_at
+    return {**message, **fields}
+
+
+def message_page(messages, **pagination):
+    return {"data": {"messages": messages, **pagination}}
+
+
+def request(**overrides):
+    return ChatRequest.from_kwargs(
+        **{
+            "url": "https://kick.com/examplechannel",
+            "max_attempts": 2,
+            "retry_timeout": 0,
+            "interruptible_retry": False,
+            **overrides,
+        }
+    )
+
+
+def session_patch(session):
+    return patch(
+        "chat_downloader.sites.kick.api_client.create_kick_session",
+        return_value=session,
+    )

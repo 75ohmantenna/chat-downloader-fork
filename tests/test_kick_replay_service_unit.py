@@ -1,69 +1,76 @@
 # SPDX-License-Identifier: MIT
 
-"""Tests for Kick VOD replay service.
-
-The replay service primarily makes live API calls. This test suite focuses
-on the pure-logic helper functions that are testable offline.
-"""
+"""Offline contracts for Kick VOD windows, replay ordering, and lifecycle."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from threading import Event, Thread
 from unittest.mock import Mock
 
 import pytest
 
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import KickError, replay_service, vod_metadata
+from tests.kick_helpers import message_page, raw_message
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
 END = START + timedelta(days=1)
 
 
-def _page(messages, **pagination):
-    return {"data": {"messages": messages, **pagination}}
+def _at(identifier, seconds=0, **fields):
+    return raw_message(
+        identifier, (START + timedelta(seconds=seconds)).isoformat(), **fields
+    )
 
 
-def _iterate(
-    client,
-    *,
-    start=START,
-    end=END,
-    channel="123",
-    request=None,
-    reverse=False,
-    **kwargs,
-):
+def _client(*pages):
+    client = Mock()
+    if len(pages) == 1:
+        client.fetch_message_page.return_value = pages[0]
+    else:
+        client.fetch_message_page.side_effect = pages
+    return client
+
+
+def _iterate(client, *, end=END, request=None, reverse=False, **kwargs):
     iterator = (
         replay_service._iter_reverse_vod_messages
         if reverse
         else replay_service._iter_vod_messages
     )
     return iterator(
-        channel, start, end, request or ChatRequest(), api_client=client, **kwargs
+        "123", START, end, request or ChatRequest(), api_client=client, **kwargs
     )
 
 
-def _video_data() -> dict:
-    """Return a minimal video metadata dict."""
+def _source(client):
+    return replay_service.ReplaySource(
+        "1",
+        START,
+        START + timedelta(seconds=10),
+        ChatRequest(),
+        api_client=client,
+        origin=START,
+    )
+
+
+def _video_data(**fields):
     return {
         "id": 108462358,
         "livestream": {
             "id": 112756116,
             "session_title": "Test Stream Title",
             "start_time": "2026-06-13T00:29:45+00:00",
-            "duration": 3600000,  # 1 hour
-            "channel": {
-                "id": 3150403,
-                "chatroom": {"id": 3142359},
-            },
+            "duration": 3600000,
+            "channel": {"id": 3150403, "chatroom": {"id": 3142359}},
+            **fields,
         },
     }
 
 
 @pytest.mark.parametrize("chatroom", [True, False])
-def test_resolves_vod_metadata(chatroom: bool) -> None:
+def test_resolves_vod_metadata(chatroom):
     data = _video_data()
     if not chatroom:
         data["livestream"]["channel"].pop("chatroom")
@@ -83,12 +90,9 @@ def test_resolves_vod_metadata(chatroom: bool) -> None:
     [
         (None, "no associated livestream"),
         ({"channel": {"id": 1}}, "missing a start_time"),
-        ({"start_time": "2026-01-01T00:00:00+00:00"}, "missing a channel id"),
+        ({"start_time": START.isoformat()}, "missing a channel id"),
         (
-            {
-                "channel": {"id": "not-a-number"},
-                "start_time": "2026-01-01T00:00:00+00:00",
-            },
+            {"channel": {"id": "not-a-number"}, "start_time": START.isoformat()},
             "non-numeric channel id",
         ),
         (
@@ -97,7 +101,7 @@ def test_resolves_vod_metadata(chatroom: bool) -> None:
         ),
     ],
 )
-def test_invalid_vod_metadata(livestream, message) -> None:
+def test_invalid_vod_metadata(livestream, message):
     data = {"id": 1} if livestream is None else {"livestream": livestream}
     with pytest.raises(KickError, match=message):
         vod_metadata._resolve_vod_window(data, "testuser")
@@ -110,10 +114,10 @@ def test_invalid_vod_metadata(livestream, message) -> None:
         ("2026-06-13T01:29:45+01:00", datetime(2026, 6, 13, 0, 29, 45, tzinfo=UTC)),
     ],
 )
-def test_vod_start_time_normalized_to_utc(timestamp, expected) -> None:
-    data = _video_data()
-    data["livestream"]["start_time"] = timestamp
-    _, _, _, start, end = vod_metadata._resolve_vod_window(data, "testuser")
+def test_vod_start_time_normalized_to_utc(timestamp, expected):
+    _, _, _, start, end = vod_metadata._resolve_vod_window(
+        _video_data(start_time=timestamp), "testuser"
+    )
     assert start.tzinfo is UTC
     assert start == expected
     assert end == start + timedelta(hours=1)
@@ -124,16 +128,14 @@ def test_vod_start_time_normalized_to_utc(timestamp, expected) -> None:
     [
         ("start_time", "0001-01-01T00:00:00+01:00", "unusable start_time"),
         *[
-            ("duration", duration, "duration")
-            for duration in [float("nan"), float("inf"), 1e20]
+            ("duration", value, "duration")
+            for value in [float("nan"), float("inf"), 1e20]
         ],
     ],
 )
-def test_unusable_vod_window(field, value, message) -> None:
-    data = _video_data()
-    data["livestream"][field] = value
+def test_unusable_vod_window(field, value, message):
     with pytest.raises(KickError, match=message):
-        vod_metadata._resolve_vod_window(data, "testuser")
+        vod_metadata._resolve_vod_window(_video_data(**{field: value}), "testuser")
 
 
 @pytest.mark.parametrize(
@@ -147,19 +149,21 @@ def test_unusable_vod_window(field, value, message) -> None:
         ("2026-01-01T00:30:00", True, False),
     ],
 )
-def test_classify_message_timestamp(timestamp, valid, done) -> None:
-    message = _make_raw_msg("test-msg-1", timestamp)
-    message["sender"] = {
-        "id": 1,
-        "username": "testuser",
-        "slug": "testuser",
-        "identity": {"color": "#fff", "badges": []},
-    }
+def test_classify_message_timestamp(timestamp, valid, done):
+    message = raw_message(
+        "test-msg-1",
+        timestamp,
+        sender={
+            "id": 1,
+            "username": "testuser",
+            "slug": "testuser",
+            "identity": {"color": "#fff", "badges": []},
+        },
+    )
     parsed, finished = replay_service._classify_message(
         message, START, START + timedelta(hours=1)
     )
     if valid:
-        assert parsed is not None
         assert parsed["message_type"] == "text_message"
     else:
         assert parsed is None
@@ -173,28 +177,20 @@ def test_classify_message_timestamp(timestamp, valid, done) -> None:
         {"created_at": "2026-01-01T00:30:00Z", "content": "test", "type": "message"},
     ],
 )
-def test_classify_message_missing_fields(message) -> None:
+def test_classify_message_missing_fields(message):
     assert replay_service._classify_message(message, START, END) == (None, False)
 
 
-def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(monkeypatch):
     pages = [
-        _page(
+        message_page(
             [
-                {"message_id": "newest-2", "payload": "x" * 128},
-                {"message_id": "newest-1", "payload": "x" * 128},
+                {"message_id": f"{age}-{index}", "payload": "x" * 128}
+                for index in (2, 1)
             ],
-            cursor="next",
-        ),
-        _page(
-            [
-                {"message_id": "oldest-2", "payload": "x" * 128},
-                {"message_id": "oldest-1", "payload": "x" * 128},
-            ],
-            cursor=None,
-        ),
+            cursor="next" if age == "newest" else None,
+        )
+        for age in ("newest", "oldest")
     ]
     created_spools = []
     real_spool = replay_service.tempfile.SpooledTemporaryFile
@@ -205,255 +201,168 @@ def test_iter_vod_messages_spools_pages_and_preserves_chronological_order(
         return spool
 
     monkeypatch.setattr(replay_service, "_VOD_SPOOL_MEMORY_BYTES", 1)
-    monkeypatch.setattr(
-        replay_service.tempfile,
-        "SpooledTemporaryFile",
-        tracking_spool,
-    )
+    monkeypatch.setattr(replay_service.tempfile, "SpooledTemporaryFile", tracking_spool)
     monkeypatch.setattr(
         replay_service,
         "_classify_message",
         lambda raw, _start, _end, _state: (raw, False),
     )
-    api_client = Mock()
-    api_client.fetch_message_page.side_effect = pages
-
-    messages = list(
-        _iterate(
-            api_client,
-            request=ChatRequest(max_attempts=1, interruptible_retry=False),
-        )
-    )
-
-    assert [message["message_id"] for message in messages] == [
+    client = _client(*pages)
+    messages = list(_iterate(client))
+    assert [row["message_id"] for row in messages] == [
         "oldest-1",
         "oldest-2",
         "newest-1",
         "newest-2",
     ]
     assert created_spools[0]._rolled is True
-    assert api_client.fetch_message_page.call_args_list[0].kwargs == {
+    assert client.fetch_message_page.call_args_list[0].kwargs == {
         "cursor": replay_service._cursor_after(END)
     }
 
 
-def test_iter_vod_messages_seeds_reverse_pagination_at_window_end() -> None:
-    client = _client_for_page(_page([], cursor=None))
-    start = START
-    end = start + timedelta(days=1)
-    assert list(_iterate(client, start=start, end=end)) == []
+def test_iter_vod_messages_seeds_reverse_pagination_at_window_end():
+    client = _client(message_page([], cursor=None))
+    assert list(_iterate(client)) == []
     client.fetch_message_page.assert_called_once_with(
-        "123", cursor=replay_service._cursor_after(end)
+        "123", cursor=replay_service._cursor_after(END)
     )
 
 
-def test_cursor_after_treats_naive_timestamp_as_utc() -> None:
-    timestamp = datetime(1970, 1, 1, tzinfo=UTC).replace(tzinfo=None)
+def test_cursor_after_treats_naive_timestamp_as_utc():
+    naive_timestamp = datetime(1970, 1, 1)  # noqa: DTZ001 - regression needs naive input
+    assert replay_service._cursor_after(naive_timestamp) == "1000000"
 
-    assert replay_service._cursor_after(timestamp) == "1000000"
+
+@pytest.mark.parametrize("end", [START, datetime(2025, 12, 31, tzinfo=UTC)])
+def test_reverse_vod_messages_does_not_fetch_empty_or_reversed_window(end):
+    client = Mock()
+    assert list(_iterate(client, end=end, reverse=True)) == []
+    client.fetch_message_page.assert_not_called()
 
 
 @pytest.mark.parametrize(
-    "end",
+    ("pages", "message", "calls"),
     [
-        START,
-        datetime(2025, 12, 31, tzinfo=UTC),
+        ([message_page([_at("same", 60)], cursor="next")], "duplicate page", None),
+        ([message_page([], cursor=c) for c in ("a", "b", "a")], "cursor repeated", 3),
+        (
+            [message_page([], cursor=replay_service._cursor_after(END))],
+            "backwards",
+            None,
+        ),
+        (
+            [
+                message_page([_at("earlier", 1)], cursor="next"),
+                message_page([_at("later", 2)], cursor=None),
+            ],
+            "out of order",
+            None,
+        ),
     ],
+    ids=["duplicate-page", "cursor-cycle", "nonadvancing-empty", "out-of-order"],
 )
-def test_reverse_vod_messages_does_not_fetch_empty_or_reversed_window(
-    end: datetime,
-) -> None:
-    api_client = Mock()
-
-    assert (
-        list(
-            _iterate(
-                api_client,
-                end=end,
-                request=ChatRequest(max_attempts=1, interruptible_retry=False),
-                reverse=True,
-            )
-        )
-        == []
-    )
-    api_client.fetch_message_page.assert_not_called()
-
-
-def test_iter_vod_messages_rejects_repeated_page_as_incomplete() -> None:
-    page = _page([_make_raw_msg("same", "2026-01-01T00:01:00Z")], cursor="next")
-    client = _client_for_page(page)
-    with pytest.raises(KickError, match="duplicate page"):
+def test_replay_rejects_incomplete_history(pages, message, calls):
+    client = _client(*pages)
+    with pytest.raises(KickError, match=message):
         list(_iterate(client))
+    if calls is not None:
+        assert client.fetch_message_page.call_count == calls
 
 
-def test_iter_vod_messages_rejects_cursor_cycle_before_refetch() -> None:
-    client = Mock()
-    client.fetch_message_page.side_effect = [
-        _page([], cursor=cursor) for cursor in ["a", "b", "a"]
-    ]
-    with pytest.raises(KickError, match="cursor repeated"):
-        list(_iterate(client))
-    assert client.fetch_message_page.call_count == 3
-
-
-def test_iter_vod_messages_has_no_silent_page_ceiling(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_iter_vod_messages_has_no_silent_page_ceiling(monkeypatch):
     page_count = 501
-    pages = [
-        _page(
-            [{"message_id": f"message-{index}"}],
-            cursor=f"cursor-{index + 1}" if index + 1 < page_count else None,
-        )
-        for index in range(page_count)
-    ]
+    client = _client(
+        *[
+            message_page(
+                [{"message_id": f"message-{index}"}],
+                cursor=f"cursor-{index + 1}" if index + 1 < page_count else None,
+            )
+            for index in range(page_count)
+        ]
+    )
     monkeypatch.setattr(
         replay_service,
         "_classify_message",
         lambda raw, _start, _end, _state: (raw, False),
     )
-    api_client = Mock()
-    api_client.fetch_message_page.side_effect = pages
-
-    messages = list(
-        _iterate(
-            api_client,
-            request=ChatRequest(max_attempts=1, interruptible_retry=False),
-        )
-    )
-
-    assert len(messages) == page_count
-    assert api_client.fetch_message_page.call_count == page_count
+    assert len(list(_iterate(client))) == page_count
+    assert client.fetch_message_page.call_count == page_count
 
 
 @pytest.mark.parametrize("bounded", [False, True])
 def test_get_vod_chat_metadata_and_relative_bounds(bounded):
-    video = _video_data()
-    video["livestream"].update(
+    video = _video_data(
         session_title="Bounded VOD" if bounded else "Test VOD",
-        start_time="2026-01-01T00:00:00+00:00",
+        start_time=START.isoformat(),
     )
     if bounded:
         video["livestream"]["channel"].pop("chatroom")
-        records = [
-            _make_raw_msg("after", "2026-01-01T00:30:00Z"),
-            _make_raw_msg("inside", "2026-01-01T00:20:00Z"),
-            _make_raw_msg("before", "2026-01-01T00:10:00Z"),
-        ]
+        records = [_at("after", 1800), _at("inside", 1200), _at("before", 600)]
     else:
         records = [
-            {**_make_raw_msg("msg-2", "2026-01-01T00:20:00Z"), "content": "second"},
-            {**_make_raw_msg("msg-1", "2026-01-01T00:10:00Z"), "content": "first"},
+            _at("msg-2", 1200, content="second"),
+            _at("msg-1", 600, content="first"),
         ]
-    client = _client_for_page(_page(records, cursor=None))
+    client = _client(message_page(records, cursor=None))
     client.fetch_video_metadata.return_value = video
     options = {"start_time": "00:15:00", "end_time": 1500} if bounded else {}
     chat = replay_service.get_vod_chat(
-        "testuser",
-        "vid-1",
-        ChatRequest(max_attempts=1, interruptible_retry=False, **options),
-        api_client=client,
+        "testuser", "vid-1", ChatRequest(**options), api_client=client
     )
     assert chat.title == ("Bounded VOD" if bounded else "Test VOD")
-    assert chat.status == "completed"
-    assert chat.video_type == "video"
-    assert chat.id == "vid-1"
+    assert (chat.status, chat.video_type, chat.id) == ("completed", "video", "vid-1")
     if bounded:
-        assert chat.start_time == 900
-        assert chat.duration == 600
-    expected = ["inside"] if bounded else ["msg-1", "msg-2"]
-    assert [message["message_id"] for message in chat] == expected
-
-
-def test_apply_request_window_clamps_offsets_to_vod_duration() -> None:
-    start = START
-    end = start + timedelta(hours=1)
-
-    selected_start, selected_end = replay_service._apply_request_window(
-        start,
-        end,
-        ChatRequest(start_time=-10, end_time=7200),
+        assert (chat.start_time, chat.duration) == (900, 600)
+    assert [row["message_id"] for row in chat] == (
+        ["inside"] if bounded else ["msg-1", "msg-2"]
     )
 
-    assert selected_start == start
-    assert selected_end == end
 
-
-def _make_raw_msg(msg_id: str, created_at: str) -> dict[str, Any]:
-    """Return a minimal raw message dict that ``parse_chat_message`` accepts."""
-    return {
-        "id": msg_id,
-        "created_at": created_at,
-        "content": "hi",
-        "type": "message",
-    }
-
-
-def _client_for_page(page: dict[str, Any]) -> Mock:
-    """Return a fake client that always returns *page* for message fetches."""
-    client = Mock()
-    client.fetch_message_page.return_value = page
-    return client
+def test_apply_request_window_clamps_offsets_to_vod_duration():
+    end = START + timedelta(hours=1)
+    assert replay_service._apply_request_window(
+        START, end, ChatRequest(start_time=-10, end_time=7200)
+    ) == (START, end)
 
 
 @pytest.mark.parametrize(
-    ("records", "reverse", "request_options", "expected"),
+    ("records", "reverse", "options", "expected"),
     [
         ([], True, {}, []),
         (
             [
-                _make_raw_msg("newest", "2026-01-01T00:50:00Z"),
-                _make_raw_msg("oldest", "2026-01-01T00:10:00Z"),
+                _at("newest", 3000),
+                _at("oldest", 600),
                 "not-a-dict",
-                _make_raw_msg("before", "2025-12-31T23:00:00Z"),
+                _at("before", -3600),
             ],
             True,
             {},
             ["oldest", "newest"],
         ),
-        (
-            [
-                _make_raw_msg("msg-2", "2026-01-01T00:20:00Z"),
-                _make_raw_msg("msg-1", "2026-01-01T00:10:00Z"),
-            ],
-            True,
-            {"max_messages": 1},
-            ["msg-1"],
-        ),
+        ([_at("msg-2", 1200), _at("msg-1", 600)], True, {"max_messages": 1}, ["msg-1"]),
         (
             [
                 {
-                    "created_at": "2026-01-01T00:00:00Z",
+                    "created_at": START.isoformat(),
                     "content": "missing id",
                     "type": "message",
                 },
-                _make_raw_msg("valid", "2026-01-01T00:00:01Z"),
+                _at("valid", 1),
             ],
             False,
             {},
             ["valid"],
         ),
         (
-            [
-                {
-                    **_make_raw_msg("excluded", "2026-01-01T00:00:00Z"),
-                    "type": "subscription",
-                },
-                _make_raw_msg("included", "2026-01-01T00:00:01Z"),
-            ],
+            [_at("excluded", type="subscription"), _at("included", 1)],
             False,
             {"message_groups": ["messages"], "max_messages": 1},
             ["included"],
         ),
         (
-            [
-                _make_raw_msg("newer", "2026-01-01T00:00:02Z"),
-                {
-                    **_make_raw_msg("excluded", "2026-01-01T00:00:01Z"),
-                    "type": "subscription",
-                },
-                _make_raw_msg("oldest", "2026-01-01T00:00:00Z"),
-            ],
+            [_at("newer", 2), _at("excluded", 1, type="subscription"), _at("oldest")],
             False,
             {"message_groups": ["messages"], "max_messages": 1},
             ["oldest"],
@@ -468,119 +377,53 @@ def _client_for_page(page: dict[str, Any]) -> Mock:
         "reverse-filter",
     ],
 )
-def test_vod_single_page_selection(records, reverse, request_options, expected):
-    client = _client_for_page(_page(records, cursor=None))
-    end = START + timedelta(hours=1) if reverse and records else END
-    messages = list(
-        _iterate(
-            client,
-            reverse=reverse,
-            end=end,
-            request=ChatRequest(
-                max_attempts=1, interruptible_retry=False, **request_options
-            ),
-        )
+def test_vod_single_page_selection(records, reverse, options, expected):
+    client = _client(message_page(records, cursor=None))
+    messages = _iterate(
+        client,
+        reverse=reverse,
+        end=START + timedelta(hours=1) if reverse and records else END,
+        request=ChatRequest(**options),
     )
-    assert [message["message_id"] for message in messages] == expected
+    assert [row["message_id"] for row in messages] == expected
     client.fetch_message_page.assert_called_once()
 
 
-def test_reverse_replay_limits_emission_after_history_is_spooled() -> None:
-    client = Mock()
-    client.fetch_message_page.side_effect = [
-        _page([_make_raw_msg("second", "2026-01-01T00:00:01Z")], cursor="next"),
-        _page([_make_raw_msg("first", "2026-01-01T00:00:00Z")], cursor=None),
-    ]
-    messages = list(_iterate(client, request=ChatRequest(max_messages=1)))
-    assert [item["message_id"] for item in messages] == ["first"]
+def test_reverse_replay_limits_emission_after_history_is_spooled():
+    client = _client(
+        message_page([_at("second", 1)], cursor="next"),
+        message_page([_at("first")], cursor=None),
+    )
+    assert [
+        row["message_id"]
+        for row in _iterate(client, request=ChatRequest(max_messages=1))
+    ] == ["first"]
     assert client.fetch_message_page.call_count == 2
 
 
-def test_reverse_replay_sorts_pages_and_deduplicates_overlapping_ids() -> None:
-    start = START
-    client = Mock()
-    client.fetch_message_page.side_effect = [
-        _page(
-            [
-                _make_raw_msg("older", "2026-01-01T00:00:01Z"),
-                _make_raw_msg("newer", "2026-01-01T00:00:02Z"),
-            ],
-            cursor="next",
-        ),
-        _page(
-            [
-                _make_raw_msg("older", "2026-01-01T00:00:01Z"),
-                _make_raw_msg("first", "2026-01-01T00:00:00Z"),
-            ],
-            cursor=None,
-        ),
-    ]
-    state = {}
-    messages = list(
-        _iterate(
-            client,
-            start=start,
-            end=start + timedelta(seconds=10),
-            channel="1",
-            diagnostics=state,
-        )
+def test_reverse_replay_sorts_pages_and_deduplicates_overlapping_ids():
+    client = _client(
+        message_page([_at("older", 1), _at("newer", 2)], cursor="next"),
+        message_page([_at("older", 1), _at("first")], cursor=None),
     )
-    assert [item["message_id"] for item in messages] == ["first", "older", "newer"]
+    state = {}
+    messages = _iterate(client, end=START + timedelta(seconds=10), diagnostics=state)
+    assert [row["message_id"] for row in messages] == ["first", "older", "newer"]
     assert state["duplicate_records"] == 1
     assert state["termination_reason"] == "completed"
 
 
-def test_reverse_replay_rejects_nonadvancing_empty_cursor() -> None:
-    start = START
-    client = _client_for_page(
-        _page([], cursor=replay_service._cursor_after(start + timedelta(seconds=10)))
-    )
-    with pytest.raises(KickError, match="backwards"):
-        list(
-            _iterate(
-                client, start=start, end=start + timedelta(seconds=10), channel="1"
-            )
-        )
-
-
-def test_reverse_replay_fails_on_unknown_out_of_order_cross_page_records() -> None:
-    start = START
-    client = Mock()
-    client.fetch_message_page.side_effect = [
-        _page([_make_raw_msg("earlier", "2026-01-01T00:00:01Z")], cursor="next"),
-        _page([_make_raw_msg("later", "2026-01-01T00:00:02Z")], cursor=None),
-    ]
-    with pytest.raises(KickError, match="out of order"):
-        list(
-            _iterate(
-                client, start=start, end=start + timedelta(seconds=10), channel="1"
-            )
-        )
-
-
-def test_replay_close_during_request_cancels_without_fetching_another_page() -> None:
-    from threading import Event, Thread
-
+def test_replay_close_during_request_cancels_without_fetching_another_page():
     entered, release = Event(), Event()
     client = Mock()
 
     def fetch(*args, **kwargs):
         entered.set()
         assert release.wait(5)
-        return _page(
-            [_make_raw_msg("message", "2026-01-01T00:00:01Z")], cursor="another-page"
-        )
+        return message_page([_at("message", 1)], cursor="another-page")
 
     client.fetch_message_page.side_effect = fetch
-    start = START
-    source = replay_service.ReplaySource(
-        "1",
-        start,
-        start + timedelta(seconds=10),
-        ChatRequest(),
-        api_client=client,
-        origin=start,
-    )
+    source = _source(client)
     results = []
     worker = Thread(target=lambda: results.extend(source))
     worker.start()
@@ -595,48 +438,25 @@ def test_replay_close_during_request_cancels_without_fetching_another_page() -> 
     assert client.fetch_message_page.call_count == 1
 
 
-def test_replay_cancellation_before_request_and_between_emitted_messages() -> None:
-    from threading import Event
-
+def test_replay_cancellation_before_request_and_between_emitted_messages():
     cancelled = Event()
     cancelled.set()
-    start = START
-    client = Mock()
+    client = _client(message_page([_at("first", 1), _at("second", 2)]))
 
     def source():
-        return _iterate(
-            client,
-            start=start,
-            end=start + timedelta(seconds=10),
-            channel="1",
-            cancelled=cancelled,
-        )
+        return _iterate(client, end=START + timedelta(seconds=10), cancelled=cancelled)
 
     assert list(source()) == []
     client.fetch_message_page.assert_not_called()
     cancelled.clear()
-    client.fetch_message_page.return_value = _page(
-        [
-            _make_raw_msg("first", "2026-01-01T00:00:01Z"),
-            _make_raw_msg("second", "2026-01-01T00:00:02Z"),
-        ]
-    )
     iterator = source()
     assert next(iterator)["message_id"] == "first"
     cancelled.set()
     assert list(iterator) == []
 
 
-def test_replay_source_close_does_not_hide_other_generator_errors() -> None:
-    start = START
-    source = replay_service.ReplaySource(
-        "1",
-        start,
-        start + timedelta(seconds=10),
-        ChatRequest(),
-        api_client=Mock(),
-        origin=start,
-    )
+def test_replay_source_close_does_not_hide_other_generator_errors():
+    source = _source(Mock())
 
     def broken():
         try:
@@ -650,78 +470,50 @@ def test_replay_source_close_does_not_hide_other_generator_errors() -> None:
         source.close()
 
 
-def test_replay_reports_skip_reasons_and_progress_with_real_parser(monkeypatch):
-    client = Mock()
-    client.fetch_message_page.return_value = _page(
-        [
-            None,
-            _make_raw_msg("before", "2025-12-31T23:59:59Z"),
-            _make_raw_msg("after", "2026-01-01T00:00:11Z"),
-            _make_raw_msg("invalid", "bad date"),
-            _make_raw_msg("wrong_type", 42),
-            {"created_at": "2026-01-01T00:00:01Z"},
-            _make_raw_msg("valid", "2026-01-01T00:00:02Z"),
-        ]
+@pytest.mark.parametrize("empty", [False, True])
+def test_replay_reports_skip_reasons_and_progress(monkeypatch, empty):
+    client = _client(
+        *(
+            [message_page([], cursor="older"), message_page([])]
+            if empty
+            else [
+                message_page(
+                    [
+                        None,
+                        _at("before", -1),
+                        _at("after", 11),
+                        raw_message("invalid", "bad date"),
+                        raw_message("wrong_type", 42),
+                        {"created_at": "2026-01-01T00:00:01Z"},
+                        _at("valid", 2),
+                    ]
+                )
+            ]
+        )
     )
-    ticks = iter([0, 6, 7])
+    ticks = iter([0, 6, 7, 8] if empty else [0, 6, 7])
     monkeypatch.setattr(replay_service, "monotonic", lambda: next(ticks))
     logs = []
     monkeypatch.setattr(
         replay_service, "log", lambda level, text: logs.append((level, text))
     )
     state = {}
-    start = START
-    rows = list(
-        _iterate(
-            client,
-            start=start,
-            end=start + timedelta(seconds=10),
-            channel="1",
-            diagnostics=state,
-        )
-    )
-    assert [item["message_id"] for item in rows] == ["valid"]
-    assert {
-        key: state[key]
-        for key in (
-            "before_start",
-            "after_end",
-            "malformed_timestamp",
-            "malformed_object",
-            "parse_error",
-        )
-    } == {
-        "before_start": 1,
-        "after_end": 1,
-        "malformed_timestamp": 2,
-        "malformed_object": 1,
-        "parse_error": 1,
-    }
-    assert state["skipped_records"] == 6
-    assert state["selected_records"] == 1
-    assert len(logs) == 3
-    assert all(level == "info" for level, _ in logs)
-    assert "1 pages" in logs[1][1]
-    assert "writing chronological" in logs[-1][1]
-
-
-def test_progress_continues_through_empty_history_pages(monkeypatch):
-    client = Mock()
-    client.fetch_message_page.side_effect = [
-        _page([], cursor="older"),
-        _page([]),
-    ]
-    ticks = iter([0, 6, 7, 8])
-    monkeypatch.setattr(replay_service, "monotonic", lambda: next(ticks))
-    logs = []
-    monkeypatch.setattr(replay_service, "log", lambda level, text: logs.append(text))
-    start = START
-    assert (
-        list(
-            _iterate(
-                client, start=start, end=start + timedelta(seconds=10), channel="1"
-            )
-        )
-        == []
-    )
-    assert "1 pages, 0 records" in logs[1]
+    rows = list(_iterate(client, end=START + timedelta(seconds=10), diagnostics=state))
+    assert [row["message_id"] for row in rows] == ([] if empty else ["valid"])
+    if empty:
+        assert "1 pages, 0 records" in logs[1][1]
+    else:
+        counts = {
+            "before_start": 1,
+            "after_end": 1,
+            "malformed_timestamp": 2,
+            "malformed_object": 1,
+            "parse_error": 1,
+        }
+        assert {key: state[key] for key in counts} == counts
+        assert state["skipped_records"] == 6
+        assert state["selected_records"] == 1
+        assert len(logs) == 3
+        assert all(level == "info" for level, _ in logs)
+        assert "1 pages" in logs[1][1]
+        assert "writing chronological" in logs[-1][1]

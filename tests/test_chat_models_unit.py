@@ -1,14 +1,10 @@
 # SPDX-License-Identifier: MIT
 from __future__ import annotations
 
-import dataclasses
-from dataclasses import dataclass, field
-
 import pytest
 
 from chat_downloader.errors import NoChatReplay
 from chat_downloader.formatting.format import ItemFormatter
-from chat_downloader.models import get_field_default
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 
@@ -53,50 +49,41 @@ def dispatcher():
     return _ChatOutputDispatcher(Chat(iter(()), title="Example"))
 
 
-@pytest.mark.parametrize("target", ["dispatcher", "chat"])
 @pytest.mark.parametrize(
-    "errors",
+    ("target", "errors"),
     [
-        (RuntimeError("boom"),),
-        (OSError("io failure"),),
-        (RuntimeError("a"), OSError("b")),
-    ],
+        (target, errors)
+        for target in ("dispatcher", "chat")
+        for errors in [
+            (RuntimeError("boom"),),
+            (OSError("io failure"),),
+            (RuntimeError("a"), OSError("b")),
+        ]
+    ]
+    + [("source", (error,)) for error in (None, OSError("socket close failed"))],
 )
 def test_close_reports_writer_failures_once(dispatcher, logs, target, errors):
-    owner = dispatcher if target == "dispatcher" else Chat(iter(()))
-    writers = [_Writer(error=error) for error in errors]
-    for writer in writers:
-        owner.attach_writer(writer)
-    owner.close()
-    owner.close()
-    assert [writer.close_calls for writer in writers] == [1] * len(writers)
-    assert len(logs) == len(errors)
-    assert all(any(str(error) in line for line in logs) for error in errors)
-
-
-@pytest.mark.parametrize("error", [None, OSError("socket close failed")])
-def test_chat_closes_source_once_and_reports_known_errors(logs, error):
-    class Source:
-        close_calls = 0
-
+    class Source(_Writer):
         def __iter__(self):
             return self
 
         def __next__(self):
             return {"message": "waiting"}
 
-        def close(self):
-            self.close_calls += 1
-            if error:
-                raise error
-
-    source = Source()
-    chat = Chat(source)
-    chat.close()
-    chat.close()
-    assert source.close_calls == 1
-    if error:
-        assert any(str(error) in line for line in logs)
+    if target == "source":
+        writers = [Source(error=errors[0])]
+        owner = Chat(writers[0])
+    else:
+        owner = dispatcher if target == "dispatcher" else Chat(iter(()))
+        writers = [_Writer(error=error) for error in errors]
+        for writer in writers:
+            owner.attach_writer(writer)
+    owner.close()
+    owner.close()
+    assert [writer.close_calls for writer in writers] == [1] * len(writers)
+    errors = [error for error in errors if error is not None]
+    assert len(logs) == len(errors)
+    assert all(any(str(error) in line for line in logs) for error in errors)
 
 
 @pytest.mark.parametrize(
@@ -169,7 +156,7 @@ def test_pre_initialised_writer_and_duplicate_attachment(dispatcher, messages):
     assert writer.close_calls == 1
 
 
-@pytest.mark.parametrize("mode", ["formatted", "raw", "late-formatted"])
+@pytest.mark.parametrize("mode", ["formatted", "raw", "late-formatted", "none"])
 def test_semantic_deduplication_is_shared_but_raw_output_is_lossless(mode):
     chat = Chat(iter(()))
     calls = []
@@ -183,7 +170,8 @@ def test_semantic_deduplication_is_shared_but_raw_output_is_lossless(mode):
     raw, first, second = _Writer(), _Writer("formatted"), _Writer("formatted")
     if mode == "formatted":
         dispatcher.attach_writer(first)
-    dispatcher.attach_writer(raw)
+    if mode != "none":
+        dispatcher.attach_writer(raw)
     if mode == "formatted":
         dispatcher.attach_writer(second)
     paid = {"message_type": "paid_message", "message_id": "paid-1"}
@@ -192,7 +180,7 @@ def test_semantic_deduplication_is_shared_but_raw_output_is_lossless(mode):
     if mode == "late-formatted":
         dispatcher.attach_writer(first)
     dispatcher.emit(ticker)
-    assert raw.received == [paid, ticker]
+    assert raw.received == ([] if mode == "none" else [paid, ticker])
     assert dispatcher.formatted_duplicates_suppressed == (
         1 if mode == "formatted" else 0
     )
@@ -223,18 +211,3 @@ def test_writer_summary_does_not_count_failed_write(dispatcher):
     assert dispatcher.writer_summaries == [
         {"file_name": "failed.jsonl", "file_created": True, "records_written": 0}
     ]
-
-
-def test_emit_without_writers_does_not_format(dispatcher):
-    dispatcher.emit({"message": "ignored"})
-    assert dispatcher.writers == []
-
-
-def test_get_field_default_with_default_factory():
-    @dataclass
-    class Model:
-        items: list = field(default_factory=list)
-
-    result = get_field_default(dataclasses.fields(Model)[0])
-    assert result == []
-    assert isinstance(result, list)

@@ -23,7 +23,7 @@ from chat_downloader.sites.kick.constants import (
 from chat_downloader.sites.kick.errors import KickError
 from chat_downloader.sites.kick.parsing import events
 from chat_downloader.sites.kick.parsing.events import dispatch_event
-from tests.kick_helpers import load_fixture, pusher_frame
+from tests.kick_helpers import load_fixture, pusher_frame, raw_message
 
 
 @pytest.fixture
@@ -47,15 +47,12 @@ def sample_dir(tmp_path, monkeypatch, caplog):
 
 
 @pytest.mark.parametrize("encoded", [False, True])
-def test_chat_message_event_is_parsed(encoded) -> None:
+def test_chat_message_event_is_parsed(encoded):
     data = load_fixture("chat_message_event_data.json")
     frame = (
         pusher_frame(CHAT_MESSAGE_EVENT, data)
         if encoded
-        else {
-            "event": CHAT_MESSAGE_EVENT,
-            "data": data,
-        }
+        else {"event": CHAT_MESSAGE_EVENT, "data": data}
     )
     message = dispatch_event(frame)
     assert message is not None
@@ -63,15 +60,12 @@ def test_chat_message_event_is_parsed(encoded) -> None:
     assert message["message"] == "hello world :PogU:"
 
 
-def test_unknown_chat_message_type_records_diagnostic() -> None:
-    diagnostics: list[str] = []
+def test_unknown_chat_message_type_records_diagnostic():
+    diagnostics = []
     frame = pusher_frame(
-        CHAT_MESSAGE_EVENT,
-        {"id": "future", "type": "future_type", "content": "message"},
+        CHAT_MESSAGE_EVENT, raw_message("future", type="future_type", content="message")
     )
-
     message = dispatch_event(frame, record_diagnostic=diagnostics.append)
-
     assert message is not None
     assert message["message_type"] == "text_message"
     assert diagnostics == ["unknown_message_type_count", "parsed_event_count"]
@@ -178,21 +172,20 @@ def test_compact_context_and_receive_time_fallback(event, fixture, received, exp
     assert diagnostics == ["parsed_event_count"]
 
 
-@pytest.mark.parametrize("provider_id", [pytest.param(None, id="null"), "provider-id"])
-def test_poll_update_uses_receive_time_fallback_id(provider_id: str | None) -> None:
-    diagnostics: list[str] = []
-    payload = load_fixture("poll_update_event.json")
-    payload["id"] = provider_id
-
+@pytest.mark.parametrize(
+    "provider_id",
+    [pytest.param(None, id="null"), "provider-id"],
+)
+def test_poll_update_uses_receive_time_fallback_id(provider_id):
+    diagnostics = []
+    payload = load_fixture("poll_update_event.json") | {"id": provider_id}
     message = dispatch_event(
         pusher_frame(POLL_UPDATE_EVENT, payload),
         record_diagnostic=diagnostics.append,
         received_timestamp=1_789_000_000_000_003,
     )
-
     assert message is not None
-    expected_id = provider_id or "kick-poll-update:1789000000000003"
-    assert message["message_id"] == expected_id
+    assert message["message_id"] == (provider_id or "kick-poll-update:1789000000000003")
     assert message["message_type"] == "poll_update"
     assert message["message"] == "Example poll"
     assert message["metadata"]["options"][1]["votes"] == 1
@@ -200,15 +193,13 @@ def test_poll_update_uses_receive_time_fallback_id(provider_id: str | None) -> N
 
 
 @pytest.mark.parametrize("payload", [None, {}, [], {"id": None}])
-def test_poll_deleted_ignores_payload_shape(payload: object) -> None:
-    diagnostics: list[str] = []
-
+def test_poll_deleted_ignores_payload_shape(payload):
+    diagnostics = []
     message = dispatch_event(
         pusher_frame(POLL_DELETE_EVENT, payload),
         record_diagnostic=diagnostics.append,
         received_timestamp=1_789_000_000_000_004,
     )
-
     assert message == {
         "message_id": "kick-poll-deleted:1789000000000004",
         "message_type": "poll_deleted",
@@ -232,24 +223,20 @@ def test_poll_deleted_ignores_payload_shape(payload: object) -> None:
     ],
 )
 def test_compact_events_require_valid_receive_timestamp(
-    event, payload, received_timestamp
+    event,
+    payload,
+    received_timestamp,
 ):
-    frame = pusher_frame(event, payload)
     diagnostics = []
-    assert (
-        dispatch_event(
-            frame,
-            received_timestamp=received_timestamp,
-            record_diagnostic=diagnostics.append,
-        )
-        is None
+    message = dispatch_event(
+        pusher_frame(event, payload),
+        received_timestamp=received_timestamp,
+        record_diagnostic=diagnostics.append,
     )
+    assert message is None
     if event in (POLL_UPDATE_EVENT, POLL_DELETE_EVENT):
-        expected_type = "poll_update" if event == POLL_UPDATE_EVENT else "poll_deleted"
-        assert diagnostics == [
-            "malformed_event_count",
-            f"malformed_event_type:{expected_type}",
-        ]
+        kind = "poll_update" if event == POLL_UPDATE_EVENT else "poll_deleted"
+        assert diagnostics == ["malformed_event_count", f"malformed_event_type:{kind}"]
 
 
 @pytest.mark.parametrize(
@@ -284,37 +271,35 @@ def test_invalid_compact_shape_remains_malformed(event, payload, received, kind)
     assert diagnostics == ["malformed_event_count", f"malformed_event_type:{kind}"]
 
 
-def test_malformed_nested_json_is_skipped() -> None:
-    frame = {"event": CHAT_MESSAGE_EVENT, "data": "{not valid json"}
+@pytest.mark.parametrize(
+    "frame",
+    [
+        {"event": CHAT_MESSAGE_EVENT, "data": "{not valid json"},
+        pusher_frame(CHAT_MESSAGE_EVENT, {"content": "x"}),
+        *[
+            pusher_frame(event, {})
+            for event in [
+                PUSHER_CONNECTION_ESTABLISHED,
+                PUSHER_SUBSCRIPTION_SUCCEEDED,
+                PUSHER_PING,
+            ]
+        ],
+    ],
+)
+def test_malformed_chat_and_control_frames_are_skipped(frame):
     assert dispatch_event(frame) is None
 
 
-def test_unparseable_chat_payload_is_skipped() -> None:
-    # Valid JSON, but missing the required id.
-    assert dispatch_event(pusher_frame(CHAT_MESSAGE_EVENT, {"content": "x"})) is None
-
-
-def test_pusher_error_is_captured_before_raise(captured) -> None:
+def test_pusher_error_is_captured_before_raise(captured):
     with pytest.raises(KickError):
         dispatch_event(pusher_frame(PUSHER_ERROR, {"message": "bad"}))
-
     assert captured[0][0][0] == "kick-pusher-error"
     assert captured[0][1]["sample_limit"] == 10
 
 
-@pytest.mark.parametrize(
-    "event",
-    [PUSHER_CONNECTION_ESTABLISHED, PUSHER_SUBSCRIPTION_SUCCEEDED, PUSHER_PING],
-)
-def test_control_events_are_ignored(event: str) -> None:
-    assert dispatch_event(pusher_frame(event, {})) is None
-
-
-def test_unknown_event_is_captured_and_skipped(captured) -> None:
+def test_unknown_event_is_captured_and_skipped(captured):
     frame = pusher_frame("App\\Events\\FutureEvent", {"future": True})
-
     assert dispatch_event(frame) is None
-
     assert captured[0][0] == (
         "kick-unknown-event-FutureEvent",
         {"raw": frame, "event_name": "App\\Events\\FutureEvent"},
@@ -326,26 +311,23 @@ def test_unknown_event_is_captured_and_skipped(captured) -> None:
     }
 
 
-def test_malformed_known_event_is_captured(captured) -> None:
-    frame = pusher_frame("App\\Events\\SubscriptionEvent", {})
-
+def test_malformed_known_event_is_captured(captured):
+    frame = pusher_frame(SUBSCRIPTION_EVENT, {})
     diagnostics = []
     assert dispatch_event(frame, record_diagnostic=diagnostics.append) is None
     assert diagnostics == ["malformed_event_count", "malformed_event_type:subscription"]
-
     assert captured[0][0][0] == "kick-malformed-event"
     assert captured[0][0][1]["raw"] == frame
     assert captured[0][0][1]["message_type"] == "subscription"
 
 
-def test_frame_without_event_is_captured_and_skipped(captured) -> None:
+def test_frame_without_event_is_captured_and_skipped(captured):
     assert dispatch_event({"data": "{}"}) is None
-
     assert captured[0][0][0] == "kick-unknown-event"
     assert captured[0][0][1]["reason"] == "missing or non-string event name"
 
 
-def test_unknown_event_capture_is_sanitized_on_disk(sample_dir) -> None:
+def test_unknown_event_capture_is_sanitized_on_disk(sample_dir):
     frame = {
         "event": "App\\Events\\FutureEvent",
         "data": {
@@ -354,9 +336,7 @@ def test_unknown_event_capture_is_sanitized_on_disk(sample_dir) -> None:
             "url": "https://example.test/watch?token=should-not-survive&safe=yes",
         },
     }
-
     assert dispatch_event(frame) is None
-
     samples = list(sample_dir.glob("kick-unknown-event-*.json"))
     assert len(samples) == 1
     sample_text = samples[0].read_text(encoding="utf-8")
@@ -372,19 +352,17 @@ def test_unknown_event_capture_is_sanitized_on_disk(sample_dir) -> None:
     assert stat.S_IMODE(samples[0].stat().st_mode) == 0o600
 
 
-def test_unknown_event_capture_is_bounded(sample_dir, caplog) -> None:
+def test_unknown_event_capture_is_bounded(sample_dir, caplog):
     for index in range(12):
         dispatch_event(pusher_frame(f"App\\Events\\Future{index}", {"index": index}))
-
     assert len(list(sample_dir.glob("kick-unknown-event-*.json"))) == 10
     assert "Debug sample limit reached" in caplog.text
 
 
-def test_unknown_event_capture_isolated_by_event_name(sample_dir) -> None:
+def test_unknown_event_capture_isolated_by_event_name(sample_dir):
     for index in range(5):
         dispatch_event(pusher_frame("App\\Events\\NoisyEvent", {"index": index}))
     dispatch_event(pusher_frame("App\\Events\\DifferentEvent", {"value": 1}))
-
     assert len(list(sample_dir.glob("kick-unknown-event-noisyevent-*.json"))) == 3
     assert len(list(sample_dir.glob("kick-unknown-event-differentevent-*.json"))) == 1
 
@@ -405,18 +383,18 @@ def test_unknown_event_capture_isolated_by_event_name(sample_dir) -> None:
         None,
     ],
 )
-def test_compact_host_does_not_repair_invalid_fields(overrides) -> None:
+def test_compact_host_does_not_repair_invalid_fields(overrides):
     data = (
         []
         if overrides is None
         else load_fixture("stream_host_event_compact.json") | overrides
     )
-    assert (
-        dispatch_event(pusher_frame(STREAM_HOST_EVENT, data), received_timestamp=123)
-        is None
+    message = dispatch_event(
+        pusher_frame(STREAM_HOST_EVENT, data), received_timestamp=123
     )
+    assert message is None
 
 
-def test_existing_wrapped_host_is_unchanged_with_receive_time() -> None:
+def test_existing_wrapped_host_is_unchanged_with_receive_time():
     frame = pusher_frame(STREAM_HOST_EVENT, load_fixture("stream_host_event.json"))
     assert dispatch_event(frame, received_timestamp=123) == dispatch_event(frame)

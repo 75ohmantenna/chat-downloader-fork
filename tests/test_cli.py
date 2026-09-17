@@ -58,18 +58,9 @@ def test_cli_invalid_request_exits_without_traceback(caplog) -> None:
     assert "Traceback" not in caplog.text
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [
-        ("a,b,c", ["a", "b", "c"]),
-        ("a b c", ["a", "b", "c"]),
-        ("a;b;c", ["a", "b", "c"]),
-        ("a, b; c", ["a", "b", "c"]),
-        ("only", ["only"]),
-    ],
-)
-def test_splitter(value, expected) -> None:
-    assert splitter(value) == expected
+@pytest.mark.parametrize("value", ["a,b,c", "a b c", "a;b;c", "a, b; c", "only"])
+def test_splitter(value) -> None:
+    assert splitter(value) == (["only"] if value == "only" else ["a", "b", "c"])
 
 
 @pytest.mark.parametrize(
@@ -84,9 +75,22 @@ def test_str2bool(values, expected) -> None:
         assert str2bool(value) is expected
 
 
-def test_str2bool_invalid_raises() -> None:
+@pytest.mark.parametrize(
+    ("parse", "value"),
+    [(str2bool, "maybe")]
+    + [
+        (parse_header, value)
+        for value in (
+            "BrokenHeader",
+            "X-Test: hello\r\nInjected: nope",
+            "Bad Header: value",
+            ":somevalue",
+        )
+    ],
+)
+def test_cli_value_parsers_reject_invalid_input(parse, value) -> None:
     with pytest.raises(argparse.ArgumentTypeError):
-        str2bool("maybe")
+        parse(value)
 
 
 @pytest.mark.parametrize(
@@ -233,20 +237,6 @@ def test_invalid_header_flag_raises_parse_error() -> None:
 
 def test_parse_header_returns_key_value_pair() -> None:
     assert parse_header("X-Test: value") == ("X-Test", "value")
-
-
-@pytest.mark.parametrize(
-    "value",
-    [
-        "BrokenHeader",
-        "X-Test: hello\r\nInjected: nope",
-        "Bad Header: value",
-        ":somevalue",
-    ],
-)
-def test_parse_header_rejects_invalid_input(value) -> None:
-    with pytest.raises(argparse.ArgumentTypeError):
-        parse_header(value)
 
 
 _CLI_CHAT_PARAMS = frozenset(

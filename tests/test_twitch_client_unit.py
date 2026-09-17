@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
-from typing import NoReturn
+from contextlib import nullcontext
 from unittest.mock import Mock
 
 import pytest
@@ -31,12 +31,16 @@ from chat_downloader.sites.twitch.replay_transport import (
 )
 
 
-class _Resp:
-    def __init__(self, payload) -> None:
-        self._payload = payload
+def _post(*payloads):
+    return Mock(
+        side_effect=[
+            Mock(status_code=200, text="", json=Mock(return_value=p)) for p in payloads
+        ]
+    )
 
-    def json(self):
-        return self._payload
+
+def _errors(*messages):
+    return {"errors": [{"message": message} for message in messages]}
 
 
 def _optional_metadata_error() -> dict[str, object]:
@@ -44,81 +48,71 @@ def _optional_metadata_error() -> dict[str, object]:
 
 
 @pytest.mark.parametrize(
-    "payload",
+    ("payloads", "count", "error"),
     [
-        {"data": {"user": {}}},
-        {"errors": [{"message": "service error", "path": ["video", "comments"]}]},
-        {"errors": _optional_metadata_error()},
-    ],
-    ids=["clean", "warning", "malformed-errors"],
-)
-def test_handle_result_errors_does_not_record_degradation(payload) -> None:
-    record_degradation = Mock()
-    _handle_result_errors(
-        [payload],
-        ["StreamMetadata"],
-        record_optional_degradation=record_degradation,
-    )
-    record_degradation.assert_not_called()
-
-
-def test_handle_result_errors_counts_once_per_degraded_result_item() -> None:
-    record_degradation = Mock()
-
-    _handle_result_errors(
-        [
-            {
-                "errors": [
-                    _optional_metadata_error(),
-                    _optional_metadata_error(),
-                    {"message": "service error", "path": ["video", "comments"]},
-                ]
-            },
-            {"errors": [_optional_metadata_error()]},
-        ],
-        ["StreamMetadata"],
-        record_optional_degradation=record_degradation,
-    )
-
-    assert record_degradation.call_count == 2
-    assert all(
-        call.args == () and call.kwargs == {} for call in record_degradation.mock_calls
-    )
-
-
-@pytest.mark.parametrize("fatal_message", ["Unauthorized", "PersistedQueryNotFound"])
-def test_handle_result_errors_does_not_count_before_later_fatal_item(
-    fatal_message: str,
-) -> None:
-    record_degradation = Mock()
-
-    with pytest.raises((LoginRequired, ParsingError)):
-        _handle_result_errors(
+        ([{"data": {"user": {}}}], 0, None),
+        (
+            [{"errors": [{"message": "service error", "path": ["video", "comments"]}]}],
+            0,
+            None,
+        ),
+        ([{"errors": _optional_metadata_error()}], 0, None),
+        (
+            [
+                {
+                    "errors": [
+                        _optional_metadata_error(),
+                        _optional_metadata_error(),
+                        {"message": "service error", "path": ["video", "comments"]},
+                    ]
+                },
+                {"errors": [_optional_metadata_error()]},
+            ],
+            2,
+            None,
+        ),
+        (
+            [{"errors": [_optional_metadata_error()]}, _errors("Unauthorized")],
+            0,
+            LoginRequired,
+        ),
+        (
             [
                 {"errors": [_optional_metadata_error()]},
-                {"errors": [{"message": fatal_message}]},
+                _errors("PersistedQueryNotFound"),
             ],
-            ["StreamMetadata"],
-            record_optional_degradation=record_degradation,
+            0,
+            ParsingError,
+        ),
+    ],
+    ids=[
+        "clean",
+        "warning",
+        "malformed-errors",
+        "once-per-item",
+        "later-auth-error",
+        "later-hash-error",
+    ],
+)
+def test_result_error_degradation_is_atomic(payloads, count, error):
+    record = Mock()
+    with pytest.raises(error) if error else nullcontext():
+        _handle_result_errors(
+            payloads, ["StreamMetadata"], record_optional_degradation=record
         )
-
-    record_degradation.assert_not_called()
+    assert record.call_count == count
+    assert all(call.args == () and call.kwargs == {} for call in record.mock_calls)
 
 
 def test_download_gql_does_not_count_degradation_from_rejected_hash_response() -> None:
-    payloads = iter(
-        [
-            [
-                {"errors": [_optional_metadata_error()]},
-                {"errors": [{"message": "PersistedQueryNotFound"}]},
-            ],
-            [{"data": {"user": {}}}],
-        ]
+    post = _post(
+        [{"errors": [_optional_metadata_error()]}, _errors("PersistedQueryNotFound")],
+        [{"data": {"user": {}}}],
     )
     record_degradation = Mock()
 
     result = _download_gql(
-        lambda *_args, **_kwargs: _Resp(next(payloads)),
+        post,
         [{"operationName": "StreamMetadata", "variables": {}}],
         record_optional_degradation=record_degradation,
     )
@@ -133,7 +127,7 @@ def test_download_gql_adds_hash_without_mutating_input(client_id) -> None:
     ops = [{"operationName": op_name, "variables": {"x": 1}}]
     ops_snapshot = [{"operationName": op_name, "variables": {"x": 1}}]
 
-    session_post = Mock(return_value=_Resp([{"data": {"ok": True}}]))
+    session_post = _post([{"data": {"ok": True}}])
     kwargs = {} if client_id is None else {"client_id": client_id}
     out = _download_gql(session_post, ops, **kwargs)
     calls = session_post.call_args.kwargs
@@ -149,7 +143,7 @@ def test_download_gql_adds_hash_without_mutating_input(client_id) -> None:
 
 
 def test_download_gql_maps_mobile_global_badge_alias_to_wire_operation() -> None:
-    session_post = Mock(return_value=_Resp([{"data": {"badges": []}}]))
+    session_post = _post([{"data": {"badges": []}}])
     _download_gql(session_post, [{"operationName": "GlobalBadgesMobile"}])
 
     operation = session_post.call_args.kwargs["json"][0]
@@ -185,12 +179,7 @@ def test_download_gql_retries_supported_hash_failure_with_full_document(
     variables: dict[str, object],
     fallback_variables: dict[str, object],
 ) -> None:
-    session_post = Mock(
-        side_effect=[
-            _Resp([{"errors": [{"message": "PersistedQueryNotFound"}]}]),
-            _Resp([{"data": {"ok": True}}]),
-        ]
-    )
+    session_post = _post([_errors("PersistedQueryNotFound")], [{"data": {"ok": True}}])
 
     result = _download_gql(
         session_post,
@@ -234,11 +223,7 @@ def test_mobile_replay_document_matches_apk_persisted_hash() -> None:
     ids=["unsupported-fallback", "fallback-auth-error", "non-hash-error"],
 )
 def test_download_gql_limits_fallback_and_maps_errors(operation, messages, error):
-    session_post = Mock(
-        side_effect=[
-            _Resp([{"errors": [{"message": message}]}]) for message in messages
-        ]
-    )
+    session_post = _post(*[[_errors(message)] for message in messages])
     with pytest.raises(error):
         _download_gql(session_post, [{"operationName": operation, "variables": {}}])
     assert session_post.call_count == len(messages)
@@ -248,39 +233,27 @@ def test_update_badge_info_merges_global_and_channel_badges() -> None:
     badge_info = {}
     subscriber_badge_info = {}
 
-    def b64_id(set_id: str, version: str, channel_id: str) -> str:
+    def badge(set_id, version, channel_id, title):
         raw = f"{set_id};{version};{channel_id}".encode()
-        return base64.b64encode(raw).decode()
+        return {"id": base64.b64encode(raw).decode(), "title": title}
 
-    channel_badge = {"id": b64_id("subscriber", "12", "123"), "title": "Sub"}
-    global_badge = {"id": b64_id("moderator", "1", ""), "title": "Mod"}
-    calls = {}
+    badges = {
+        "ChatList_Badges": badge("subscriber", "12", "123", "Sub"),
+        "GlobalBadges": badge("moderator", "1", "", "Mod"),
+    }
 
-    def download_gql_func(_session_post, ops, client_id=None):
-        calls.setdefault("client_ids", []).append(client_id)
-        op_name = ops[0]["operationName"]
-        if op_name == "ChatList_Badges":
-            return [
-                {
-                    "data": {
-                        "badges": [channel_badge],
-                        "user": {"broadcastBadges": []},
-                    },
-                },
-            ]
-        if op_name == "GlobalBadges":
-            return [
-                {
-                    "data": {
-                        "badges": [global_badge],
-                        "user": {"broadcastBadges": []},
-                    },
-                },
-            ]
-        msg = f"Unexpected operationName: {op_name}"
-        raise AssertionError(msg)
+    def download(_session_post, ops, client_id=None):
+        return [
+            {
+                "data": {
+                    "badges": [badges[ops[0]["operationName"]]],
+                    "user": {"broadcastBadges": []},
+                }
+            }
+        ]
 
-    # session_post isn't used by our stub download func.
+    download_gql_func = Mock(side_effect=download)
+
     update_badge_info(
         session_post=lambda *a, **k: None,
         channel="xenova",
@@ -290,23 +263,20 @@ def test_update_badge_info_merges_global_and_channel_badges() -> None:
         client_id="custom-client",
     )
 
-    assert calls["client_ids"] == ["custom-client", "custom-client"]
-
-    assert ("moderator", "1") in badge_info
+    assert [call.kwargs["client_id"] for call in download_gql_func.call_args_list] == [
+        "custom-client",
+        "custom-client",
+    ]
     assert badge_info[("moderator", "1")]["title"] == "Mod"
-
-    assert "123" in subscriber_badge_info
-    assert ("subscriber", "12") in subscriber_badge_info["123"]
     assert subscriber_badge_info["123"][("subscriber", "12")]["title"] == "Sub"
 
 
 def test_get_user_videos_raises_user_not_found_on_empty_user_id() -> None:
-    def download_gql_func(_session_post, _query):
-        return [{"data": {"user": {"id": "", "videos": None}}}]
-
     gen = get_user_videos(
-        session_post=lambda *a, **k: None,
-        download_gql_func=download_gql_func,
+        session_post=Mock(),
+        download_gql_func=Mock(
+            return_value=[{"data": {"user": {"id": "", "videos": None}}}]
+        ),
         username="doesnotexist",
         limit=1,
     )
@@ -339,74 +309,47 @@ def test_get_chat_messages_by_vod_id_selects_cursor_or_offset(cursor, offset, ex
     }
 
 
-def test_benign_unmatched_irc_buffer_detection_suppresses_join_part_ping_numeric() -> (
-    None
-):
-    readbuffer = (
-        "PING :tmi.twitch.tv\r\n"
-        "PONG :tmi.twitch.tv\r\n"
-        ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n"
-        ":tmi.twitch.tv 001 justinfan67420 :Welcome, GLHF!\r\n"
-        ":justinfan67420.tmi.twitch.tv 353 justinfan67420 = #idubbbz :foo bar baz\r\n"
-        ":user!user@user.tmi.twitch.tv JOIN #idubbbz\r\n"
-        ":user!user@user.tmi.twitch.tv PART #idubbbz\r\n"
-    )
-    assert _is_benign_unmatched_irc_buffer(readbuffer) is True
-
-
-def test_benign_unmatched_irc_buffer_detection_keeps_unknown_lines() -> None:
-    readbuffer = "THIS IS NOT A TWITCH IRC HOUSEKEEPING LINE\r\n"
-    assert _is_benign_unmatched_irc_buffer(readbuffer) is False
-
-
-# ---------------------------------------------------------------------------
-# update_badge_info: graceful degradation with specific exceptions (Fix 4)
-# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("readbuffer", "benign"),
+    [
+        (
+            (
+                "PING :tmi.twitch.tv\r\n"
+                "PONG :tmi.twitch.tv\r\n"
+                ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n"
+                ":tmi.twitch.tv 001 justinfan67420 :Welcome, GLHF!\r\n"
+                ":justinfan67420.tmi.twitch.tv 353 justinfan67420 "
+                "= #idubbbz :foo bar baz\r\n"
+                ":user!user@user.tmi.twitch.tv JOIN #idubbbz\r\n"
+                ":user!user@user.tmi.twitch.tv PART #idubbbz\r\n"
+            ),
+            True,
+        ),
+        ("THIS IS NOT A TWITCH IRC HOUSEKEEPING LINE\r\n", False),
+    ],
+)
+def test_benign_unmatched_irc_buffer(readbuffer, benign):
+    assert _is_benign_unmatched_irc_buffer(readbuffer) is benign
 
 
 @pytest.mark.parametrize(
-    "exc",
+    ("exc", "expected"),
     [
-        RequestException("connection refused"),
-        ValueError("bad base64"),
-        KeyError("missing key"),
+        (RequestException("connection refused"), None),
+        (ValueError("bad base64"), None),
+        (KeyError("missing key"), None),
+        (RuntimeError("unexpected"), RuntimeError),
     ],
 )
-def test_update_badge_info_logs_warning_on_network_error(exc, caplog) -> None:
-    """update_badge_info warns and does not raise on expected errors."""
-    import logging
-
-    def download_gql_func(_session_post, _ops, client_id=None) -> NoReturn:
-        raise exc
-
-    with caplog.at_level(logging.WARNING, logger="chat_downloader"):
+def test_badge_errors_degrade_only_for_expected_exceptions(exc, expected, caplog):
+    with pytest.raises(expected) if expected else nullcontext():
         update_badge_info(
-            session_post=lambda *a, **k: None,
+            session_post=Mock(),
             channel="testchan",
-            download_gql_func=download_gql_func,
+            download_gql_func=Mock(side_effect=exc),
             badge_info={},
             subscriber_badge_info={},
         )
-
-    assert any("testchan" in r.message for r in caplog.records)
-    assert any("Continuing without badges" in r.message for r in caplog.records)
-
-
-def test_update_badge_info_does_not_swallow_unexpected_exceptions() -> None:
-    """Unexpected exception types propagate past the narrowed clause."""
-
-    class _WeirdError(RuntimeError):
-        pass
-
-    def download_gql_func(_session_post, _ops, client_id=None) -> NoReturn:
-        msg = "unexpected"
-        raise _WeirdError(msg)
-
-    with pytest.raises(_WeirdError):
-        update_badge_info(
-            session_post=lambda *a, **k: None,
-            channel="testchan",
-            download_gql_func=download_gql_func,
-            badge_info={},
-            subscriber_badge_info={},
-        )
+    if expected is None:
+        assert any("testchan" in record.message for record in caplog.records)
+        assert any("Continuing without badges" in r.message for r in caplog.records)

@@ -15,6 +15,7 @@ from chat_downloader.sites.twitch import _replay_vod_loop, replay_service
 from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
 from chat_downloader.sites.twitch.replay_transport import get_chat_messages_by_vod_id
 from chat_downloader.sites.twitch.types import BadgeSet
+from tests.twitch_third_helpers import chat_request
 
 
 @pytest.fixture
@@ -31,13 +32,8 @@ def downloader():
 
 
 def _request(**overrides):
-    return ChatRequest(
-        **{
-            "url": "https://www.twitch.tv/videos/123",
-            "max_attempts": 1,
-            "message_groups": ["messages"],
-            **overrides,
-        }
+    return chat_request(
+        **{"url": "https://www.twitch.tv/videos/123", "max_attempts": 1, **overrides}
     )
 
 
@@ -72,40 +68,64 @@ def _run(downloader, fetch, request=None, *, video_id="vod123", duration=120):
     )
 
 
-@pytest.mark.parametrize("kind", ["vod", "clip"])
-def test_replay_metadata_missing(downloader, kind):
-    if kind == "vod":
-        downloader._download_gql.return_value = [{"data": {"video": None}}]
-        get_chat, error = replay_service.get_chat_by_vod_id, VideoUnavailable
-        request = _request()
-        identifier = "vod123"
+@pytest.mark.parametrize(
+    ("kind", "metadata", "retry", "expected"),
+    [
+        ("vod", None, False, VideoUnavailable),
+        ("clip", {"video": None, "title": "Expired Clip"}, False, NoChatReplay),
+        (
+            "vod",
+            {"title": "Replay", "lengthSeconds": 12.5, "owner": {}},
+            False,
+            ("Replay", 12.5),
+        ),
+        (
+            "vod",
+            {
+                "title": "Example VOD",
+                "lengthSeconds": 123,
+                "owner": {"id": "channel-123", "login": "streamer"},
+            },
+            True,
+            ("Example VOD", 123),
+        ),
+        (
+            "clip",
+            {
+                "video": {"id": "vod123"},
+                "videoOffsetSeconds": 15,
+                "durationSeconds": 45,
+                "title": "Example Clip",
+                "broadcaster": {"id": "channel-123", "login": "streamer"},
+            },
+            True,
+            ("Example Clip (123)", 45),
+        ),
+    ],
+    ids=["missing-vod", "expired-clip", "missing-owner", "vod-retry", "clip-retry"],
+)
+def test_replay_metadata(downloader, kind, metadata, retry, expected):
+    response = {"data": {"video" if kind == "vod" else "clip": metadata}}
+    download = (
+        downloader._download_gql if kind == "vod" else downloader._download_base_gql
+    )
+    responses = [response] if kind == "clip" else [[response]]
+    if retry:
+        responses.insert(0, RequestException("temporary"))
+    download.side_effect = responses
+    get_chat = getattr(replay_service, f"get_chat_by_{kind}_id")
+    request = _request(max_attempts=len(responses))
+    if isinstance(expected, type):
+        with pytest.raises(expected):
+            get_chat(downloader, "123", request)
     else:
-        downloader._download_base_gql.return_value = {
-            "data": {"clip": {"video": None, "title": "Expired Clip"}},
-        }
-        get_chat, error = replay_service.get_chat_by_clip_id, NoChatReplay
-        request = _request(url="https://clips.twitch.tv/expired-clip")
-        identifier = "expired-clip"
-    with pytest.raises(error):
-        get_chat(downloader, identifier, request)
-    downloader._update_badge_info.assert_not_called()
-
-
-def test_replay_service_get_chat_by_vod_id_allows_missing_owner_login(downloader):
-    downloader._download_gql.return_value = [
-        {
-            "data": {
-                "video": {
-                    "title": "Replay",
-                    "lengthSeconds": 12.5,
-                    "owner": {},
-                }
-            }
-        }
-    ]
-    chat = replay_service.get_chat_by_vod_id(downloader, "123", _request())
-    assert (chat.title, chat.duration) == ("Replay", 12.5)
-    downloader._update_badge_info.assert_not_called()
+        chat = get_chat(downloader, "123", request)
+        assert (chat.title, chat.duration) == expected
+    assert downloader.retry.call_count == int(retry)
+    if retry:
+        downloader._update_badge_info.assert_called_once_with("streamer", "channel-123")
+    else:
+        downloader._update_badge_info.assert_not_called()
 
 
 def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page(
@@ -145,20 +165,14 @@ def test_mobile_replay_fallback_drives_full_multi_page_composition(downloader):
             }
         ]
 
-    responses = [
-        _PersistedQueryUnavailable("rotated"),
-        mobile_page("message-1", "cursor-1", 1),
-        _PersistedQueryUnavailable("rotated"),
-        mobile_page("message-2", "", 2),
-    ]
-    calls = []
-
-    def download(query):
-        calls.append(query)
-        response = responses.pop(0)
-        if isinstance(response, Exception):
-            raise response
-        return response
+    download = Mock(
+        side_effect=[
+            _PersistedQueryUnavailable("rotated"),
+            mobile_page("message-1", "cursor-1", 1),
+            _PersistedQueryUnavailable("rotated"),
+            mobile_page("message-2", "", 2),
+        ]
+    )
 
     badge_set = BadgeSet(
         global_badges={},
@@ -181,9 +195,10 @@ def test_mobile_replay_fallback_drives_full_multi_page_composition(downloader):
     assert [item["message_id"] for item in result] == ["message-1", "message-2"]
     assert result[0]["emotes"][0]["locations"] == "0-4"
     assert result[0]["author"]["badges"][0]["title"] == "Channel subscriber"
+    calls = [call.args[0] for call in download.call_args_list]
     assert calls[2][0]["variables"] == {"videoID": "vod-1", "cursor": "cursor-1"}
     assert calls[3][0]["variables"] == {"vodId": "vod-1", "after": "cursor-1"}
-    assert responses == []
+    assert len(calls) == 4
 
 
 def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_stop(
@@ -251,39 +266,9 @@ def test_replay_completed_page_logs_count_and_skips_non_dict_edges(
     log.assert_any_call("debug", "Total number of messages: 1")
 
 
-@pytest.mark.parametrize("kind", ["vod", "clip"])
-def test_replay_service_retries_metadata_before_success(downloader, kind):
-    owner = {"id": "channel-123", "login": "streamer"}
-    if kind == "vod":
-        metadata = {"title": "Example VOD", "lengthSeconds": 123, "owner": owner}
-        response = [{"data": {"video": metadata}}]
-        download, get_chat = downloader._download_gql, replay_service.get_chat_by_vod_id
-        title = "Example VOD"
-    else:
-        metadata = {
-            "video": {"id": "vod123"},
-            "videoOffsetSeconds": 15,
-            "durationSeconds": 45,
-            "title": "Example Clip",
-            "broadcaster": owner,
-        }
-        response = {"data": {"clip": metadata}}
-        download, get_chat = (
-            downloader._download_base_gql,
-            replay_service.get_chat_by_clip_id,
-        )
-        title = "Example Clip (123)"
-    download.side_effect = [RequestException("temporary"), response]
-    chat = get_chat(
-        downloader, "123", ChatRequest(url="https://twitch.tv", max_attempts=2)
-    )
-    assert chat.title == title
-    downloader.retry.assert_called_once()
-    downloader._update_badge_info.assert_called_once_with("streamer", "channel-123")
-
-
 @pytest.mark.parametrize(
-    "url", ["https://www.twitch.tv/videos/123", "https://clips.twitch.tv/clip123"]
+    "url",
+    ["https://www.twitch.tv/videos/123", "https://clips.twitch.tv/clip123"],
 )
 def test_replay_request_rejects_zero_attempts(url):
     with pytest.raises(ValueError, match="max_attempts"):

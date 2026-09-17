@@ -33,19 +33,14 @@ def _text(message_id="one", timestamp=1000):
 
 
 def _summary(received=5, benign=2, parsed=3):
-    return (
-        "[DEBUG] Run summary: "
-        + repr(
-            {
-                "provider_diagnostics": {
-                    "received_irc_frame_count": received,
-                    "benign_irc_control_frame_count": benign,
-                    "parsed_irc_message_count": parsed,
-                }
-            }
-        )
-        + "\n"
-    )
+    summary = {
+        "provider_diagnostics": {
+            "received_irc_frame_count": received,
+            "benign_irc_control_frame_count": benign,
+            "parsed_irc_message_count": parsed,
+        }
+    }
+    return f"[DEBUG] Run summary: {summary!r}\n"
 
 
 def _log(path, received=5, benign=2, parsed=3):
@@ -171,9 +166,16 @@ def test_bad_summary_fails_without_echoing_input(tmp_path, capsys, summary):
     assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
 
 
-def test_io_and_usage_errors_are_content_free(tmp_path, capsys):
-    assert main([str(tmp_path / "PRIVATE_SENTINEL")]) == 2
-    assert "PRIVATE_SENTINEL" not in capsys.readouterr().out
+@pytest.mark.parametrize("missing", [False, True])
+def test_io_errors_are_content_free(tmp_path, capsys, missing):
+    path = tmp_path / "PRIVATE_SENTINEL" if missing else tmp_path
+    assert main([str(path)]) == 2
+    assert json.loads(capsys.readouterr().out) == {
+        "error": "input_or_temporary_storage_io"
+    }
+
+
+def test_usage_errors_are_content_free(capsys):
     with pytest.raises(SystemExit) as error:
         main(["--PRIVATE_SENTINEL"])
     assert error.value.code == 2
@@ -228,13 +230,6 @@ def test_fifo_input_fails_promptly_without_waiting_for_a_writer(tmp_path):
     assert result.returncode == 2
     assert json.loads(result.stdout) == {"error": "input_or_temporary_storage_io"}
     assert result.stderr == ""
-
-
-def test_directory_input_is_an_io_error(tmp_path, capsys):
-    assert main([str(tmp_path)]) == 2
-    assert json.loads(capsys.readouterr().out) == {
-        "error": "input_or_temporary_storage_io"
-    }
 
 
 def test_inspection_ignores_unrelated_debug_lines_without_echoing_them(

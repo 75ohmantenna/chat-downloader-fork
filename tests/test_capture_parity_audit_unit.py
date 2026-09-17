@@ -75,7 +75,7 @@ class Capture:
             args.extend(("--dedup-reset-before-jsonl-line", line))
         return _run_raw(*args, timeout=timeout)
 
-    def check(self, code=0, *, counters=None, absent=("private",), **options):
+    def check(self, code=0, *, counters="", absent=("private",), **options):
         result = self.run(**options)
         direct = self.direct(**options)
         assert result.returncode == code, result.stdout + result.stderr
@@ -86,8 +86,8 @@ class Capture:
         for token in absent:
             assert token not in result.stdout + result.stderr
         fields = dict(word.split("=", 1) for word in result.stdout.split()[1:])
-        for name, expected in (counters or {}).items():
-            assert fields[name] == str(expected), (name, fields)
+        for name, expected in (word.split("=", 1) for word in counters.split()):
+            assert fields[name] == expected, (name, fields)
         return direct
 
 
@@ -114,13 +114,8 @@ def test_auditor_matches_real_writer_composition_and_semantic_dedup(capture):
     list(chat)
     chat.close()
     stats = capture.check(
-        counters={
-            "jsonl_records": 4,
-            "expected_txt_lines": 3,
-            "txt_lines": 3,
-            "suppressed_duplicates": 1,
-            "txt_trailing_newline": "yes",
-        }
+        counters="jsonl_records=4 expected_txt_lines=3 txt_lines=3 "
+        "suppressed_duplicates=1 txt_trailing_newline=yes"
     )
     assert stats.suppressed_duplicates == 1
 
@@ -138,7 +133,7 @@ def test_invalid_jsonl_without_content_echo(capture, raw, reason):
     capture.write(raw)
     stats = capture.check(
         1,
-        counters={"first_issue": reason, "jsonl_errors": 1},
+        counters=f"first_issue={reason} jsonl_errors=1",
         absent=("private", "not-json"),
     )
     assert stats.jsonl_errors == 1
@@ -150,14 +145,10 @@ def test_invalid_jsonl_without_content_echo(capture, raw, reason):
         (
             b"\xff\n{}\n\n",
             b"\n",
-            {
-                "jsonl_lines": 3,
-                "jsonl_records": 1,
-                "jsonl_errors": 2,
-                "first_issue_jsonl_line": 1,
-                "comparison_complete": "no",
-                "comparison_skipped": 3,
-            },
+            (
+                "jsonl_lines=3 jsonl_records=1 jsonl_errors=2 first_issue_jsonl_line=1 "
+                "comparison_complete=no comparison_skipped=3"
+            ),
             {"comparison_skipped": 3},
         ),
         (
@@ -166,43 +157,34 @@ def test_invalid_jsonl_without_content_echo(capture, raw, reason):
                 _message("private-after"),
             ],
             b": private-after\n",
-            {
-                "render_errors": 1,
-                "comparison_complete": "no",
-                "comparison_skipped": 2,
-                "first_issue": "render_error",
-            },
+            (
+                "render_errors=1 comparison_complete=no comparison_skipped=2 "
+                "first_issue=render_error"
+            ),
             {"render_errors": 1},
         ),
         (
             [_message("private-one"), _message("private-two")],
             b": altered\n",
-            {
-                "text_mismatches": 2,
-                "count_mismatch": "yes",
-                "first_mismatch_jsonl_line": 1,
-                "first_mismatch_txt_line": 1,
-            },
+            (
+                "text_mismatches=2 count_mismatch=yes first_mismatch_jsonl_line=1 "
+                "first_mismatch_txt_line=1"
+            ),
             {"text_mismatches": 2},
         ),
         (
             [_message()],
             b"\xff",
-            {
-                "txt_utf8_errors": 1,
-                "txt_trailing_newline": "no",
-                "first_issue": "txt_invalid_utf8",
-            },
+            "txt_utf8_errors=1 txt_trailing_newline=no first_issue=txt_invalid_utf8",
             {"txt_utf8_errors": 1, "txt_trailing_newline": False},
         ),
         (
             json.dumps(_message()).encode(),
             b": private\n",
-            {
-                "jsonl_trailing_newline": "no",
-                "first_issue": "jsonl_missing_trailing_newline",
-                "first_mismatch_jsonl_line": 1,
-            },
+            (
+                "jsonl_trailing_newline=no first_issue=jsonl_missing_trailing_newline "
+                "first_mismatch_jsonl_line=1"
+            ),
             {"jsonl_trailing_newline": False},
         ),
         (
@@ -211,21 +193,16 @@ def test_invalid_jsonl_without_content_echo(capture, raw, reason):
             + json.dumps(_message("two")).encode()
             + b"\r\n",
             b": one\n: two\n",
-            {
-                "jsonl_newline_style": "mixed",
-                "first_issue": "jsonl_mixed_newlines",
-                "first_mismatch_jsonl_line": 2,
-            },
+            (
+                "jsonl_newline_style=mixed first_issue=jsonl_mixed_newlines "
+                "first_mismatch_jsonl_line=2"
+            ),
             {"jsonl_mixed_newlines": 1},
         ),
         (
             [_message()],
             b": private\nextra\n",
-            {
-                "count_mismatch": "yes",
-                "first_mismatch_jsonl_line": "-",
-                "first_mismatch_txt_line": 2,
-            },
+            "count_mismatch=yes first_mismatch_jsonl_line=- first_mismatch_txt_line=2",
             {"count_mismatch": True},
         ),
     ],
@@ -251,36 +228,17 @@ def test_decoder_depth_and_unhashable_dedup_are_content_errors(capture, deep_jso
     )
     capture.check(
         1,
-        counters={
-            "jsonl_lines": 1,
-            "jsonl_records": int(not deep_json),
-            "expected_txt_lines": 0,
-            "txt_lines": 0,
-            "suppressed_duplicates": 0,
-            "jsonl_errors": int(deep_json),
-            "dedup_errors": int(not deep_json),
-            "render_errors": 0,
-            "txt_utf8_errors": 0,
-            "text_mismatches": 0,
-            "newline_errors": 0,
-            "count_mismatch": "no",
-            "jsonl_trailing_newline": "yes",
-            "txt_trailing_newline": "empty",
-            "jsonl_newline_style": "lf",
-            "txt_newline_style": "none",
-            "newline_style_mismatch": "no",
-            "comparison_complete": "no",
-            "comparison_skipped": 1,
-            "dedup_resets_applied": 0,
-            "dedup_reset_errors": 0,
-            "jsonl_missing": "no",
-            "txt_missing": "no",
-            "first_issue": stats.first_issue,
-            "first_issue_jsonl_line": 1,
-            "first_issue_txt_line": "-",
-            "first_mismatch_jsonl_line": "-",
-            "first_mismatch_txt_line": "-",
-        },
+        counters=f"jsonl_lines=1 jsonl_records={int(not deep_json)} "
+        f"jsonl_errors={int(deep_json)} dedup_errors={int(not deep_json)} "
+        "expected_txt_lines=0 txt_lines=0 suppressed_duplicates=0 render_errors=0 "
+        "txt_utf8_errors=0 text_mismatches=0 newline_errors=0 count_mismatch=no "
+        "jsonl_trailing_newline=yes txt_trailing_newline=empty "
+        "jsonl_newline_style=lf txt_newline_style=none newline_style_mismatch=no "
+        "comparison_complete=no comparison_skipped=1 dedup_resets_applied=0 "
+        "dedup_reset_errors=0 jsonl_missing=no txt_missing=no "
+        f"first_issue={stats.first_issue} first_issue_jsonl_line=1 "
+        "first_issue_txt_line=- first_mismatch_jsonl_line=- "
+        "first_mismatch_txt_line=-",
     )
     if not deep_json:
         assert stats.dedup_errors == 1
@@ -317,11 +275,11 @@ def test_origin_newlines_and_sanitized_content(capture, jsonl_newline, txt_newli
         b"cr\\rnel\\u0085ls\\u2028ps\\u2029end" + txt_newline,
     )
     mismatch = jsonl_newline != txt_newline
-    counters = {"newline_style_mismatch": "yes" if mismatch else "no"}
-    counters.update(
-        {"first_issue": "capture_newline_style_mismatch"}
+    counters = "newline_style_mismatch=" + ("yes" if mismatch else "no")
+    counters += (
+        " first_issue=capture_newline_style_mismatch"
         if mismatch
-        else {"newline_errors": 0}
+        else " newline_errors=0"
     )
     capture.check(int(mismatch), counters=counters, absent=(message,))
 
@@ -334,14 +292,10 @@ def test_empty_and_lazy_missing_artifacts(capture, create_jsonl, create_txt):
         if create:
             path.write_bytes(b"")
     capture.check(
-        counters={
-            "jsonl_records": 0,
-            "txt_lines": 0,
-            "jsonl_trailing_newline": "empty",
-            "txt_trailing_newline": "empty",
-            "jsonl_missing": "no" if create_jsonl else "yes",
-            "txt_missing": "no" if create_txt else "yes",
-        }
+        counters="jsonl_records=0 txt_lines=0 jsonl_trailing_newline=empty "
+        "txt_trailing_newline=empty "
+        f"jsonl_missing={'no' if create_jsonl else 'yes'} "
+        f"txt_missing={'no' if create_txt else 'yes'}"
     )
 
 
@@ -367,11 +321,11 @@ def test_production_dedup_limits_and_appended_runs(capture, mode):
     capture.write(
         records, "".join(f"{r['message_type']}:{r['message']}\n" for r in expected)
     )
-    counters = {"suppressed_duplicates": int(mode == "zero")}
+    counters = f"suppressed_duplicates={int(mode == 'zero')}"
     if mode == "eviction":
-        counters["expected_txt_lines"] = 3
+        counters += " expected_txt_lines=3"
     if mode == "reset":
-        counters["dedup_resets_applied"] = 2
+        counters += " dedup_resets_applied=2"
     stats = capture.check(counters=counters, **options)
     assert stats.suppressed_duplicates == int(mode == "zero")
     if mode == "reset":

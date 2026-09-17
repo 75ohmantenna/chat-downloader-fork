@@ -41,42 +41,103 @@ def _video(number, restriction=None):
     }
 
 
-def test_discovery_get_user_clips_remaps_clip_fields():
-    node = {
-        "id": "1",
-        "slug": "clip-slug",
-        "url": "https://clips.twitch.tv/clip-slug",
-        "embedURL": "https://embed.example/clip-slug",
-        "title": "Example Clip",
-        "viewCount": 42,
-        "language": "en",
-        "curator": {"name": "curator"},
-        "game": {"displayName": "Example Game"},
-        "broadcaster": {"login": "streamer"},
-        "thumbnailURL": "https://img.example/thumb.jpg",
-        "createdAt": "2024-01-01T00:00:00Z",
-        "durationSeconds": 18,
-    }
-    download = Mock(return_value=_page("clips", [_edge(node)]))
-    result = list(discovery.get_user_clips(Mock(), download, "streamer", limit=1))
-    assert download.call_args.args[1][0]["operationName"] == "ClipsCards__User"
-    assert result == [
-        {
-            "id": "1",
-            "slug": "clip-slug",
-            "url": "https://clips.twitch.tv/clip-slug",
-            "embed_url": "https://embed.example/clip-slug",
-            "title": "Example Clip",
-            "views": 42,
-            "language": "en",
-            "curator": {"name": "curator"},
-            "game": {"display_name": "Example Game"},
-            "broadcaster": {"name": "streamer"},
-            "thumbnail_url": "https://img.example/thumb.jpg",
-            "created_at": 1704067200000000,
-            "duration": 18,
-        }
-    ]
+def _mapped_fields(common, fields):
+    return (
+        {**common, **{source: value for source, _, value, _ in fields}},
+        {**common, **{target: value for _, target, _, value in fields}},
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "node", "expected"),
+    [
+        (
+            "clips",
+            *_mapped_fields(
+                {
+                    "id": "1",
+                    "slug": "clip-slug",
+                    "title": "Example Clip",
+                    "url": "https://clips.twitch.tv/clip-slug",
+                    "language": "en",
+                    "curator": {"name": "curator"},
+                },
+                [
+                    (
+                        "embedURL",
+                        "embed_url",
+                        "https://embed.example/clip-slug",
+                        "https://embed.example/clip-slug",
+                    ),
+                    ("viewCount", "views", 42, 42),
+                    (
+                        "game",
+                        "game",
+                        {"displayName": "Example Game"},
+                        {"display_name": "Example Game"},
+                    ),
+                    (
+                        "broadcaster",
+                        "broadcaster",
+                        {"login": "streamer"},
+                        {"name": "streamer"},
+                    ),
+                    (
+                        "thumbnailURL",
+                        "thumbnail_url",
+                        "https://img.example/thumb.jpg",
+                        "https://img.example/thumb.jpg",
+                    ),
+                    (
+                        "createdAt",
+                        "created_at",
+                        "2024-01-01T00:00:00Z",
+                        1704067200000000,
+                    ),
+                    ("durationSeconds", "duration", 18, 18),
+                ],
+            ),
+        ),
+        (
+            "streams",
+            *_mapped_fields(
+                {
+                    "id": "101",
+                    "title": "Top Stream",
+                    "type": "live",
+                    "broadcaster": {"name": "one"},
+                    "game": {"name": "game-one"},
+                },
+                [
+                    ("viewersCount", "viewers", 1000, 1000),
+                    (
+                        "previewImageURL",
+                        "preview_image_url",
+                        "preview-101",
+                        "preview-101",
+                    ),
+                ],
+            ),
+        ),
+    ],
+)
+def test_discovery_remaps_fields_and_stream_pages(kind, node, expected):
+    pages = [_page(kind, [_edge(node)])]
+    if kind == "streams":
+        pages.append(_page(kind, [_edge(None, "cursor-2")]))
+    download = Mock(side_effect=pages)
+    if kind == "clips":
+        result = list(discovery.get_user_clips(Mock(), download, "streamer", limit=1))
+        assert download.call_args.args[1][0]["operationName"] == "ClipsCards__User"
+        assert result == [expected]
+    else:
+        result = list(discovery.get_top_livestreams(Mock(), download, limit=31))
+        queries = [call.args[1][0]["variables"] for call in download.call_args_list]
+        assert len(queries) == 2
+        assert queries[0]["cursor"] == ""
+        assert queries[1]["cursor"] == "cursor-1"
+        assert queries[1]["limit"] == 1
+        assert result == [expected, {}]
 
 
 def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes():
@@ -132,42 +193,6 @@ def test_discovery_get_top_livestreams_logs_warning_when_streams_missing(caplog)
     assert any(
         "Could not retrieve Twitch livestream data" in r.message for r in caplog.records
     )
-
-
-def test_discovery_get_top_livestreams_paginates_and_remaps_none_nodes():
-    node = {
-        "id": "101",
-        "title": "Top Stream",
-        "viewersCount": 1000,
-        "previewImageURL": "preview-101",
-        "broadcaster": {"name": "one"},
-        "game": {"name": "game-one"},
-        "type": "live",
-    }
-    download = Mock(
-        side_effect=[
-            _page("streams", [_edge(node)]),
-            _page("streams", [_edge(None, "cursor-2")]),
-        ]
-    )
-    result = list(discovery.get_top_livestreams(Mock(), download, limit=31))
-    queries = [call.args[1][0]["variables"] for call in download.call_args_list]
-    assert len(queries) == 2
-    assert queries[0]["cursor"] == ""
-    assert queries[1]["cursor"] == "cursor-1"
-    assert queries[1]["limit"] == 1
-    assert result == [
-        {
-            "id": "101",
-            "title": "Top Stream",
-            "viewers": 1000,
-            "preview_image_url": "preview-101",
-            "broadcaster": {"name": "one"},
-            "game": {"name": "game-one"},
-            "type": "live",
-        },
-        {},
-    ]
 
 
 @pytest.mark.parametrize(

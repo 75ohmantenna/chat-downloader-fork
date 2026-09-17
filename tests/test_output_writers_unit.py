@@ -17,7 +17,10 @@ from chat_downloader.output.continuous_write import (
 )
 
 
-@pytest.mark.parametrize("writer_class", [JsonLinesContinuousWriter, ContinuousWriter])
+@pytest.mark.parametrize(
+    "writer_class",
+    [JsonLinesContinuousWriter, ContinuousWriter],
+)
 @pytest.mark.parametrize(
     "items",
     [

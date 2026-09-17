@@ -12,7 +12,7 @@ from chat_downloader.sites.kick.parsing.messages import (
     parse_chat_message,
     parse_preloaded_messages,
 )
-from tests.kick_helpers import load_fixture
+from tests.kick_helpers import load_fixture, raw_message
 
 
 @pytest.fixture
@@ -27,21 +27,29 @@ def captured(monkeypatch):
 
 
 def _identity_message(identity):
-    return {"id": "x", "sender": {"id": 1, "identity": identity}}
+    return raw_message("x", sender={"id": 1, "identity": identity})
 
 
-def test_parse_full_chat_message() -> None:
-    raw = load_fixture("chat_message_event_data.json")
-    msg = parse_chat_message(raw)
-    assert msg["message_id"] == "live-1"
-    assert msg["message_type"] == "text_message"
-    assert msg["message"] == "hello world :PogU:"
-    assert msg["timestamp"] == 1704067260000000
+def test_parse_full_chat_message():
+    msg = parse_chat_message(load_fixture("chat_message_event_data.json"))
+    assert (
+        msg["message_id"],
+        msg["message_type"],
+        msg["message"],
+        msg["timestamp"],
+    ) == (
+        "live-1",
+        "text_message",
+        "hello world :PogU:",
+        1704067260000000,
+    )
     author = msg["author"]
-    assert author["id"] == "99"
-    assert author["display_name"] == "LiveUser"
-    assert author["name"] == "liveuser"
-    assert author["colour"] == "#FF0000"
+    assert (author["id"], author["display_name"], author["name"], author["colour"]) == (
+        "99",
+        "LiveUser",
+        "liveuser",
+        "#FF0000",
+    )
     assert author["badges"] == [
         {"name": "moderator", "title": "Moderator"},
         {"name": "subscriber", "title": "Subscriber", "count": 5},
@@ -82,41 +90,42 @@ def test_modern_badge_fixtures_are_parsed_without_mutation(fixture, expected):
     assert raw == original
 
 
-def test_parse_modern_badge_metadata_is_not_aliased() -> None:
+def test_modern_badge_metadata_is_not_aliased():
     raw = _identity_message(
         {"badges_v2": [{"name": "level", "metadata": {"nested": {"level": 28}}}]}
     )
     msg = parse_chat_message(raw)
     msg["author"]["badges"][0]["metadata"]["nested"]["level"] = 29
-
-    assert raw["sender"]["identity"]["badges_v2"][0]["metadata"] == {
-        "nested": {"level": 28}
-    }
-
-
-def test_reply_type_maps_to_text_message() -> None:
-    msg = parse_chat_message({"id": "x", "type": "reply", "content": "hi"})
-    assert msg["message_type"] == "text_message"
+    metadata = raw["sender"]["identity"]["badges_v2"][0]["metadata"]
+    assert metadata == {"nested": {"level": 28}}
 
 
 @pytest.mark.parametrize("encoded", [False, True])
-def test_celebration_preserves_subscription_renewal_metadata(encoded) -> None:
-    raw = load_fixture("celebration_message_event_data.json")
+@pytest.mark.parametrize("kind", ["celebration", "reply"])
+def test_message_metadata_context(kind, encoded):
+    raw = load_fixture(f"{kind}_message_event_data.json")
     if encoded:
         raw["metadata"] = json.dumps(raw["metadata"])
-
     msg = parse_chat_message(raw)
-
     assert msg["message_type"] == "text_message"
-    assert msg["message"] == "Celebrating 20 months!"
-    assert msg["metadata"] == {
-        "celebration": {
-            "id": "celebration-renewal-1",
-            "type": "subscription_renewed",
-            "total_months": 20,
-            "created_at": 1787880598835777,
+    if kind == "celebration":
+        assert msg["message"] == "Celebrating 20 months!"
+        assert msg["metadata"] == {
+            "celebration": {
+                "id": "celebration-renewal-1",
+                "type": "subscription_renewed",
+                "total_months": 20,
+                "created_at": 1787880598835777,
+            }
         }
-    }
+    else:
+        reply = msg["in_reply_to"]
+        assert reply["message_id"] == "original-message"
+        assert reply["message"] == "Original :KEKW:"
+        assert reply["emotes"][0]["id"] == "37226"
+        assert reply["timestamp"] == 1787650140000000
+        assert reply["author"]["display_name"] == "OriginalAuthor"
+        assert reply["thread_parent_message_id"] == "original-message"
 
 
 @pytest.mark.parametrize(
@@ -160,84 +169,71 @@ def test_malformed_message_metadata_is_ignored(kind, metadata, content, omitted)
     assert omitted not in msg
 
 
-@pytest.mark.parametrize("encoded", [False, True])
-def test_reply_preserves_original_message_context(encoded) -> None:
-    raw = load_fixture("reply_message_event_data.json")
-    if encoded:
-        raw["metadata"] = json.dumps(raw["metadata"])
-
-    msg = parse_chat_message(raw)
-
-    assert msg["message_type"] == "text_message"
-    assert msg["in_reply_to"]["message_id"] == "original-message"
-    assert msg["in_reply_to"]["message"] == "Original :KEKW:"
-    assert msg["in_reply_to"]["emotes"][0]["id"] == "37226"
-    assert msg["in_reply_to"]["timestamp"] == 1787650140000000
-    assert msg["in_reply_to"]["author"]["display_name"] == "OriginalAuthor"
-    assert msg["in_reply_to"]["thread_parent_message_id"] == "original-message"
-
-
-def test_reply_uses_original_message_sender_fallback() -> None:
-    raw = {
-        "id": "reply",
-        "type": "reply",
-        "metadata": {
-            "original_message": {
-                "id": "original",
-                "sender": {"id": 1, "username": "NestedAuthor"},
-            }
-        },
-    }
-
-    msg = parse_chat_message(raw)
-
+def test_reply_uses_original_message_sender_fallback():
+    msg = parse_chat_message(
+        raw_message(
+            "reply",
+            type="reply",
+            metadata={
+                "original_message": {
+                    "id": "original",
+                    "sender": {"id": 1, "username": "NestedAuthor"},
+                },
+            },
+        )
+    )
     assert msg["in_reply_to"]["author"]["display_name"] == "NestedAuthor"
 
 
-def test_unknown_type_is_captured_and_falls_back_to_default(captured) -> None:
-    msg = parse_chat_message({"id": "x", "type": "something_new", "content": "hi"})
-
+def test_unknown_type_is_captured_and_falls_back_to_default(captured):
+    msg = parse_chat_message(raw_message("x", type="something_new"))
     assert msg["message_type"] == "text_message"
     assert captured[0][0][0] == "kick-unknown-message-type"
     assert captured[0][0][1]["message_type"] == "something_new"
     assert captured[0][1]["sample_limit"] == 10
 
 
-@pytest.mark.parametrize("payload", [["not", "a", "dict"], {"content": "no id"}])
-def test_invalid_payload_raises(payload) -> None:
+@pytest.mark.parametrize(
+    "payload",
+    [["not", "a", "dict"], {"content": "no id"}],
+)
+def test_invalid_payload_raises(payload):
     with pytest.raises(ParsingError):
         parse_chat_message(payload)
 
 
-def test_malformed_preloaded_message_is_captured(captured) -> None:
+def test_malformed_preloaded_message_is_captured(captured):
     assert parse_preloaded_messages([{"content": "missing id"}]) == []
-
     assert captured[0][0][0] == "kick-malformed-preloaded-message"
     assert captured[0][0][1]["raw"] == {"content": "missing id"}
 
 
-def test_missing_content_yields_empty_message() -> None:
-    msg = parse_chat_message({"id": "x", "content": None})
-    assert msg["message"] == ""
-    assert "emotes" not in msg
-
-
-@pytest.mark.parametrize("created_at", ["", "not-a-date", 123])
-def test_invalid_timestamp_is_omitted(created_at: object) -> None:
-    msg = parse_chat_message({"id": "x", "created_at": created_at})
-    assert "timestamp" not in msg
-
-
 @pytest.mark.parametrize(
-    "fields", [{"content": "hi"}, {"sender": "nope"}, {"sender": {}}]
+    ("fields", "expected", "omitted"),
+    [
+        ({"type": "reply", "content": "hi"}, {"message_type": "text_message"}, set()),
+        ({"content": None}, {"message": ""}, {"emotes"}),
+        *[
+            ({"created_at": value}, {}, {"timestamp"})
+            for value in ["", "not-a-date", 123]
+        ],
+        *[
+            (fields, {}, {"author"})
+            for fields in [{"content": "hi"}, {"sender": "nope"}, {"sender": {}}]
+        ],
+        (
+            {"sender": {"id": 7, "username": "OnlyName"}},
+            {"author": {"id": "7", "display_name": "OnlyName", "name": "onlyname"}},
+            set(),
+        ),
+        ({"id": 12345, "content": "hi"}, {"message_id": "12345"}, set()),
+    ],
 )
-def test_missing_or_invalid_sender_yields_no_author(fields) -> None:
-    assert "author" not in parse_chat_message({"id": "x", **fields})
-
-
-def test_author_without_identity_or_slug() -> None:
-    msg = parse_chat_message({"id": "x", "sender": {"id": 7, "username": "OnlyName"}})
-    assert msg["author"] == {"id": "7", "display_name": "OnlyName", "name": "onlyname"}
+def test_message_optional_fields_and_id_coercion(fields, expected, omitted):
+    msg = parse_chat_message({"id": "x", **fields})
+    for key, value in expected.items():
+        assert msg[key] == value
+    assert not omitted & msg.keys()
 
 
 @pytest.mark.parametrize(
@@ -259,8 +255,8 @@ def test_author_without_identity_or_slug() -> None:
                 "badges": [
                     {
                         "name": "level",
-                        "icons": [{"url": "https://example.test/level.png"}],
                         "selected": True,
+                        "icons": [{"url": "https://example.test/level.png"}],
                     }
                 ],
             },
@@ -333,7 +329,7 @@ def test_author_without_identity_or_slug() -> None:
         ),
     ],
 )
-def test_badge_normalization(identity, expected) -> None:
+def test_badge_normalization(identity, expected):
     assert parse_chat_message(_identity_message(identity))["author"] == expected
 
 
@@ -352,12 +348,8 @@ def test_badge_normalization(identity, expected) -> None:
         ),
     ],
 )
-def test_modern_badge_selection(
-    badge: object,
-    expected: list[dict[str, object]],
-) -> None:
+def test_modern_badge_selection(badge, expected):
     msg = parse_chat_message(_identity_message({"badges_v2": [badge]}))
-
     assert msg["author"].get("badges", []) == expected
 
 
@@ -372,29 +364,20 @@ def test_modern_badge_selection(
         {"name": "   ", "selected": True},
     ],
 )
-def test_modern_badges_require_nonempty_name(badge: object) -> None:
+def test_modern_badges_require_nonempty_name(badge):
     msg = parse_chat_message(_identity_message({"badges_v2": [badge]}))
-
     assert "badges" not in msg["author"]
 
 
 @pytest.mark.parametrize(
     ("rows", "expected"),
     [
-        ([{"id": "ok", "content": "hi"}, {"no": "id"}, "garbage"], ["ok"]),
-        ([{"id": 99, "content": "a"}, {"id": "str", "content": "b"}], ["99", "str"]),
+        ([raw_message("ok"), {"no": "id"}, "garbage"], ["ok"]),
+        (
+            [raw_message(99, content="a"), raw_message("str", content="b")],
+            ["99", "str"],
+        ),
     ],
 )
 def test_preloaded_skips_invalid_messages_and_coerces_numeric_ids(rows, expected):
     assert [m["message_id"] for m in parse_preloaded_messages(rows)] == expected
-
-
-# Kick sends numeric IDs in some contexts. _opt_str must coerce them to str
-# rather than rejecting them (which get_str would do). Pin the invariant so
-# a future accessor swap cannot silently break numeric-id handling.
-
-
-def test_top_level_numeric_id_coerced_to_str() -> None:
-    """parse_chat_message accepts a numeric top-level id and stringifies it."""
-    msg = parse_chat_message({"id": 12345, "content": "hi"})
-    assert msg["message_id"] == "12345"

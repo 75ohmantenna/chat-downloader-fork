@@ -5,6 +5,7 @@ from __future__ import annotations
 import queue
 import threading
 import time
+from contextlib import nullcontext
 from unittest.mock import patch
 
 import pytest
@@ -132,19 +133,13 @@ def test_timeout_reason_uses_worker_completion_time_over_expiry_events() -> None
 
 
 def test_timed_generator_basic_iteration_resets_inactivity_timer() -> None:
-    def gen():
-        yield 1
-        yield 2
-
-    tg = TimedGenerator(gen())
+    tg = TimedGenerator(iter((1, 2)))
     tg.inactivity_timeout = 1
     fake = _FakeTimer(alive=True)
     tg.inactivity_timer = fake
     tg.start_inactivity_timer = lambda: None  # type: ignore[method-assign]
 
     assert next(tg) == 1
-    # reset_inactivity_timer cancels and restarts via start_inactivity_timer,
-    # but we haven't patched it here; at minimum, cancel() should have happened.
     assert fake.cancelled is True
 
 
@@ -159,18 +154,15 @@ class _FakeQueue:
         return self.value
 
 
-def test_timer_callbacks_set_expiry_flags() -> None:
+def test_timer_callbacks_set_expiry_flags(timer_kind) -> None:
+    kind, option, method, attribute = timer_kind
     tg = TimedGenerator(iter(()))
-    tg.timeout = 1
-    tg.inactivity_timeout = 1
-    tg.start_timer()
-    tg.start_inactivity_timer()
-    assert tg.timer is not None
-    assert tg.inactivity_timer is not None
-    tg.timer.function()
-    tg.inactivity_timer.function()
-    assert tg._timeout_expired.is_set()
-    assert tg._inactivity_expired.is_set()
+    setattr(tg, option, 1)
+    getattr(tg, method)()
+    timer = getattr(tg, attribute)
+    assert timer is not None
+    timer.function()
+    assert getattr(tg, f"_{kind}_expired").is_set()
     tg._cancel_timers()
 
 
@@ -188,46 +180,53 @@ def test_closed_generator_stops_idempotently(close):
     tg._cancel_timers()
 
 
-def test_next_empty_queue_falls_back_to_timeout_when_no_reason():
+@pytest.mark.parametrize(
+    ("case", "kind"),
+    [
+        ("empty", "timeout"),
+        ("stop", "timeout"),
+        ("deadline", "timeout"),
+        ("late", "timeout"),
+        ("late", "inactivity"),
+    ],
+)
+def test_queue_termination_closes_and_uses_matching_callback(case, kind):
+    option = "timeout" if kind == "timeout" else "inactivity_timeout"
     called = []
-    tg = TimedGenerator(
-        iter(()), timeout=1, on_timeout=lambda: called.append("timeout")
+
+    def start(self):
+        self.timer = _FakeTimer(alive=True)
+        self._timeout_deadline = 10.0
+
+    timer_patch = patch.object(TimedGenerator, "start_timer", start)
+    with timer_patch if case == "deadline" else nullcontext():
+        options = {} if case == "stop" else {option: 1}
+        tg = TimedGenerator(
+            iter(()), **options, **{f"on_{option}": lambda: called.append(kind)}
+        )
+    tg._result_queue = _FakeQueue(
+        exc=queue.Empty() if case == "empty" else None,
+        value=("error", StopIteration(), 0.0)
+        if case == "stop"
+        else ("item", "late-item", 2.0 if case == "deadline" else 0.0),
     )
-    tg._result_queue = _FakeQueue(exc=queue.Empty())
-    # type: ignore[method-assign]
-    tg._timeout_reason = lambda at_time=None: None
-
+    if case == "deadline":
+        tg._timeout_expired.clear()
+        tg._timeout_deadline = 1.0
+    elif case in ("late", "empty"):
+        tg._timeout_reason = (  # type: ignore[method-assign]
+            lambda at_time=None: kind if case == "late" else None
+        )
+    if case == "late":
+        tg._record_prefetched_item()
     with pytest.raises(StopIteration):
         next(tg)
-
-    assert called == ["timeout"]
+    assert called == ([] if case == "stop" else [kind])
     assert tg._closed is True
-
-
-def test_next_error_stop_iteration_closes_generator() -> None:
-    tg = TimedGenerator(iter(()))
-    tg._result_queue = _FakeQueue(value=("error", StopIteration(), 0.0))
-
-    with pytest.raises(StopIteration):
-        next(tg)
-
-    assert tg._closed is True
-
-
-def test_next_item_after_expiry_uses_matching_callback(timer_kind):
-    kind, option, _, _ = timer_kind
-    called = []
-    tg = TimedGenerator(
-        iter(()), **{option: 1, f"on_{option}": lambda: called.append(kind)}
-    )
-    tg._result_queue = _FakeQueue(value=("item", "late-item", 0.0))
-    tg._record_prefetched_item()
-    tg._timeout_reason = lambda at_time=None: kind  # type: ignore[method-assign]
-    with pytest.raises(StopIteration):
-        next(tg)
-    assert called == [kind]
-    assert tg._closed is True
-    assert tg.deadline_prefetch_summary() == (1, True)
+    if case == "late":
+        assert tg.deadline_prefetch_summary() == (1, True)
+    if case == "deadline":
+        assert tg.timer.cancelled is True
 
 
 def test_worker_counts_item_returned_while_deadline_shutdown_completes() -> None:
@@ -284,34 +283,8 @@ def test_deadline_prefetch_and_consumer_terminal_decision(items):
     assert tg.deadline_prefetch_summary() == (len(items), True)
 
 
-def test_next_item_after_timeout_deadline_uses_callback_without_timer_flag() -> None:
-    called = []
-
-    def fake_start_timer(self) -> None:
-        self.timer = _FakeTimer(alive=True)
-        self._timeout_deadline = 10.0
-
-    with patch.object(TimedGenerator, "start_timer", fake_start_timer):
-        tg = TimedGenerator(
-            iter(()),
-            timeout=1,
-            on_timeout=lambda: called.append("timeout"),
-        )
-
-    tg._timeout_expired.clear()
-    tg._timeout_deadline = 1.0
-    tg._result_queue = _FakeQueue(value=("item", "late-item", 2.0))
-
-    with pytest.raises(StopIteration):
-        next(tg)
-
-    assert called == ["timeout"]
-    assert tg._closed is True
-    assert tg.timer.cancelled is True
-
-
-@pytest.mark.parametrize("method", ["start_timer", "start_inactivity_timer"])
-def test_start_timer_requires_configured_timeout(method):
+def test_start_timer_requires_configured_timeout(timer_kind):
+    _, _, method, _ = timer_kind
     tg = TimedGenerator(iter(()))
     with pytest.raises(RuntimeError, match=rf"{method}\(\) called without"):
         getattr(tg, method)()

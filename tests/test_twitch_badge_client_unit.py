@@ -35,6 +35,17 @@ def _legacy_badge(set_id, version, channel_id="", **metadata):
     }
 
 
+def _subscriber_badge(title="Subscriber"):
+    return _legacy_badge(
+        "subscriber",
+        "12",
+        "123",
+        title=title,
+        clickAction="visit_url",
+        clickURL="https://example.test/subscriber",
+    )
+
+
 def _payload(badges, *, channel=False):
     return [
         {
@@ -67,15 +78,14 @@ def _refresh(download, global_cache=None, channel_cache=None, **kwargs):
     "malformed", [False, True], ids=["normalized", "skip-malformed"]
 )
 def test_badge_refresh_falls_back_independently_and_normalizes_mobile_shapes(malformed):
-    channel_badges = (
+    channel_badges, global_badges = (
         [None, {"setID": "missing-version"}]
         if malformed
-        else [_mobile_badge("subscriber", "12", "Subscriber")]
-    )
-    global_badges = (
-        [None, {"setID": "missing-version"}]
-        if malformed
-        else [_mobile_badge("moderator", "1", "Moderator")]
+        else [_mobile_badge(name, version, title)]
+        for name, version, title in (
+            ("subscriber", "12", "Subscriber"),
+            ("moderator", "1", "Moderator"),
+        )
     )
     download = Mock(side_effect=_mobile_cycle(channel_badges, global_badges))
     global_cache, channel_cache = _refresh(
@@ -121,14 +131,7 @@ def test_badge_refresh_falls_back_independently_and_normalizes_mobile_shapes(mal
     ],
 )
 def test_badge_source_failure_is_isolated_without_fallback(source, failure, channel_id):
-    channel_badge = _legacy_badge(
-        "subscriber",
-        "12",
-        "123",
-        title="Subscriber",
-        clickAction="visit_url",
-        clickURL="https://example.test/subscriber",
-    )
+    channel_badge = _subscriber_badge()
     global_badge = _legacy_badge(
         "moderator", "1", title="Moderator", image1x="global.png"
     )
@@ -152,14 +155,7 @@ def test_badge_source_failure_is_isolated_without_fallback(source, failure, chan
 
 
 def test_mobile_refresh_preserves_legacy_click_metadata():
-    channel_badge = _legacy_badge(
-        "subscriber",
-        "12",
-        "123",
-        title="Old subscriber",
-        clickAction="visit_url",
-        clickURL="https://example.test/subscriber",
-    )
+    channel_badge = _subscriber_badge("Old subscriber")
     global_badge = _legacy_badge(
         "moderator",
         "1",

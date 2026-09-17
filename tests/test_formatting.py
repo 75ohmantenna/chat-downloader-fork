@@ -19,6 +19,19 @@ def formatter() -> ItemFormatter:
     return ItemFormatter()
 
 
+def format_field(formatter, field, value, config, template=None):
+    item = {field: value}
+    if field == "author.badges":
+        item = {"author": {"badges": value}}
+    return formatter.format(
+        item,
+        format_object={
+            "template": template or "{" + field + "}",
+            "keys": {field: config},
+        },
+    )
+
+
 def test_item_formatter_with_custom_path(tmp_path: Path) -> None:
     path = tmp_path / "formats.json"
     path.write_text(json.dumps({"test_format": {"template": "Test: {message}"}}))
@@ -90,6 +103,30 @@ def youtube_format(request):
             ({"message_type": kind, "message": "System notice"}, "System notice")
             for kind in ["viewer_engagement_message", "deleted_message", "ban_user"]
         ],
+        (
+            {
+                "target_message_id": "message-id",
+                "message_type": "ban_user",
+                "message": None,
+            },
+            "[Message removed: message-id]",
+        ),
+        (
+            {
+                "author": {"id": "channel-id"},
+                "message_type": "ban_user",
+                "message": None,
+            },
+            "[Messages removed for author: channel-id]",
+        ),
+        (
+            {
+                "action_type": "remove_chat_item",
+                "message_type": "ban_user",
+                "message": None,
+            },
+            "[Moderation action: remove_chat_item]",
+        ),
     ],
 )
 def test_youtube_timestamp_and_author_separator(
@@ -97,26 +134,6 @@ def test_youtube_timestamp_and_author_separator(
 ):
     name, prefix = youtube_format
     item = {"timestamp": 1577836800000000, "time_text": "0:42", **fields}
-    assert formatter.format(item, name) == prefix + notice
-
-
-@pytest.mark.parametrize(
-    ("fields", "notice"),
-    [
-        ({"target_message_id": "message-id"}, "[Message removed: message-id]"),
-        ({"author": {"id": "channel-id"}}, "[Messages removed for author: channel-id]"),
-        ({"action_type": "remove_chat_item"}, "[Moderation action: remove_chat_item]"),
-    ],
-)
-def test_youtube_moderation_fallbacks(formatter, youtube_format, fields, notice):
-    name, prefix = youtube_format
-    item = {
-        "message_type": "ban_user",
-        "message": None,
-        "timestamp": 1577836800000000,
-        "time_text": "0:42",
-        **fields,
-    }
     assert formatter.format(item, name) == prefix + notice
 
 
@@ -285,13 +302,7 @@ def test_missing_format_raises(formatter, kwargs):
     ],
 )
 def test_field_configuration(formatter, field, value, config, template, expected):
-    assert (
-        formatter.format(
-            {field: value},
-            format_object={"template": template, "keys": {field: config}},
-        )
-        == expected
-    )
+    assert format_field(formatter, field, value, config, template) == expected
 
 
 @pytest.mark.parametrize(
@@ -310,17 +321,8 @@ def test_field_configuration(formatter, field, value, config, template, expected
     ],
 )
 def test_field_separator(formatter, field, value, separator, expected) -> None:
-    item = {"author": {"badges": value}} if field == "author.badges" else {field: value}
-    assert (
-        formatter.format(
-            item,
-            format_object={
-                "template": "{" + field + "}",
-                "keys": {field: {"template": "{}", "separator": separator}},
-            },
-        )
-        == expected
-    )
+    config = {"template": "{}", "separator": separator}
+    assert format_field(formatter, field, value, config) == expected
 
 
 def test_omit_if_false_after_badge_separator(formatter):
@@ -352,36 +354,27 @@ def test_placeholder_fallbacks(formatter, author, expected) -> None:
 
 
 @pytest.mark.parametrize(
-    ("duration", "expected_suffix"),
+    ("duration", "suffix"),
     [
-        (0, "spammer was timed out for 0 seconds."),
-        (1, "spammer was timed out for 1 second."),
-        (30, "spammer was timed out for 30 seconds."),
+        (0, "was timed out for 0 seconds."),
+        (1, "was timed out for 1 second."),
+        (30, "was timed out for 30 seconds."),
+        (None, "was permanently banned."),
     ],
 )
-def test_format_twitch_timeout_duration_uses_correct_grammar(
-    formatter, duration, expected_suffix
-):
-    item = {
-        "message_type": "ban_user",
-        "banned_user": "spammer",
-        "ban_duration": duration,
-        "ban_type": "timeout",
-        "timestamp": 1000000,
-    }
-    assert formatter.format(item, "twitch").endswith(expected_suffix)
-    assert item["ban_duration"] == duration
-    assert isinstance(item["ban_duration"], int)
-
-
-def test_format_twitch_permanent_ban_falls_back_to_ban_type(formatter):
+def test_format_twitch_ban_duration(formatter, duration, suffix):
     item = {
         "message_type": "ban_user",
         "banned_user": "spammer",
         "ban_type": "permanent",
         "timestamp": 1000000,
     }
-    assert formatter.format(item, "twitch").endswith("spammer was permanently banned.")
+    if duration is not None:
+        item.update(ban_duration=duration, ban_type="timeout")
+    assert formatter.format(item, "twitch").endswith("spammer " + suffix)
+    if duration is not None:
+        assert item["ban_duration"] == duration
+        assert isinstance(item["ban_duration"], int)
 
 
 @pytest.mark.parametrize(
@@ -399,13 +392,7 @@ def test_format_twitch_permanent_ban_falls_back_to_ban_type(formatter):
 )
 def test_singular_template_selection(formatter, value, singular_template, expected):
     config = {"template": "{} items", "singular_template": singular_template}
-    assert (
-        formatter.format(
-            {"count": value},
-            format_object={"template": "{count}", "keys": {"count": config}},
-        )
-        == expected
-    )
+    assert format_field(formatter, "count", value, config) == expected
 
 
 def test_apply_format_by_type_unknown_field(formatter):
@@ -420,7 +407,4 @@ def test_apply_format_by_type_unknown_field(formatter):
 @pytest.mark.parametrize("template", ["{0.attr}", "{0[key]}"])
 def test_safe_formatter_rejects_object_access(formatter, template) -> None:
     with pytest.raises(ValueError, match="Attribute/index access not allowed"):
-        formatter.format(
-            {"value": "private"},
-            format_object={"template": "{value}", "keys": {"value": template}},
-        )
+        format_field(formatter, "value", "private", template)

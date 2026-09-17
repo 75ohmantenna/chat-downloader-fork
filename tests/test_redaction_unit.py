@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import io
 import json
 import logging
 import os
@@ -18,15 +17,13 @@ import chat_downloader.debugging as dbg
 import chat_downloader.redaction as red
 from chat_downloader.runtime.runner import execute_run
 from chat_downloader.sites.session import ChatDownloaderSession
+from tests.core_third_helpers import captured_logs, restore_loggers
 
 
 @pytest.fixture(autouse=True)
 def _restore_logging_state():
-    state = [(logger, logger.level, logger.disabled) for logger in dbg.loggers]
-    yield
-    for logger, level, disabled in state:
-        logger.setLevel(level)
-        logger.disabled = disabled
+    with restore_loggers():
+        yield
 
 
 @pytest.fixture
@@ -38,60 +35,49 @@ def sample_dir(tmp_path, monkeypatch):
     return path
 
 
-def test_redacts_sensitive_init_fields_and_header_values() -> None:
-    assert red.sanitize_for_log(
-        {
-            "headers": {
-                "Authorization": "Bearer secret-token",
-                "User-Agent": "TestAgent/1.0",
-            },
-            "proxy": "http://user:pass@example.invalid:8080",
-            "cookies": "/tmp/cookies.txt",
-            "connect_timeout": 10.0,
-        }
-    ) == {
-        "headers": {
-            "Authorization": red.REDACTED,
-            "User-Agent": "TestAgent/1.0",
-        },
-        "proxy": red.REDACTED,
-        "cookies": red.REDACTED,
-        "connect_timeout": 10.0,
-    }
-
-
-def test_non_sensitive_headers_are_not_redacted() -> None:
-    result = red.sanitize_for_log(
-        {
-            "headers": {
-                "Content-Type": "application/json",
-                "Accept": "*/*",
-                "Accept-Language": "en-US",
-                "Authorization": "Bearer tok",
-                "Cookie": "sid=abc",
-            }
-        }
-    )
-    assert result["headers"]["Content-Type"] == "application/json"
-    assert result["headers"]["Accept"] == "*/*"
-    assert result["headers"]["Accept-Language"] == "en-US"
-    assert result["headers"]["Authorization"] == red.REDACTED
-    assert result["headers"]["Cookie"] == red.REDACTED
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("proxy", "http://user:pass@example.invalid:8080", red.REDACTED),
+        ("cookies", "/tmp/cookies.txt", red.REDACTED),
+        ("connect_timeout", 10.0, 10.0),
+    ],
+)
+def test_redacts_sensitive_init_fields(field, value, expected):
+    assert red.sanitize_for_log({field: value}) == {field: expected}
 
 
 @pytest.mark.parametrize(
-    ("name", "value"),
+    ("name", "value", "expected"),
     [
-        ("X-Auth-Token", "secret-token"),
-        ("Api-Key", "secret-key"),
-        ("X-Service-Credential", "credential"),
-        ("X-Custom", "Bearer embedded-secret"),
-        ("X-Custom", "Basic dXNlcjpwYXNz"),
+        (name, value, value)
+        for name, value in [
+            ("User-Agent", "TestAgent/1.0"),
+            ("Content-Type", "application/json"),
+            ("Accept", "*/*"),
+            ("Accept-Language", "en-US"),
+        ]
+    ]
+    + [
+        (name, value, red.REDACTED)
+        for name, value in [
+            ("X-Auth-Token", "secret-token"),
+            ("Api-Key", "secret-key"),
+            ("X-Service-Credential", "credential"),
+            ("X-Custom", "Bearer embedded-secret"),
+            ("X-Custom", "Basic dXNlcjpwYXNz"),
+        ]
     ],
 )
-def test_redacts_custom_authentication_headers(name: str, value: str) -> None:
-    result = red.sanitize_for_log({"headers": {name: value}})
-    assert result == {"headers": {name: red.REDACTED}}
+def test_header_redaction(name, value, expected):
+    headers = {name: value, "Authorization": "Bearer tok", "Cookie": "sid=abc"}
+    assert red.sanitize_for_log({"headers": headers}) == {
+        "headers": {
+            name: expected,
+            "Authorization": red.REDACTED,
+            "Cookie": red.REDACTED,
+        }
+    }
 
 
 def test_redacts_nested_sensitive_keys_in_sequences() -> None:
@@ -101,21 +87,24 @@ def test_redacts_nested_sensitive_keys_in_sequences() -> None:
 
 
 @pytest.mark.parametrize(
-    "key",
-    ["accessToken", "feedbackToken", "refresh_token", "password"],
+    ("key", "expected"),
+    [
+        (key, red.REDACTED)
+        for key in ["accessToken", "feedbackToken", "refresh_token", "password"]
+    ]
+    + [
+        (key, "VISIBLE")
+        for key in ["author", "authority", "continuationPolicy", "tokenizer", "monkey"]
+    ],
 )
-def test_sensitive_key_classifier_redacts_structured_values_and_headers(
-    key: str,
-) -> None:
-    assert red.sanitize_for_log(
-        {
-            key: "STRUCTURED_SECRET",
-            "headers": {key: "HEADER_SECRET"},
-        }
-    ) == {
-        key: red.REDACTED,
-        "headers": {key: red.REDACTED},
+def test_sensitive_key_classifier(key, expected):
+    assert red.sanitize_for_log({key: "VISIBLE", "headers": {key: "VISIBLE"}}) == {
+        key: expected,
+        "headers": {key: expected},
     }
+    if expected == "VISIBLE":
+        url = f"https://example.invalid/?{key}=VISIBLE"
+        assert f"{key}=VISIBLE" in red.render_for_log(url)
 
 
 @pytest.mark.parametrize(
@@ -140,12 +129,6 @@ def test_redacts_google_api_key_in_generic_key_query() -> None:
     assert "key=%3Credacted%3E" in rendered
 
 
-def test_preserves_non_secret_generic_key_query() -> None:
-    url = "https://example.invalid/?key=display-name"
-
-    assert red.render_for_log(url) == url
-
-
 def test_redacts_tokens_from_urllib3_request_target_log() -> None:
     api_key = "AIza" + "A" * 35
     continuation = "opaque-continuation"
@@ -162,22 +145,6 @@ def test_redacts_tokens_from_urllib3_request_target_log() -> None:
     assert rendered.count(red.REDACTED) == 2
 
 
-@pytest.mark.parametrize(
-    "key",
-    ["author", "authority", "continuationPolicy", "tokenizer", "monkey"],
-)
-def test_sensitive_key_classifier_avoids_substring_false_positives(key: str) -> None:
-    value = {
-        key: "VISIBLE",
-        "headers": {key: "VISIBLE"},
-    }
-
-    assert red.sanitize_for_log(value) == value
-    assert f"{key}=VISIBLE" in red.render_for_log(
-        f"https://example.invalid/?{key}=VISIBLE"
-    )
-
-
 def test_structured_redaction_preserves_control_characters() -> None:
     value = "a\nb\tc\x00"
 
@@ -186,30 +153,33 @@ def test_structured_redaction_preserves_control_characters() -> None:
 
 
 @pytest.mark.parametrize(
-    "serialized",
+    ("serialized", "expected"),
     [
-        '{"Authorization": "Bearer LOG_SECRET"}',
-        "{'Authorization': 'Bearer LOG_SECRET'}",
+        (text, None)
+        for text in [
+            '{"Authorization": "Bearer LOG_SECRET"}',
+            "{'Authorization': 'Bearer LOG_SECRET'}",
+        ]
+    ]
+    + [
+        (text, text)
+        for text in [
+            '{"author": "VISIBLE"}',
+            "https://example.invalid/?key=display-name",
+        ]
     ],
 )
-def test_render_for_log_redacts_quoted_serialized_fields(serialized: str) -> None:
+def test_render_serialized_values(serialized, expected):
     rendered = red.render_for_log(serialized)
-
-    assert "LOG_SECRET" not in rendered
-    assert red.REDACTED in rendered
-
-
-def test_render_for_log_preserves_non_sensitive_quoted_fields() -> None:
-    serialized = '{"author": "VISIBLE"}'
-
-    assert red.render_for_log(serialized) == serialized
+    if expected is None:
+        assert "LOG_SECRET" not in rendered
+        assert red.REDACTED in rendered
+    else:
+        assert rendered == expected
 
 
 def test_logging_filter_redacts_urls_and_visitor_data_and_escapes_controls() -> None:
-    stream = io.StringIO()
-    handler = logging.StreamHandler(stream)
-    dbg.logger.addHandler(handler)
-    try:
+    with captured_logs() as stream:
         dbg.set_log_level("debug")
         child_logger = logging.getLogger("chat_downloader.sites.logging_boundary")
         child_logger.setLevel(logging.DEBUG)
@@ -218,8 +188,6 @@ def test_logging_filter_redacts_urls_and_visitor_data_and_escapes_controls() -> 
             "token=TOKEN_SECRET&visitorData=VISITOR_SECRET "
             "visitor=VISITOR_SECRET title=first\nforged\x1b[31mred\x00",
         )
-    finally:
-        dbg.logger.removeHandler(handler)
 
     output = stream.getvalue()
     for secret in ("URL_SECRET", "TOKEN_SECRET", "VISITOR_SECRET"):
@@ -230,33 +198,22 @@ def test_logging_filter_redacts_urls_and_visitor_data_and_escapes_controls() -> 
 
 
 def test_logging_filter_redacts_exceptions_and_stack_information() -> None:
-    stream = io.StringIO()
-    handler = logging.StreamHandler(stream)
-    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-    handler.addFilter(dbg._SafeLogFilter())
     logger = logging.Logger("chat_downloader.sites.exception_boundary", logging.DEBUG)
-    logger.addHandler(handler)
 
     def fail_request() -> None:
         raise ValueError("token=EXCEPTION_SECRET")
 
-    try:
-        fail_request()
-    except ValueError:
-        logger.exception("request failed")
-
-    record = logger.makeRecord(
-        logger.name,
-        logging.ERROR,
-        __file__,
-        1,
-        "stack failed",
-        (),
-        None,
-    )
-    record.stack_info = "Stack:\n token=STACK_SECRET"
-    record.exc_text = "ValueError: token=PREFORMATTED_SECRET"
-    logger.handle(record)
+    with captured_logs(logger, safe=True, formatted=True) as stream:
+        try:
+            fail_request()
+        except ValueError:
+            logger.exception("request failed")
+        record = logger.makeRecord(
+            logger.name, logging.ERROR, __file__, 1, "stack failed", (), None
+        )
+        record.stack_info = "Stack:\n token=STACK_SECRET"
+        record.exc_text = "ValueError: token=PREFORMATTED_SECRET"
+        logger.handle(record)
 
     output = stream.getvalue()
     assert "request failed" in output
@@ -275,14 +232,10 @@ def test_logging_filter_handles_malformed_urls_without_leaking_secrets() -> None
         "url=https://example.invalid/?token=SECRET%",
         "url=http://[broken/path?author=VISIBLE&token=SECRET",
     )
-    stream = io.StringIO()
-    handler = logging.StreamHandler(stream)
-    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
-    handler.addFilter(dbg._SafeLogFilter())
     logger = logging.Logger("chat_downloader.sites.malformed_url_boundary")
-    logger.addHandler(handler)
-    for message in messages:
-        logger.warning(message)
+    with captured_logs(logger, safe=True, formatted=True) as stream:
+        for message in messages:
+            logger.warning(message)
 
     output = stream.getvalue()
     assert output.count("[WARNING]") == len(messages)
@@ -308,18 +261,12 @@ def test_proxy_validation_runtime_logging_redacts_malformed_credentials() -> Non
         "bad://user:PROXY_SECRET@",
         "http://user:PROXY_SECRET@example.invalid\uff0fx",
     )
-    stream = io.StringIO()
-    handler = logging.StreamHandler(stream)
-    handler.addFilter(dbg._SafeLogFilter())
-    dbg.logger.addHandler(handler)
-    try:
+    with captured_logs(safe=True) as stream:
         results = [
             execute_run(ProxyValidationDownloader, proxy=proxy)
             for proxy in proxy_values
         ]
         dbg.logger.warning("contact=user@example.invalid")
-    finally:
-        dbg.logger.removeHandler(handler)
 
     output = stream.getvalue()
     assert [result.success for result in results] == [False, False, True, False, False]

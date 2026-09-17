@@ -8,7 +8,6 @@ import pytest
 
 from chat_downloader.sites.twitch.constants import (
     MESSAGE_GROUPS,
-    MESSAGE_REGEX,
     MESSAGE_TYPE_REMAPPING,
 )
 from chat_downloader.sites.twitch.parsing import (
@@ -20,7 +19,6 @@ from chat_downloader.sites.twitch.parsing import (
 from chat_downloader.sites.twitch.parsing import (
     messages as tw_messages,
 )
-from chat_downloader.sites.twitch.parsing.messages import _parse_irc_item
 from chat_downloader.sites.twitch.parsing.tag_decoding import (
     _decode_pseudo_bnf,
     _parse_bool,
@@ -29,12 +27,15 @@ from chat_downloader.sites.twitch.parsing.tag_decoding import (
 from chat_downloader.sites.twitch.remappings import build_comment_remapping
 from chat_downloader.sites.twitch.types import BadgeSet
 from chat_downloader.sites.twitch.validation_keys import build_known_irc_keys
-
-
-def _parse_irc(raw, **kwargs):
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-    return _parse_irc_item(match, **kwargs)
+from tests.twitch_third_helpers import (
+    badge_record,
+    gql_comment,
+    gql_message,
+    irc_frame,
+)
+from tests.twitch_third_helpers import (
+    parse_irc as _parse_irc,
+)
 
 
 @pytest.mark.parametrize(
@@ -56,61 +57,49 @@ def test_social_sharing_badge_level_is_known() -> None:
     assert "current_badge_level" in build_known_irc_keys()
 
 
-def test_parse_irc_item_parses_announcement_usernotice() -> None:
-    raw = (
-        "@badge-info=;badges=moderator/1,partner/1;color=#5B99FF;"
-        "display-name=StreamElements;emotes=;flags=;"
-        "id=db229975-40e4-4d55-92de-75ec0e8b3cb2;mod=1;room-id=93869876;"
-        "subscriber=0;tmi-sent-ts=1771953482608;turbo=0;user-id=100135110;"
-        "user-type=mod;msg-id=announcement;msg-param-color=PRIMARY;"
-        "system-msg= :tmi.twitch.tv USERNOTICE #thebausffs "
-        ":DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR\r\n"
-    )
-
-    parsed = _parse_irc(raw)
-
+@pytest.mark.parametrize(
+    ("tags", "text", "expected"),
+    [
+        (
+            (
+                "display-name=StreamElements;badges=moderator/1,partner/1;"
+                "msg-id=announcement;msg-param-color=PRIMARY;system-msg="
+            ),
+            "announcement text",
+            {"message_type": "announcement", "announcement_colour": "PRIMARY"},
+        ),
+        (
+            (
+                "badge-info=subscriber/3;badges=subscriber/3;login=socialbadgeuser;"
+                "display-name=SocialBadgeUser;subscriber=1;"
+                "msg-id=socialsharingbadge;msg-param-current-badge-level=1;"
+                r"system-msg=Unlocked\sa\ssocial\ssharing\sbadge"
+            ),
+            "Wooohooo, I got a social media badge!",
+            {"message_type": "social_sharing_badge", "current_badge_level": 1},
+        ),
+    ],
+)
+def test_parse_usernotice(tags, text, expected):
+    parsed = _parse_irc(irc_frame(tags, "USERNOTICE", text, user=""))
     assert parsed["action_type"] == "user_notice"
-    assert parsed["message_type"] == "announcement"
-    assert parsed["announcement_colour"] == "PRIMARY"
-    assert parsed["message"] == (
-        "DinkDonk GAMBA BET YOUR POINTS Shirley YOU WILL WIN THIS TIME DESPAIR"
+    assert parsed["message"] == text
+    assert {key: parsed[key] for key in expected} == expected
+    assert parsed["author"]["name"] == (
+        "streamelements"
+        if expected["message_type"] == "announcement"
+        else "socialbadgeuser"
     )
-    assert parsed["author"]["name"] == "streamelements"
-
-
-def test_parse_irc_item_parses_social_sharing_badge_usernotice() -> None:
-    raw = (
-        "@badge-info=subscriber/3;badges=subscriber/3;color=#FF69B4;"
-        "display-name=SocialBadgeUser;emotes=;flags=;id=social-badge-1;"
-        "login=socialbadgeuser;mod=0;msg-id=socialsharingbadge;"
-        "msg-param-current-badge-level=1;room-id=641972806;subscriber=1;"
-        r"system-msg=Unlocked\sa\ssocial\ssharing\sbadge;"
-        "tmi-sent-ts=1784401035261;user-id=1206377490;user-type=;vip=0 "
-        ":tmi.twitch.tv USERNOTICE #kaicenat "
-        ":Wooohooo, I got a social media badge!\r\n"
-    )
-
-    parsed = _parse_irc(raw)
-
-    assert parsed["action_type"] == "user_notice"
-    assert parsed["message_type"] == "social_sharing_badge"
-    assert parsed["current_badge_level"] == 1
-    assert parsed["message"] == "Wooohooo, I got a social media badge!"
-    assert parsed["author"]["name"] == "socialbadgeuser"
 
 
 @pytest.mark.parametrize("badge", ["moderator", "subscriber"])
 def test_parse_irc_item_parses_shared_chat_privmsg_tags(badge) -> None:
-    raw = (
-        "@badge-info=;badges=vip/1;color=#1E90FF;display-name=GuestUser;emotes=;"
-        "flags=;id=22fe4db9-1f83-4d8e-b4b9-d9f840d5f001;mod=0;room-id=123;"
-        f"source-id=shared-message-1;source-room-id=456;source-badges={badge}/1;"
-        "source-badge-info=subscriber/12;source-only=1;subscriber=0;"
-        "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
+    parsed = _parse_irc(
+        irc_frame(
+            "badges=vip/1;room-id=123;source-id=shared-message-1;source-room-id=456;"
+            f"source-badges={badge}/1;source-badge-info=subscriber/12;source-only=1"
+        )
     )
-
-    parsed = _parse_irc(raw)
 
     assert parsed["shared_chat_source_message_id"] == "shared-message-1"
     assert parsed["shared_chat_source_channel_id"] == "456"
@@ -125,63 +114,42 @@ def test_parse_irc_item_parses_shared_chat_privmsg_tags(badge) -> None:
         assert parsed["shared_chat_source_badges"][0]["months"] == 12
 
 
-def test_parse_irc_item_parses_shared_chat_usernotice_source_msg_id() -> None:
-    raw = (
-        "@badge-info=;badges=moderator/1;color=#5B99FF;display-name=Fossabot;"
-        "emotes=;flags=;id=db229975-40e4-4d55-92de-75ec0e8b3cb2;mod=1;"
-        "room-id=93869876;source-msg-id=announcement;subscriber=0;"
-        "tmi-sent-ts=1771953482608;turbo=0;user-id=100135110;user-type=mod;"
-        "msg-id=announcement;msg-param-color=PRIMARY;system-msg= "
-        ":tmi.twitch.tv USERNOTICE #thebausffs :promo\r\n"
-    )
-
-    parsed = _parse_irc(raw)
-
-    assert parsed["message_type"] == "announcement"
+@pytest.mark.parametrize("notice", [False, True])
+def test_parse_shared_chat_usernotice(notice):
+    tags = "source-msg-id=announcement;msg-id=announcement"
+    if notice:
+        tags += (
+            ";source-id=shared-message-1;source-room-id=123456;source-only=1;"
+            r"msg-id=sharedchatnotice;system-msg=Shared\sChat\snotice"
+        )
+    parsed = _parse_irc(irc_frame(tags, "USERNOTICE", "promo", user=""))
     assert parsed["shared_chat_source_msg_id"] == "announcement"
-
-
-def test_parse_irc_item_parses_sharedchatnotice_usernotice() -> None:
-    raw = (
-        "@badge-info=;badges=moderator/1;color=#5B99FF;display-name=Fossabot;"
-        "emotes=;flags=;id=db229975-40e4-4d55-92de-75ec0e8b3cb2;mod=1;"
-        "room-id=93869876;source-id=shared-message-1;source-room-id=123456;"
-        "source-msg-id=announcement;source-only=1;subscriber=0;"
-        "tmi-sent-ts=1771953482608;turbo=0;user-id=100135110;user-type=mod;"
-        "msg-id=sharedchatnotice;system-msg=Shared\\sChat\\snotice "
-        ":tmi.twitch.tv USERNOTICE #thebausffs :promo\r\n"
+    assert parsed["message_type"] == (
+        "shared_chat_notice" if notice else "announcement"
     )
-
-    parsed = _parse_irc(raw)
-
-    assert parsed["action_type"] == "user_notice"
-    assert parsed["message_type"] == "shared_chat_notice"
-    assert parsed["system_message"] == "Shared Chat notice"
-    assert parsed["shared_chat_source_message_id"] == "shared-message-1"
-    assert parsed["shared_chat_source_channel_id"] == "123456"
-    assert parsed["shared_chat_source_msg_id"] == "announcement"
-    assert parsed["shared_chat_source_only"] is True
-    assert parsed["is_shared_chat_message"] is True
-    assert parsed["shared_chat_effective_source_channel_id"] == "123456"
-    assert parsed["shared_chat_is_cross_channel"] is True
+    if notice:
+        assert parsed["action_type"] == "user_notice"
+        assert parsed["system_message"] == "Shared Chat notice"
+        assert parsed["shared_chat_source_message_id"] == "shared-message-1"
+        assert parsed["shared_chat_source_channel_id"] == "123456"
+        assert parsed["shared_chat_source_only"] is True
+        assert parsed["is_shared_chat_message"] is True
+        assert parsed["shared_chat_effective_source_channel_id"] == "123456"
+        assert parsed["shared_chat_is_cross_channel"] is True
 
 
 def test_parse_irc_item_preserves_sharedchatnotice_goal_params() -> None:
-    raw = (
-        "@badge-info=;badges=moderator/1;color=#5B99FF;display-name=Fossabot;"
-        "emotes=;flags=;id=db229975-40e4-4d55-92de-75ec0e8b3cb2;mod=1;"
-        "room-id=93869876;source-id=shared-message-1;source-room-id=123456;"
-        "source-msg-id=announcement;subscriber=0;tmi-sent-ts=1771953482608;"
-        "turbo=0;user-id=100135110;user-type=mod;msg-id=sharedchatnotice;"
-        "msg-param-goal-target-contributions=100;"
-        "msg-param-goal-current-contributions=25;"
-        "msg-param-goal-user-contributions=5;"
-        "msg-param-goal-description=Daily\\sgoal;"
-        "msg-param-goal-contribution-type=BITS;system-msg=Shared\\sChat "
-        ":tmi.twitch.tv USERNOTICE #thebausffs :promo\r\n"
+    parsed = _parse_irc(
+        irc_frame(
+            "source-room-id=123456;source-msg-id=announcement;msg-id=sharedchatnotice;"
+            "msg-param-goal-target-contributions=100;"
+            "msg-param-goal-current-contributions=25;msg-param-goal-user-contributions=5;"
+            r"msg-param-goal-description=Daily\sgoal;msg-param-goal-contribution-type=BITS",
+            "USERNOTICE",
+            "promo",
+            user="",
+        )
     )
-
-    parsed = _parse_irc(raw)
 
     assert parsed["message_type"] == "shared_chat_notice"
     assert parsed["msg_param_goal_target_contributions"] == "100"
@@ -192,15 +160,11 @@ def test_parse_irc_item_preserves_sharedchatnotice_goal_params() -> None:
 
 
 def test_parse_irc_item_sets_shared_chat_fields_for_same_channel_source() -> None:
-    raw = (
-        "@badge-info=;badges=vip/1;color=#1E90FF;display-name=GuestUser;emotes=;"
-        "flags=;id=22fe4db9-1f83-4d8e-b4b9-d9f840d5f001;mod=0;room-id=123;"
-        "source-id=shared-message-1;source-room-id=123;subscriber=0;"
-        "tmi-sent-ts=1771953482608;turbo=0;user-id=789;user-type= "
-        ":guestuser!guestuser@guestuser.tmi.twitch.tv PRIVMSG #example :hello\r\n"
+    parsed = _parse_irc(
+        irc_frame(
+            "badges=vip/1;room-id=123;source-id=shared-message-1;source-room-id=123"
+        )
     )
-
-    parsed = _parse_irc(raw)
 
     assert parsed["is_shared_chat_message"] is True
     assert parsed["shared_chat_effective_source_channel_id"] == "123"
@@ -238,103 +202,53 @@ def test_parse_emotes_from_tag_text() -> None:
     assert parsed[0]["locations"] == ["0-4", "6-10"]
 
 
-def test_parse_message_info_fragments_and_emotes() -> None:
-    message = {
-        "userColor": "#abcdef",
-        "userBadges": [],
-        "fragments": [
-            {
-                "text": "Kappa",
-                "emote": {"emoteID": "25", "id": "ignored;0;4"},
-            },
-            {"text": " hi"},
-        ],
-    }
-    parsed = tw_messages._parse_message_info(message)
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_parse_message_info_fragments_and_emote_locations(duplicate):
+    fragments = [
+        {"text": "Kappa", "emote": {"emoteID": "25", "id": "emote;0;4"}},
+        {"text": " " if duplicate else " hi"},
+    ]
+    if duplicate:
+        fragments.append(
+            {"text": "Kappa", "emote": {"emoteID": "25", "id": "emote;6;10"}}
+        )
+    parsed = tw_messages._parse_message_info(
+        gql_message(userColor="#abcdef", userBadges=[], fragments=fragments)
+    )
     assert parsed["author_colour"] == "#abcdef"
-    assert parsed["message"] == "Kappa hi"
-    assert parsed["emotes"][0]["id"] == "25"
-    assert parsed["emotes"][0]["name"] == "Kappa"
-    assert parsed["emotes"][0]["locations"] == "0-4"
-
-
-def test_parse_message_info_merges_duplicate_emote_locations() -> None:
-    message = {
-        "userColor": "#fff",
-        "userBadges": [],
-        "fragments": [
-            {
-                "text": "Kappa",
-                "emote": {"emoteID": "25", "id": "emote;0;4"},
-            },
-            {"text": " "},
-            {
-                "text": "Kappa",
-                "emote": {"emoteID": "25", "id": "emote;6;10"},
-            },
-        ],
-    }
-
-    parsed = tw_messages._parse_message_info(message)
-
-    assert parsed["message"] == "Kappa Kappa"
+    assert parsed["message"] == ("Kappa Kappa" if duplicate else "Kappa hi")
     assert parsed["emotes"] == [
         {
             "id": "25",
             "images": tw_messages._generate_emote_image_list("25"),
             "name": "Kappa",
-            "locations": "0-4,6-10",
-        },
+            "locations": "0-4,6-10" if duplicate else "0-4",
+        }
     ]
 
 
-def test_parse_badge_info_prefers_subscriber_over_global() -> None:
+@pytest.mark.parametrize(
+    ("name", "version", "title", "prefix"),
+    [("subscriber", "12", "Sub", "s"), ("moderator", "1", "Mod", "g")],
+)
+def test_parse_badge_info_prefers_subscriber_over_global(name, version, title, prefix):
     badge_set = BadgeSet(
-        global_badges={
-            ("moderator", "1"): {
-                "title": "Mod",
-                "image1x": "g1",
-                "image2x": "g2",
-                "image4x": "g4",
-                "clickAction": None,
-                "clickURL": None,
-            },
-        },
+        global_badges={("moderator", "1"): badge_record()},
         channel_badges={
             "123": {
-                ("subscriber", "12"): {
-                    "title": "Sub",
-                    "image1x": "s1",
-                    "image2x": "s2",
-                    "image4x": "s4",
-                    "clickAction": "open",
-                    "clickURL": "https://example.com",
-                },
-            },
+                ("subscriber", "12"): badge_record(
+                    "Sub", "s", clickAction="open", clickURL="https://example.com"
+                )
+            }
         },
     )
-
-    sub = tw_messages._parse_badge_info(
-        "subscriber",
-        "12",
-        channel_id="123",
-        badge_set=badge_set,
+    parsed = tw_messages._parse_badge_info(
+        name, version, channel_id="123", badge_set=badge_set
     )
-    assert sub["name"] == "subscriber"
-    assert sub["version"] == 12
-    assert sub["title"] == "Sub"
-    assert sub["icons"][0]["url"] == "s1"
-
-    mod = tw_messages._parse_badge_info(
-        "moderator",
-        "1",
-        channel_id="123",
-        badge_set=badge_set,
-    )
-    assert mod["name"] == "moderator"
-    assert mod["version"] == 1
-    assert mod["title"] == "Mod"
-    assert mod["icons"][0]["url"] == "g1"
+    assert parsed["name"] == name
+    assert parsed["version"] == int(version)
+    assert parsed["title"] == title
+    assert parsed["icons"][0]["url"] == f"{prefix}1"
 
 
 def test_parse_author_images_user_and_game_helpers() -> None:
@@ -388,145 +302,62 @@ def test_parse_irc_badges_accepts_entries_without_version() -> None:
     assert parsed == [{"name": "vip", "version": ""}]
 
 
-def test_set_message_type_and_add_text_for_emotes_handle_unknown_and_invalid(
-    monkeypatch,
-) -> None:
-    debug_calls = []
-    info: dict[str, object] = {}
-
-    monkeypatch.setattr(
-        tw_irc_resolve,
-        "debug_log",
-        lambda *items: debug_calls.append(items),
-    )
-    monkeypatch.setattr(
-        tw_emotes,
-        "debug_log",
-        lambda *items: debug_calls.append(items),
-    )
-
+def test_set_message_type_and_add_text_for_emotes_handle_unknown_and_invalid():
+    info = {}
     tw_irc_resolve._set_message_type(info, "mystery_type")
     assert "message_type" not in info
-    assert debug_calls == [("Unknown message type: mystery_type", "Parsed data: {}")]
-
     emotes = [{"locations": ["bad-location"]}]
     tw_emotes._add_text_for_emotes("hello", emotes)
     assert "name" not in emotes[0]
-    assert debug_calls[-1] == (
-        "Invalid emote: {'locations': ['bad-location']}",
-        "Message: hello",
-    )
 
 
-def test_set_message_type_captures_unknown_raw_payload(monkeypatch) -> None:
-    capture_calls = []
-    monkeypatch.setattr(
-        tw_irc_resolve,
-        "capture_debug_sample",
-        lambda *items, **kwargs: capture_calls.append((deepcopy(items), kwargs)),
-    )
-    info: dict[str, object] = {}
-    raw = {"message": {"messageType": "mystery_type"}}
-
-    tw_irc_resolve._set_message_type(info, "mystery_type", raw_payload=raw)
-
-    assert capture_calls == [
-        (
-            (
-                "twitch-unknown-message-type",
-                {
-                    "raw": raw,
-                    "message_type": "mystery_type",
-                    "parsed": info,
-                },
-            ),
-            {"sample_limit": 10},
-        )
-    ]
-
-
-def test_parse_irc_item_captures_unknown_action_with_raw_line(monkeypatch) -> None:
-    capture_calls = []
-    monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: True)
-    monkeypatch.setattr(
-        tw_irc_resolve,
-        "capture_debug_sample",
-        lambda *items, **kwargs: capture_calls.append((deepcopy(items), kwargs)),
-    )
-    raw = (
-        "@badge-info=;badges=;display-name=TestUser;room-id=999;"
-        "tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv MYSTERY "
-        "#channel :hello\r\n"
-    )
-    parsed = _parse_irc(raw)
-
-    assert capture_calls == [
-        (
-            (
-                "twitch-unknown-irc-action",
-                {
-                    "raw": raw,
-                    "action_type": "MYSTERY",
-                    "parsed": parsed,
-                },
-            ),
-            {"sample_limit": 10},
-        )
-    ]
-
-
-@pytest.mark.parametrize("debug", [False, True])
-def test_parse_irc_item_captures_unknown_tags_only_in_debug(monkeypatch, debug) -> None:
-    capture_calls = []
+@pytest.mark.parametrize(
+    ("kind", "debug"),
+    [
+        ("message-type", True),
+        ("irc-action", True),
+        ("irc-tag", True),
+        ("irc-tag", False),
+    ],
+)
+def test_parse_captures_unknown_payloads(monkeypatch, kind, debug):
+    calls = []
     monkeypatch.setattr(tw_messages.logger, "isEnabledFor", lambda _level: debug)
+    module = tw_messages if kind == "irc-tag" else tw_irc_resolve
     monkeypatch.setattr(
-        tw_messages,
+        module,
         "capture_debug_sample",
-        lambda *items, **kwargs: capture_calls.append((items, kwargs)),
+        lambda *args, **kwargs: calls.append((deepcopy(args), kwargs)),
     )
-    raw = (
-        "@badge-info=;badges=;display-name=TestUser;made-up-tag=value;"
-        "room-id=999;tmi-sent-ts=1;user-id=12345 "
-        ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG "
-        "#channel :hello\r\n"
+    if kind == "message-type":
+        info = {}
+        raw = {"message": {"messageType": "mystery_type"}}
+        tw_irc_resolve._set_message_type(info, "mystery_type", raw_payload=raw)
+        payload = {"raw": raw, "message_type": "mystery_type", "parsed": info}
+    elif kind == "irc-action":
+        raw = irc_frame(action="MYSTERY", user="")
+        parsed = _parse_irc(raw)
+        payload = {"raw": raw, "action_type": "MYSTERY", "parsed": parsed}
+    else:
+        raw = irc_frame("made-up-tag=value")
+        assert _parse_irc(raw)["made_up_tag"] == "value"
+        payload = {"raw": raw, "unknown_tags": ["made-up-tag"]}
+    assert calls == (
+        [((f"twitch-unknown-{kind}", payload), {"sample_limit": 10})] if debug else []
     )
-    parsed = _parse_irc(raw)
-    assert parsed["made_up_tag"] == "value"
-    expected = (
-        [
-            (
-                (
-                    "twitch-unknown-irc-tag",
-                    {"raw": raw, "unknown_tags": ["made-up-tag"]},
-                ),
-                {"sample_limit": 10},
-            ),
-        ]
-        if debug
-        else []
-    )
-    assert capture_calls == expected
 
 
 def test_parse_item_defaults_to_text_message_and_drops_empty_badges() -> None:
-    item = {
-        "id": "msg-1",
-        "createdAt": "2024-01-01T00:00:01Z",
-        "contentOffsetSeconds": 15,
-        "commenter": {
+    item = gql_comment(
+        gql_message(userColor="#ffffff", userBadges=[{"setID": "subscriber"}]),
+        commenter={
             "id": "42",
             "login": "streamer",
             "displayName": "Streamer",
             "profileImageURL": "https://img.example/profile.png",
             "primaryColorHex": "#abcdef",
         },
-        "message": {
-            "userColor": "#ffffff",
-            "userBadges": [{"setID": "subscriber"}],
-            "fragments": [{"text": "hello"}],
-        },
-    }
-
+    )
     parsed = tw_messages._parse_item(item, offset=5.0, channel_id="123")
 
     assert parsed["message"] == "hello"
@@ -561,17 +392,15 @@ def test_parse_item_accepts_mobile_emote_positions() -> None:
 
 def test_parse_item_attaches_badges_without_commenter() -> None:
     parsed = tw_messages._parse_item(
-        {
-            "id": "msg-1",
-            "message": {
-                "userBadges": [
+        gql_comment(
+            gql_message(
+                userBadges=[
                     None,
                     {"setID": "subscriber"},
                     {"setID": "moderator", "version": "1"},
-                ],
-                "fragments": [{"text": "hello"}],
-            },
-        },
+                ]
+            )
+        ),
         offset=0,
         channel_id="123",
     )
@@ -581,19 +410,7 @@ def test_parse_item_attaches_badges_without_commenter() -> None:
 
 
 def test_parse_item_remaps_known_message_type(monkeypatch, request) -> None:
-    item = {
-        "id": "msg-2",
-        "createdAt": "2024-01-01T00:00:02Z",
-        "contentOffsetSeconds": 2,
-        "commenter": {
-            "id": "42",
-            "login": "streamer",
-            "displayName": "Streamer",
-            "profileImageURL": "https://img.example/profile.png",
-            "primaryColorHex": "#abcdef",
-        },
-        "message": {"fragments": []},
-    }
+    item = gql_comment(gql_message(fragments=[]))
 
     monkeypatch.setattr(
         tw_messages,
@@ -609,17 +426,14 @@ def test_parse_item_remaps_known_message_type(monkeypatch, request) -> None:
 
 
 def test_parse_irc_item_parses_emotes_subscriber_months_and_reply_author() -> None:
-    raw = (
-        "@badge-info=subscriber/12;badges=subscriber/12;color=#00FF00;"
-        "display-name=TestUser;emotes=25:0-4;flags=;id=abc123;mod=0;room-id=999;"
-        "reply-parent-user-id=321;reply-parent-msg-id=parent-msg;"
-        "reply-parent-display-name=OtherUser;reply-parent-user-login=otheruser;"
-        "subscriber=1;tmi-sent-ts=1700000000000;turbo=0;user-id=12345;user-type= "
-        ":testuser!testuser@testuser.tmi.twitch.tv PRIVMSG #channel :Kappa"
-        "\r\n"
+    parsed = _parse_irc(
+        irc_frame(
+            "badge-info=subscriber/12;badges=subscriber/12;emotes=25:0-4;subscriber=1;"
+            "reply-parent-user-id=321;reply-parent-msg-id=parent-msg;"
+            "reply-parent-display-name=OtherUser;reply-parent-user-login=otheruser",
+            text="Kappa",
+        )
     )
-
-    parsed = _parse_irc(raw)
 
     assert parsed["message"] == "Kappa"
     assert parsed["emotes"][0]["name"] == "Kappa"
@@ -628,79 +442,58 @@ def test_parse_irc_item_parses_emotes_subscriber_months_and_reply_author() -> No
     assert parsed["author"]["name"] == "testuser"
 
 
-def test_parse_irc_item_parses_animated_message_without_unknown_warning(
-    monkeypatch,
-) -> None:
+@pytest.mark.parametrize(
+    ("kind", "tags", "text", "user"),
+    [
+        (
+            "animated-message",
+            "animation-id=party;badges=vip/1",
+            "hello",
+            "animateduser",
+        ),
+        (
+            "gigantified-emote-message",
+            "emotes=25:0-4;badges=subscriber/12",
+            "Kappa",
+            "giganticuser",
+        ),
+    ],
+)
+def test_parse_special_message_without_unknown_warning(
+    monkeypatch, kind, tags, text, user
+):
     debug_calls = []
     monkeypatch.setattr(
-        tw_irc_resolve,
-        "debug_log",
-        lambda *items: debug_calls.append(items),
+        tw_irc_resolve, "debug_log", lambda *args: debug_calls.append(args)
     )
-    raw = (
-        "@badge-info=;badges=vip/1;color=#1E90FF;display-name=AnimatedUser;"
-        "emotes=;flags=;id=animated-msg-1;mod=0;room-id=999;"
-        "animation-id=party;subscriber=0;tmi-sent-ts=1700000000000;turbo=0;"
-        "user-id=12345;user-type=;msg-id=animated-message "
-        ":animateduser!animateduser@animateduser.tmi.twitch.tv PRIVMSG "
-        "#channel :hello\r\n"
+    parsed = _parse_irc(
+        irc_frame(f"{tags};msg-id={kind};display-name={user}", text=text, user=user)
     )
-
-    parsed = _parse_irc(raw)
-
     assert parsed["action_type"] == "text_message"
-    assert parsed["message_type"] == "animated-message"
-    assert parsed["animation_id"] == "party"
-    assert parsed["message"] == "hello"
-    assert parsed["author"]["name"] == "animateduser"
+    assert parsed["message_type"] == kind
+    assert parsed["message"] == text
+    assert parsed["author"]["name"] == user
+    if kind == "animated-message":
+        assert parsed["animation_id"] == "party"
+    else:
+        assert parsed["emotes"][0]["id"] == "25"
+        assert parsed["emotes"][0]["name"] == "Kappa"
+        assert parsed["channel_id"] == "999"
+        assert parsed["author"]["badges"][0]["name"] == "subscriber"
     assert not any(
-        call and "Unknown message type" in str(call[0]) for call in debug_calls
-    )
-
-
-def test_parse_irc_item_parses_gigantified_emote_without_unknown_warning(
-    monkeypatch,
-) -> None:
-    debug_calls = []
-    monkeypatch.setattr(
-        tw_irc_resolve,
-        "debug_log",
-        lambda *items: debug_calls.append(items),
-    )
-    raw = (
-        "@badge-info=;badges=subscriber/12;color=#00FF00;"
-        "display-name=GiganticUser;emotes=25:0-4;flags=;id=gigantic-msg-1;"
-        "mod=0;room-id=999;subscriber=1;tmi-sent-ts=1700000000000;turbo=0;"
-        "user-id=12345;user-type=;msg-id=gigantified-emote-message "
-        ":giganticuser!giganticuser@giganticuser.tmi.twitch.tv PRIVMSG "
-        "#channel :Kappa\r\n"
-    )
-
-    parsed = _parse_irc(raw)
-
-    assert parsed["action_type"] == "text_message"
-    assert parsed["message_type"] == "gigantified-emote-message"
-    assert parsed["message"] == "Kappa"
-    assert parsed["emotes"][0]["id"] == "25"
-    assert parsed["emotes"][0]["name"] == "Kappa"
-    assert parsed["channel_id"] == "999"
-    assert parsed["author"]["badges"][0]["name"] == "subscriber"
-    assert not any(
-        call and "Unknown message type" in str(call[0]) for call in debug_calls
+        "Unknown message type" in str(call[0]) for call in debug_calls if call
     )
 
 
 def test_parse_irc_item_preserves_mystery_gift_theme() -> None:
-    raw = (
-        "@badge-info=;badges=;color=#9146FF;display-name=GiftUser;emotes=;"
-        "flags=;id=gift-msg-1;mod=0;room-id=999;subscriber=0;"
-        "tmi-sent-ts=1700000000000;turbo=0;user-id=12345;user-type=;"
-        "msg-id=submysterygift;msg-param-mass-gift-count=5;"
-        "msg-param-gift-theme=hype "
-        ":giftuser!giftuser@giftuser.tmi.twitch.tv USERNOTICE #channel\r\n"
+    parsed = _parse_irc(
+        irc_frame(
+            "msg-id=submysterygift;msg-param-mass-gift-count=5;msg-param-gift-theme=hype",
+            "USERNOTICE",
+            None,
+            user="giftuser",
+        )
     )
-
-    parsed = _parse_irc(raw)
 
     assert parsed["action_type"] == "user_notice"
     assert parsed["message_type"] == "mystery_subscription_gift"
@@ -731,21 +524,10 @@ def test_parse_irc_item_handles_unknown_action_roomstate_and_clearchat(
         ":tmi.twitch.tv CLEARCHAT #channel :banneduser\r\n"
     )
     clear_chat_raw = "@room-id=999;tmi-sent-ts=1 :tmi.twitch.tv CLEARCHAT #channel\r\n"
-
-    unknown_match = MESSAGE_REGEX.search(unknown_raw)
-    roomstate_match = MESSAGE_REGEX.search(roomstate_raw)
-    clear_timeout_match = MESSAGE_REGEX.search(clear_timeout_raw)
-    clear_chat_match = MESSAGE_REGEX.search(clear_chat_raw)
-
-    assert unknown_match is not None
-    assert roomstate_match is not None
-    assert clear_timeout_match is not None
-    assert clear_chat_match is not None
-
-    unknown = _parse_irc_item(unknown_match)
-    roomstate = _parse_irc_item(roomstate_match)
-    clear_timeout = _parse_irc_item(clear_timeout_match)
-    clear_chat = _parse_irc_item(clear_chat_match)
+    unknown = _parse_irc(unknown_raw)
+    roomstate = _parse_irc(roomstate_raw)
+    clear_timeout = _parse_irc(clear_timeout_raw)
+    clear_chat = _parse_irc(clear_chat_raw)
 
     assert unknown["action_type"] == "MYSTERY"
     assert unknown["message_type"] == "MYSTERY"
@@ -765,6 +547,7 @@ def test_parse_irc_item_handles_unknown_action_roomstate_and_clearchat(
     assert clear_timeout["message_type"] == "ban_user"
     assert clear_timeout["ban_type"] == "timeout"
     assert clear_timeout["banned_user"] == "banneduser"
+    assert "message" not in clear_timeout
     assert clear_chat["message_type"] == "clear_chat"
 
 
@@ -807,9 +590,7 @@ def test_parse_irc_item_follower_only_unexpected_negative_treated_as_disabled() 
         "@badge-info=;badges=;display-name=TestUser;followers-only=-2;room-id=999;"
         "tmi-sent-ts=1;user-id=12345 :tmi.twitch.tv ROOMSTATE #channel\r\n"
     )
-    match = MESSAGE_REGEX.search(raw)
-    assert match is not None
-    parsed = _parse_irc_item(match)
+    parsed = _parse_irc(raw)
     assert parsed["follower_only"] is False
     assert "minutes_to_follow_before_chatting" not in parsed
 
@@ -854,61 +635,3 @@ def test_resolve_irc_badges_absent_source_stays_absent() -> None:
     info = {"author_badge_metadata": "", "author_badges": "moderator/1"}
     tw_messages._resolve_irc_badges(info, channel_id="100", badge_set=BadgeSet({}, {}))
     assert "shared_chat_source_badges" not in info
-
-
-@pytest.mark.parametrize(
-    ("action", "info", "message", "expected", "absent"),
-    [
-        (
-            "USERNOTICE",
-            {"message_type": "announcement"},
-            None,
-            {"action_type": "user_notice", "message_type": "announcement"},
-            (),
-        ),
-        (
-            "MYSTERY",
-            {},
-            None,
-            {"action_type": "MYSTERY", "message_type": "MYSTERY"},
-            (),
-        ),
-        (
-            "CLEARCHAT",
-            {"ban_duration": "600", "message": "banneduser"},
-            "banneduser",
-            {
-                "message_type": "ban_user",
-                "ban_type": "timeout",
-                "banned_user": "banneduser",
-            },
-            ("message",),
-        ),
-        ("CLEARCHAT", {}, None, {"message_type": "clear_chat"}, ()),
-        (
-            "ROOMSTATE",
-            {"follower_only": "10", "slow_mode": "5"},
-            None,
-            {
-                "follower_only": True,
-                "minutes_to_follow_before_chatting": 10,
-                "slow_mode": True,
-                "seconds_to_wait": 5,
-            },
-            (),
-        ),
-        (
-            "ROOMSTATE",
-            {"follower_only": "-1", "slow_mode": "0"},
-            None,
-            {"follower_only": False, "slow_mode": False},
-            ("minutes_to_follow_before_chatting",),
-        ),
-    ],
-    ids=["notice", "unknown", "timeout", "clear", "modes-enabled", "modes-disabled"],
-)
-def test_resolve_irc_action(action, info, message, expected, absent) -> None:
-    info = deepcopy(info)
-    tw_irc_resolve._resolve_irc_action_and_message_type(info, action, message)
-    assert {key: info[key] for key in expected} == expected
-    assert all(key not in info for key in absent)

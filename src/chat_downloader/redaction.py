@@ -493,16 +493,13 @@ def capture_debug_sample(
             serialized.encode("utf-8"), usedforsecurity=False
         ).hexdigest()[:12]
         sample_dir = _sample_directory()
+        bounds: list[tuple[str, str, int | None]] = []
         if sample_group is not None and group_limit is not None:
             group_digest = hashlib.sha1(
                 f"{slugify_debug_label(label)}:{digest}".encode(),
                 usedforsecurity=False,
             ).hexdigest()[:12]
-            bounds: list[tuple[str, str, int | None]] = [
-                (sample_group, group_digest, group_limit)
-            ]
-        else:
-            bounds = []
+            bounds.append((sample_group, group_digest, group_limit))
         bounds.append((label, digest, sample_limit))
         for bound_label, bound_digest, limit in bounds:
             allowed, reserved = _reserve_debug_sample(

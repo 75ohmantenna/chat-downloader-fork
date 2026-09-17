@@ -91,52 +91,55 @@ def _get_one_message(**init_params) -> None:
 @pytest.mark.network
 @pytest.mark.network_environment
 @pytest.mark.timeout(90)
-def test_proxy(local_http_proxy: str) -> None:
-    for proxy in ("", None, local_http_proxy):
-        _get_one_message(proxy=proxy)
-
-
-@pytest.mark.network
-@pytest.mark.network_environment
-@pytest.mark.timeout(90)
 @pytest.mark.parametrize(
-    "platform",
-    [
-        "Windows NT 10.0; Win64; x64",
-        "Macintosh; Intel Mac OS X 10_15_7",
-        "X11; Linux x86_64",
+    ("kind", "platform"),
+    [("proxy", None), ("cookies", None)]
+    + [
+        ("headers", platform)
+        for platform in (
+            "Windows NT 10.0; Win64; x64",
+            "Macintosh; Intel Mac OS X 10_15_7",
+            "X11; Linux x86_64",
+        )
     ],
 )
-def test_headers(platform) -> None:
-    _get_one_message(
-        headers={
-            "User-Agent": (
-                f"Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/143.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "en-US, en",
-        }
-    )
-
-
-@pytest.mark.network
-@pytest.mark.network_environment
-@pytest.mark.timeout(90)
-def test_cookies() -> None:
-    _get_one_message(cookies=None)
+def test_network_initialization(kind, platform, request) -> None:
+    if kind == "proxy":
+        for proxy in ("", None, request.getfixturevalue("local_http_proxy")):
+            _get_one_message(proxy=proxy)
+    elif kind == "cookies":
+        _get_one_message(cookies=None)
+    else:
+        _get_one_message(
+            headers={
+                "User-Agent": (
+                    f"Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/143.0.0.0 Safari/537.36"
+                ),
+                "Accept-Language": "en-US, en",
+            }
+        )
 
 
 @pytest.fixture
-def cookie_session():
-    session = ChatDownloader()
+def cookie_session(request):
+    session = ChatDownloader(**getattr(request, "param", {}))
     try:
         yield session
     finally:
         session.close()
 
 
-def test_cookie_operations(cookie_session) -> None:
-    cookie_session.set_cookie_value(".youtube.com", "test_cookie", "test_value")
+@pytest.mark.parametrize(
+    "options",
+    [{}, {"expire_time": 4102444800}, {"path": "/watch"}, {"secure": True}],
+    ids=["default", "expiry", "path", "secure"],
+)
+def test_cookie_operations(cookie_session, options) -> None:
+    assert isinstance(cookie_session.config, DownloaderConfig)
+    cookie_session.set_cookie_value(
+        ".youtube.com", "test_cookie", "test_value", **options
+    )
     assert cookie_session.get_cookie_value("test_cookie") == "test_value"
     assert (
         cookie_session.get_cookie_value("nonexistent", default="default") == "default"
@@ -167,38 +170,15 @@ def test_clear_cookies_disables_future_cookie_file_reloads(cookie_file) -> None:
 
 
 @pytest.mark.parametrize(
-    "options",
-    [
-        {"expire_time": 4102444800},
-        {"path": "/watch"},
-        {"secure": True},
-    ],
-    ids=["expiry", "path", "secure"],
-)
-def test_cookie_options(cookie_session, options) -> None:
-    cookie_session.set_cookie_value(
-        ".youtube.com", "custom_cookie", "custom_value", **options
-    )
-    assert cookie_session.get_cookie_value("custom_cookie") == "custom_value"
-
-
-def test_config_attribute_is_downloader_config(cookie_session) -> None:
-    assert isinstance(cookie_session.config, DownloaderConfig)
-
-
-@pytest.mark.parametrize(
-    "options",
+    "cookie_session",
     [
         {"proxy": "socks5://127.0.0.1:1080"},
         {"headers": {"X-Custom": "val"}, "cookies": None},
         {"proxy": "http://p:8080"},
         {},
     ],
+    indirect=True,
 )
-def test_removed_init_params_property_raises_attribute_error(options) -> None:
-    session = ChatDownloader(**options)
-    try:
-        with pytest.raises(AttributeError):
-            _ = session.init_params
-    finally:
-        session.close()
+def test_removed_init_params_property_raises_attribute_error(cookie_session) -> None:
+    with pytest.raises(AttributeError):
+        _ = cookie_session.init_params

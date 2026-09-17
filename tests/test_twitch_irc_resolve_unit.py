@@ -52,31 +52,28 @@ def test_room_state_normalization(field, value, expected) -> None:
     }
 
 
-def test_absent_room_modes_stay_absent() -> None:
-    info = {}
-    _resolve_irc_action_and_message_type(info, "", None)
-    assert info == {"message_type": ""}
-
-
 @pytest.mark.parametrize(
-    ("duration", "ban_type"), [(600, "timeout"), (None, "permanent")]
+    ("action", "message", "duration", "expected"),
+    [
+        ("", None, None, {"message_type": ""}),
+        ("CLEARCHAT", "targeted_user", 600, {"ban_type": "timeout"}),
+        ("CLEARCHAT", "targeted_user", None, {"ban_type": "permanent"}),
+        ("CLEARCHAT", None, None, {}),
+        ("PRIVMSG", "someone", None, {}),
+    ],
 )
-def test_clearchat_ban(duration, ban_type) -> None:
-    info = {"message": "targeted_user"}
+def test_action_resolution(action, message, duration, expected) -> None:
+    info = {"message": message} if message else {}
     if duration is not None:
         info["ban_duration"] = duration
-    _resolve_irc_action_and_message_type(info, "CLEARCHAT", "targeted_user")
-    assert info["message_type"] == "ban_user"
-    assert info["ban_type"] == ban_type
-    assert info["banned_user"] == "targeted_user"
-    assert "message" not in info
-
-
-@pytest.mark.parametrize(
-    ("action", "message"), [("CLEARCHAT", None), ("PRIVMSG", "someone")]
-)
-def test_non_ban_actions(action, message) -> None:
-    info = {"message": message} if message else {}
     _resolve_irc_action_and_message_type(info, action, message)
-    assert info["message_type"] != "ban_user"
-    assert "ban_type" not in info
+    if "ban_type" in expected:
+        assert info["message_type"] == "ban_user"
+        assert info["ban_type"] == expected["ban_type"]
+        assert info["banned_user"] == message
+        assert "message" not in info
+    else:
+        assert info["message_type"] != "ban_user"
+        assert "ban_type" not in info
+        if not action:
+            assert info == expected

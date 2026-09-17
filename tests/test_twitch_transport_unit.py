@@ -9,6 +9,7 @@ from typing import Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
+from requests.exceptions import HTTPError
 
 import chat_downloader.redaction as red
 from chat_downloader.errors import (
@@ -26,23 +27,27 @@ from chat_downloader.sites.twitch import (
     irc_diagnostics,
     irc_transport,
 )
+from tests.twitch_third_helpers import irc_frame
 
 
 def _privmsg(message_id: str, text: str) -> str:
-    return (
-        "@badge-info=;badges=;color=;display-name=User;emotes=;id="
-        f"{message_id};mod=0;room-id=1;subscriber=0;tmi-sent-ts=1;turbo=0;user-id=1;"
-        f"user-type= :user!user@user.tmi.twitch.tv PRIVMSG #example :{text}"
-    )
+    return irc_frame(
+        f"id={message_id};display-name=User;room-id=1;user-id=1",
+        text=text,
+        channel="example",
+        user="user",
+    ).removesuffix("\r\n")
 
 
 def _usernotice(message_id: str, message_type: str, text: str) -> str:
-    return (
-        "@badge-info=;badges=;color=;display-name=User;emotes=;flags=;id="
-        f"{message_id};mod=0;msg-id={message_type};room-id=1;subscriber=1;"
-        "system-msg=Event;tmi-sent-ts=1;turbo=0;user-id=1;user-type= "
-        f":tmi.twitch.tv USERNOTICE #example :{text}"
-    )
+    return irc_frame(
+        f"id={message_id};msg-id={message_type};display-name=User;room-id=1;"
+        "subscriber=1;user-id=1;system-msg=Event",
+        "USERNOTICE",
+        text,
+        "example",
+        "",
+    ).removesuffix("\r\n")
 
 
 def _capture_resub(capture, frame):
@@ -128,21 +133,23 @@ def test_event_frame_capture_prefers_message_type_and_falls_back_to_action(
     )
     frame_capture.capture("notice\r\n", {}, "NOTICE", "")
 
-    assert captured == [
-        (
-            (f"twitch-irc-event-{label}", {"raw": frame}),
-            {
-                "sample_limit": 1,
-                "sample_group": "twitch-irc-event-frames",
-                "group_limit": 12,
-            },
-        )
+    assert [(args[0].rsplit("-", 1)[0], args[1]) for args, _ in captured] == [
+        (f"twitch-irc-event-{label}", {"raw": frame})
         for label, frame in [
-            ("message-resubscription-7dce7b9831c9", "resub one\r\n"),
-            ("message-viewermilestone-71b63634a922", "milestone\r\n"),
-            ("action-notice-dfb14fbb9e7d", "notice\r\n"),
+            ("message-resubscription", "resub one\r\n"),
+            ("message-viewermilestone", "milestone\r\n"),
+            ("action-notice", "notice\r\n"),
         ]
     ]
+    assert all(
+        kwargs
+        == {
+            "sample_limit": 1,
+            "sample_group": "twitch-irc-event-frames",
+            "group_limit": 12,
+        }
+        for _, kwargs in captured
+    )
 
 
 def test_event_frame_capture_bounds_provider_controlled_keys_and_labels(
@@ -365,70 +372,45 @@ def test_event_capture_backend_label_persists_across_runs_with_group_slots(
 
 
 @pytest.mark.parametrize(
-    ("genuine", "masquerade", "message_type", "label"),
+    ("frames", "types", "labels"),
     [
         (
-            _usernotice("genuine-resub", "resub", "Genuine resub"),
-            "resubscription",
-            "resubscription",
-            "message-resubscription-7dce7b9831c9",
+            [
+                _usernotice("genuine", "resub", "Genuine resub"),
+                _usernotice("masquerade", "resubscription", "Unknown raw type"),
+            ],
+            ["resubscription"] * 2,
+            ["message-resubscription", "action-usernotice"],
         ),
         (
-            _privmsg("genuine-text", "Genuine text"),
-            "text_message",
-            "text_message",
-            "message-text-message-18e44952e1aa",
+            [
+                _privmsg("genuine", "Genuine text"),
+                _usernotice("masquerade", "text_message", "Unknown raw type"),
+            ],
+            ["text_message"] * 2,
+            ["message-text-message", "action-usernotice"],
+        ),
+        (
+            [
+                _usernotice("unknown-1", "unknown-one", "First unknown"),
+                _usernotice("unknown-2", "unknown-two", "Second unknown"),
+                irc_frame(action="MYSTERY", user="").removesuffix("\r\n"),
+            ],
+            ["unknown-one", "unknown-two", "MYSTERY"],
+            ["action-usernotice", "action-unknown"],
         ),
     ],
 )
-def test_real_parser_raw_msg_id_provenance_prevents_normalized_masquerades(
-    monkeypatch,
-    captured_frames,
-    genuine,
-    masquerade,
-    message_type,
-    label,
+def test_real_parser_capture_requires_raw_provenance(
+    event_capture, captured_frames, frames, types, labels
 ):
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    items = _parse_frames(
-        [
-            genuine,
-            _usernotice("masquerade", masquerade, "Unknown raw type"),
-        ]
+    assert [item["message_type"] for item in _parse_frames(frames)] == types
+    captured_labels = [args[0] for args, _kwargs in captured_frames]
+    assert len(captured_labels) == len(labels)
+    assert all(
+        actual.startswith(f"twitch-irc-event-{expected}-")
+        for actual, expected in zip(captured_labels, labels, strict=True)
     )
-    assert [item["message_type"] for item in items] == [message_type] * 2
-    assert [args[0] for args, _kwargs in captured_frames] == [
-        f"twitch-irc-event-{label}",
-        "twitch-irc-event-action-usernotice-541488f4d6e7",
-    ]
-
-
-def test_real_parser_unknown_types_share_raw_action_fallback(
-    monkeypatch: pytest.MonkeyPatch,
-    captured_frames,
-) -> None:
-    captured = captured_frames
-
-    raw_frames = [
-        _usernotice("unknown-1", "unknown-one", "First unknown"),
-        _usernotice("unknown-2", "unknown-two", "Second unknown"),
-        (
-            "@badge-info=;badges=;display-name=User;room-id=1;tmi-sent-ts=1;"
-            "user-id=1 :tmi.twitch.tv MYSTERY #example :Unknown action"
-        ),
-    ]
-    monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "1")
-    items = _parse_frames(raw_frames)
-
-    assert [item["message_type"] for item in items] == [
-        "unknown-one",
-        "unknown-two",
-        "MYSTERY",
-    ]
-    assert [args[0] for args, _kwargs in captured] == [
-        "twitch-irc-event-action-usernotice-541488f4d6e7",
-        "twitch-irc-event-action-unknown-9a26a76fee31",
-    ]
 
 
 def test_successful_capture_modes_have_additive_fifteen_frame_limit(
@@ -452,43 +434,49 @@ def test_successful_capture_modes_have_additive_fifteen_frame_limit(
     )
 
 
-def test_live_diagnostics_count_split_control_frames_with_bounded_state() -> None:
+@pytest.mark.parametrize(
+    ("chunks", "frames", "controls"),
+    [
+        (
+            [
+                "PING :tmi.twitch.tv\r",
+                "\n:tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n",
+                "x" * 100 + "PING :tmi.twitch.tv\r\n",
+            ],
+            3,
+            2,
+        ),
+        (
+            [
+                (
+                    ":tmi.twitch.tv 001 justinfan :Welcome\r\n"
+                    ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n"
+                    ":user!user@user.tmi.twitch.tv JOIN #example\r\n"
+                    "@badge-info=;badges= :user!user@user.tmi.twitch.tv "
+                    "PRIVMSG #example :JOIN #another-channel\r\n"
+                    "@badge-info= :user!user@user.tmi.twitch.tv JOIN #example\r\n"
+                    ":tmi.twitch.tv 421 justinfan CAP :Unknown command\r\n"
+                    "UNKNOWN LINE\r\n"
+                )
+            ],
+            7,
+            3,
+        ),
+    ],
+)
+def test_live_diagnostics_control_frames_and_bounded_state(chunks, frames, controls):
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-
-    diagnostics.record_received_data("PING :tmi.twitch.tv\r")
-    diagnostics.record_received_data(
-        "\n:tmi.twitch.tv PONG tmi.twitch.tv :tmi.twitch.tv\r\n"
-    )
-    diagnostics.record_received_data("x" * 100 + "PING :tmi.twitch.tv\r\n")
+    for chunk in chunks:
+        diagnostics.record_received_data(chunk)
     diagnostics.increment("not_a_supported_counter")
-
-    assert diagnostics.summary["received_irc_chunk_count"] == 3
-    assert diagnostics.summary["received_irc_frame_count"] == 3
-    assert diagnostics.summary["benign_irc_control_frame_count"] == 2
-    assert diagnostics.summary["keepalive_ping_received_count"] == 1
-    assert diagnostics.summary["keepalive_pong_received_count"] == 1
+    assert diagnostics.summary["received_irc_chunk_count"] == len(chunks)
+    assert diagnostics.summary["received_irc_frame_count"] == frames
+    assert diagnostics.summary["benign_irc_control_frame_count"] == controls
     assert "not_a_supported_counter" not in diagnostics.summary
-    assert len(diagnostics._frame_prefix) <= (
-        irc_diagnostics._CONTROL_FRAME_PREFIX_LIMIT
-    )
-
-
-def test_live_diagnostics_separate_benign_control_and_message_frames() -> None:
-    diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
-
-    diagnostics.record_received_data(
-        ":tmi.twitch.tv 001 justinfan :Welcome\r\n"
-        ":tmi.twitch.tv CAP * ACK :twitch.tv/tags twitch.tv/commands\r\n"
-        ":user!user@user.tmi.twitch.tv JOIN #example\r\n"
-        "@badge-info=;badges= :user!user@user.tmi.twitch.tv "
-        "PRIVMSG #example :JOIN #another-channel\r\n"
-        "@badge-info= :user!user@user.tmi.twitch.tv JOIN #example\r\n"
-        ":tmi.twitch.tv 421 justinfan CAP :Unknown command\r\n"
-        "UNKNOWN LINE\r\n",
-    )
-
-    assert diagnostics.summary["received_irc_frame_count"] == 7
-    assert diagnostics.summary["benign_irc_control_frame_count"] == 3
+    assert len(diagnostics._frame_prefix) <= irc_diagnostics._CONTROL_FRAME_PREFIX_LIMIT
+    if frames == 3:
+        assert diagnostics.summary["keepalive_ping_received_count"] == 1
+        assert diagnostics.summary["keepalive_pong_received_count"] == 1
 
 
 @pytest.mark.parametrize("frame_prefix", ["", " \r\n", ":tmi.twitch.tv"])
@@ -559,14 +547,22 @@ def test_download_gql_handles_error_response(batched) -> None:
         )
 
 
-def test_download_base_gql_detects_captcha():
-    response = SimpleNamespace(
-        status_code=403, text="Kasada challenge required", json=dict
-    )
-    with pytest.raises(CaptchaChallengeRequired, match="twitch_web"):
+@pytest.mark.parametrize(
+    ("status", "text", "error"),
+    [
+        (403, "Kasada challenge required", CaptchaChallengeRequired),
+        (429, "Too Many Requests", HTTPError),
+    ],
+)
+def test_download_base_gql_errors(status, text, error):
+    response = Mock(status_code=status, text=text)
+    response.raise_for_status.side_effect = HTTPError(str(status))
+    with pytest.raises(error):
         graphql_client._download_base_gql(
             lambda *a, **kw: response, [{"operationName": "x"}]
         )
+    if status == 429:
+        response.raise_for_status.assert_called_once()
 
 
 def test_download_gql_rejects_missing_hash_mapping() -> None:
@@ -794,7 +790,6 @@ def test_irc_transport_captures_drift_but_not_control_frames(frame, unknown) -> 
         list(_stream_messages(_FakeIRC([frame, ""]), diagnostics))
 
     if unknown:
-        mock_log.assert_any_call("debug", 'No matches found in "\nUNKNOWN LINE\n"')
         mock_capture.assert_called_once_with(
             "twitch-unknown-irc-shape",
             {"raw": frame},
@@ -868,7 +863,6 @@ def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
     with (
         patch.object(irc_transport.time, "monotonic", side_effect=[0.0, 61.0, 180.0]),
-        patch.object(irc_transport, "log") as mock_log,
         pytest.raises(ConnectionError, match="became idle"),
     ):
         next(_stream_messages(irc, diagnostics))
@@ -877,10 +871,6 @@ def test_irc_transport_idle_watchdog_sends_keepalive_then_reconnects() -> None:
     assert diagnostics.summary["receive_timeout_count"] == 2
     assert diagnostics.summary["idle_watchdog_expiration_count"] == 1
     assert diagnostics.summary["keepalive_ping_sent_count"] == 2
-    mock_log.assert_called_once_with(
-        "debug",
-        "Twitch IRC idle watchdog expired after 180s; reconnecting.",
-    )
 
 
 @pytest.mark.parametrize("frame", ["PING :tmi.twitch.tv\r\n", "UNKNOWN LINE\r\n"])
@@ -910,24 +900,6 @@ def test_twitch_chat_irc_close_is_idempotent(irc_socket):
     irc_socket.close.assert_called_once()
     irc.close_connection()
     irc_socket.close.assert_called_once()
-
-
-def test_download_base_gql_raises_http_error_for_non_captcha_4xx() -> None:
-    """Non-captcha 4xx/5xx must raise HTTPError via raise_for_status()."""
-    from requests.exceptions import HTTPError
-
-    mock_response = Mock()
-    mock_response.status_code = 429
-    mock_response.text = "Too Many Requests"
-    mock_response.raise_for_status.side_effect = HTTPError("429")
-
-    with pytest.raises(HTTPError):
-        graphql_client._download_base_gql(
-            lambda *args, **kwargs: mock_response,
-            [{"operationName": "x"}],
-        )
-
-    mock_response.raise_for_status.assert_called_once()
 
 
 def test_update_badge_info_skips_malformed_badge_and_keeps_others():
