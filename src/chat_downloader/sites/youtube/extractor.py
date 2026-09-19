@@ -54,13 +54,10 @@ class YouTubeChatDownloader(
 
     @property
     def _has_auth_cookies(self) -> bool:
-        """Check if YouTube authentication cookies are present.
+        """Return whether the required YouTube authentication cookies exist.
 
         YouTube authentication requires LOGIN_INFO cookie plus at least one
         SAPISID variant (SAPISID, __Secure-1PAPISID, or __Secure-3PAPISID).
-
-        :return: True if auth cookies are present, False otherwise
-        :rtype: bool
         """
         has_login_info = bool(self.get_cookie_value("LOGIN_INFO"))
         yt_sapisid, yt_1psapisid, yt_3psapisid = _get_sid_cookies(self)

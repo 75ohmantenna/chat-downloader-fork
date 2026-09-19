@@ -17,12 +17,12 @@ _MAX_EXPONENTIAL_BACKOFF_SECONDS = 60.0
 def _convert_or_none[R, D](
     value: Any, converter: Callable[[Any], R], default: D
 ) -> R | D:
-    """Generic conversion function with error handling.
+    """Convert a value, returning a fallback after a type or value error.
 
-    :param value: Value to convert
-    :param converter: Conversion function (int, float, str, etc.)
-    :param default: Value to return if conversion fails
-    :return: Converted value or default
+    Args:
+        value: Value to convert.
+        converter: Conversion callable, such as ``int``, ``float``, or ``str``.
+        default: Value returned when conversion fails.
     """
     try:
         return converter(value)
@@ -71,17 +71,17 @@ def attempts(max_attempts: int) -> range:
 def backoff_seconds(attempt_number: int, retry_timeout: float | None = None) -> float:
     """Return sleep duration for the given attempt (1-indexed).
 
-    When *retry_timeout* is ``None`` the formula is exponential back-off
+    When ``retry_timeout`` is ``None`` the formula is exponential backoff
     (0 s, 1 s, 2 s, 4 s, …) capped at 60 seconds, plus a small random jitter
     of up to 0.5 s.
     The jitter prevents simultaneous retry storms when multiple processes or
     threads encounter the same transient error at the same time.
-    When *retry_timeout* is a non-negative number it is used as a fixed wait.
+    When ``retry_timeout`` is a nonnegative number it is used as a fixed wait.
 
-    :param attempt_number: Current attempt number (1-indexed).
-    :param retry_timeout: Fixed wait in seconds, or ``None`` for exponential
-        back-off.
-    :return: Seconds to sleep before the next attempt.
+    Args:
+        attempt_number: Current one-indexed attempt number.
+        retry_timeout: Fixed wait in seconds, or ``None`` for exponential
+            backoff.
     """
     if retry_timeout is None:
         exponent = min(max(attempt_number - 2, 0), 6)

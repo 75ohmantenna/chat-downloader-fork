@@ -455,7 +455,9 @@ endpoint with better IP reputation).
 
 Status mapping in `api_client.py::_check_status`:
 
-- channel `404` → `UserNotFound`; VOD/clip/history `404` → terminal `KickError`
+- channel `404` → `UserNotFound`; video `404` → the internal
+  `KickVideoNotFound` signal used by the current website fallback; clip and
+  history `404` → `KickError` (the clip service may then try mobile metadata)
 - `403` / challenge body → `CaptchaChallengeRequired`
 - provider-specific `423` → `KickCountryBlocked` (terminal; no fallback/retry)
 - `429` / `5xx` → `KickServerError` (transient, retried)
@@ -533,9 +535,10 @@ this directory before opening a provider session. Existing directories must be
 owned by the current user, have mode `0700`, and not be symlinks; an unsafe
 directory stops retrieval with an actionable error before sampling quotas are
 consumed. Missing directories are created privately. Each write still checks
-directory and file safety. Most anomaly labels capture at most ten unique payloads per process
-and directory. Unsupported event names use isolated three-sample labels plus a
-ten-sample aggregate cap, so a noisy event cannot hide a different event name.
+directory and file safety. Most anomaly labels capture at most ten unique
+payloads per process and directory. Unsupported event names use isolated
+three-sample labels plus a ten-sample aggregate cap, so a noisy event cannot
+hide a different event name.
 Successful frame capture attempts at most three payloads per normalized event
 type and retrieval run. Type-specific labels make the sampled surface visible
 without opening every file. The shared sanitizer redacts

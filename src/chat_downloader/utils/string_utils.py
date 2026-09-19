@@ -35,12 +35,10 @@ def get_title_of_webpage(html: str) -> str | None:
 
 
 def wrap_as_list(item: Any) -> list[Any] | tuple[Any, ...]:
-    """Wraps an item in a list, if it is not already iterable.
+    """Wrap an item in a list unless it is already a list or tuple.
 
-    :param item: The item to wrap
-    :type item: object
-    :return: The wrapped item
-    :rtype: list | tuple
+    Args:
+        item: Value to wrap.
     """
     if isinstance(item, (list, tuple)):
         return item

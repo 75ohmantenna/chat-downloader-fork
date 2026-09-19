@@ -21,9 +21,10 @@ def _cli_metadata(
 ) -> dict[str, Any]:
     """Build dataclass metadata containing the CLI option description.
 
-    :param description: Help text shown in ``--help`` output.
-    :param group: Declarative argument-group ownership label.
-    :param flags: Additional short-form flags, e.g. ``["-s"]``.
+    Args:
+        description: Help text shown in ``--help`` output.
+        group: Declarative argument-group ownership label.
+        flags: Additional short-form flags, such as ``["-s"]``.
     """
     m: dict[str, Any] = {"help": description, "group": group}
     if flags:

@@ -9,12 +9,10 @@ from urllib import parse
 
 
 def _get_source_image_url(url: str) -> str:
-    """Extract the source image URL by removing query parameters.
+    """Return an image URL without its provider resize suffix.
 
-    :param url: Image URL potentially with query parameters
-    :type url: str
-    :return: URL without query parameters
-    :rtype: str
+    Args:
+        url: Image URL that may contain an equals-delimited resize suffix.
     """
     index = url.find("=")
     if index >= 0:
@@ -27,10 +25,8 @@ def _parse_youtube_link(text: str) -> str:
 
     Handles redirect links, protocol-relative URLs, and YouTube-internal links.
 
-    :param text: Raw link text from YouTube data
-    :type text: str
-    :return: Normalized URL
-    :rtype: str
+    Args:
+        text: Raw link text from a YouTube payload.
     """
     from chat_downloader.sites.youtube.constants_patterns import (
         _YT_HOME,
@@ -53,12 +49,9 @@ def _parse_navigation_endpoint(
 ) -> str:
     """Extract URL from a YouTube navigation endpoint.
 
-    :param navigation_endpoint: Navigation endpoint object from YouTube data
-    :type navigation_endpoint: dict
-    :param default_text: Text to return if parsing fails, defaults to ''
-    :type default_text: str
-    :return: Parsed URL or default text
-    :rtype: str
+    Args:
+        navigation_endpoint: Navigation endpoint from a YouTube payload.
+        default_text: Text returned when the endpoint has no usable URL.
     """
     try:
         return _parse_youtube_link(

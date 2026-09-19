@@ -21,7 +21,7 @@ Primary entry point:
 Public site methods are assembled from focused mixins and include
 `get_chat_by_video_id`, `get_chat_by_clip_id`, `get_chat_by_channel_id`,
 `get_chat_by_user_id`, `get_chat_by_custom_username`, `get_chat_by_handle`,
-`get_user_videos`, and `get_playlist_items`.
+`get_user_videos`, `get_playlist_items`, `get_video_data`, and `generate_urls`.
 
 Main implementation areas:
 
@@ -76,8 +76,8 @@ The normal YouTube flow is:
   bootstrap requests
 - `client_requests_initial.py`: initial request helpers
 - `client_requests_continuation.py`: continuation request helpers
-- `client_requests_errors.py`: shared HTTP, JSON, CAPTCHA, and retry
-  classification for request helpers
+- `client_requests_errors.py`: HTTP, JSON, CAPTCHA, and retry classification
+  for continuation requests
 - `client_auth.py`: cookie initialization, SAPISID cookie parsing, and auth
   header derivation
 

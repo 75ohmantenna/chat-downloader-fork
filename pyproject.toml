@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "chat-downloader"
 dynamic = ["version"]
-description = "Enhanced YouTube, Twitch, and Kick livestream chat logging and retrieval tool"
+description = "YouTube, Twitch, and Kick live and replay chat retrieval tool"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

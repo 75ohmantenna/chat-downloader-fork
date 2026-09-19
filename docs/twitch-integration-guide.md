@@ -356,19 +356,21 @@ three reply frames under separate fixed labels. These independent attempt
 quotas survive reconnects and remain available after the ordinary text event
 or the 12 event-key quota has been filled. Only parsed `text_message` records
 from `PRIVMSG` without a raw `msg-id` qualify. Each attempt consumes its shape
-quota even if writing fails; an overlapping frame can consume one attempt in each shape. The shared
-backend caps these labels at three files each and their group at six, with the
-same process/output-directory scope and sanitization as other captures.
+quota even if writing fails; an overlapping frame can consume one attempt in
+each shape. The shared backend caps these labels at three files each and their
+group at six, with the same process/output-directory scope and sanitization as
+other captures.
 
-The first-three and event-diverse modes are additive. With both enabled, clean
-traffic capture writes at most 21 raw-frame samples: three first-arrival samples,
-12 event-key samples, and six text-shape samples. Quotas can retain the same
-frame, so review all captured public chat data before sharing it. Drift samples
-for unknown types, tags, actions, and shapes use their own limits and are not part
+Together, the first-three and event-diverse modes capture at most
+21 clean-traffic raw-frame samples: three first-arrival samples, 12 event-key
+samples, and six text-shape samples. Quotas can retain the same frame, so
+review all captured public chat data before sharing it. Drift samples for
+unknown types, tags, actions, and shapes use their own limits and are not part
 of this clean-traffic maximum. Both raw modes run after parsing but before live
-message deduplication and type or group filtering, so they can retain duplicates
-or records excluded from normal JSONL/TXT output. An unknown frame can also
-appear in both its drift sample and the event mode's raw-action fallback.
+message deduplication and type or group filtering, so they can retain
+duplicates or records excluded from normal JSONL/TXT output. An unknown frame
+can also appear in both its drift sample and the event mode's raw-action
+fallback.
 
 When a live IRC message or GraphQL response contains an unknown type, tag, or
 shape, the runtime emits a drift diagnostic and saves a sanitized snapshot when

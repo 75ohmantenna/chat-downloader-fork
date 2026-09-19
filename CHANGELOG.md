@@ -18,6 +18,11 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Allow strict completion, run manifests, and replay checkpoints to recognize
   stable YouTube and Twitch replay statuses through provider capabilities.
 
+### Documentation / tooling
+
+- Reconcile the architecture, API, CLI, and provider guides with the current
+  implementation, and consolidate coding-agent guidance in `AGENTS.md`.
+
 ## 2.2.1 — 2026-08-31
 
 ### Documentation / tooling

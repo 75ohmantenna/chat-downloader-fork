@@ -188,13 +188,10 @@ _KEYS_TO_IGNORE = [
 
 @cache
 def build_remapping() -> Mapping[str, Any]:
-    """Build the full _REMAPPING dictionary with parsing functions.
+    """Return the complete message-field remapping table.
 
-    This function is called to create the complete remapping configuration that
-    includes references to the focused parsing modules.
-
-    :return: Complete remapping dictionary
-    :rtype: dict
+    Imports stay local to avoid circular dependencies with the focused parser
+    modules referenced by the table.
     """
     from chat_downloader.utils.conversion_utils import int_or_none
 
@@ -294,14 +291,10 @@ def build_remapping() -> Mapping[str, Any]:
 
 @cache
 def build_video_remapping() -> Mapping[str, Any]:
-    """Build the full _VIDEO_REMAPPING dictionary with parsing functions.
+    """Return the complete video-field remapping table.
 
-    This function is called to create the complete video remapping
-    configuration that includes references to parsing functions from the
-    focused parsing modules.
-
-    :return: Complete video remapping dictionary
-    :rtype: dict
+    Imports stay local to avoid circular dependencies with the focused parser
+    modules referenced by the table.
     """
     from .parsing.message_content_text_parser import _parse_runs, _parse_text
 

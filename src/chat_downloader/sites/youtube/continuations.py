@@ -31,26 +31,18 @@ _KNOWN_CHAT_CONTINUATIONS: frozenset[str] = frozenset(
 class ContinuationParseResult:
     """Parsed result from a single YouTube live-chat continuation response.
 
-    :param actions: List of raw action dicts extracted from the payload.
-        Empty when the response carries no actions (e.g. a heartbeat tick
-        for a live stream with no new messages).
-    :type actions: list
-    :param next_continuation: Opaque continuation token for the next request,
-        or ``None`` when no further pages are available.
-    :type next_continuation: str | None
-    :param timeout_ms: Milliseconds to wait before the next request, as
-        requested by YouTube. ``None`` when no timeout hint is available.
-    :type timeout_ms: int | None
-    :param is_end: ``True`` when no continuation token was found and the
-        stream is considered finished.
-    :type is_end: bool
-    :param debug_info: Small dictionary of diagnostic fields preserved for
-        logging (continuation key, raw continuation entry). Not intended
-        for programmatic use.
-    :type debug_info: dict
-    :param click_tracking_params: Keyword-only click-tracking params for the
-        next request, or ``None`` when absent.
-    :type click_tracking_params: str | None
+    Attributes:
+        actions: Raw action dictionaries extracted from the payload. Empty for
+            responses such as live heartbeat ticks with no new messages.
+        next_continuation: Opaque token for the next request, or ``None`` when
+            no further pages are available.
+        timeout_ms: Provider-requested delay before the next request in
+            milliseconds, or ``None`` when no hint is available.
+        is_end: Whether no continuation token was found.
+        debug_info: Bounded diagnostic fields for logging, not a stable public
+            interface.
+        click_tracking_params: Keyword-only click-tracking value for the next
+            request, or ``None`` when absent.
     """
 
     actions: list[JSONAny] = field(default_factory=list)

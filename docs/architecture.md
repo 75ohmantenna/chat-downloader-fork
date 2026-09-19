@@ -20,8 +20,8 @@ For behavior-preservation coverage see
                           │
 ┌─────────────────────────▼────────────────────────────────┐
 │  runtime/                        (orchestration)          │
-│    cli_bridge · site_dispatch · chat_pipeline            │
-│    config_guards · runner · session_lifecycle            │
+│    dispatch · pipeline · sessions · runner               │
+│    checkpoints · manifests · verification                │
 └──────┬──────────────────┬───────────────────────────┬────┘
        │                  │                           │
 ┌──────▼──────┐   ┌───────▼──────────────┐   ┌───────▼────┐
@@ -34,7 +34,7 @@ For behavior-preservation coverage see
        │
 ┌──────▼──────────────────────────────────────────────────┐
 │  utils/                          (leaf; no upward deps)  │
-│  models/                         (typed shapes only)     │
+│  models/                         (typed configuration)  │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -65,7 +65,7 @@ same interfaces as production callers.
 
 | Transport | Open/read path | Retry/reconnect owner | Close path |
 |-----------|----------------|-----------------------|------------|
-| Shared HTTP (YouTube and Twitch) | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
+| Base HTTP session | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; YouTube and Twitch use it for provider requests, while Kick uses it for proxy resolution and rejected-key discovery; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures; Kick API retries stay in its dedicated client and services | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, a 180-second idle watchdog, and fixed-schema transport counters | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
 | Kick API HTTP | `kick/http_session.py` creates the Cloudflare-capable transports owned by `KickApiClient`, preserves explicit/environment proxy policy, lazily converts an applicable main-origin `session_token` cookie into bearer authentication, and origin-isolates the anonymous mobile host from credentials | Kick channel metadata plus reconnect/VOD/clip history and metadata retry transient network, malformed-response, 429, and 5xx failures; provider-specific HTTP 423 is a terminal country/region block; clip replay can fail over from unavailable web/source-VOD metadata to the anonymous mobile v1 contract while preserving terminal access policy and reconciling known channel and duration evidence; startup/reconnect preload state remains one-shot best-effort | `KickChatDownloader.close()` closes the client sessions and base session exactly once |
 | Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits, and permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
@@ -91,6 +91,7 @@ text append mode also terminates an existing final line before appending. Output
 path aliases resolving to the same file are attached only once. Writer targets
 are compared after `{title}`/`{id}` expansion; existing hard links are compared
 by device and inode.
+
 Kick VOD and clip replay traverses reverse cursors and buffers the selected
 history in a temporary spool before chronological output. Five-second forward
 windows are reserved for reconnect backfill; their cursor is not a forward
@@ -98,8 +99,6 @@ continuation. Progress reporting exposes collection before emission, and skip
 reasons distinguish replay boundaries from malformed records. Optional replay
 completion enforcement remains independent of file parity; known record loss
 persists across shutdown checkpoints.
-
-
 ---
 
 ## Package inventory
@@ -110,6 +109,7 @@ immediate non-`__init__.py` Python module is represented and rejects stale
 module names.
 
 ### Top-level
+
 | Module | Purpose |
 |--------|---------|
 | `__main__.py` | `python -m chat_downloader` entry-point shim |
@@ -126,6 +126,7 @@ module names.
 | `_timeout_defaults.py` | Leaf HTTP-timeout constants (`DEFAULT_CONNECT_TIMEOUT`, `DEFAULT_READ_TIMEOUT`) shared by models and session helpers |
 
 ### `models/`
+
 | Module | Purpose |
 |--------|---------|
 | `_base.py` | Shared defaults, CLI metadata, and dataclass field helpers (`get_field_default`) |
@@ -136,6 +137,7 @@ module names.
 | `__init__.py` | Single public surface for `from chat_downloader.models import …` |
 
 ### `runtime/`
+
 | Module | Purpose |
 |--------|---------|
 | `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, and replay overlap suppression |
@@ -149,6 +151,7 @@ module names.
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
 
 ### `output/`
+
 | Module | Purpose |
 |--------|---------|
 | `capture_parity.py` | Internal provider-neutral streaming audit state machine for JSONL/TXT formatting, deduplication, physical-newline, input-identity, and content-safety parity checks |
@@ -156,12 +159,14 @@ module names.
 | `writers.py` | `ContinuousFileWriter` ABC; `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
 
 ### `formatting/`
+
 | Module | Purpose |
 |--------|---------|
 | `format.py` | `ItemFormatter`: safe template resolution, inheritance, field formatting, singular/conditional fragments, and output sanitization |
 | `custom_formats.json` | Built-in default, provider-specific, live, and time-display format definitions |
 
 ### `utils/`
+
 | Module | Purpose |
 |--------|---------|
 | `color_utils.py` | ARGB/RGBA color conversion |
@@ -178,6 +183,7 @@ module names.
 | `timed_input.py` | Interruptible console input with timeout support |
 
 ### `sites/` (shared)
+
 | Module | Purpose |
 |--------|---------|
 | `base.py` | `BaseChatDownloader` ABC: URL matching, session setup, cookie handling |
@@ -195,6 +201,7 @@ module names.
 ### `sites/youtube/`
 
 #### `constants_*.py`
+
 | Module | Purpose |
 |--------|---------|
 | `constants_actions_messages_core.py` | Core action-dict path keys for extracting message items |
@@ -202,6 +209,7 @@ module names.
 | `constants_patterns.py` | URL patterns, API endpoint strings, and miscellaneous regex |
 
 #### `client_*.py`
+
 | Module | Purpose |
 |--------|---------|
 | `client_auth.py` | SAPISIDHASH authentication header generation |
@@ -212,6 +220,7 @@ module names.
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |
 
 #### Continuation loop
+
 | Module | Purpose |
 |--------|---------|
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |
@@ -220,6 +229,7 @@ module names.
 | `continuations.py` | Continuation token-key definitions and response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
 
 #### Other YouTube modules
+
 | Module | Purpose |
 |--------|---------|
 | `_protocols.py` | YouTube-specific Protocol definitions |
@@ -235,6 +245,7 @@ module names.
 | `video_initialization.py`, `video_metadata.py`, `video_status.py`, `video_status_helpers.py`, `video_status_models.py` | Video bootstrap metadata and status models |
 
 ### `sites/twitch/`
+
 | Module | Purpose |
 |--------|---------|
 | `_protocols.py` | Twitch transport and downloader structural interfaces |
@@ -255,6 +266,7 @@ module names.
 | `validation_keys.py` | Known IRC tag/key validation lists |
 
 ### `sites/kick/`
+
 | Module | Purpose |
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |

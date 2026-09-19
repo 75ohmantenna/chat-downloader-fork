@@ -258,9 +258,9 @@ Helpers:
   unrelated keys
 - `as_dict()`: convert to a plain dictionary
 
-The CLI exposes `quiet`, `exit_on_debug`, `pause_on_debug`, `resume`, and
-`verify_output`. The `--testing`
-flag is a CLI convenience that enables debug logging and `pause_on_debug`.
+The CLI exposes every `RunConfig` field except `max_seen_message_ids`.
+The `--testing` flag is a CLI convenience that enables debug logging and
+`pause_on_debug`.
 
 ### `SiteDefault`
 
@@ -399,9 +399,10 @@ backend's 12-sample group limit and one-sample-per-label limit are shared per
 process and output directory, so a later run may retain fewer samples. An exact
 prior payload can reuse its deterministic path; a different payload for that
 event key is rejected even if group slots remain. This mode also requires the
-shared capture flag and debug logging. When both Twitch modes are enabled,
-their limits are additive: at most 15 raw-frame samples, with a frame
-potentially appearing once in each mode. Capture occurs before live
+shared capture flag and debug logging. It also has independent three-frame
+quotas for emote-bearing text and replies. When both Twitch modes are enabled,
+their limits are additive: at most 21 clean-traffic raw-frame samples, with one
+frame potentially appearing in multiple quotas. Capture occurs before live
 deduplication and output filtering; separate drift samples can add files and
 overlap unknown fallback frames.
 

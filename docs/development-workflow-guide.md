@@ -383,9 +383,9 @@ The event mode also reserves three attempts each for emote-bearing text and
 replies, under fixed `text-shape-emotes` and `text-shape-in-reply-to` labels.
 These six attempts are independent of the event-key quota, span reconnects,
 and run before filtering and deduplication. Failed writes consume an attempt.
-Enabling this together with the first-three mode is additive: no more than 21
-clean-traffic raw-frame samples are captured, and one source frame can appear
-in multiple quotas. Both modes run before live deduplication and output
+Enabling this together with the first-three mode is additive: no more than
+21 clean-traffic raw-frame samples are captured, and one source frame can
+appear in multiple quotas. Both modes run before live deduplication and output
 filtering.
 Separate drift samples can add files, and unknown frames can overlap the event
 mode's fallback capture.

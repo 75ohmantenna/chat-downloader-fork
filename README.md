@@ -1,7 +1,7 @@
 # chat-downloader-fork
 
-Maintained YouTube, Twitch, and Kick livestream-chat CLI and Python API. This is
-a personal fork of
+Maintained YouTube, Twitch, and Kick live and replay chat CLI and Python API.
+This is a personal fork of
 [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader),
 targeting Python 3.12+; CI validates Python 3.12, 3.13, and 3.14.
 
@@ -22,12 +22,13 @@ others. Accordingly:
 
 ## Development Notes
 
-This fork has been developed mostly with Anthropic's Claude and OpenAI's
-Codex. Hosted CI runs the canonical `make ci` quality gate on pushes and pull
-requests. Its locked checks include codespell, Ruff lint and format checks,
-mypy, import-linter, the offline test suite with 100% line coverage, a package
-build, and an isolated installation smoke test. These checks do not constitute
-a security audit and do not replace your own review. **Use at your own risk.**
+Development of this fork has been AI-assisted, primarily with Anthropic's
+Claude and OpenAI's Codex. Hosted CI runs the canonical `make ci` quality gate
+on pushes and pull requests. Its locked checks include codespell, Ruff lint and
+format checks, mypy, import-linter, the offline test suite with 100% line
+coverage, a package build, and an isolated installation smoke test. These
+checks do not constitute a security audit and do not replace your own review.
+**Use at your own risk.**
 
 ## Supported Platforms
 

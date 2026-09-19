@@ -17,7 +17,12 @@ from chat_downloader.models import ChatRequest, DownloaderConfig, RunConfig, Sit
 from chat_downloader.output.continuous_write import SUPPORTED_OUTPUT_FORMATS
 from chat_downloader.runtime import RunResult
 from chat_downloader.sites.kick.constants import MESSAGE_GROUPS as KICK_MESSAGE_GROUPS
-from chat_downloader.sites.twitch.irc_diagnostics import _TwitchLiveDiagnostics
+from chat_downloader.sites.twitch.irc_diagnostics import (
+    _EVENT_FRAME_CAPTURE_LIMIT,
+    _TEXT_SHAPE_CAPTURE_LIMIT,
+    _TwitchLiveDiagnostics,
+)
+from chat_downloader.sites.twitch.live_service import _SUCCESSFUL_FRAME_CAPTURE_LIMIT
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "chat_downloader"
@@ -192,6 +197,24 @@ def test_twitch_guide_documents_exact_live_diagnostic_fields() -> None:
     documented = re.findall(r"^\| `([a-z_]+)` \|", section, flags=re.MULTILINE)
 
     assert documented == list(_TwitchLiveDiagnostics().summary)
+
+
+def test_twitch_capture_guides_document_code_derived_clean_traffic_limit() -> None:
+    """Keep duplicated user-facing capture limits aligned with implementation."""
+    expected = (
+        _SUCCESSFUL_FRAME_CAPTURE_LIMIT
+        + _EVENT_FRAME_CAPTURE_LIMIT
+        + 2 * _TEXT_SHAPE_CAPTURE_LIMIT
+    )
+    phrase = f"{expected} clean-traffic raw-frame samples"
+
+    for reference in (
+        CLI_REFERENCE,
+        API_REFERENCE,
+        TWITCH_REFERENCE,
+        ROOT / "docs" / "development-workflow-guide.md",
+    ):
+        assert phrase in reference.read_text(encoding="utf-8"), reference.name
 
 
 def test_cli_reference_mentions_only_real_cli_flags() -> None:

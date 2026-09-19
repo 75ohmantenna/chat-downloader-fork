@@ -41,10 +41,10 @@ def preferredencoding() -> str:
 
 
 def _get_windows_console_handle(out: Any) -> Any:
-    """Get Windows console handle for output stream.
+    """Return the Windows console handle for an output stream.
 
-    :param out: Output stream
-    :return: Console handle or None if not available
+    Args:
+        out: Output stream to inspect.
     """
     import ctypes
     import ctypes.wintypes
@@ -69,10 +69,10 @@ def _get_windows_console_handle(out: Any) -> Any:
 
 
 def _is_valid_console(handle: Any) -> bool:
-    """Check if handle is a valid console.
+    """Return whether a handle refers to a Windows console.
 
-    :param handle: Windows console handle
-    :return: True if valid console, False otherwise
+    Args:
+        handle: Windows console handle.
     """
     import ctypes
     import ctypes.wintypes
@@ -104,10 +104,10 @@ def _is_valid_console(handle: Any) -> bool:
 
 
 def _find_next_nonbmp_position(s: str) -> int:
-    """Find position of next non-BMP character in string.
+    """Return the next non-BMP character index, or the string length.
 
-    :param s: String to search
-    :return: Position of next non-BMP character, or length of string
+    Args:
+        s: String to search.
     """
     try:
         return next(i for i, c in enumerate(s) if ord(c) > MAX_BMP_CODEPOINT)
@@ -118,13 +118,16 @@ def _find_next_nonbmp_position(s: str) -> int:
 def _write_to_windows_console(
     handle: Any, text: str, *, skip_errors: bool = True
 ) -> bool:
-    """Write text to Windows console using WriteConsoleW API.
+    """Write text to a Windows console through ``WriteConsoleW``.
 
-    :param handle: Windows console handle
-    :param text: Text to write
-    :param skip_errors: Whether to skip errors on write failure
-    :return: True if successful
-    :raises OSError: if write fails and skip_errors is False
+    Args:
+        handle: Windows console handle.
+        text: Text to write.
+        skip_errors: Return partial status instead of raising after repeated
+            write failures.
+
+    Raises:
+        OSError: A write fails while ``skip_errors`` is false.
     """
     import ctypes
     import ctypes.wintypes

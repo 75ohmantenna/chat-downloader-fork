@@ -13,12 +13,10 @@ COLOR_MASK = 255
 
 
 def argb_int_to_rgba(argb_int: int) -> list[int]:
-    """Convert ARGB integer to RGBA array.
+    """Convert an ARGB integer to an RGBA component list.
 
-    :param argb_int: ARGB integer
-    :type argb_int: int
-    :return: RGBA array
-    :rtype: list[int]
+    Args:
+        argb_int: Packed ARGB integer.
     """
     red = (argb_int >> RED_SHIFT) & COLOR_MASK
     green = (argb_int >> GREEN_SHIFT) & COLOR_MASK
@@ -28,11 +26,9 @@ def argb_int_to_rgba(argb_int: int) -> list[int]:
 
 
 def rgba_to_hex(colours: list[int]) -> str:
-    """Convert RGBA array to hex colour.
+    """Convert RGBA components to a hexadecimal colour string.
 
-    :param colours: RGBA array
-    :type colours: list[int]
-    :return: Corresponding hexadecimal representation
-    :rtype: str
+    Args:
+        colours: Red, green, blue, and alpha components in that order.
     """
     return f"#{colours[0]:02x}{colours[1]:02x}{colours[2]:02x}{colours[3]:02x}"

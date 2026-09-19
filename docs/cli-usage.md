@@ -228,9 +228,11 @@ Debug and automation:
   capture-path logs.
   Backend group and per-label quotas are shared per process and output
   directory, so later runs can retain fewer or reuse only an exact prior
-  payload. If both Twitch modes are enabled, the maximum is 15 raw-frame
-  samples and the same frame can appear once in each mode. Capture precedes
-  live deduplication and output filtering; drift samples can be additional.
+  payload. The event mode also has independent three-frame quotas for
+  emote-bearing text and replies. If both Twitch modes are enabled, the ceiling
+  is 21 clean-traffic raw-frame samples, and one frame can appear in multiple
+  quotas. Capture precedes live deduplication and output filtering; drift
+  samples can be additional.
 - With both that setting and `CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES=1`, Kick also
   captures the first three successfully parsed raw frames per normalized event
   type for clean-run schema review.
@@ -242,8 +244,9 @@ Debug and automation:
 - YouTube terminal continuation responses finish immediately without an
   unnecessary final wait. Empty replay pages continue when the provider
   supplies another continuation token.
-- Debug runs, including failures, end with status and total and per-type retrieved-message counts,
-  provider diagnostics when available, the number of semantic duplicates
+- Debug runs, including failures, end with status, total and per-type
+  retrieved-message counts, provider diagnostics when available, the number of
+  semantic duplicates
   suppressed across formatted file outputs, the number of source items
   prefetched but excluded at a retrieval deadline, whether that count is final,
   and the creation state and completed-record count for each output writer. A

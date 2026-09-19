@@ -36,13 +36,11 @@ def get_all_sites(
     *,
     include_parent: bool = False,
 ) -> list[type[BaseChatDownloader]]:
-    """Get all supported sites.
+    """Return the registered site downloader classes.
 
-    :param include_parent: Whether to include the BaseChatDownloader, defaults
-        to False
-    :type include_parent: bool, optional
-    :return: A list of all supported ChatDownloader classes
-    :rtype: list
+    Args:
+        include_parent: Include ``BaseChatDownloader`` before the concrete
+            provider classes.
     """
     if include_parent:
         return [BaseChatDownloader, *_SITE_CLASSES]

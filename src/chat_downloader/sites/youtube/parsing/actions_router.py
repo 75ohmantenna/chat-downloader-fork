@@ -135,12 +135,10 @@ def process_action(
 ) -> ProcessedAction | None:
     """Process a YouTube chat action and return parsed message data.
 
-    :param action: The action object to process
-    :type action: dict
-    :param offset: Time offset in milliseconds for replay chat
-    :type offset: int
-    :return: ProcessedAction with named fields, or None if action is ignored
-    :rtype: ProcessedAction or None
+    Args:
+        action: Raw action object to process. Tracking metadata is removed from
+            the routed inner action.
+        offset: Replay or clip offset in seconds.
     """
     data: dict[str, Any] = {}
 
