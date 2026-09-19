@@ -8,15 +8,48 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.3.0 — 2026-09-19
+
+### Features
+
+- Add validated replay checkpoints for resumable JSONL and TXT captures, with
+  artifact identity checks and accounting for records already written by an
+  earlier run.
+- Add optional output verification, strict replay-completion enforcement, and
+  exclusive run manifests containing parity, deadline, provider, and
+  checkpoint findings.
+- Add content-safe Kick and Twitch capture inspectors plus independently
+  bounded reply, emote, badge, and IRC-shape sampling for offline diagnosis.
+- Report Kick replay progress, boundary exclusions, cancellation, and metadata
+  fallback decisions without retaining chat content in diagnostics.
+
+### Fixes
+
+- Restore complete Kick VOD and clip replay retrieval with current metadata,
+  chronological pagination, relative timestamps, and bounded stop/resume
+  behavior.
+- Authenticate eligible Kick API requests from current session cookies while
+  rejecting expired, path-inapplicable, malformed, or unsafe bearer tokens and
+  preserving explicitly supplied authorization.
+- Preserve mobile YouTube replay paid messages, stickers, engagement events,
+  inline emotes, sparse ticker details, and bounded request-profile recovery.
+- Replace generated YouTube headers between reused sessions so stale client,
+  account, authorization, and obsolete identity values cannot survive a
+  changed request context while explicit overrides remain authoritative.
+- Preserve compact Kick host events and reply context in text output, including
+  parent-author and message-ID fallbacks.
+- Integrate Twitch provider inspection into output verification, preserve GIF
+  IRC metadata, and retain verification findings alongside parity and deadline
+  accounting.
+- Preserve the existing Kick preloaded-message list API and YouTube
+  continuation argument compatibility after the internal refactor.
+- Allow strict completion, run manifests, and replay checkpoints to recognize
+  stable YouTube and Twitch replay statuses through provider capabilities.
+
 ### Dependencies
 
 - Require urllib3 2.8.0 or newer to include fixes for HTTPS proxy TLS settings
   and streamed response handling in package installations.
-
-### Fixes
-
-- Allow strict completion, run manifests, and replay checkpoints to recognize
-  stable YouTube and Twitch replay statuses through provider capabilities.
 
 ### Documentation / tooling
 
