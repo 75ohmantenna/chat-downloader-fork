@@ -161,8 +161,8 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `start_time` | `None` | Replay start offset; supported by YouTube, Twitch replay, and Kick VOD/clip URLs |
 | `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD/clip URLs |
 | `max_attempts` | `15` | Maximum retry attempts |
-| `retry_timeout` | `None` | Delay before retry; `None` uses exponential backoff, while a negative value waits for user input |
-| `interruptible_retry` | `True` | Allow a waiting retry to be triggered immediately |
+| `retry_timeout` | `None` | Delay before retry; `None` uses exponential backoff, while a negative value requires an interactive terminal |
+| `interruptible_retry` | `True` | Allow an interactive user to trigger a waiting retry immediately; redirected stdin uses the full delay |
 | `timeout` | `None` | Overall runtime limit |
 | `inactivity_timeout` | `None` | Stop after idle period |
 | `max_messages` | `None` | Stop after this many messages |
@@ -322,7 +322,9 @@ zero-record run therefore does not create configured `.jsonl` or `.txt` files;
 the runtime logs each uncreated path and includes `file_created: False` in its
 debug writer summary.
 
-Output paths support `{title}` and `{id}` placeholders. The substituted values
+Output paths support `{title}` and `{id}` placeholders, with `{{` and `}}` for
+literal braces. Other fields, conversions, and format specifications are
+rejected. The substituted values
 are sanitized as single filename components. Targets are deduplicated after
 placeholder expansion and canonical path resolution; existing hard links are
 also treated as one destination.

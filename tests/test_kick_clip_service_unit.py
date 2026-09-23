@@ -10,6 +10,8 @@ import pytest
 
 from chat_downloader.errors import CaptchaChallengeRequired, NoChatReplay
 from chat_downloader.models import ChatRequest
+from chat_downloader.runtime.capture_manifest import replay_complete
+from chat_downloader.runtime.runner import RunResult
 from chat_downloader.sites.kick import clip_service
 from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.errors import KickCountryBlocked, KickError
@@ -35,6 +37,37 @@ def _video_metadata(**fields):
             **fields,
         }
     }
+
+
+def test_clip_malformed_timestamp_prevents_complete_certification() -> None:
+    page = {
+        "data": {
+            "messages": [
+                raw_message("inside", "2026-08-18T22:55:22Z", content="inside"),
+                raw_message("broken", "not-a-timestamp", content="broken"),
+            ],
+            "cursor": None,
+        }
+    }
+    session = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("clip_metadata.json")),
+            FakeResponse(200, _video_metadata()),
+            FakeResponse(200, page),
+        ]
+    )
+    client = KickApiClient(session=session, mobile_session=session)
+    chat = clip_service.get_clip_chat(
+        "n3on",
+        CLIP_ID,
+        ChatRequest(max_attempts=1, interruptible_retry=False),
+        api_client=client,
+    )
+    assert [item["message_id"] for item in chat] == ["inside"]
+    assert chat.diagnostics["malformed_timestamp"] == 1
+    assert not replay_complete(
+        chat, RunResult(success=True, termination_reason="completed")
+    )
 
 
 def _client():

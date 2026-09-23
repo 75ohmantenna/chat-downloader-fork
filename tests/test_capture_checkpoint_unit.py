@@ -108,6 +108,42 @@ def test_resume_preserves_same_timestamp_messages_and_verifies_both_runs(
     assert final.message_count == 0
 
 
+def test_resume_saves_checkpoint_when_formatted_writer_deduplicates_paid_item(
+    tmp_path,
+) -> None:
+    paid = message(2, 10)
+    paid["message_type"] = "paid_message"
+    ticker = paid.copy()
+    ticker["message_type"] = "ticker_paid_message_item"
+
+    class PaidReplay(Downloader):
+        records: ClassVar[list] = [message(1, 9), paid, ticker, message(3, 11)]
+
+    params = parameters(tmp_path)
+    first = execute_run(PaidReplay, **params, max_messages=3)
+    assert first.success
+    assert first.parity_status == "passed"
+    assert load_json(tmp_path / "checkpoint.json")["total"] == 3
+    assert execute_run(PaidReplay, **params).success
+
+
+def test_resume_ignores_synthetic_chat_end_after_last_record(tmp_path) -> None:
+    class EndedReplay(Downloader):
+        records: ClassVar[list] = [
+            message(1, 10),
+            {
+                "message_type": "chat_ended",
+                "action_type": "chat_ended",
+                "message": None,
+            },
+        ]
+
+    result = execute_run(EndedReplay, **parameters(tmp_path))
+    assert result.success
+    assert result.message_count == 1
+    assert load_json(tmp_path / "checkpoint.json")["completed"]
+
+
 @pytest.mark.parametrize(
     ("kind", "patch"),
     [

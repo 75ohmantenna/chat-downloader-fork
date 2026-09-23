@@ -16,6 +16,7 @@ from chat_downloader.models._base import (
     _cli_metadata,
 )
 from chat_downloader.models._site_default import SiteDefault
+from chat_downloader.utils.filename_utils import validate_output_template
 from chat_downloader.utils.time_utils import ensure_seconds
 
 
@@ -244,6 +245,10 @@ class ChatRequest:
 
     def __post_init__(self) -> None:
         """Validate request fields that have constrained runtime values."""
+        outputs = self.output if isinstance(self.output, list) else [self.output]
+        for output in outputs:
+            if isinstance(output, str):
+                validate_output_template(output)
         _validate_positive_integer(
             "max_messages",
             self.max_messages,

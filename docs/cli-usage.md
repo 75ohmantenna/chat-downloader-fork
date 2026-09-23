@@ -143,8 +143,10 @@ YouTube JSONL retains both the main and ticker forms of paid events; replay
 pairs share the precise provider offset even when the ticker's nested display
 text is rounded to whole seconds. TXT output emits one semantic paid event.
 
-Output names may contain `{title}` and `{id}` placeholders. Metadata is
-sanitized before substitution. Duplicate targets are removed after expansion,
+Output names may contain `{title}` and `{id}` placeholders; use `{{` and `}}`
+for literal braces. Other fields, conversions, and format specifications are
+rejected when the request is validated. Metadata is sanitized before
+substitution. Duplicate targets are removed after expansion,
 path resolution, and existing-file identity checks, so aliases and hard links
 do not receive the same message twice.
 
@@ -311,12 +313,15 @@ use explicit filenames without `{title}` or `{id}` placeholders. The checkpoint
 and each output must be distinct regular files. At most one JSONL and one TXT
 output are accepted. The checkpoint takes precedence over `--overwrite` and
 always uses append mode. Stable message IDs and finite replay-relative offsets
-are required; Kick VODs and clips provide both.
+are required; Kick VODs and clips provide both. Provider-generated terminal
+markers without replay offsets are omitted from checkpointed captures.
 
 Checkpoints advance after output writers close and synchronize on normal,
 message-limited, or interrupted shutdown. A one-second overlap preserves
 messages at the saved timestamp while suppressing IDs already written. The
-record limit counts newly written messages. Keep the URL, filters, selected
+record limit counts newly written messages. Formatted TXT may write fewer lines
+than JSONL when paid chat and ticker events share an ID; this does not prevent
+checkpoint saving. Keep the URL, filters, selected
 start/end, format, and filenames unchanged; message limits and timeouts may
 change. Request settings and file hashes are checked before append.
 

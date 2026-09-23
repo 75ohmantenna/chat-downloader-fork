@@ -236,6 +236,15 @@ class CaptureCheckpoint:
             last_offset = self._prior_offset
             try:
                 for item in source:
+                    # Provider-generated end markers carry no replay position
+                    # and do not represent an archival chat record.
+                    if (
+                        item.get("message_type") == "chat_ended"
+                        and item.get("action_type") == "chat_ended"
+                        and "message_id" not in item
+                        and "time_in_seconds" not in item
+                    ):
+                        continue
                     offset, message_id = (
                         item.get("time_in_seconds"),
                         item.get("message_id"),
@@ -301,9 +310,7 @@ class CaptureCheckpoint:
         if (
             dispatcher is None
             or chat.write_error_count
-            or any(
-                item["records_written"] != count for item in dispatcher.writer_summaries
-            )
+            or not dispatcher.counts_match(count)
         ):
             msg = "Checkpoint not saved: output records disagree."
             raise ChatDownloaderError(msg)

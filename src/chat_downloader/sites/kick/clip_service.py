@@ -395,6 +395,10 @@ def get_clip_chat(
             )
 
     clip_start, clip_end = _apply_clip_request_window(metadata, request)
+    diagnostics: dict[str, object] = {}
+    transport = getattr(api_client, "diagnostics", {})
+    if isinstance(transport, dict):
+        diagnostics["transport"] = transport
     if isinstance(metadata, _MobileClipMetadata):
         start_dt = metadata.started_at + timedelta(seconds=clip_start)
         end_dt = metadata.started_at + timedelta(seconds=clip_end)
@@ -407,7 +411,9 @@ def get_clip_chat(
                 request,
                 api_client=api_client,
                 origin=metadata.started_at,
+                diagnostics=diagnostics,
             ),
+            diagnostics=diagnostics,
             title=metadata.title or username,
             duration=max(0.0, (end_dt - start_dt).total_seconds()),
             status="completed",
@@ -446,7 +452,9 @@ def get_clip_chat(
             source_request,
             api_client=api_client,
             origin=clip_origin,
+            diagnostics=diagnostics,
         ),
+        diagnostics=diagnostics,
         title=metadata.title or source_title,
         duration=max(0.0, (end_dt - start_dt).total_seconds()),
         status="completed",

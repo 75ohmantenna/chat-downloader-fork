@@ -261,7 +261,7 @@ def _complete_run_record(
         result.error_message = "Selected replay did not complete without record loss."
         log("error", result.error_message)
     try:
-        if manifest is not None:
+        if manifest is not None and manifest.valid:
             manifest.write(
                 chat,
                 result,
@@ -271,8 +271,10 @@ def _complete_run_record(
             )
     except (OSError, ValueError) as error:
         result.success = False
-        result.error_message = f"Unable to write run manifest: {error}"
-        log("error", result.error_message)
+        message = f"Unable to write run manifest: {error}"
+        if result.error_message is None:
+            result.error_message = message
+        log("error", message)
     _log_run_summary(chat, result.message_count, result.message_type_counts, result)
 
 

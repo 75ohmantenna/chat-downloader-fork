@@ -8,7 +8,10 @@ from typing import Any, Protocol, TypedDict
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
-from chat_downloader.utils.filename_utils import sanitize_filename_component
+from chat_downloader.utils.filename_utils import (
+    sanitize_filename_component,
+    validate_output_template,
+)
 
 from ._message_dedup import _FormattedMessageDeduplicator
 
@@ -62,6 +65,7 @@ def _expand_output_file_name(
     video_id: str | None,
 ) -> str:
     """Expand output placeholders with safe single-component metadata."""
+    validate_output_template(file_name)
     safe_title = sanitize_filename_component(title).replace("..", "_")
     safe_id = sanitize_filename_component(video_id).replace("..", "_")
     return file_name.format(title=safe_title, id=safe_id)
@@ -170,6 +174,18 @@ class _ChatOutputDispatcher:
     def formatted_duplicates_suppressed(self) -> int:
         """Return provider items omitted from all formatted file outputs."""
         return self._formatted_duplicates_suppressed
+
+    def counts_match(self, raw_count: int) -> bool:
+        """Check each writer against the records its output mode should receive."""
+        return all(
+            self._records_written_by_writer[id(writer)]
+            == (
+                raw_count - self._formatted_duplicates_suppressed
+                if writer.output_mode == "formatted"
+                else raw_count
+            )
+            for writer in self.writers
+        )
 
     @property
     def writer_summaries(self) -> list[_WriterSummary]:

@@ -9,8 +9,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from chat_downloader.runtime.capture_manifest import is_completed_replay
-from chat_downloader.runtime.runner import execute_run
+from chat_downloader.runtime.capture_manifest import RunManifest, is_completed_replay
+from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.models import Chat
 from tests.test_capture_checkpoint_unit import (
     Downloader,
@@ -173,6 +173,24 @@ def test_manifest_cannot_alias_outputs_or_checkpoint(tmp_path, target, params):
     if target == "video.jsonl":
         assert not (tmp_path / target).exists()
     assert not (tmp_path / "chat.jsonl").exists()
+
+
+def test_manifest_collision_keeps_primary_error(tmp_path, params) -> None:
+    params.pop("resume")
+    params.pop("verify_output")
+    params["output"] = str(tmp_path / "{id}.jsonl")
+    result = execute_run(
+        Downloader, **params, run_manifest=str(tmp_path / "video.jsonl")
+    )
+    assert not result.success
+    assert result.error_message == "Run manifest must be distinct from chat outputs."
+
+
+def test_unbound_manifest_refuses_direct_write(tmp_path) -> None:
+    manifest = RunManifest(str(tmp_path / "run.json"), None)
+    manifest.valid = False
+    with pytest.raises(ValueError, match="not validated"):
+        manifest.write(None, RunResult())
 
 
 @pytest.mark.parametrize("timing", ["existing", "dangling-link", "close-race"])
