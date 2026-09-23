@@ -47,7 +47,7 @@ _VOD_COMMENTER_KEYS = frozenset(
     }
 )
 _VOD_MESSAGE_KEYS = frozenset({"__typename", "userColor", "userBadges", "fragments"})
-_VOD_BADGE_KEYS = frozenset({"__typename", "setID", "version"})
+_VOD_BADGE_KEYS = frozenset({"__typename", "id", "setID", "version"})
 _VOD_FRAGMENT_KEYS = frozenset({"__typename", "text", "emote"})
 _VOD_EMOTE_KEYS = frozenset({"__typename", "emoteID", "id", "from", "to"})
 _VOD_VIDEO_KEYS = frozenset({"__typename", "id", "owner"})

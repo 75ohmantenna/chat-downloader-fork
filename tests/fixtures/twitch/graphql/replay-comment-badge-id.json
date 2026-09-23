@@ -1,0 +1,63 @@
+{
+  "raw": {
+    "__typename": "VideoCommentEdge",
+    "cursor": "badge-id-cursor",
+    "node": {
+      "__typename": "VideoComment",
+      "id": "badge-id-message",
+      "commenter": {
+        "__typename": "User",
+        "id": "fixture-user-id",
+        "login": "fixture-user",
+        "displayName": "FixtureUser"
+      },
+      "contentOffsetSeconds": 3,
+      "createdAt": "2026-09-20T14:56:12.792Z",
+      "message": {
+        "__typename": "VideoCommentMessage",
+        "fragments": [
+          {
+            "__typename": "VideoCommentMessageFragment",
+            "emote": null,
+            "text": "hello"
+          }
+        ],
+        "userBadges": [
+          {
+            "__typename": "Badge",
+            "id": "bW9kZXJhdG9yOzE7",
+            "setID": "moderator",
+            "version": "1"
+          },
+          {
+            "__typename": "Badge",
+            "id": "c3Vic2NyaWJlcjszOw==",
+            "setID": "subscriber",
+            "version": "3"
+          },
+          {
+            "__typename": "Badge",
+            "id": "c3ViLWdpZnRlcjsxOw==",
+            "setID": "sub-gifter",
+            "version": "1"
+          }
+        ],
+        "userColor": "#FF0000"
+      }
+    }
+  },
+  "expected_author_badges": [
+    {
+      "name": "moderator",
+      "version": 1
+    },
+    {
+      "name": "subscriber",
+      "version": 3
+    },
+    {
+      "name": "sub_gifter",
+      "version": 1
+    }
+  ]
+}

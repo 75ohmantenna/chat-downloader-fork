@@ -141,6 +141,11 @@ def test_graphql_fixture_parses_without_drift(
     assert disposition == "yield"
     assert data is not None
     assert not drift_recorder, f"{path.name} triggered drift log(s): {drift_recorder}"
+    expected_badges = payload.get("expected_author_badges")
+    if expected_badges is not None:
+        author = data.get("author")
+        assert isinstance(author, dict)
+        assert author.get("badges") == expected_badges
 
 
 # ---------------------------------------------------------------------------
