@@ -142,7 +142,13 @@ def test_first_entry_fallback(function, data, options):
             {"name": "x"},
             {"author": {"id": 1, "name": "x"}},
         ),
-        ({"a_foo_a_bar": "v"}, "a", {}, {"foo_bar": "v"}, {"a": {"foo_bar": "v"}}),
+        (
+            {"a_foo_a_bar": "v", "target_a_id": "other"},
+            "a",
+            {},
+            {"foo_a_bar": "v"},
+            {"target_a_id": "other", "a": {"foo_a_bar": "v"}},
+        ),
     ],
 )
 def test_move_to_dict(data, key, options, sub, expected):

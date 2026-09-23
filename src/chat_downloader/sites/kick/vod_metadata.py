@@ -152,7 +152,8 @@ def _resolve_vod_window(
         if isinstance(chatroom_data, dict):
             chatroom_id = str(chatroom_data.get("id", ""))
 
-    title = str(livestream.get("session_title", username))
+    raw_title = livestream.get("session_title")
+    title = str(raw_title) if raw_title else username
 
     start_dt = _parse_vod_start(livestream, username)
 

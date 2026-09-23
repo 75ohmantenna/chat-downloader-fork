@@ -18,6 +18,29 @@ from chat_downloader.sites.twitch.types import BadgeSet
 from tests.twitch_third_helpers import chat_request
 
 
+def test_clip_at_vod_offset_zero_retains_clip_duration() -> None:
+    downloader = SimpleNamespace(
+        _download_base_gql=Mock(
+            return_value={
+                "data": {
+                    "clip": {
+                        "video": {"id": "vod123"},
+                        "videoOffsetSeconds": 0,
+                        "durationSeconds": 45,
+                        "title": "Opening clip",
+                    }
+                }
+            }
+        ),
+        _update_badge_info=Mock(),
+        _get_chat_messages_by_vod_id=Mock(return_value=iter(())),
+    )
+    replay_service.get_chat_by_clip_id(
+        cast("Any", downloader), "clip123", ChatRequest(max_attempts=1)
+    )
+    assert downloader._get_chat_messages_by_vod_id.call_args.args[2:] == (45.0, 0.0)
+
+
 @pytest.fixture
 def downloader():
     return SimpleNamespace(

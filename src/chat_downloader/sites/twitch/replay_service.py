@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 from json.decoder import JSONDecodeError
 from logging import DEBUG
 from typing import TYPE_CHECKING, Protocol, cast
@@ -371,8 +372,22 @@ def get_chat_by_clip_id(
             msg,
         )
 
-    offset: float | None = get_float(clip, "videoOffsetSeconds") or None
-    duration: float | None = get_float(clip, "durationSeconds") or None
+    raw_offset = clip.get("videoOffsetSeconds")
+    offset: float | None = (
+        float(raw_offset)
+        if isinstance(raw_offset, (int, float))
+        and not isinstance(raw_offset, bool)
+        and math.isfinite(raw_offset)
+        else None
+    )
+    raw_duration = clip.get("durationSeconds")
+    duration: float | None = (
+        float(raw_duration)
+        if isinstance(raw_duration, (int, float))
+        and not isinstance(raw_duration, bool)
+        and math.isfinite(raw_duration)
+        else None
+    )
     broadcaster = get_dict(clip, "broadcaster")
     downloader._update_badge_info(
         get_str(broadcaster, "login"), get_str(broadcaster, "id") or None

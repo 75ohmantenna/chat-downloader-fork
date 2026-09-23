@@ -37,6 +37,7 @@ class TimedGenerator:
 
         self.timer: threading.Timer | None = None
         self.inactivity_timer: threading.Timer | None = None
+        self._inactivity_lock = threading.Lock()
         self._closed = False
         self._stop_requested = threading.Event()
         self._worker_state_lock = threading.Lock()
@@ -94,18 +95,33 @@ class TimedGenerator:
         self.timer.start()
 
     def start_inactivity_timer(self) -> None:
-        """Start (or restart) the inactivity timeout timer."""
+        """Start one timer that follows the current inactivity deadline."""
         if self.inactivity_timeout is None:
             msg = (
                 "start_inactivity_timer() called without a configured "
                 "inactivity_timeout"
             )
             raise RuntimeError(msg)
-        self._inactivity_expired.clear()
-        self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
+        with self._inactivity_lock:
+            if self.inactivity_timer is not None:
+                self.inactivity_timer.cancel()
+            self._inactivity_expired.clear()
+            self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
 
         def on_inactivity_timeout() -> None:
-            self._inactivity_expired.set()
+            with self._inactivity_lock:
+                if self._closed:
+                    return
+                deadline = self._inactivity_deadline
+                remaining = deadline - time.monotonic() if deadline is not None else 0
+                if remaining <= 0:
+                    self._inactivity_expired.set()
+                    return
+                self.inactivity_timer = threading.Timer(
+                    remaining, on_inactivity_timeout
+                )
+                self.inactivity_timer.daemon = True
+                self.inactivity_timer.start()
 
         self.inactivity_timer = threading.Timer(
             self.inactivity_timeout,
@@ -115,10 +131,11 @@ class TimedGenerator:
         self.inactivity_timer.start()
 
     def reset_inactivity_timer(self) -> None:
-        """Cancel the current inactivity timer and start a fresh one."""
-        if self.inactivity_timer:
-            self.inactivity_timer.cancel()
-            self.start_inactivity_timer()
+        """Move the deadline without creating another thread per item."""
+        if self.inactivity_timeout is not None:
+            with self._inactivity_lock:
+                self._inactivity_expired.clear()
+                self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
 
     def __iter__(self) -> Self:
         """Return this object as its own iterator."""

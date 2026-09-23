@@ -97,6 +97,16 @@ def test_paid_pinned_chat_preserves_integer_monetary_components() -> None:
     assert isinstance(parsed["pinned_chat_paid_exponent"], int)
 
 
+def test_timeout_target_and_crowd_chant_parent_stay_top_level() -> None:
+    timeout = _parse_fixture("irc-clearchat-timeout.json")
+    assert timeout["target_author_id"] == "200"
+    assert "author" not in timeout
+
+    chant = _parse_fixture("irc-privmsg-crowd-chant.json")
+    assert chant["crowd_chant_in_reply_to_message_id"] == "parent"
+    assert "in_reply_to" not in chant
+
+
 def test_gif_tag_is_recognized_and_preserved_losslessly() -> None:
     parsed = _parse_fixture("irc-privmsg-gif.json")
 

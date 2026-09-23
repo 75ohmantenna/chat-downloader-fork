@@ -72,7 +72,7 @@ def move_to_dict(
     Args:
         info: The source dict, mutated in place.
         dict_name: Name of the sub-dict key to create or update.
-        replace_key: Prefix/substring to match and strip from keys.
+        replace_key: Prefix to match and strip from keys.
             Defaults to ``dict_name + "_"``.
         create_when_empty: When ``True``, create the sub-dict even if no
             matching keys were found.
@@ -88,9 +88,9 @@ def move_to_dict(
     keys_to_check = list(info_keys) if info_keys else list(info.keys() if info else [])
 
     for key in keys_to_check:
-        if replace_key in key:
+        if key.startswith(replace_key):
             info_item = info.pop(key, None)
-            new_key = key.replace(replace_key, "")
+            new_key = key.removeprefix(replace_key)
             if info_item not in (None, [], {}):
                 new_dict[new_key] = info_item
 

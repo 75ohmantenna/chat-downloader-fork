@@ -53,6 +53,7 @@ The Twitch flow depends on the target type.
 4. Request replay comments in pages.
 5. Parse comment nodes into normalized messages.
 6. Apply time-range and message-type filtering until replay data is exhausted.
+   Clips starting at VOD offset zero still stop at the clip duration.
 
 ## Module Guide
 

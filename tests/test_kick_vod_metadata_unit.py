@@ -12,7 +12,10 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.errors import KickError, KickVideoNotFound
 from chat_downloader.sites.kick.replay_service import get_vod_chat
-from chat_downloader.sites.kick.vod_metadata import fetch_vod_metadata
+from chat_downloader.sites.kick.vod_metadata import (
+    _resolve_vod_window,
+    fetch_vod_metadata,
+)
 from tests.kick_helpers import (
     FakeKickSession,
     FakeResponse,
@@ -24,6 +27,18 @@ from tests.kick_helpers import (
 
 VIDEO = "01a09138-ec70-7c4c-a2b7-47a9ed4fc9b4"
 REQUEST = ChatRequest(max_attempts=1, interruptible_retry=False)
+
+
+def test_null_vod_title_falls_back_to_channel_name() -> None:
+    data = {
+        "livestream": {
+            "channel": {"id": 12345},
+            "session_title": None,
+            "start_time": "2026-08-18T22:20:25+00:00",
+            "duration": 1000,
+        }
+    }
+    assert _resolve_vod_window(data, "examplechannel")[2] == "examplechannel"
 
 
 @pytest.fixture

@@ -598,8 +598,21 @@ def test_parse_irc_item_handles_unknown_action_roomstate_and_clearchat(
     assert clear_timeout["message_type"] == "ban_user"
     assert clear_timeout["ban_type"] == "timeout"
     assert clear_timeout["banned_user"] == "banneduser"
+    assert clear_timeout["target_author_id"] == "200"
+    assert "author" not in clear_timeout
     assert "message" not in clear_timeout
     assert clear_chat["message_type"] == "clear_chat"
+
+
+def test_crowd_chant_parent_does_not_create_reply_metadata() -> None:
+    raw = (
+        "@crowd-chant-parent-msg-id=parent;id=chant;room-id=999;"
+        "tmi-sent-ts=1;user-id=123 :viewer!viewer@viewer.tmi.twitch.tv "
+        "PRIVMSG #channel :chant\r\n"
+    )
+    item = _parse_irc(raw)
+    assert item["crowd_chant_in_reply_to_message_id"] == "parent"
+    assert "in_reply_to" not in item
 
 
 def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> None:

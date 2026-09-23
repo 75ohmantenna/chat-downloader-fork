@@ -137,10 +137,50 @@ def test_timed_generator_basic_iteration_resets_inactivity_timer() -> None:
     tg.inactivity_timeout = 1
     fake = _FakeTimer(alive=True)
     tg.inactivity_timer = fake
-    tg.start_inactivity_timer = lambda: None  # type: ignore[method-assign]
-
+    before = time.monotonic()
     assert next(tg) == 1
-    assert fake.cancelled is True
+    assert fake.cancelled is False
+    assert tg.inactivity_timer is fake
+    assert tg._inactivity_deadline >= before + 1
+    tg.close()
+
+
+def test_inactivity_timer_does_not_spawn_per_delivered_message() -> None:
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(iter((1, 2, 3)), inactivity_timeout=60)
+        assert list(tg) == [1, 2, 3]
+        assert timer.call_count == 1
+
+
+def test_inactivity_timer_reschedules_at_updated_deadline() -> None:
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(iter(()), inactivity_timeout=60)
+        first_callback = timer.call_args.args[1]
+        tg.reset_inactivity_timer()
+        first_callback()
+        assert timer.call_count == 2
+        tg._inactivity_deadline = time.monotonic() - 1
+        timer.call_args.args[1]()
+        assert tg._inactivity_expired.is_set()
+        tg.close()
+
+
+def test_restarting_inactivity_timer_cancels_previous_timer() -> None:
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(iter(()), inactivity_timeout=60)
+        tg.start_inactivity_timer()
+        timer.return_value.cancel.assert_called_once()
+        tg.close()
+
+
+def test_cancelled_inactivity_callback_cannot_reschedule_after_close() -> None:
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(iter(()), inactivity_timeout=60)
+        callback = timer.call_args.args[1]
+        tg.close()
+        callback()
+        assert timer.call_count == 1
+        assert not tg._inactivity_expired.is_set()
 
 
 class _FakeQueue:
@@ -161,6 +201,8 @@ def test_timer_callbacks_set_expiry_flags(timer_kind) -> None:
     getattr(tg, method)()
     timer = getattr(tg, attribute)
     assert timer is not None
+    if kind == "inactivity":
+        tg._inactivity_deadline = time.monotonic() - 1
     timer.function()
     assert getattr(tg, f"_{kind}_expired").is_set()
     tg._cancel_timers()
