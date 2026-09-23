@@ -305,6 +305,9 @@ counts; successful reconnect and Pusher-key recovery counts; and the last
 decoded-frame timestamp in UTC microseconds. Emitted-source counts distinguish
 initial preloaded history/current-pin records, live WebSocket records, and
 records recovered through reconnect backfill.
+When the last observed message predates the bounded recovery window, the
+summary also counts truncated reconnect windows and their cumulative uncovered
+duration in microseconds; a warning reports each uncovered interval.
 Per-type output counts remain separate because filtering and preloaded history
 can make them differ from raw Pusher counts.
 

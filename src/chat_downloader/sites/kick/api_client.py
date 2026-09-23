@@ -319,13 +319,16 @@ def _response_rejects_start_time(response: requests.Response) -> bool:
 
 def _body_looks_like_challenge(response: requests.Response) -> bool:
     """Return whether a JSON endpoint returned a challenge document."""
-    if any(marker in response.text for marker in CLOUDFLARE_MARKERS):
-        return True
     content_type = response.headers.get("Content-Type", "").lower()
-    if "text/html" not in content_type:
-        return False
     body_start = response.text.lstrip()[:64].lower()
-    return body_start.startswith(("<!doctype html", "<html"))
+    is_html = "text/html" in content_type or body_start.startswith(
+        ("<!doctype html", "<html")
+    )
+    if not is_html:
+        return False
+    return any(marker in response.text for marker in CLOUDFLARE_MARKERS) or (
+        body_start.startswith(("<!doctype html", "<html"))
+    )
 
 
 def _raise_for_challenge(response: requests.Response, context: str) -> NoReturn:

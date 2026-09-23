@@ -108,6 +108,34 @@ def test_posix_timed_input_register_failure_raises_timeout_and_prints_newline(
     assert outputs == ["Prompt: ", timed_utils.LF]
 
 
+def test_posix_timed_input_handles_regular_file_stdin(monkeypatch) -> None:
+    with open(__file__, encoding="utf-8") as stream:
+        monkeypatch.setattr(timed_utils.sys, "stdin", stream)
+        monkeypatch.setattr(timed_utils, "echo", lambda _text: None)
+        with pytest.raises(TimeoutOccurred):
+            timed_utils.posix_timed_input(0.01, "", newline=False)
+
+
+def test_posix_timed_input_eof_waits_remaining_delay(monkeypatch) -> None:
+    slept: list[float] = []
+
+    class FakeSelector:
+        def register(self, *_args) -> None:
+            return None
+
+        def select(self, _timeout):
+            return [
+                (SimpleNamespace(fileobj=SimpleNamespace(readline=lambda: "")), None)
+            ]
+
+    monkeypatch.setattr(timed_utils.selectors, "DefaultSelector", FakeSelector)
+    monkeypatch.setattr(timed_utils, "echo", lambda _text: None)
+    monkeypatch.setattr(timed_utils.time, "sleep", slept.append)
+    with pytest.raises(TimeoutOccurred):
+        timed_utils.posix_timed_input(1.0, "", newline=False)
+    assert slept[0] > 0.9
+
+
 def test_posix_timed_input_timeout_flushes_stdin(monkeypatch) -> None:
     outputs: list[str] = []
     tcflush_calls = []

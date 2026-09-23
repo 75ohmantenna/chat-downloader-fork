@@ -4,9 +4,12 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+
+from chat_downloader.errors import ChatDownloaderError
 
 from .console_utils import pause
 from .conversion_utils import backoff_seconds
@@ -14,6 +17,14 @@ from .timed_input import timed_input
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+def _stdin_is_interactive() -> bool:
+    """Treat detached or closed input as noninteractive."""
+    try:
+        return sys.stdin.isatty()
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -63,13 +74,20 @@ class RetryPolicy:
         """Wait according to the policy before next retry."""
         seconds = self.sleep_seconds(attempt_number)
         if seconds is None:
-            pause()
+            if not _stdin_is_interactive():
+                msg = "Manual retry requires an interactive terminal."
+                raise ChatDownloaderError(msg)
+            try:
+                pause()
+            except EOFError as error:
+                msg = "Manual retry input closed before Enter was pressed."
+                raise ChatDownloaderError(msg) from error
             return
 
         use_interruptible = (
             self.interruptible_retry if interruptible is None else interruptible
         )
-        if use_interruptible:
+        if use_interruptible and _stdin_is_interactive():
             timed_input(seconds)
             return
 

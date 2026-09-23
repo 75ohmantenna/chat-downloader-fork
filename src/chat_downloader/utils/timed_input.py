@@ -102,7 +102,7 @@ except ImportError:
         sel = selectors.DefaultSelector()
         try:
             sel.register(sys.stdin, selectors.EVENT_READ)
-        except (ValueError, AttributeError, io.UnsupportedOperation):
+        except (OSError, ValueError, AttributeError, io.UnsupportedOperation):
             # Under pytest or other input-capturing environments, sys.stdin
             # may not be a real file descriptor. Treat as a timeout so
             # timed_input() returns its default.
@@ -110,11 +110,15 @@ except ImportError:
                 echo(LF)
             raise TimeoutOccurred from None
 
+        started = time.monotonic()
         events = sel.select(timeout)
 
         if events:
             key, _ = events[0]
-            return cast("TextIO", key.fileobj).readline().rstrip(LF)
+            line = cast("TextIO", key.fileobj).readline()
+            if line:
+                return line.rstrip(LF)
+            time.sleep(max(0.0, timeout - (time.monotonic() - started)))
         if newline:
             echo(LF)
         # Best-effort only (stdin may not support tcflush).

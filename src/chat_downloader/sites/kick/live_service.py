@@ -108,6 +108,8 @@ class _KickLiveDiagnostics:
             "preloaded_emitted_count": 0,
             "live_emitted_count": 0,
             "reconnect_backfill_emitted_count": 0,
+            "reconnect_backfill_truncated_count": 0,
+            "reconnect_backfill_truncated_microseconds": 0,
             "last_websocket_frame_timestamp": None,
         }
 
@@ -123,6 +125,21 @@ class _KickLiveDiagnostics:
         value = self.summary.get(name)
         if isinstance(value, int):
             self.summary[name] = value + 1
+
+    def record_backfill_gap(
+        self, checkpoint_timestamp: int | None, recovery_floor: int
+    ) -> int:
+        """Record and return the part of an outage beyond the recovery window."""
+        if checkpoint_timestamp is None or checkpoint_timestamp >= recovery_floor:
+            return 0
+        microseconds = recovery_floor - checkpoint_timestamp
+        self.increment("reconnect_backfill_truncated_count")
+        previous = self.summary["reconnect_backfill_truncated_microseconds"]
+        if isinstance(previous, int):
+            self.summary["reconnect_backfill_truncated_microseconds"] = (
+                previous + microseconds
+            )
+        return microseconds
 
     def record_frame(self) -> int:
         """Record and return a decoded frame's UTC receive timestamp."""
@@ -612,6 +629,22 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                             # time. Use the full bounded provider-time window.
                             checkpoint_timestamp = None
                         pending_reconnect_backfill = False
+                        recovery_floor = (
+                            min(
+                                received_timestamp,
+                                received_timestamp + provider_clock_offset,
+                            )
+                            - _RECONNECT_BACKFILL_MICROSECONDS
+                        )
+                        gap = diagnostics.record_backfill_gap(
+                            checkpoint_timestamp, recovery_floor
+                        )
+                        if gap:
+                            log(
+                                "warning",
+                                "Kick reconnect backfill cannot cover the "
+                                f"earliest {gap / 1_000_000:.3f}s of the outage.",
+                            )
                         log(
                             "debug",
                             "Kick WebSocket subscription confirmed; checking a "

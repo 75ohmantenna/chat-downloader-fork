@@ -279,6 +279,22 @@ def test_required_endpoint_errors(method, args, response, error, match):
 
 
 @pytest.mark.parametrize(
+    "phrase",
+    ["Just a moment...", "cf-challenge", "Checking your browser before accessing"],
+)
+def test_json_message_text_does_not_trigger_challenge(phrase: str) -> None:
+    payload = {"data": {"messages": [{"id": "1", "content": phrase}]}}
+    client, _ = _client([FakeResponse(200, payload)])
+    assert client.fetch_message_page("123", cursor=None) == payload
+
+
+def test_json_channel_title_does_not_trigger_challenge() -> None:
+    payload = {"id": 123, "livestream": {"session_title": "Just a moment..."}}
+    client, _ = _client([FakeResponse(200, payload)])
+    assert client.fetch_channel("examplechannel") == payload
+
+
+@pytest.mark.parametrize(
     ("payload", "ids", "pin"),
     [
         (message_page([{"id": "a"}, "bad", 7]), ["a"], None),

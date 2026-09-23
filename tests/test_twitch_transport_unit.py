@@ -913,6 +913,22 @@ def test_twitch_chat_irc_close_is_idempotent(irc_socket):
     irc_socket.close.assert_called_once()
 
 
+def test_twitch_chat_irc_closes_transport_without_shutdown() -> None:
+    class ProxyTransport:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    irc = irc_transport.TwitchChatIRC.__new__(irc_transport.TwitchChatIRC)
+    transport = ProxyTransport()
+    irc.socket = transport
+    irc.send_raw = lambda _command: None
+    irc.close_connection()
+    assert transport.closed
+
+
 def test_update_badge_info_skips_malformed_badge_and_keeps_others():
     import base64
 

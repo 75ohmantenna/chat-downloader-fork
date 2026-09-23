@@ -209,7 +209,9 @@ class TwitchChatIRC:
         self._closed = True
         try:
             self.send_raw("QUIT")
-            self.socket.shutdown(socket.SHUT_WR)
+            shutdown = getattr(self.socket, "shutdown", None)
+            if shutdown is not None:
+                shutdown(socket.SHUT_WR)
         except OSError:
             pass
         finally:

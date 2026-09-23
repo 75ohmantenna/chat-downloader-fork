@@ -729,6 +729,8 @@ def test_get_chat_by_channel_reconnects_on_disconnect(transports, diagnostics) -
         "preloaded_emitted_count": 0,
         "live_emitted_count": 2,
         "reconnect_backfill_emitted_count": 0,
+        "reconnect_backfill_truncated_count": 0,
+        "reconnect_backfill_truncated_microseconds": 0,
         "last_websocket_frame_timestamp": None,
     }
 
@@ -1072,6 +1074,42 @@ def test_repeated_recovery_failures_are_terminal(transports, frame, error, match
         list(chat.chat)
     assert len(created) == 2
     assert all(transport.close_count >= 1 for transport in created)
+
+
+def test_backfill_gap_diagnostics_accumulate_lost_window() -> None:
+    diagnostics = live_service._KickLiveDiagnostics()
+    assert diagnostics.record_backfill_gap(None, 10_000_000) == 0
+    assert diagnostics.record_backfill_gap(10_000_000, 10_000_000) == 0
+    assert diagnostics.record_backfill_gap(5_000_000, 10_000_000) == 5_000_000
+    assert diagnostics.record_backfill_gap(8_000_000, 10_000_000) == 2_000_000
+    assert diagnostics.summary["reconnect_backfill_truncated_count"] == 2
+    assert diagnostics.summary["reconnect_backfill_truncated_microseconds"] == 7_000_000
+
+
+def test_long_reconnect_records_uncovered_history_window() -> None:
+    first = pusher_frame(
+        CHAT_MESSAGE_EVENT,
+        {
+            "id": "before-outage",
+            "type": "message",
+            "content": "first",
+            "created_at": "2026-01-01T00:00:00Z",
+        },
+    )
+    session = _recovery_session([])
+    with (
+        recovery_clock([0, 20]),
+        _live_chat(
+            [
+                [first, ConnectionError("drop")],
+                [pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})],
+            ],
+            session=session,
+        ) as chat,
+    ):
+        assert [item["message_id"] for item in chat.chat] == ["before-outage"]
+    assert chat.diagnostics["reconnect_backfill_truncated_count"] == 1
+    assert chat.diagnostics["reconnect_backfill_truncated_microseconds"] == 10_000_000
 
 
 def test_get_chat_by_channel_offline_succeeds_with_offline_title() -> None:
