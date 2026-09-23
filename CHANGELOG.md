@@ -8,13 +8,32 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.3.1 — 2026-09-23
+
 ### Fixes
 
-- Leave replay checkpoints unchanged when chat, output writer, or downloader
-  shutdown fails, preserving any earlier capture error.
+- Preserve captures through provider retries and reconnects, and report Kick
+  history gaps when a reconnect cannot recover every message.
+- Keep replay checkpoints aligned with formatted output and recover interrupted
+  records without advancing past capture or shutdown failures.
 - Bind replay checkpoints to the package version and built-in format definitions
   to reject incompatible appends after an upgrade or format change. Hash the
   definitions through linked package data and reject missing definitions.
+- Reject invalid output templates and missing checkpoint or manifest directories
+  before starting a capture.
+- Detect incomplete Twitch and YouTube replay captures, retry required Twitch
+  GraphQL failures, and preserve fractional and signed replay timestamps.
+- Preserve Twitch VOD badge IDs and clips beginning at VOD offset zero.
+- Emit YouTube replay preroll before zero-offset notices so resumed checkpoint
+  output remains chronological.
+- Use direct TLS connections for Kick WebSockets when proxy settings are present,
+  and retain Kick VOD end-time drift in replay diagnostics.
+- Preserve nested parser fields and Kick channel names when a VOD has no title.
+
+### Documentation / tooling
+
+- Check maintenance scripts with Ruff and align repository guidance with the
+  tracked lockfile, validation commands, and Kick replay inspection.
 
 ## 2.3.0 — 2026-09-19
 
