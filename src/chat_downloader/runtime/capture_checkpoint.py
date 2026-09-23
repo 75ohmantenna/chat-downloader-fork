@@ -74,6 +74,9 @@ def _atomic_json(path: Path, data: Mapping[str, object]) -> None:
 def checkpoint_lock(name: str) -> Generator[None, None, None]:
     """Exclude concurrent writers; stale locks require explicit operator recovery."""
     lock = Path(name + ".lock")
+    if not lock.parent.is_dir():
+        msg = f"Resume checkpoint parent directory must already exist: {lock.parent}"
+        raise ValueError(msg)
     descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     os.close(descriptor)
     try:

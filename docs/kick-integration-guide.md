@@ -104,6 +104,8 @@ The Kick flow depends on the target type.
 3. Derive the UTC recording window from `start_time` plus `duration`; legacy
    duration is milliseconds, while the current website reports seconds.
    Do not substitute `end_time`: observed metadata can disagree with media duration.
+   A material website `end_time` disagreement is logged and retained as signed
+   `metadata_end_disagreement_seconds` in replay diagnostics.
 4. Narrow the window using recording-relative request bounds.
 5. Page backwards from the inclusive end using the message API's reverse
    `cursor`, buffering the selected messages in a temporary spool that spills

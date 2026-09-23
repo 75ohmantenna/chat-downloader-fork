@@ -66,6 +66,20 @@ def test_manifest_certifies_closed_files_and_completed_run(
     assert "Record 1" not in (tmp_path / "run.json").read_text()
 
 
+def test_manifest_reports_missing_parent_before_capture(tmp_path, params):
+    missing = tmp_path / "missing"
+
+    result = execute_run(Downloader, **params, run_manifest=str(missing / "run.json"))
+
+    assert not result.success
+    assert result.error_message == (
+        f"Run manifest parent directory must already exist: {missing}"
+    )
+    assert not missing.exists()
+    assert not (tmp_path / "chat.jsonl").exists()
+    assert not (tmp_path / "checkpoint.json.lock").exists()
+
+
 def test_provider_completed_status_enables_resume_and_certification(
     tmp_path, monkeypatch, params
 ):

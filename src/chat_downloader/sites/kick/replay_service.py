@@ -108,7 +108,10 @@ def get_vod_chat(
         request: Chat request window, pagination, and retry settings.
         api_client: Downloader-owned provider HTTP client.
     """
-    video_data = fetch_vod_metadata(api_client, username, video_id, request)
+    diagnostics: dict[str, object] = {}
+    video_data = fetch_vod_metadata(
+        api_client, username, video_id, request, diagnostics=diagnostics
+    )
     channel_id, _chatroom_id, title, vod_start_dt, vod_end_dt = _resolve_vod_window(
         video_data, username
     )
@@ -116,7 +119,6 @@ def get_vod_chat(
 
     log("info", f"VOD time window: {start_dt} to {end_dt}")
 
-    diagnostics: dict[str, object] = {}
     transport = getattr(api_client, "diagnostics", {})
     if isinstance(transport, dict):
         diagnostics["transport"] = transport

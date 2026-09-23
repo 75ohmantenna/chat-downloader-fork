@@ -26,6 +26,8 @@ def fetch_vod_metadata(
     username: str,
     video_id: str,
     request: ChatRequest,
+    *,
+    diagnostics: dict[str, object] | None = None,
 ) -> JSONDict:
     """Prefer legacy metadata; only a video 404 activates the web fallback.
 
@@ -84,7 +86,9 @@ def fetch_vod_metadata(
     ):
         msg = "Kick web video has no finite positive duration."
         raise KickError(msg)
-    _log_end_disagreement(video, duration)
+    disagreement = _log_end_disagreement(video, duration)
+    if disagreement is not None and diagnostics is not None:
+        diagnostics["metadata_end_disagreement_seconds"] = disagreement
     return {
         "uuid": video_id,
         "livestream": {
@@ -176,14 +180,14 @@ def _resolve_vod_window(
     return channel_id, chatroom_id, title, start_dt, end_dt
 
 
-def _log_end_disagreement(video: JSONDict, duration: float) -> None:
+def _log_end_disagreement(video: JSONDict, duration: float) -> float | None:
     """Explain inconsistent optional end metadata without changing the window."""
     try:
         start = datetime.fromisoformat(get_str(video, "start_time"))
         end = datetime.fromisoformat(get_str(video, "end_time"))
         difference = (end - start).total_seconds() - duration
     except (ValueError, TypeError):
-        return
+        return None
     if abs(difference) > 1:
         log(
             "info",
@@ -191,3 +195,5 @@ def _log_end_disagreement(video: JSONDict, duration: float) -> None:
             f"by {difference:.1f}s; "
             "using duration for the replay cutoff.",
         )
+        return difference
+    return None

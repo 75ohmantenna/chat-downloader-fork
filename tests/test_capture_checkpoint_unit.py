@@ -402,6 +402,20 @@ def test_checkpoint_excludes_concurrent_runs_and_releases_lock(tmp_path, params)
     assert not Path(params["resume"] + ".lock").exists()
 
 
+def test_resume_reports_missing_checkpoint_directory_before_capture(tmp_path, params):
+    missing = tmp_path / "missing"
+    params["resume"] = str(missing / "checkpoint.json")
+
+    result = execute_run(Downloader, **params)
+
+    assert not result.success
+    assert result.error_message == (
+        f"Resume checkpoint parent directory must already exist: {missing}"
+    )
+    assert not missing.exists()
+    assert not (tmp_path / "chat.jsonl").exists()
+
+
 def test_checkpoint_source_preserves_deadline_summary_and_unstarted_close(
     tmp_path,
 ) -> None:

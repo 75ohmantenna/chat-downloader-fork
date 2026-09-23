@@ -311,10 +311,12 @@ chat_downloader "https://kick.com/examplechannel/videos/VIDEO_ID" \
 again to append the remaining chat. The initial output files must be absent;
 use explicit filenames without `{title}` or `{id}` placeholders. The checkpoint
 and each output must be distinct regular files. At most one JSONL and one TXT
-output are accepted. The checkpoint takes precedence over `--overwrite` and
-always uses append mode. Stable message IDs and finite replay-relative offsets
-are required; signed offsets are accepted for YouTube preroll items. Kick VODs
-and clips provide both fields. Provider-generated terminal
+output are accepted. Create the checkpoint's parent directory before running;
+the CLI reports a missing directory before starting capture. The checkpoint
+takes precedence over `--overwrite` and always uses append mode. Stable message
+IDs and finite replay-relative offsets are required; signed offsets are accepted
+for YouTube preroll items. Kick VODs and clips provide both fields.
+Provider-generated terminal
 markers without replay offsets are omitted from checkpointed captures.
 
 Checkpoints advance after output writers close and synchronize on normal,
@@ -369,7 +371,9 @@ It contains no chat messages, request headers, cookies, or input URL. Hashes cov
 whole files; writer counts cover the current run. Unopened pre-existing files
 are not hashed unless a resume checkpoint verified them. The manifest must be
 a new path distinct from outputs, checkpoint, and checkpoint lock. Use a new
-manifest filename on every resume. Failure to write the manifest fails the run.
+manifest filename on every resume. Create its parent directory before running;
+the CLI reports a missing directory before starting capture. Failure to write
+the manifest fails the run.
 
 ```bash
 chat_downloader "https://kick.com/examplechannel/videos/VIDEO_ID" \

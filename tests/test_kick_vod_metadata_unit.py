@@ -96,6 +96,7 @@ def test_new_vod_metadata_and_reverse_history_compose_without_alias_lookup():
     assert web.calls[0][1]["headers"] == {"Authorization": None, "Cookie": None}
     assert chat.diagnostics["termination_reason"] == "completed"
     assert chat.diagnostics["transport"]["http_status_counts"] == {"404": 1, "200": 3}
+    assert chat.diagnostics["metadata_end_disagreement_seconds"] == 92.0
     client.close()
     assert primary.close_calls == web.close_calls == 1
 
@@ -173,19 +174,34 @@ def test_web_endpoint_rejects_path_injection_and_redirects() -> None:
 
 
 @pytest.mark.parametrize(
-    "end",
-    ["2026-09-11T23:24:00Z", "bad", None, "2026-09-11T23:24:00"],
+    ("end", "difference"),
+    [
+        ("2026-09-11T23:24:00Z", 66.0),
+        ("2026-09-11T23:22:00Z", -54.0),
+        ("2026-09-11T23:22:54Z", None),
+        ("bad", None),
+        (None, None),
+        ("2026-09-11T23:24:00", None),
+    ],
 )
 def test_metadata_explains_disagreement_without_changing_cutoff(
-    monkeypatch, fallback_client, end
+    monkeypatch, fallback_client, end, difference
 ):
     from chat_downloader.sites.kick import vod_metadata
 
     payload = fallback_client.fetch_web_video_metadata.return_value
     payload["data"]["end_time"] = end
     logs = []
+    diagnostics = {}
     monkeypatch.setattr(vod_metadata, "log", lambda level, text: logs.append(text))
-    result = fetch_vod_metadata(fallback_client, "examplechannel", VIDEO, REQUEST)
+    result = fetch_vod_metadata(
+        fallback_client, "examplechannel", VIDEO, REQUEST, diagnostics=diagnostics
+    )
     assert result["livestream"]["duration"] == payload["data"]["duration"] * 1000
     assert "trying website metadata" in logs[0]
-    assert len(logs) == (2 if end == "2026-09-11T23:24:00Z" else 1)
+    assert len(logs) == (2 if difference is not None else 1)
+    assert diagnostics == (
+        {"metadata_end_disagreement_seconds": difference}
+        if difference is not None
+        else {}
+    )

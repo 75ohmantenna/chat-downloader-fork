@@ -92,6 +92,11 @@ class RunManifest:
         }:
             msg = "Run manifest must be distinct from the checkpoint."
             raise ValueError(msg)
+        if not self.path.parent.is_dir():
+            msg = (
+                f"Run manifest parent directory must already exist: {self.path.parent}"
+            )
+            raise ValueError(msg)
         self.outputs: list[Path] = []
         self.valid = True
 
