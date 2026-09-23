@@ -10,10 +10,11 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
-- Leave replay checkpoints unchanged when chat shutdown fails, so a failed
-  close cannot establish a new resume point.
+- Leave replay checkpoints unchanged when chat or downloader shutdown fails,
+  even when a capture error occurred first.
 - Bind replay checkpoints to the package version and built-in format definitions
-  to reject incompatible appends after an upgrade or format change.
+  to reject incompatible appends after an upgrade or format change. Hash the
+  definitions through linked package data and reject missing definitions.
 
 ## 2.3.0 — 2026-09-19
 

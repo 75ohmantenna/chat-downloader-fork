@@ -13,6 +13,7 @@ from typing import ClassVar
 import pytest
 
 from chat_downloader.errors import ChatDownloaderError
+from chat_downloader.formatting import format as format_module
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint, _atomic_json
 from chat_downloader.runtime.capture_verification import capture_paths, verify_capture
@@ -356,9 +357,10 @@ def test_negative_replay_offsets_can_resume(tmp_path, monkeypatch, params) -> No
     assert [item["message_id"] for item in rows] == ["1", "2", "3"]
 
 
+@pytest.mark.parametrize("resumed", [False, True])
 @pytest.mark.parametrize("error_type", [RuntimeError, OSError, ValueError])
 def test_failed_chat_close_does_not_advance_checkpoint(
-    tmp_path, params, error_type
+    tmp_path, params, error_type, resumed
 ) -> None:
     class FailedClose(Downloader):
         def get_chat(self, **kwargs):
@@ -372,9 +374,54 @@ def test_failed_chat_close_does_not_advance_checkpoint(
             chat.close = close
             return chat
 
+    checkpoint = tmp_path / "checkpoint.json"
+    if resumed:
+        assert execute_run(Downloader, **params, max_messages=1).success
+        before = checkpoint.read_bytes()
+
     result = execute_run(FailedClose, **params)
     assert not result.success
     assert result.error_message == "close failed"
+    if resumed:
+        assert checkpoint.read_bytes() == before
+    else:
+        assert not checkpoint.exists()
+
+
+@pytest.mark.parametrize("resumed", [False, True])
+def test_failed_downloader_close_does_not_advance_checkpoint(
+    tmp_path, params, resumed
+) -> None:
+    class FailedClose(Downloader):
+        def close(self) -> None:
+            raise RuntimeError("downloader close failed")
+
+    checkpoint = tmp_path / "checkpoint.json"
+    if resumed:
+        assert execute_run(Downloader, **params, max_messages=1).success
+        before = checkpoint.read_bytes()
+
+    result = execute_run(FailedClose, **params)
+    assert not result.success
+    assert result.error_message == "downloader close failed"
+    if resumed:
+        assert checkpoint.read_bytes() == before
+    else:
+        assert not checkpoint.exists()
+
+
+def test_failed_downloader_close_preserves_primary_error_without_checkpoint(
+    tmp_path, params
+) -> None:
+    class FailedClose(Downloader):
+        failure = RuntimeError("stream failed")
+
+        def close(self) -> None:
+            raise RuntimeError("downloader close failed")
+
+    result = execute_run(FailedClose, **params)
+    assert not result.success
+    assert result.error_message == "stream failed"
     assert not (tmp_path / "checkpoint.json").exists()
 
 
@@ -416,21 +463,35 @@ def test_checkpoint_fingerprint_changes_with_program_version(
 def test_checkpoint_fingerprint_changes_with_builtin_formats(
     tmp_path, monkeypatch
 ) -> None:
-    import chat_downloader.runtime.capture_checkpoint as module
-
-    package = tmp_path / "chat_downloader"
-    runtime = package / "runtime"
-    runtime.mkdir(parents=True)
-    formats = package / "formatting"
-    formats.mkdir()
-    builtin = formats / "custom_formats.json"
+    builtin = tmp_path / "custom_formats.json"
     builtin.write_text('{"default": "first"}', encoding="utf-8")
-    monkeypatch.setattr(module, "__file__", str(runtime / "capture_checkpoint.py"))
+    monkeypatch.setattr(format_module, "BUILTIN_FORMAT_FILE", builtin)
     request = {"output": str(tmp_path / "capture.jsonl")}
     first = CaptureCheckpoint(str(tmp_path / "one.json"), request.copy())
     builtin.write_text('{"default": "second"}', encoding="utf-8")
     second = CaptureCheckpoint(str(tmp_path / "two.json"), request.copy())
     assert first.fingerprint != second.fingerprint
+
+
+def test_linked_builtin_formats_can_resume(tmp_path, monkeypatch, params) -> None:
+    linked = tmp_path / "builtin_formats.json"
+    linked.symlink_to(format_module.BUILTIN_FORMAT_FILE)
+    monkeypatch.setattr(format_module, "BUILTIN_FORMAT_FILE", linked)
+    assert execute_run(Downloader, **params, max_messages=1).success
+    assert execute_run(Downloader, **params).success
+
+
+def test_missing_builtin_formats_rejects_capture_before_output(
+    tmp_path, monkeypatch, params
+) -> None:
+    monkeypatch.setattr(
+        format_module, "BUILTIN_FORMAT_FILE", tmp_path / "missing_formats.json"
+    )
+    result = execute_run(Downloader, **params)
+    assert not result.success
+    assert "built-in formats" in result.error_message
+    assert not (tmp_path / "checkpoint.json").exists()
+    assert not (tmp_path / "chat.jsonl").exists()
 
 
 @pytest.mark.parametrize("identity_change", ["version", "builtin_formats"])
@@ -445,23 +506,15 @@ def test_resume_rejects_changed_build_identity_before_append(
     if identity_change == "version":
         monkeypatch.setattr(module, "__version__", "future-test-version")
     else:
-        package = tmp_path / "chat_downloader"
-        runtime = package / "runtime"
-        runtime.mkdir(parents=True)
-        formats = package / "formatting"
-        formats.mkdir()
-        builtin = formats / "custom_formats.json"
-        original = (
-            Path(module.__file__).resolve().parents[1]
-            / "formatting"
-            / "custom_formats.json"
-        )
+        builtin = tmp_path / "custom_formats.json"
+        original = format_module.BUILTIN_FORMAT_FILE
         builtin.write_bytes(original.read_bytes() + b"\n")
-        monkeypatch.setattr(module, "__file__", str(runtime / "capture_checkpoint.py"))
+        monkeypatch.setattr(format_module, "BUILTIN_FORMAT_FILE", builtin)
 
     result = execute_run(Downloader, **saved_capture)
     assert not result.success
     assert "Checkpoint does not match" in result.error_message
+    assert "program version" in result.error_message
     assert output.read_bytes() == before_output
     assert checkpoint.read_bytes() == before_checkpoint
 

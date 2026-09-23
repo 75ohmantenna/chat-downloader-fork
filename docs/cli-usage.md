@@ -332,10 +332,12 @@ start/end, format, and filenames unchanged; message limits and timeouts may
 change. Request settings, the package version, built-in format definitions,
 and file hashes are checked before append. Checkpoints created before these
 version and format checks were added cannot be resumed; start a new capture.
-If chat shutdown fails, the checkpoint does not advance.
+The version check applies to releases; avoid resuming across unreleased source
+changes that affect output. If chat or downloader shutdown fails, the
+checkpoint does not advance.
 
-A process crash, power failure, or failed chat shutdown can leave output newer
-than its checkpoint.
+A process crash, power failure, or failed chat or downloader close can leave
+output newer than its checkpoint.
 The next run rejects that mismatch without truncating files. Preserve the
 artifacts for inspection and start a fresh capture to recover. A `.lock` file
 prevents simultaneous checkpoint writers; after an unclean exit, remove that

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 from chat_downloader.errors import ChatDownloaderError
+from chat_downloader.formatting import format as format_module
 from chat_downloader.metadata import __version__
 from chat_downloader.models import ChatRequest
 
@@ -54,6 +55,17 @@ def _file_signature(path: Path) -> str | None:
             return hashlib.file_digest(stream, "sha256").hexdigest()
     except FileNotFoundError:
         return None
+
+
+def _builtin_format_signature() -> str:
+    """Hash the format definitions actually loaded by the text formatter."""
+    try:
+        return hashlib.sha256(
+            format_module.BUILTIN_FORMAT_FILE.read_bytes()
+        ).hexdigest()
+    except OSError as error:
+        msg = f"Unable to read built-in formats for checkpoint identity: {error}"
+        raise ValueError(msg) from error
 
 
 def _atomic_json(path: Path, data: Mapping[str, object]) -> None:
@@ -161,9 +173,7 @@ class CaptureCheckpoint:
             _file_signature(Path(request.format_file)) if request.format_file else None
         )
         identity["program_version"] = __version__
-        identity["builtin_formats"] = _file_signature(
-            Path(__file__).resolve().parents[1] / "formatting" / "custom_formats.json"
-        )
+        identity["builtin_formats"] = _builtin_format_signature()
         self.fingerprint = hashlib.sha256(
             json.dumps(identity, default=str, sort_keys=True).encode()
         ).hexdigest()
@@ -199,7 +209,10 @@ class CaptureCheckpoint:
             or state.get("version") != 1
             or state.get("request") != self.fingerprint
         ):
-            msg = "Checkpoint does not match this replay request."
+            msg = (
+                "Checkpoint does not match this replay request, program version, "
+                "or built-in formats."
+            )
             raise ValueError(msg)
         if state.get("artifacts") != self._initial_signatures:
             msg = "Capture files changed since the checkpoint; refusing to append."

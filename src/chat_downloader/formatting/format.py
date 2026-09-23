@@ -23,6 +23,8 @@ from chat_downloader.utils.time_utils import (
 if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
 
+BUILTIN_FORMAT_FILE = Path(__file__).parent / "custom_formats.json"
+
 
 class _SafeFormatter(string.Formatter):
     """Block {0.attr}/{0[key]} access that exposes state in user-supplied templates."""
@@ -89,9 +91,7 @@ class ItemFormatter:
         Raises:
             FormatFileNotFound: The custom format file does not exist.
         """
-        default_path = Path(__file__).parent / "custom_formats.json"
-
-        with default_path.open(encoding="utf-8") as default_formats:
+        with BUILTIN_FORMAT_FILE.open(encoding="utf-8") as default_formats:
             self.format_file: dict[str, Any] = json.load(default_formats)
 
         if path is not None:

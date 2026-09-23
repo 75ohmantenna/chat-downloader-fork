@@ -85,15 +85,16 @@ def _finalize_run(
 ) -> Exception | None:
     """Close chat and downloader.
 
-    Return a suppressed chat-close error so checkpointed runs can reject it.
+    Return a suppressed close error so checkpointed runs can reject it while
+    preserving any earlier capture error.
     """
     close_error: Exception | None = None
-    chat_close_error: Exception | None = None
+    suppressed_close_error: Exception | None = None
     if chat is not None and hasattr(chat, "close"):
         try:
             chat.close()
         except Exception as e:  # noqa: BLE001 — finalization must preserve cleanup
-            chat_close_error = e
+            suppressed_close_error = e
             if not primary_error and not isinstance(e, (OSError, ValueError)):
                 close_error = e
             else:
@@ -110,12 +111,13 @@ def _finalize_run(
             downloader.close()
         except Exception as e:  # noqa: BLE001 — close errors must not skip cleanup
             if primary_error:
+                suppressed_close_error = suppressed_close_error or e
                 log("warning", f"Error closing downloader session(s): {e}")
             else:
                 close_error = close_error or e
     if close_error is not None:
         raise close_error
-    return chat_close_error
+    return suppressed_close_error
 
 
 @dataclass(slots=True)
@@ -392,17 +394,19 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     finally:
         with checkpoint_resources:
             try:
-                chat_close_error = _finalize_run(
+                suppressed_close_error = _finalize_run(
                     chat, downloader, primary_error=primary_error
                 )
-                if chat_close_error is not None and checkpoint_bound:
+                if suppressed_close_error is not None and checkpoint_bound:
                     checkpoint_bound = False
                     verification_bound = False
                     if not primary_error:
                         primary_error = True
                         result.success = False
                         result.termination_reason = "error"
-                        result.error_message = _classify_run_error(chat_close_error)
+                        result.error_message = _classify_run_error(
+                            suppressed_close_error
+                        )
                         log("error", result.error_message)
             except Exception as error:  # noqa: BLE001 — record cleanup failures
                 primary_error = True
