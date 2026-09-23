@@ -114,6 +114,7 @@ def test_run_result_preserves_existing_positional_field_order() -> None:
         (RequestException("timeout"), "timeout"),
         (OSError("disk full"), "disk full"),
         (ValueError("max_attempts must be positive"), "max_attempts"),
+        (RuntimeError("unexpected acquisition"), "unexpected acquisition"),
         (KeyboardInterrupt(), "Keyboard Interrupt"),
     ],
 )
@@ -336,8 +337,10 @@ def test_execute_run_cleanup_without_primary_error(
         )
         assert factory.instance.closed is True
     else:
-        with pytest.raises(type(error), match=str(error)):
-            execute_run(factory)
+        result = execute_run(factory)
+        assert not result.success
+        assert str(error) in result.error_message
+        assert factory.instance.closed is True
     assert chat.closed is True
 
 
@@ -361,13 +364,28 @@ def test_execute_run_preserves_primary_error_when_cleanup_fails(downloader, logg
     assert factory.instance.closed is True
 
 
+def test_unexpected_chat_close_error_still_writes_manifest(
+    downloader, monkeypatch, tmp_path
+):
+    chat = Chat(iter(()), id="video", status="completed")
+    close = MagicMock(side_effect=RuntimeError("close failed"))
+    monkeypatch.setattr(chat, "close", close)
+    factory = downloader(chat)
+    manifest = tmp_path / "run.json"
+    result = execute_run(factory, run_manifest=str(manifest))
+    assert not result.success
+    assert result.error_message == "close failed"
+    assert factory.instance.closed
+    assert json.loads(manifest.read_text())["success"] is False
+
+
 def test_execute_run_detects_write_errors(downloader, logged):
     chat = _FakeChat()
     chat.write_error_count = 1
     result = execute_run(downloader(chat))
 
     assert result.success is False
-    assert "output writers reported errors" in result.error_message
+    assert "output writer(s) reported errors" in result.error_message
     assert _summary(logged)["success"] is False
 
 

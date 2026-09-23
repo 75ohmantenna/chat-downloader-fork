@@ -51,6 +51,9 @@ ALLOWLIST: frozenset[str] = frozenset(
         # streaming alignment state. The privacy-safe CLI/reporting layer is
         # already separate under scripts/.
         "output/capture_parity.py",
+        # The runner owns one capture's acquisition, per-record checkpoint
+        # transaction, shutdown, verification, and manifest lifecycle.
+        "runtime/runner.py",
     }
 )
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"

@@ -12,6 +12,7 @@ from typing import ClassVar
 
 import pytest
 
+from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint, _atomic_json
 from chat_downloader.runtime.capture_verification import capture_paths, verify_capture
@@ -44,7 +45,9 @@ class Downloader:
 
         def source():
             for item in self.records:
-                if item.get("time_in_seconds", 0) >= float(request.start_time or 0):
+                if request.start_time is None or item.get(
+                    "time_in_seconds", 0
+                ) >= float(request.start_time):
                     yield item.copy()
             if self.failure is not None:
                 raise self.failure
@@ -294,9 +297,75 @@ def test_failed_capture_does_not_advance_checkpoint(
         monkeypatch.setattr(ContinuousWriter, "write", fail)
     result = execute_run(Downloader, **params)
     assert not result.success
-    assert not (tmp_path / "checkpoint.json").exists()
+    assert (tmp_path / "checkpoint.json").exists() is (failure == "writer")
+    if failure == "writer":
+        assert load_json(tmp_path / "checkpoint.json")["total"] == 0
     if failure == "parity":
         assert result.parity_status == "failed"
+
+
+@pytest.mark.parametrize("interrupt_at", ["txt_write", "checkpoint_observe"])
+def test_interrupted_record_rolls_back_before_resume(
+    tmp_path, monkeypatch, params, interrupt_at
+) -> None:
+    from chat_downloader.output.continuous_write import ContinuousWriter
+
+    if interrupt_at == "txt_write":
+        original_write = ContinuousWriter.write
+
+        def interrupted_write(writer, item, *, flush=False):
+            if writer.file_name.endswith(".txt") and "Record 2" in str(item):
+                raise KeyboardInterrupt
+            original_write(writer, item, flush=flush)
+
+        monkeypatch.setattr(ContinuousWriter, "write", interrupted_write)
+    else:
+        original_observe = CaptureCheckpoint.observe
+
+        def interrupted_observe(checkpoint, item):
+            original_observe(checkpoint, item)
+            if item["message_id"] == "2":
+                raise KeyboardInterrupt
+
+        monkeypatch.setattr(CaptureCheckpoint, "observe", interrupted_observe)
+
+    first = execute_run(Downloader, **params)
+    assert first.interrupted
+    assert load_json(tmp_path / "checkpoint.json")["total"] == 1
+    assert len((tmp_path / "chat.jsonl").read_text().splitlines()) == 1
+    assert len((tmp_path / "chat.txt").read_text().splitlines()) == 1
+
+    monkeypatch.undo()
+    resumed = execute_run(Downloader, **params)
+    assert resumed.success
+    lines = (tmp_path / "chat.jsonl").read_text().splitlines()
+    rows = [json.loads(line) for line in lines]
+    assert [item["message_id"] for item in rows] == ["1", "2", "3", "4"]
+
+
+def test_negative_replay_offsets_can_resume(tmp_path, monkeypatch, params) -> None:
+    records = [message(1, -15), message(2, -14), message(3, 1)]
+    monkeypatch.setattr(Downloader, "records", records)
+    first = execute_run(Downloader, **params, max_messages=1)
+    assert first.success
+    assert load_json(tmp_path / "checkpoint.json")["offset"] == -15
+    second = execute_run(Downloader, **params)
+    assert second.success
+    lines = (tmp_path / "chat.jsonl").read_text().splitlines()
+    rows = [json.loads(line) for line in lines]
+    assert [item["message_id"] for item in rows] == ["1", "2", "3"]
+
+
+def test_checkpoint_record_snapshot_requires_writers(tmp_path) -> None:
+    checkpoint = CaptureCheckpoint(
+        str(tmp_path / "checkpoint.json"),
+        {"output": str(tmp_path / "capture.jsonl")},
+    )
+    chat = Chat(iter(()))
+    with pytest.raises(ChatDownloaderError, match="attached output writers"):
+        checkpoint.begin_record(chat)
+    with pytest.raises(ChatDownloaderError, match="output records disagree"):
+        checkpoint.save(chat, 0)
 
 
 @pytest.mark.parametrize("stale", [False, True])

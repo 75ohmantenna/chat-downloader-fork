@@ -313,13 +313,17 @@ use explicit filenames without `{title}` or `{id}` placeholders. The checkpoint
 and each output must be distinct regular files. At most one JSONL and one TXT
 output are accepted. The checkpoint takes precedence over `--overwrite` and
 always uses append mode. Stable message IDs and finite replay-relative offsets
-are required; Kick VODs and clips provide both. Provider-generated terminal
+are required; signed offsets are accepted for YouTube preroll items. Kick VODs
+and clips provide both fields. Provider-generated terminal
 markers without replay offsets are omitted from checkpointed captures.
 
 Checkpoints advance after output writers close and synchronize on normal,
 message-limited, or interrupted shutdown. A one-second overlap preserves
 messages at the saved timestamp while suppressing IDs already written. The
-record limit counts newly written messages. Formatted TXT may write fewer lines
+runner discards a record interrupted during writing or checkpoint observation
+before saving, including a partial write to one of two outputs. The next run
+retrieves that record again. The record limit counts newly written messages.
+Formatted TXT may write fewer lines
 than JSONL when paid chat and ticker events share an ID; this does not prevent
 checkpoint saving. Keep the URL, filters, selected
 start/end, format, and filenames unchanged; message limits and timeouts may
@@ -355,6 +359,8 @@ passes. Reaching exactly `--max_messages` is conservatively treated as limited:
 exhaustion has not been observed. Live and unknown recording states are rejected
 before writing. Explicit empty windows may complete normally. Completion means
 provider history traversal, not proof that the provider retained every event.
+Twitch pagination stalls and known skipped Twitch or YouTube replay records
+prevent a capture from qualifying as complete.
 
 `--run_manifest run.json` writes a JSON report after shutdown with program
 version, recording identity/window, success, completion, termination, parity,

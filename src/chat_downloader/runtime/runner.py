@@ -88,28 +88,32 @@ def _finalize_run(
     Suppress errors only when a primary error already occurred so the
     original exception is not obscured.
     """
+    close_error: Exception | None = None
     if chat is not None and hasattr(chat, "close"):
         try:
             chat.close()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — finalization must preserve cleanup
             if not primary_error and not isinstance(e, (OSError, ValueError)):
-                raise
-            log("warning", f"Error finalizing chat output: {e}")
+                close_error = e
+            else:
+                log("warning", f"Error finalizing chat output: {e}")
 
     if chat is not None and not primary_error:
         write_error_count = getattr(chat, "write_error_count", 0)
         if write_error_count > 0:
             msg = f"{write_error_count} output writer(s) reported errors during close"
-            raise ChatDownloaderError(msg)
+            close_error = close_error or ChatDownloaderError(msg)
 
     if downloader is not None:
         try:
             downloader.close()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 — close errors must not skip cleanup
             if primary_error:
                 log("warning", f"Error closing downloader session(s): {e}")
             else:
-                raise
+                close_error = close_error or e
+    if close_error is not None:
+        raise close_error
 
 
 @dataclass(slots=True)
@@ -331,10 +335,22 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
             max_seen_message_ids=run_config.max_seen_message_ids,
         )
 
-        for message in chat:
-            result.message_count += 1
-            if checkpoint is not None:
-                checkpoint.observe(message)
+        source = iter(chat)
+        while True:
+            boundary = checkpoint.begin_record(chat) if checkpoint is not None else None
+            previous_count = result.message_count
+            try:
+                message = next(source)
+                if checkpoint is not None:
+                    checkpoint.observe(message)
+                result.message_count += 1
+            except StopIteration:
+                break
+            except BaseException:
+                result.message_count = previous_count
+                if checkpoint is not None and boundary is not None:
+                    checkpoint.rollback_record(chat, boundary)
+                raise
             message_type = message.get("message_type")
             counter_key = message_type if isinstance(message_type, str) else "<missing>"
             result.message_type_counts[counter_key] = (
@@ -358,6 +374,10 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         primary_error = True
         result.error_message = _classify_run_error(e)
         log("error", result.error_message)
+    except Exception as error:  # noqa: BLE001 — preserve manifest and checkpoint on unexpected failures
+        primary_error = True
+        result.error_message = _classify_run_error(error)
+        log("error", result.error_message)
     except KeyboardInterrupt:
         primary_error = True
         result.interrupted = True
@@ -371,13 +391,12 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         with checkpoint_resources:
             try:
                 _finalize_run(chat, downloader, primary_error=primary_error)
-            except ChatDownloaderError:
+            except Exception as error:  # noqa: BLE001 — record cleanup failures
                 primary_error = True
                 result.success = False
                 result.termination_reason = "error"
-                result.error_message = (
-                    "One or more output writers reported errors during close"
-                )
+                result.error_message = _classify_run_error(error)
+                log("error", result.error_message)
             _verify_capture_outputs(
                 chat,
                 run_config,
