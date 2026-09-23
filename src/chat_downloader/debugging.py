@@ -196,10 +196,17 @@ else:  # fallback support
 handler.addFilter(_SafeLogFilter())
 
 logger = logging.getLogger(logger_name)
+logger.addHandler(logging.NullHandler())
+logger.addFilter(_SafeLogFilter())
 
 loggers = [logging.getLogger(name) for name in (logger_name, "urllib3")]
-for configured_logger in loggers:
-    configured_logger.addHandler(handler)
+
+
+def install_cli_log_handler() -> None:
+    """Attach the console handler when the CLI owns logging configuration."""
+    for configured_logger in loggers:
+        if handler not in configured_logger.handlers:
+            configured_logger.addHandler(handler)
 
 
 def set_log_level(level: str) -> None:

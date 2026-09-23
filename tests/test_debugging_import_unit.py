@@ -82,6 +82,7 @@ def test_debugging_import_renders_with_available_colour(monkeypatch, colour):
     with _reload_debugging(
         monkeypatch, colorama=SimpleNamespace(init=init), tty=colour
     ) as (module, stream):
+        module.install_cli_log_handler()
         module.log("warning", "visible token=PRIVATE")
         output = stream.getvalue()
         assert "visible" in output

@@ -14,6 +14,8 @@ support and AI-assistance disclosures.
 - Dependency and build metadata: `pyproject.toml` and `uv.lock`.
 - Tests and coverage: pytest and coverage.py.
 - Formatting and linting: Ruff, with an 88-character line length.
+- Ruff checks `src/chat_downloader`, `tests`, and `scripts` in local hooks and
+  Makefile commands.
 - Spelling: codespell over every Git-tracked file and filename.
 - Type checking: mypy, configured in `mypy.ini`.
 - Import boundaries: import-linter, configured in `pyproject.toml`.

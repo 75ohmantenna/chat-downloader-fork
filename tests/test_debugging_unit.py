@@ -56,6 +56,15 @@ def test_disable_logger_suppresses_output(caplog):
     assert caplog.records == []
 
 
+def test_console_handlers_install_only_when_cli_requests_them():
+    assert dbg.handler not in dbg.logger.handlers
+    assert dbg.handler not in logging.getLogger("urllib3").handlers
+    dbg.install_cli_log_handler()
+    dbg.install_cli_log_handler()
+    assert dbg.logger.handlers.count(dbg.handler) == 1
+    assert logging.getLogger("urllib3").handlers.count(dbg.handler) == 1
+
+
 @pytest.mark.parametrize(
     ("tty", "platform", "colorama", "environment", "expected"),
     [

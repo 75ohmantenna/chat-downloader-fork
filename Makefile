@@ -19,17 +19,17 @@ test:
 	$(UV) run pytest -q -p no:rerunfailures -m "not network"
 
 lint:
-	$(UV_RUN) ruff check src/chat_downloader tests
+	$(UV_RUN) ruff check src/chat_downloader tests scripts
 	$(UV_RUN) lint-imports
 
 spell:
 	@git ls-files -z | xargs -0 $(UV_RUN) codespell
 
 fmt:
-	$(UV) run ruff format src/chat_downloader tests
+	$(UV) run ruff format src/chat_downloader tests scripts
 
 fmt-check:
-	$(UV_RUN) ruff format --check src/chat_downloader tests
+	$(UV_RUN) ruff format --check src/chat_downloader tests scripts
 
 typecheck:
 	$(UV_RUN) mypy .

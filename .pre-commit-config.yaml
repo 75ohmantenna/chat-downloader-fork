@@ -4,14 +4,14 @@ repos:
       - id: ruff-check
         name: ruff (lint)
         language: system
-        entry: uv run --locked ruff check src/chat_downloader tests
+        entry: uv run --locked ruff check src/chat_downloader tests scripts
         pass_filenames: false
         stages: [pre-commit]
 
       - id: ruff-format
         name: ruff (format check)
         language: system
-        entry: uv run --locked ruff format --check src/chat_downloader tests
+        entry: uv run --locked ruff format --check src/chat_downloader tests scripts
         pass_filenames: false
         stages: [pre-commit]
 

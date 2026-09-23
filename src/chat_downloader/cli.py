@@ -21,7 +21,7 @@ from .cli_args import (
     _ParamRegistrar,
     _rename_default_argument_groups,
 )
-from .debugging import disable_logger, log, set_log_level
+from .debugging import disable_logger, install_cli_log_handler, log, set_log_level
 from .metadata import __program__, __summary__, __version__
 
 if TYPE_CHECKING:
@@ -40,7 +40,7 @@ def _install_cli_signal_handlers() -> None:
     def handler(signum: int, _frame: FrameType | None) -> None:
         if state["triggered"]:
             signal.signal(signum, signal.SIG_DFL)
-            log("warning", "Second signal received; exiting immediately.")
+            log("warning", "Second signal received; interrupting cleanup.")
             raise KeyboardInterrupt
         state["triggered"] = True
         log(
@@ -77,6 +77,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def main(cli_args: Sequence[str] | None = None) -> None:
     """Parse cli_args (default sys.argv[1:]) and run the chat downloader."""
     _install_cli_signal_handlers()
+    install_cli_log_handler()
 
     parser = _build_arg_parser()
     args = parser.parse_args(args=cli_args)
