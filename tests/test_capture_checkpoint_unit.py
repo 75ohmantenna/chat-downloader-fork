@@ -356,6 +356,116 @@ def test_negative_replay_offsets_can_resume(tmp_path, monkeypatch, params) -> No
     assert [item["message_id"] for item in rows] == ["1", "2", "3"]
 
 
+@pytest.mark.parametrize("error_type", [RuntimeError, OSError, ValueError])
+def test_failed_chat_close_does_not_advance_checkpoint(
+    tmp_path, params, error_type
+) -> None:
+    class FailedClose(Downloader):
+        def get_chat(self, **kwargs):
+            chat = super().get_chat(**kwargs)
+            original_close = chat.close
+
+            def close() -> None:
+                original_close()
+                raise error_type("close failed")
+
+            chat.close = close
+            return chat
+
+    result = execute_run(FailedClose, **params)
+    assert not result.success
+    assert result.error_message == "close failed"
+    assert not (tmp_path / "checkpoint.json").exists()
+
+
+def test_failed_chat_close_preserves_primary_error_without_checkpoint(
+    tmp_path, params
+) -> None:
+    class FailedClose(Downloader):
+        failure = RuntimeError("stream failed")
+
+        def get_chat(self, **kwargs):
+            chat = super().get_chat(**kwargs)
+            original_close = chat.close
+
+            def close() -> None:
+                original_close()
+                raise OSError("close failed")
+
+            chat.close = close
+            return chat
+
+    result = execute_run(FailedClose, **params)
+    assert not result.success
+    assert result.error_message == "stream failed"
+    assert not (tmp_path / "checkpoint.json").exists()
+
+
+def test_checkpoint_fingerprint_changes_with_program_version(
+    tmp_path, monkeypatch
+) -> None:
+    import chat_downloader.runtime.capture_checkpoint as module
+
+    request = {"output": str(tmp_path / "capture.jsonl")}
+    first = CaptureCheckpoint(str(tmp_path / "one.json"), request.copy())
+    monkeypatch.setattr(module, "__version__", "future-test-version", raising=False)
+    second = CaptureCheckpoint(str(tmp_path / "two.json"), request.copy())
+    assert first.fingerprint != second.fingerprint
+
+
+def test_checkpoint_fingerprint_changes_with_builtin_formats(
+    tmp_path, monkeypatch
+) -> None:
+    import chat_downloader.runtime.capture_checkpoint as module
+
+    package = tmp_path / "chat_downloader"
+    runtime = package / "runtime"
+    runtime.mkdir(parents=True)
+    formats = package / "formatting"
+    formats.mkdir()
+    builtin = formats / "custom_formats.json"
+    builtin.write_text('{"default": "first"}', encoding="utf-8")
+    monkeypatch.setattr(module, "__file__", str(runtime / "capture_checkpoint.py"))
+    request = {"output": str(tmp_path / "capture.jsonl")}
+    first = CaptureCheckpoint(str(tmp_path / "one.json"), request.copy())
+    builtin.write_text('{"default": "second"}', encoding="utf-8")
+    second = CaptureCheckpoint(str(tmp_path / "two.json"), request.copy())
+    assert first.fingerprint != second.fingerprint
+
+
+@pytest.mark.parametrize("identity_change", ["version", "builtin_formats"])
+def test_resume_rejects_changed_build_identity_before_append(
+    tmp_path, monkeypatch, saved_capture, identity_change
+) -> None:
+    import chat_downloader.runtime.capture_checkpoint as module
+
+    output = tmp_path / "chat.jsonl"
+    checkpoint = tmp_path / "checkpoint.json"
+    before_output, before_checkpoint = output.read_bytes(), checkpoint.read_bytes()
+    if identity_change == "version":
+        monkeypatch.setattr(module, "__version__", "future-test-version")
+    else:
+        package = tmp_path / "chat_downloader"
+        runtime = package / "runtime"
+        runtime.mkdir(parents=True)
+        formats = package / "formatting"
+        formats.mkdir()
+        builtin = formats / "custom_formats.json"
+        original = (
+            Path(module.__file__).resolve().parents[1]
+            / "formatting"
+            / "custom_formats.json"
+        )
+        builtin.write_bytes(original.read_bytes() + b"\n")
+        monkeypatch.setattr(module, "__file__", str(runtime / "capture_checkpoint.py"))
+
+    result = execute_run(Downloader, **saved_capture)
+    assert not result.success
+    assert "Checkpoint does not match" in result.error_message
+    assert output.read_bytes() == before_output
+    assert checkpoint.read_bytes() == before_checkpoint
+
+
 def test_checkpoint_record_snapshot_requires_writers(tmp_path) -> None:
     checkpoint = CaptureCheckpoint(
         str(tmp_path / "checkpoint.json"),

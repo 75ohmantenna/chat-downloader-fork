@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 from chat_downloader.errors import ChatDownloaderError
+from chat_downloader.metadata import __version__
 from chat_downloader.models import ChatRequest
 
 from .capture_manifest import has_record_loss, is_completed_replay
@@ -158,6 +159,10 @@ class CaptureCheckpoint:
         identity["output"] = [str(path) for path in self.outputs]
         identity["format_file"] = (
             _file_signature(Path(request.format_file)) if request.format_file else None
+        )
+        identity["program_version"] = __version__
+        identity["builtin_formats"] = _file_signature(
+            Path(__file__).resolve().parents[1] / "formatting" / "custom_formats.json"
         )
         self.fingerprint = hashlib.sha256(
             json.dumps(identity, default=str, sort_keys=True).encode()

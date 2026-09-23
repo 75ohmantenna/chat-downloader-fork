@@ -329,9 +329,13 @@ Formatted TXT may write fewer lines
 than JSONL when paid chat and ticker events share an ID; this does not prevent
 checkpoint saving. Keep the URL, filters, selected
 start/end, format, and filenames unchanged; message limits and timeouts may
-change. Request settings and file hashes are checked before append.
+change. Request settings, the package version, built-in format definitions,
+and file hashes are checked before append. Checkpoints created before these
+version and format checks were added cannot be resumed; start a new capture.
+If chat shutdown fails, the checkpoint does not advance.
 
-A process crash or power failure can leave output newer than its checkpoint.
+A process crash, power failure, or failed chat shutdown can leave output newer
+than its checkpoint.
 The next run rejects that mismatch without truncating files. Preserve the
 artifacts for inspection and start a fresh capture to recover. A `.lock` file
 prevents simultaneous checkpoint writers; after an unclean exit, remove that

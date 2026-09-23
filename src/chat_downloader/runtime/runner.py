@@ -82,17 +82,18 @@ def _finalize_run(
     downloader: _ClosableDownloader | None,
     *,
     primary_error: bool,
-) -> None:
+) -> Exception | None:
     """Close chat and downloader.
 
-    Suppress errors only when a primary error already occurred so the
-    original exception is not obscured.
+    Return a suppressed chat-close error so checkpointed runs can reject it.
     """
     close_error: Exception | None = None
+    chat_close_error: Exception | None = None
     if chat is not None and hasattr(chat, "close"):
         try:
             chat.close()
         except Exception as e:  # noqa: BLE001 — finalization must preserve cleanup
+            chat_close_error = e
             if not primary_error and not isinstance(e, (OSError, ValueError)):
                 close_error = e
             else:
@@ -114,6 +115,7 @@ def _finalize_run(
                 close_error = close_error or e
     if close_error is not None:
         raise close_error
+    return chat_close_error
 
 
 @dataclass(slots=True)
@@ -390,13 +392,26 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     finally:
         with checkpoint_resources:
             try:
-                _finalize_run(chat, downloader, primary_error=primary_error)
+                chat_close_error = _finalize_run(
+                    chat, downloader, primary_error=primary_error
+                )
+                if chat_close_error is not None and checkpoint_bound:
+                    checkpoint_bound = False
+                    verification_bound = False
+                    if not primary_error:
+                        primary_error = True
+                        result.success = False
+                        result.termination_reason = "error"
+                        result.error_message = _classify_run_error(chat_close_error)
+                        log("error", result.error_message)
             except Exception as error:  # noqa: BLE001 — record cleanup failures
                 primary_error = True
                 result.success = False
                 result.termination_reason = "error"
                 result.error_message = _classify_run_error(error)
                 log("error", result.error_message)
+                checkpoint_bound = False
+                verification_bound = False
             _verify_capture_outputs(
                 chat,
                 run_config,
