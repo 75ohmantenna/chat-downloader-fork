@@ -16,6 +16,7 @@ from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.formatting import format as format_module
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint, _atomic_json
+from chat_downloader.runtime.capture_replay_order import ordered_initial_preroll
 from chat_downloader.runtime.capture_verification import capture_paths, verify_capture
 from chat_downloader.runtime.chat_pipeline import configure_chat
 from chat_downloader.runtime.runner import execute_run
@@ -110,6 +111,53 @@ def test_resume_preserves_same_timestamp_messages_and_verifies_both_runs(
     final = execute_run(Downloader, **params)
     assert final.success
     assert final.message_count == 0
+
+
+def test_resume_orders_initial_zero_notice_after_negative_preroll(
+    tmp_path, params
+) -> None:
+    notice = message(0, 0)
+    notice["message_type"] = "viewer_engagement_message"
+
+    class PrerollReplay(Downloader):
+        records: ClassVar[list] = [
+            notice,
+            message(1, -13),
+            message(2, -12),
+            message(3, 0),
+            message(4, 1),
+        ]
+
+    first = execute_run(PrerollReplay, **params, max_messages=2)
+    assert first.success
+    assert first.parity_status == "passed"
+    assert load_json(tmp_path / "checkpoint.json")["offset"] == -12
+
+    second = execute_run(PrerollReplay, **params, require_complete=True)
+    assert second.success
+    assert second.parity_status == "passed"
+    assert load_json(tmp_path / "checkpoint.json")["completed"]
+    rows = [
+        json.loads(line) for line in (tmp_path / "chat.jsonl").read_text().splitlines()
+    ]
+    assert [item["message_id"] for item in rows] == ["1", "2", "0", "3", "4"]
+    assert [item["time_in_seconds"] for item in rows] == [-13, -12, 0, 0, 1]
+
+
+def test_initial_zero_notice_buffer_respects_checkpoint_boundary() -> None:
+    notices = [message(1, 0), message(2, 0)]
+    with pytest.raises(ValueError, match="too many message IDs"):
+        list(ordered_initial_preroll(notices, boundary_limit=1))
+
+
+def test_preroll_order_does_not_restart_reusable_source() -> None:
+    records = [message(1, 0), message(2, -1), message(3, 1), message(4, 2)]
+    assert list(ordered_initial_preroll(records, boundary_limit=10)) == [
+        records[1],
+        records[0],
+        records[2],
+        records[3],
+    ]
 
 
 def test_resume_saves_checkpoint_when_formatted_writer_deduplicates_paid_item(

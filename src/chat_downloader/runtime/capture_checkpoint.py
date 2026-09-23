@@ -20,6 +20,7 @@ from chat_downloader.metadata import __version__
 from chat_downloader.models import ChatRequest
 
 from .capture_manifest import has_record_loss, is_completed_replay
+from .capture_replay_order import ordered_initial_preroll
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
@@ -264,7 +265,7 @@ class CaptureCheckpoint:
             emitted = 0
             last_offset = self._prior_offset
             try:
-                for item in source:
+                for item in ordered_initial_preroll(source, _BOUNDARY_LIMIT):
                     # Provider-generated end markers carry no replay position
                     # and do not represent an archival chat record.
                     if (

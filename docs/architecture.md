@@ -142,6 +142,7 @@ module names.
 |--------|---------|
 | `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, and replay overlap suppression |
 | `capture_manifest.py` | Exclusive JSON run manifests, artifact hashes, and replay completeness policy |
+| `capture_replay_order.py` | Pure ordering of opening zero-offset replay notices after negative preroll messages for checkpoints |
 | `capture_verification.py` | Optional post-shutdown verification using the resolved production formatter |
 | `cli_bridge.py` | Categorize `run()` kwargs into init / chat / run param groups |
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |

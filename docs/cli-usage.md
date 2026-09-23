@@ -322,6 +322,8 @@ markers without replay offsets are omitted from checkpointed captures.
 Checkpoints advance after output writers close and synchronize on normal,
 message-limited, or interrupted shutdown. A one-second overlap preserves
 messages at the saved timestamp while suppressing IDs already written. The
+checkpoint writer places opening zero-offset replay notices after any negative
+preroll messages so their saved offsets remain chronological. The
 runner discards a record interrupted during writing or checkpoint observation
 before saving, including a partial write to one of two outputs. The next run
 retrieves that record again. The record limit counts newly written messages.
