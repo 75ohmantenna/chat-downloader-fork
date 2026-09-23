@@ -1,7 +1,8 @@
 # CLAUDE.md
 
 Follow [`AGENTS.md`](AGENTS.md) for project structure, commands, testing,
-style, and commit conventions. It is the single source of project guidance.
+style, and commit conventions. The checked-in code, configuration, and tests
+define implemented behavior; update prose when it differs from those sources.
 
 ## Python tooling
 

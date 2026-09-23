@@ -165,8 +165,9 @@ The existing parity auditor remains responsible for physical newline checks.
 uv run python scripts/inspect_kick_capture.py capture.jsonl --debug-log debug.log
 ```
 
-Use one completed live run, preferably captured with `--message_groups all`,
-and its debug log. The log is optional. The content-free JSON report checks
+For live inspection, use one completed run, preferably captured with
+`--message_groups all`, and its debug log. The log is optional. The content-free
+JSON report checks
 record IDs, text author IDs and timestamps, unknown types, invalid JSON,
 duplicates, and named/unnamed emote spans in messages and replies. Timestamp
 backsteps and absent provider timestamps on system events are informational.
@@ -182,10 +183,16 @@ and recovered backfill alone are informational. Filters, deduplication, and
 deadline prefetch can make parsed counts differ from output; a count gap is
 evidence to investigate, not proof of message loss.
 
+For a Kick VOD or clip replay, the same command detects reverse-history
+diagnostics from the run summary and reconciles replay pages, records, skips,
+filters, duplicates, emissions, and output counts. For appended replay captures,
+repeat `--debug-log` once per run in append order. Each log must contain exactly
+one bounded (64 KiB) standard run summary. Multiple logs are rejected for live
+captures. Missing replay runs or incomplete final traversal require review;
+counts cannot authenticate that logs belong to a capture.
+
 Exit `0` means no review findings, `1` means review required, and `2` means an
-input, summary, or temporary-storage error. Exactly one bounded (64 KiB)
-standard run summary is required when a log is supplied. Logs from multiple
-runs are rejected; counts cannot authenticate that a log belongs to a capture.
+input, summary, or temporary-storage error.
 Reports never echo chat content, identifiers, unknown type names, or rejected
 arguments. Exact duplicate tracking uses temporary SQLite storage. Memory
 scales with the largest JSONL record, not total capture length. Missing or
@@ -201,11 +208,11 @@ uv run pytest -q -p no:rerunfailures -m "not network"
 Static checks:
 
 ```bash
-uv run ruff check src/chat_downloader tests
-uv run ruff format --check src/chat_downloader tests
-git ls-files -z | xargs -0 uv run codespell
-uv run mypy .
-uv run lint-imports
+uv run --locked ruff check src/chat_downloader tests scripts
+uv run --locked ruff format --check src/chat_downloader tests scripts
+git ls-files -z | xargs -0 uv run --locked codespell
+uv run --locked mypy .
+uv run --locked lint-imports
 ```
 
 Documentation and release contracts:
@@ -282,8 +289,10 @@ for non-obvious choices live in
 Update one authoritative document instead of copying the same explanation into
 several places.
 
-Source code, dataclass metadata, constants, and tests are authoritative when
-prose and implementation disagree. Documentation contract tests keep module
+Checked-in source code and configuration define implemented behavior; tests
+verify it and protect intended contracts. When prose and implementation
+disagree, inspect the code and configuration, then correct the prose or fix a
+demonstrated code bug. Documentation contract tests keep module
 inventories, typed field/default tables, CLI flags, output formats, public
 exports, and provider message-group tables aligned with those sources.
 
@@ -445,11 +454,13 @@ version and the topmost numbered changelog release.
 
 ## Hosted CI
 
-GitHub Actions is the only supported hosted CI platform. The workflow validates
-Python 3.12, 3.13, and 3.14 on pushes to every branch, pull requests targeting
-`master`, and manual dispatch. It uses locked dependencies, read-only contents
-permission, concurrency cancellation, and a job timeout. The checkout retains
-full Git history so the fork-history issue-reference guard can inspect every
-commit after its recorded baseline.
+GitHub Actions is the only supported hosted CI platform. The `test` job runs
+`make ci` on Python 3.12, 3.13, and 3.14 for pushes to every branch, pull
+requests targeting `master`, and manual dispatch. The separate Python 3.14
+`network-replay` job runs stable replay contracts on the weekly schedule and
+manual dispatch. Both jobs use locked dependencies, read-only contents
+permission, concurrency cancellation, and a 20-minute timeout. The `test`
+checkout retains full Git history so the fork-history issue-reference guard can
+inspect every commit after its recorded baseline.
 
 Do not add Gitea, Forgejo, Codeberg, or Woodpecker CI configuration.

@@ -6,7 +6,7 @@ This is a personal fork of
 targeting Python 3.12+; CI validates Python 3.12, 3.13, and 3.14.
 
 The supported file formats are JSON Lines (`.jsonl`) and formatted text
-(`.txt`). Network tests are opt-in; the default suite is fully offline.
+(`.txt`). Network tests are opt-in locally; the default suite is fully offline.
 
 ## Personal Fork — No Support
 
@@ -28,7 +28,8 @@ on pushes and pull requests. Its locked checks include codespell, Ruff lint and
 format checks, mypy, import-linter, the offline test suite with 100% line
 coverage, a package build, and an isolated installation smoke test. These
 checks do not constitute a security audit and do not replace your own review.
-**Use at your own risk.**
+**Use at your own risk.** A separate weekly and manually triggered CI job runs
+the stable replay network contracts on Python 3.14.
 
 ## Supported Platforms
 

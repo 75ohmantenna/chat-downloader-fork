@@ -4,9 +4,9 @@
 
 A module whose body is nothing but imports plus ``__all__`` adds an import
 boundary without any cohesive behavior — the kind of shim the decomposition
-policy (see AGENTS.md) calls a split on the wrong axis. ``__init__.py`` package
-facades are exempt; genuine single-purpose facades can be allowlisted with a
-rationale.
+policy (see "Architecture invariants" in AGENTS.md) calls a split on the wrong
+axis. ``__init__.py`` package facades are exempt; genuine single-purpose facades
+can be allowlisted with a rationale.
 """
 
 from __future__ import annotations
@@ -68,5 +68,5 @@ def test_no_reexport_only_barrels() -> None:
 
     assert not offenders, (
         "re-export-only barrel modules (fold into the caller or make them "
-        "cohesive; see AGENTS.md decomposition policy):\n" + "\n".join(offenders)
+        "cohesive; see AGENTS.md architecture invariants):\n" + "\n".join(offenders)
     )

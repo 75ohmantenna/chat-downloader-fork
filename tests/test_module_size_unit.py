@@ -5,7 +5,7 @@
 The line budget is a *smell signal, not a splitting trigger*: split by cohesion,
 not to duck under the ceiling. Cohesive units that legitimately exceed it are
 allowlisted with a rationale rather than fragmented by phase. See
-docs/maintenance-decisions.md and the "Decomposition policy" in AGENTS.md.
+docs/maintenance-decisions.md and "Architecture invariants" in AGENTS.md.
 """
 
 from __future__ import annotations

@@ -523,7 +523,7 @@ class _Inspection:
 def inspect_capture(
     path: Path, debug_log: Path | list[Path] | None = None
 ) -> dict[str, object]:
-    """Inspect one run without retaining message bodies or printing identifiers."""
+    """Inspect live or appended replay captures without retaining content."""
     with (
         tempfile.TemporaryDirectory(prefix="kick-inspection-") as directory,
         closing(sqlite3.connect(Path(directory) / "ids.sqlite")) as database,

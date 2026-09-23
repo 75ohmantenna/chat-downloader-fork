@@ -1,5 +1,10 @@
 # Repository Guide
 
+The checked-in source code, configuration, and tests define the implemented
+behavior. Keep this guide and the other documents aligned with them; when prose
+and implementation differ, verify the code and correct the prose. This guide
+sets repository workflow and review rules, not runtime behavior.
+
 ## Project facts
 
 `chat-downloader-fork` is a Python 3.12+ CLI and typed API for YouTube, Twitch,
@@ -24,10 +29,10 @@ Important locations:
 - `docs/maintenance-backlog.md` and `docs/maintenance-decisions.md`: open work
   and durable design decisions.
 
-Supported output extensions are `.jsonl` and `.txt`. `uv.lock`, `dist/`,
-coverage files, and package metadata directories are generated; do not hand-edit
-or commit build output. Update `uv.lock` with `uv lock` only when dependencies
-intentionally change.
+Supported output extensions are `.jsonl` and `.txt`. `uv.lock` is generated and
+tracked; regenerate it with `uv lock` when dependency or version metadata
+changes require it. `dist/`, coverage files, and package metadata directories
+are generated build output; do not hand-edit or commit them.
 
 ## Architecture invariants
 
@@ -66,7 +71,7 @@ make ci
 ```
 
 `make setup` installs pre-commit/pre-push hooks and runs `uv sync`. Network tests
-are opt-in. `make ci` is canonical validation: lock check, lint, spelling,
+are opt-in locally. `make ci` is canonical validation: lock check, lint, spelling,
 format check, type checking, 100% offline line coverage, build, and smoke test.
 
 Minimum verification:
@@ -106,10 +111,11 @@ Minimum verification:
 - Do not file fork-originating issues or pull requests upstream. Do not cite or
   link upstream issue/PR discussions in project docs, source, tests, fixtures,
   or release notes; keep regression context self-contained.
-- GitHub Actions is the only hosted CI. Preserve pushes for all branches, pull
-  requests targeting `master`, manual dispatch, Python 3.12–3.14, locked sync,
-  `make ci`, read-only contents permission, concurrency cancellation, and the
-  job timeout. Do not add other hosted CI configurations.
+- GitHub Actions is the only hosted CI. Preserve `make ci` on pushes for all
+  branches, pull requests targeting `master`, and manual dispatch across Python
+  3.12–3.14. Preserve the separate weekly and manual Python 3.14
+  `network_replay` job, locked sync, read-only contents permission, concurrency
+  cancellation, and job timeouts. Do not add other hosted CI configurations.
 - Commit subjects use `topic: imperative summary`, where topic is `build`,
   `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, or
   `test`. Keep subjects at 72 characters or fewer with no trailing period.
