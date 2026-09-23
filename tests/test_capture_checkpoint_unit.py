@@ -448,6 +448,41 @@ def test_failed_chat_close_preserves_primary_error_without_checkpoint(
     assert not (tmp_path / "checkpoint.json").exists()
 
 
+@pytest.mark.parametrize("resumed", [False, True])
+@pytest.mark.parametrize("stream_error", [False, True])
+def test_writer_close_failure_preserves_first_error_and_checkpoint(
+    tmp_path, monkeypatch, params, resumed, stream_error
+) -> None:
+    from chat_downloader.output.continuous_write import ContinuousWriter
+
+    checkpoint = tmp_path / "checkpoint.json"
+    if resumed:
+        assert execute_run(Downloader, **params, max_messages=1).success
+    before = checkpoint.read_bytes() if resumed else None
+
+    original_close = ContinuousWriter.close
+
+    def fail_after_close(writer) -> None:
+        original_close(writer)
+        if writer.file_name.endswith(".txt"):
+            raise OSError("writer close failed")
+
+    monkeypatch.setattr(ContinuousWriter, "close", fail_after_close)
+
+    class Replay(Downloader):
+        failure = RuntimeError("stream failed") if stream_error else None
+
+    result = execute_run(Replay, **params)
+    assert not result.success
+    expected = "stream failed" if stream_error else "output writer(s) reported errors"
+    assert expected in result.error_message
+    assert result.parity_status == "not_run"
+    if resumed:
+        assert checkpoint.read_bytes() == before
+    else:
+        assert not checkpoint.exists()
+
+
 def test_checkpoint_fingerprint_changes_with_program_version(
     tmp_path, monkeypatch
 ) -> None:

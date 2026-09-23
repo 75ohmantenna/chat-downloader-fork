@@ -100,11 +100,15 @@ def _finalize_run(
             else:
                 log("warning", f"Error finalizing chat output: {e}")
 
-    if chat is not None and not primary_error:
-        write_error_count = getattr(chat, "write_error_count", 0)
-        if write_error_count > 0:
-            msg = f"{write_error_count} output writer(s) reported errors during close"
-            close_error = close_error or ChatDownloaderError(msg)
+    if (
+        chat is not None
+        and (write_error_count := getattr(chat, "write_error_count", 0)) > 0
+    ):
+        msg = f"{write_error_count} output writer(s) reported errors during close"
+        writer_error = ChatDownloaderError(msg)
+        suppressed_close_error = suppressed_close_error or writer_error
+        if not primary_error:
+            close_error = close_error or writer_error
 
     if downloader is not None:
         try:

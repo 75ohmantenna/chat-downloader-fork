@@ -10,8 +10,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
-- Leave replay checkpoints unchanged when chat or downloader shutdown fails,
-  even when a capture error occurred first.
+- Leave replay checkpoints unchanged when chat, output writer, or downloader
+  shutdown fails, preserving any earlier capture error.
 - Bind replay checkpoints to the package version and built-in format definitions
   to reject incompatible appends after an upgrade or format change. Hash the
   definitions through linked package data and reject missing definitions.
