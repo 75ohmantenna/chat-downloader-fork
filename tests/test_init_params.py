@@ -54,6 +54,14 @@ def test_environment_cookie_proxy_check(environment_proxy, cookie_file, proxy):
         ChatDownloader(proxy=proxy, cookies=cookie_file).close()
 
 
+def test_kick_only_environment_proxy_is_checked_for_cookie_auth(
+    environment_proxy, cookie_file, monkeypatch
+):
+    monkeypatch.setenv("NO_PROXY", "www.youtube.com,www.twitch.tv")
+    with pytest.raises(InvalidParameter, match="cookie"):
+        ChatDownloader(cookies=cookie_file)
+
+
 @pytest.mark.parametrize(
     ("proxy", "cookies"),
     [

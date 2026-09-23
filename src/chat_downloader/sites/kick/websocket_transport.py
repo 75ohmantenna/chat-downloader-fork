@@ -98,22 +98,18 @@ def _default_connector(
         proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
     """
     socket_timeout = 10.0 if timeout is None else timeout
-    proxy_socket = None
-    if proxy_url is not None:
-        parsed = urlparse(url)
-        if parsed.scheme != "wss" or parsed.hostname is None:
-            msg = f"Unsupported proxied WebSocket URL: {url!r}"
-            raise OSError(msg)
-        proxy_socket = open_proxied_tls_socket(
-            parsed.hostname,
-            parsed.port or 443,
-            timeout=socket_timeout,
-            proxy_url=proxy_url,
-        )
+    parsed = urlparse(url)
+    if parsed.scheme != "wss" or parsed.hostname is None:
+        msg = f"Unsupported WebSocket URL: {url!r}"
+        raise OSError(msg)
+    proxy_socket = open_proxied_tls_socket(
+        parsed.hostname,
+        parsed.port or 443,
+        timeout=socket_timeout,
+        proxy_url=proxy_url,
+    )
     try:
-        connection_options: _ConnectionOptions = (
-            {"socket": proxy_socket} if proxy_socket else {}
-        )
+        connection_options: _ConnectionOptions = {"socket": proxy_socket}
         return cast(
             "_WebSocketConnection",
             create_connection(
@@ -123,9 +119,8 @@ def _default_connector(
             ),
         )
     except BaseException:
-        if proxy_socket is not None:
-            with suppress(OSError):
-                proxy_socket.close()
+        with suppress(OSError):
+            proxy_socket.close()
         raise
 
 

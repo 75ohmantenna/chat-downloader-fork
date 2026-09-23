@@ -81,6 +81,8 @@ The Kick flow depends on the target type.
    reversed into chronological order before the current pin is emitted.
 5. Open the Pusher WebSocket with the compiled public application key,
    subscribe to the public chatroom channel, and stream live frames.
+   `proxy=""` opens a direct TLS socket even when environment proxy variables
+   are set; a configured proxy uses the same explicit socket path.
 6. Dispatch each frame to a typed parser, deduplicate against preloaded and
    recent message IDs, filter by message groups/types, and yield.
 7. On disconnect, reconnect and resubscribe. If Pusher rejects the application

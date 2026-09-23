@@ -15,6 +15,7 @@ from chat_downloader.errors import InvalidParameter
 _COOKIE_AUTH_TARGETS = (
     "https://www.youtube.com/",
     "https://www.twitch.tv/",
+    "https://kick.com/",
 )
 
 

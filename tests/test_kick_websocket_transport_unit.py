@@ -59,20 +59,29 @@ def test_connector_tunnel_and_handshake_cleanup(monkeypatch, proxy, failure):
             wt._default_connector("wss://example.test/socket", 4.0, proxy_url=proxy)
             == "connection"
         )
-        if proxy:
-            tunnel.assert_called_once_with(
-                "example.test", 443, timeout=4.0, proxy_url=proxy
-            )
-            assert create.call_args.kwargs["socket"] is socket
-        else:
-            create.assert_called_once_with("wss://example.test/socket", timeout=4.0)
+        tunnel.assert_called_once_with(
+            "example.test", 443, timeout=4.0, proxy_url=proxy
+        )
+        assert create.call_args.kwargs["socket"] is socket
 
 
 def test_connector_rejects_non_secure_proxied_url():
-    with pytest.raises(OSError, match="Unsupported proxied WebSocket"):
+    with pytest.raises(OSError, match="Unsupported WebSocket"):
         wt._default_connector(
             "ws://example.test/socket", 4.0, proxy_url="http://proxy.test:8080"
         )
+
+
+def test_direct_connector_supplies_socket_despite_environment_proxy(monkeypatch):
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
+    direct_socket = MagicMock()
+    tunnel = MagicMock(return_value=direct_socket)
+    create = MagicMock(return_value="connected")
+    monkeypatch.setattr(wt, "open_proxied_tls_socket", tunnel)
+    monkeypatch.setattr(wt, "create_connection", create)
+    assert wt._default_connector("wss://example.test/socket", 2.0) == "connected"
+    tunnel.assert_called_once_with("example.test", 443, timeout=2.0, proxy_url=None)
+    assert create.call_args.kwargs["socket"] is direct_socket
 
 
 @pytest.mark.parametrize(
