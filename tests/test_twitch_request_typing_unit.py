@@ -31,7 +31,7 @@ def test_twitch_vod_entry_accepts_chat_request() -> None:
     )
     downloader._update_badge_info = Mock()
 
-    def fake_generator(vod_id, params, duration, offset=None):
+    def fake_generator(vod_id, params, duration, offset=None, *, diagnostics=None):
         captured["vod_id"] = vod_id
         captured["params"] = params
         captured["duration"] = duration
@@ -67,7 +67,7 @@ def test_twitch_clip_entry_accepts_chat_request() -> None:
     )
     downloader._update_badge_info = Mock()
 
-    def fake_generator(vod_id, params, duration, offset=None):
+    def fake_generator(vod_id, params, duration, offset=None, *, diagnostics=None):
         captured["vod_id"] = vod_id
         captured["params"] = params
         captured["duration"] = duration

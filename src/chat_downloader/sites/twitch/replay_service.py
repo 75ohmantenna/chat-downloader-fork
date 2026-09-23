@@ -57,7 +57,7 @@ class _FetchMessages(Protocol):
     ) -> tuple[JSONDict | None, JSONDict | None]: ...
 
 
-def _process_vod_edge(
+def _process_vod_edge(  # noqa: C901 — edge validation and filtering are one cohesive parse
     edge: JSONDict,
     offset: float,
     creator_channel_id: str | None,
@@ -65,6 +65,7 @@ def _process_vod_edge(
     time_filter: TimeRangeFilter,
     msg_filter: MessageFilter,
     logger_obj: Logger,
+    diagnostics: dict[str, object] | None = None,
 ) -> tuple[JSONDict | None, str]:
     """Validate a GraphQL VOD edge/node typename and apply filters.
 
@@ -76,6 +77,7 @@ def _process_vod_edge(
         time_filter: ``check(data)`` returns ``yield``, ``skip``, or ``stop``.
         msg_filter: ``should_add(data)`` decides inclusion.
         logger_obj: Debug logger.
+        diagnostics: Mutable record-loss counters for skipped provider records.
 
     Returns:
         ``(data, disposition)``: ``yield`` emits data, ``skip`` advances,
@@ -100,15 +102,27 @@ def _process_vod_edge(
 
     edge_typename = edge.get("__typename")
     if edge_typename not in ("VideoCommentEdge", None):
+        if diagnostics is not None:
+            diagnostics["parse_error"] = (
+                cast("int", diagnostics.get("parse_error", 0)) + 1
+            )
         logger_obj.debug("Skipping unexpected edge type: %s", edge_typename)
         return None, "skip"
 
     node = get_dict(edge, "node")
     if not node:
+        if diagnostics is not None:
+            diagnostics["parse_error"] = (
+                cast("int", diagnostics.get("parse_error", 0)) + 1
+            )
         return None, "skip"
 
     node_typename = node.get("__typename")
     if node_typename not in ("Comment", "VideoComment", None):
+        if diagnostics is not None:
+            diagnostics["parse_error"] = (
+                cast("int", diagnostics.get("parse_error", 0)) + 1
+            )
         logger_obj.debug("Skipping unexpected node type: %s", node_typename)
         return None, "skip"
 
@@ -185,7 +199,7 @@ def _fetch_vod_page(
                 cursor or None,
                 content_offset,
             )
-        except (JSONDecodeError, RequestException) as error:
+        except (JSONDecodeError, RequestException, ParsingError) as error:
             downloader.retry(attempt_number, error=error, request=request)
     raise RetriesExceeded(request.max_attempts)  # pragma: no cover
 
@@ -198,10 +212,12 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
     offset: float | None = None,
     fetch_messages: _FetchMessages | None = None,
     logger_obj: Logger | None = None,
+    diagnostics: dict[str, object] | None = None,
 ) -> Generator[JSONDict, None, None]:
     """Yield replay chat messages for a VOD or clip."""
     fetch_messages = fetch_messages or get_chat_messages_by_vod_id
     effective_logger: Logger = logger_obj or logger
+    state = diagnostics if diagnostics is not None else {}
 
     plan = _init_vod_loop(request, max_duration, offset)
 
@@ -229,10 +245,12 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 raise UserNotFound(
                     msg,
                 )
-            first_iteration = False
 
         if not comments:
+            if not first_iteration:
+                state["termination_reason"] = "pagination_stalled"
             break
+        first_iteration = False
 
         edges = get_list(comments, "edges")
         has_next_page = bool(multi_get(comments, "pageInfo", "hasNextPage"))
@@ -246,6 +264,8 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 vod_id=vod_id,
             )
             if page_action == "break":
+                if has_next_page:
+                    state["termination_reason"] = "pagination_stalled"
                 break
             continue
 
@@ -254,6 +274,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
         previous_cursor = cursor
         for edge_item in edges:
             if not isinstance(edge_item, dict):
+                state["parse_error"] = cast("int", state.get("parse_error", 0)) + 1
                 continue
             new_cursor = get_str(edge_item, "cursor")
             if new_cursor:
@@ -266,6 +287,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 plan.time_filter,
                 plan.msg_filter,
                 effective_logger,
+                state,
             )
             if edge_action == "stop":
                 return
@@ -285,6 +307,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
         # Cursor must advance on a page that had edges; if Twitch returns
         # the same cursor we'd loop on identical data.
         if cursor == previous_cursor:
+            state["termination_reason"] = "pagination_stalled"
             log(
                 "warning",
                 f"VOD {vod_id}: cursor did not advance after a non-empty "
@@ -325,13 +348,17 @@ def get_chat_by_vod_id(
     if channel_login:
         downloader._update_badge_info(channel_login, get_str(owner, "id") or None)
 
+    diagnostics: dict[str, object] = {}
     return Chat(
-        downloader._get_chat_messages_by_vod_id(vod_id, request, duration),
+        downloader._get_chat_messages_by_vod_id(
+            vod_id, request, duration, diagnostics=diagnostics
+        ),
         title=title,
         duration=duration,
         status="past",
         video_type="video",
         id=vod_id,
+        diagnostics=diagnostics,
     )
 
 
@@ -393,11 +420,15 @@ def get_chat_by_clip_id(
         get_str(broadcaster, "login"), get_str(broadcaster, "id") or None
     )
 
+    diagnostics: dict[str, object] = {}
     return Chat(
-        downloader._get_chat_messages_by_vod_id(vod_id, request, duration, offset),
+        downloader._get_chat_messages_by_vod_id(
+            vod_id, request, duration, offset, diagnostics=diagnostics
+        ),
         title=f"{get_str(clip, 'title')} ({clip_id})",
         duration=duration,
         status="past",
         video_type="clip",
         id=clip_id,
+        diagnostics=diagnostics,
     )

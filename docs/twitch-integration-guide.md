@@ -55,6 +55,12 @@ The Twitch flow depends on the target type.
 6. Apply time-range and message-type filtering until replay data is exhausted.
    Clips starting at VOD offset zero still stop at the clip duration.
 
+Required GraphQL field service errors retry during replay pagination. Missing
+comments after an earlier page also retry. If empty pages or an unchanged cursor
+stop pagination, replay diagnostics mark the traversal incomplete. Unexpected
+edge or node shapes count as known record loss for `--require_complete` and
+run manifests.
+
 ## Module Guide
 
 ### Site entry and orchestration

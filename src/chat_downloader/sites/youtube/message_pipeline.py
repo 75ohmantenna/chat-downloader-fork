@@ -233,6 +233,7 @@ def _process_actions(
     *,
     is_replay: bool,
     paid_events: PaidEventCache | None = None,
+    diagnostics: dict[str, object] | None = None,
 ) -> Generator[JSONDict, None, bool]:
     """Filter raw ``liveChatContinuation`` actions and yield accepted messages.
 
@@ -248,6 +249,7 @@ def _process_actions(
         live_start_time_ms: Epoch-ms baseline for live offsets.
         is_replay: Suppress live-timing enrichment for replay streams.
         paid_events: Per-run cache enriching sparse paid tickers.
+        diagnostics: Mutable replay record-loss counters.
 
     Returns:
         True on a "stop" disposition (terminate the outer loop).
@@ -266,6 +268,18 @@ def _process_actions(
         processed_action_count += 1
         if pipeline_result.non_emission_reason is not None:
             non_emission_counts[pipeline_result.non_emission_reason] += 1
+            if (
+                is_replay
+                and diagnostics is not None
+                and pipeline_result.non_emission_reason
+                in {
+                    NonEmissionReason.UNPARSED_ACTION,
+                    NonEmissionReason.INVALID_MESSAGE,
+                }
+            ):
+                diagnostics["parse_error"] = (
+                    cast("int", diagnostics.get("parse_error", 0)) + 1
+                )
         if pipeline_result.disposition == "skip":
             continue
         if pipeline_result.disposition == "stop":

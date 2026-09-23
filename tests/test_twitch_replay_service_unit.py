@@ -9,8 +9,11 @@ from unittest.mock import Mock, patch
 import pytest
 from requests.exceptions import RequestException
 
-from chat_downloader.errors import NoChatReplay, VideoUnavailable
+from chat_downloader.errors import NoChatReplay, ParsingError, VideoUnavailable
 from chat_downloader.models import ChatRequest
+from chat_downloader.runtime.capture_manifest import replay_complete
+from chat_downloader.runtime.runner import RunResult
+from chat_downloader.sites.models import Chat
 from chat_downloader.sites.twitch import _replay_vod_loop, replay_service
 from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
 from chat_downloader.sites.twitch.replay_transport import get_chat_messages_by_vod_id
@@ -79,7 +82,15 @@ def _message(message_id, **extra):
     return {"message_type": "text_message", "message_id": message_id, **extra}
 
 
-def _run(downloader, fetch, request=None, *, video_id="vod123", duration=120):
+def _run(
+    downloader,
+    fetch,
+    request=None,
+    *,
+    video_id="vod123",
+    duration=120,
+    diagnostics=None,
+):
     return list(
         replay_service.iter_vod_chat_messages(
             cast("Any", downloader),
@@ -87,6 +98,7 @@ def _run(downloader, fetch, request=None, *, video_id="vod123", duration=120):
             request or _request(),
             max_duration=duration,
             fetch_messages=cast("replay_service._FetchMessages", fetch),
+            diagnostics=diagnostics,
         )
     )
 
@@ -246,6 +258,7 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
     time_filter.check.side_effect = ["skip", None, None, "stop"]
     message_filter.should_add.side_effect = [False, True]
     parsed = [_message("skip", extra="x"), *map(_message, ["filtered", "kept", "stop"])]
+    diagnostics: dict[str, object] = {}
     with (
         patch.object(_replay_vod_loop, "TimeRangeFilter", return_value=time_filter),
         patch.object(
@@ -261,8 +274,9 @@ def test_replay_service_iter_vod_chat_messages_handles_typenames_filters_and_sto
         patch.object(replay_service.logger, "isEnabledFor", return_value=True),
         patch.object(replay_service, "capture_debug_sample") as capture,
     ):
-        result = _run(downloader, fetch, _request(end_time=30))
+        result = _run(downloader, fetch, _request(end_time=30), diagnostics=diagnostics)
     assert result == [_message("kept")]
+    assert diagnostics["parse_error"] == 3
     assert (debug_log.call_count, capture.call_count) == (3, 3)
     capture.assert_any_call(
         "twitch-unknown-gql-shape",
@@ -322,3 +336,61 @@ def test_iter_vod_stops_when_pagination_cannot_advance(
     fetch = Mock(side_effect=[_response(edges, True)] * page_limit)
     assert _run(downloader, fetch) == []
     assert fetch.call_count == expected_calls
+
+
+@pytest.mark.parametrize("edges", [[], [_edge("m1", "")]])
+def test_stalled_twitch_replay_is_not_certified_complete(downloader, edges):
+    diagnostics: dict[str, object] = {}
+    with patch.object(replay_service, "_parse_item", return_value=_message("m1")):
+        _run(
+            downloader,
+            Mock(return_value=_response(edges, True)),
+            diagnostics=diagnostics,
+        )
+    chat = Chat(status="past", diagnostics=diagnostics)
+    classifier = SimpleNamespace(
+        is_completed_replay_status=lambda status: status == "past"
+    )
+    chat.site = cast("Any", classifier)
+    assert diagnostics["termination_reason"] == "pagination_stalled"
+    assert not replay_complete(
+        chat,
+        RunResult(
+            success=True, termination_reason=str(diagnostics["termination_reason"])
+        ),
+    )
+
+
+def test_missing_comments_mid_pagination_is_retryable(downloader):
+    downloader._download_gql.side_effect = [
+        [{"data": {"video": {"comments": {"edges": [_edge("m1")]}}}}],
+        [{"data": {"video": {"comments": None}}}],
+    ]
+    get_chat_messages_by_vod_id(None, downloader._download_gql, "123", None, 0)
+    with pytest.raises(ParsingError, match="comments disappeared"):
+        get_chat_messages_by_vod_id(
+            None, downloader._download_gql, "123", "cursor-1", 0
+        )
+
+
+def test_missing_comments_after_first_page_marks_replay_incomplete(downloader):
+    diagnostics: dict[str, object] = {}
+    fetch = Mock(side_effect=[_response([_edge("m1")], True), (None, None)])
+    with patch.object(replay_service, "_parse_item", return_value=_message("m1")):
+        assert _run(downloader, fetch, diagnostics=diagnostics) == [_message("m1")]
+    assert diagnostics["termination_reason"] == "pagination_stalled"
+
+
+@pytest.mark.parametrize("fallback", [False, True])
+def test_missing_video_mid_pagination_raises(downloader, fallback):
+    if fallback:
+        downloader._download_gql.side_effect = [
+            _PersistedQueryUnavailable("rotated"),
+            [{"data": {"video": {"comments": None}}}],
+        ]
+    else:
+        downloader._download_gql.return_value = [{"data": {"video": None}}]
+    with pytest.raises(ParsingError, match="disappeared"):
+        get_chat_messages_by_vod_id(
+            None, downloader._download_gql, "123", "cursor-1", 0
+        )

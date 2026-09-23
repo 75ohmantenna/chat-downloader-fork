@@ -195,9 +195,10 @@ def test_handle_gql_errors_unfamiliar_service_error_still_warns(
         lambda level, message: logged.append((level, message)),
     )
 
-    _handle_gql_errors(
-        [{"message": "service error", "path": ["video", "comments"]}],
-    )
+    with pytest.raises(ParsingError, match="service error"):
+        _handle_gql_errors(
+            [{"message": "service error", "path": ["video", "comments"]}],
+        )
 
     assert logged == [
         (
@@ -218,12 +219,13 @@ def test_handle_gql_errors_checks_every_service_error(monkeypatch) -> None:
         lambda level, message: logged.append((level, message)),
     )
 
-    _handle_gql_errors(
-        [
-            {"message": "service error", "path": ["user", "primaryTeam"]},
-            {"message": "service error", "path": ["video", "comments"]},
-        ],
-    )
+    with pytest.raises(ParsingError, match="service error"):
+        _handle_gql_errors(
+            [
+                {"message": "service error", "path": ["user", "primaryTeam"]},
+                {"message": "service error", "path": ["video", "comments"]},
+            ],
+        )
 
     assert [level for level, _message in logged] == ["debug", "warning"]
 

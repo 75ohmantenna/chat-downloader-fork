@@ -206,6 +206,11 @@ the renderer's display timing instead of aborting the replay or replacing
 valid nested timing. Clip offsets are applied once after nested renderer timing
 is merged.
 
+Resume checkpoints retain signed replay offsets. A negative resume boundary
+starts polling at the zero preroll floor while retaining the signed presentation
+filter. Unparsed actions and invalid replay messages count as known record loss
+for completion reports; known control actions and requested filters do not.
+
 `NoChatReplay` indicates that YouTube does not expose replay chat for the
 target.
 

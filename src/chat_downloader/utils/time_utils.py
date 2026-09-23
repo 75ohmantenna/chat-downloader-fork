@@ -212,10 +212,7 @@ def parse_date(
             hour=int(groups.get("hour", 0)),
             minute=int(groups.get("minute", 0)),
             second=int(groups.get("second", 0)),
-            microsecond=int(
-                float(f"0.{groups.get('second_fraction', 0)}")
-                * MICROSECONDS_PER_SECOND,
-            ),
+            microsecond=int((groups.get("second_fraction", "") + "000000")[:6]),
             tzinfo=parse_timezone(groups, default_timezone=default_timezone),
         )
     except (ValueError, OverflowError) as e:
@@ -225,4 +222,9 @@ def parse_date(
 
 def parse_iso8601(data_str: str) -> float:
     """Parse an ISO 8601 string and return microseconds since the Unix epoch."""
-    return parse_date(data_str).timestamp() * MICROSECONDS_PER_SECOND
+    epoch = datetime.datetime(1970, 1, 1, tzinfo=UTC)
+    delta = parse_date(data_str) - epoch
+    return float(
+        (delta.days * 86_400 + delta.seconds) * MICROSECONDS_PER_SECOND
+        + delta.microseconds
+    )

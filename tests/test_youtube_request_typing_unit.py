@@ -28,7 +28,7 @@ class _Streams(YouTubeChatStreamsMixin):
         self.initial_request = params
         return self.details, {}
 
-    def _get_chat_messages(self, initial_info, ytcfg, params):
+    def _get_chat_messages(self, initial_info, ytcfg, params, diagnostics=None):
         self.message_params = params
         return iter(())
 

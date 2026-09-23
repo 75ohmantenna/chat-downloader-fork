@@ -54,7 +54,7 @@ def _optional_metadata_error() -> dict[str, object]:
         (
             [{"errors": [{"message": "service error", "path": ["video", "comments"]}]}],
             0,
-            None,
+            ParsingError,
         ),
         ([{"errors": _optional_metadata_error()}], 0, None),
         (
@@ -68,8 +68,8 @@ def _optional_metadata_error() -> dict[str, object]:
                 },
                 {"errors": [_optional_metadata_error()]},
             ],
-            2,
-            None,
+            0,
+            ParsingError,
         ),
         (
             [{"errors": [_optional_metadata_error()]}, _errors("Unauthorized")],

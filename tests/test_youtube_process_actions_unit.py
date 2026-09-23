@@ -58,6 +58,19 @@ def _assert_poll_summary(log_calls, processed, emitted, non_emitted, reasons):
     } == reasons
 
 
+def test_replay_unknown_actions_count_as_record_loss(monkeypatch):
+    reasons = [
+        NonEmissionReason.KNOWN_IGNORED_ACTION,
+        NonEmissionReason.UNPARSED_ACTION,
+        NonEmissionReason.INVALID_MESSAGE,
+    ]
+    process = Mock(side_effect=[_skip(reason) for reason in reasons])
+    patch(monkeypatch, "message_pipeline.process_pipeline_action", process)
+    diagnostics: dict[str, object] = {}
+    assert list(_actions([{} for _ in reasons], diagnostics=diagnostics)) == []
+    assert diagnostics["parse_error"] == 2
+
+
 @pytest.mark.parametrize(
     ("results", "expected", "stopped", "diagnostics"),
     [

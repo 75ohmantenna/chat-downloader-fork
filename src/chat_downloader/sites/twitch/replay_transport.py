@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.utils.json_types import JSONDict, get_dict, get_list, get_str
 
 from .graphql_client import _PersistedQueryUnavailable
@@ -61,6 +62,9 @@ def get_chat_messages_by_vod_id(
         info = get_dict(data, "video")
         fallback_comments = get_dict(info, "comments")
         if not fallback_comments:
+            if cursor:
+                msg = "Twitch replay comments disappeared during pagination"
+                raise ParsingError(msg) from None
             return None, None
         edges = get_list(fallback_comments, "edges")
         final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
@@ -74,10 +78,16 @@ def get_chat_messages_by_vod_id(
     data = get_dict(result[0], "data") if result else {}
     info = get_dict(data, "video")
     if not info:
+        if cursor:
+            msg = "Twitch replay video disappeared during pagination"
+            raise ParsingError(msg)
         return None, None
 
     comments = info.get("comments")
     if not isinstance(comments, dict):
+        if cursor:
+            msg = "Twitch replay comments disappeared during pagination"
+            raise ParsingError(msg)
         return None, None
 
     return comments, info

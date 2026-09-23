@@ -45,6 +45,11 @@ def test_timestamp_to_microseconds_with_fractional_seconds() -> None:
     assert ts2 > ts1
 
 
+def test_timestamp_to_microseconds_preserves_fraction_exactly() -> None:
+    assert timestamp_to_microseconds("2024-01-01T00:00:00.000249Z") % 1_000_000 == 249
+    assert parse_date("2024-01-01T00:00:00.000489Z").microsecond == 489
+
+
 def test_timestamp_to_microseconds_without_fractional_part() -> None:
     """Test timestamp without fractional seconds (lines 70-83)."""
     # Timestamp without fractional part should work

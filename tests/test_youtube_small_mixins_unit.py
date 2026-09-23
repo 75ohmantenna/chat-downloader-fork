@@ -58,7 +58,7 @@ def test_chat_streams_mixin_video_entry_wraps_runtime_generator() -> None:
             assert video_type == "video"
             return {"title": "Example"}, {"cfg": 1}
 
-        def _get_chat_messages(self, initial_info, ytcfg, params):
+        def _get_chat_messages(self, initial_info, ytcfg, params, diagnostics=None):
             assert initial_info == {"title": "Example"}
             assert ytcfg == {"cfg": 1}
             assert params.url.endswith("vid")

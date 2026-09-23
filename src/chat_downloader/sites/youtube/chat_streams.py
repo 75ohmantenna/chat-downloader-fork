@@ -30,10 +30,15 @@ class YouTubeChatStreamsMixin:
         initial_info: dict[str, Any],
         ytcfg: JSONDict,
         params: ChatRequest,
+        diagnostics: dict[str, object] | None = None,
     ) -> Generator[JSONDict, None, None]:
         """Yield chat messages from a YouTube continuation endpoint."""
         return _ContinuationLoop(
-            cast("YouTubeDownloaderProto", self), initial_info, ytcfg, params
+            cast("YouTubeDownloaderProto", self),
+            initial_info,
+            ytcfg,
+            params,
+            diagnostics=diagnostics,
         ).run()
 
     def _get_chat_by_clip_id(self, match: re.Match[str], params: ChatRequest) -> Chat:
@@ -66,9 +71,11 @@ class YouTubeChatStreamsMixin:
             end_time=ensure_seconds(request.end_time, max_duration) + clip_start_time,
         )
 
+        diagnostics: dict[str, object] = {}
         return Chat(
-            self._get_chat_messages(initial_info, ytcfg, request),
+            self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
             id=clip_id,
+            diagnostics=diagnostics,
             **initial_info,
         )
 
@@ -80,9 +87,11 @@ class YouTubeChatStreamsMixin:
         request = proto._coerce_chat_request(params)
         initial_info, ytcfg = proto._get_initial_video_info(video_id, request)
 
+        diagnostics: dict[str, object] = {}
         return Chat(
-            self._get_chat_messages(initial_info, ytcfg, request),
+            self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
             id=video_id,
+            diagnostics=diagnostics,
             **initial_info,
         )
 

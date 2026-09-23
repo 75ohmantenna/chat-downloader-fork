@@ -124,7 +124,7 @@ def _describe_operation_names(operation_names: list[str] | None) -> str:
     return ", ".join(operation_names)
 
 
-def _handle_gql_errors(
+def _handle_gql_errors(  # noqa: C901 — GraphQL error classification has distinct provider cases
     errors: JSONList,
     operation_names: list[str] | None = None,
 ) -> bool:
@@ -166,10 +166,13 @@ def _handle_gql_errors(
         if "unavailable" in message_lower or "deleted" in message_lower:
             raise VideoUnavailable(error_message)
         if "service error" in message_lower:
-            optional_degradation_found |= _log_service_error(
+            is_optional = _log_service_error(
                 error_message,
                 error_path,
             )
+            if not is_optional:
+                raise ParsingError(error_message)
+            optional_degradation_found = True
             continue
         path_str = " -> ".join(str(p) for p in error_path) if error_path else "unknown"
         msg = f"GraphQL error at {path_str} during {operation_text}: {error_message}"

@@ -141,6 +141,8 @@ class TwitchChatDownloader(BaseChatDownloader):
         params: ChatRequest | dict[str, Any],
         max_duration: float | None,
         offset: float | None = None,
+        *,
+        diagnostics: dict[str, object] | None = None,
     ) -> Generator[dict[str, Any], None, None]:
         """Yield parsed VOD or clip chat messages.
 
@@ -149,6 +151,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             params: Replay request options, including time bounds and filters.
             max_duration: Maximum video duration.
             offset: Clip time offset; None for VODs.
+            diagnostics: Mutable replay completion and record-loss counters.
         """
         request = self._coerce_chat_request(params)
 
@@ -160,6 +163,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             offset,
             fetch_messages=get_chat_messages_by_vod_id,
             logger_obj=logger,
+            diagnostics=diagnostics,
         )
 
     def _get_chat_by_vod_id(

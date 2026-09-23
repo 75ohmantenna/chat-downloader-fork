@@ -278,11 +278,13 @@ class _ContinuationLoop:
         initial_info: dict[str, Any],
         ytcfg: JSONDict,
         params: ChatRequest,
+        diagnostics: dict[str, object] | None = None,
     ) -> None:
         self.downloader = downloader
         self.initial_info = initial_info
         self.ytcfg = ytcfg
         self.params = params
+        self.diagnostics = diagnostics if diagnostics is not None else {}
         self.paid_events = PaidEventCache()
         self._accepted_response = False
         self.ctx: _ChatContext
@@ -364,7 +366,7 @@ class _ContinuationLoop:
             getattr(self.downloader, "_request_profile", None),
         )
         offset_milliseconds = (
-            start_time * _MS_PER_SECOND
+            max(start_time, 0) * _MS_PER_SECOND
             if isinstance(start_time, (float, int))
             else None
         )
@@ -565,6 +567,7 @@ class _ContinuationLoop:
                 ctx.time_filter,
                 ctx.loop_state,
                 ctx.live_start_time_ms,
+                diagnostics=self.diagnostics,
                 is_replay=ctx.is_replay,
                 paid_events=self.paid_events,
             )
