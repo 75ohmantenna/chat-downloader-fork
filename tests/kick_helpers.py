@@ -300,7 +300,7 @@ def collect_live_chat(batches, *responses, **request_kwargs):
 
 
 def live_clock(**kwargs):
-    return patch.object(live_service.time, "time_ns", **kwargs)
+    return patch.object(live_service, "time_ns", **kwargs)
 
 
 def fixture_frame(event, name):

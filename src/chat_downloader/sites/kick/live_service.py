@@ -9,10 +9,10 @@ remain active offline.
 
 from __future__ import annotations
 
-import time
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from itertools import islice
+from time import time_ns
 from typing import TYPE_CHECKING, Any
 
 from requests.exceptions import RequestException
@@ -143,7 +143,7 @@ class _KickLiveDiagnostics:
 
     def record_frame(self) -> int:
         """Record and return a decoded frame's UTC receive timestamp."""
-        received_timestamp = time.time_ns() // 1_000
+        received_timestamp = time_ns() // 1_000
         previous_timestamp = self.summary["last_websocket_frame_timestamp"]
         if (
             isinstance(previous_timestamp, int)
