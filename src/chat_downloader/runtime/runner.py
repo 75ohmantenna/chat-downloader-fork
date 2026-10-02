@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from dataclasses import dataclass, field
+from time import monotonic
 from typing import TYPE_CHECKING, Any, Protocol
 
 from requests.exceptions import ConnectionError as RequestsConnectionError
@@ -136,6 +137,7 @@ class RunResult:
     parity_status: str = "not_requested"
     termination_reason: str = "error"
     provider_inspection: dict[str, object] | None = None
+    elapsed_seconds: float = 0.0
 
 
 def create_message_callback(
@@ -178,6 +180,7 @@ def _log_run_summary(
             "termination_reason": getattr(result, "termination_reason", "completed"),
             "parity_status": getattr(result, "parity_status", "not_requested"),
             "provider_inspection": getattr(result, "provider_inspection", None),
+            "elapsed_seconds": getattr(result, "elapsed_seconds", 0.0),
             "message_count": message_count,
             "message_type_counts": message_type_counts,
             "formatted_duplicates_suppressed": getattr(
@@ -307,6 +310,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     _configure_testing_mode(run_config)
     downloader = None
     result = RunResult()
+    started = monotonic()
     chat = None
     primary_error = False
     checkpoint = None
@@ -420,6 +424,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 log("error", result.error_message)
                 checkpoint_bound = False
                 verification_bound = False
+            result.elapsed_seconds = monotonic() - started
             _verify_capture_outputs(
                 chat,
                 run_config,

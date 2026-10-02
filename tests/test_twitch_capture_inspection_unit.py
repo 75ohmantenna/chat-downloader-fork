@@ -61,14 +61,16 @@ def _run_script(path, timeout):
     )
 
 
+@pytest.mark.parametrize("prefix", ["", "[2026-10-02 01:21:15 UTC] "])
 def test_clean_inspection_counts_shapes_and_keeps_timestamp_backsteps_informational(
     tmp_path,
+    prefix,
 ):
     rows = [{"message_type": "room_state"}, _text(), _text("two", 982)]
     rows[-1]["in_reply_to"] = {"message_id": "parent"}
-    report = inspect_capture(
-        _write(tmp_path / "chat.jsonl", rows), _log(tmp_path / "debug.log")
-    )
+    log = _log(tmp_path / "debug.log")
+    log.write_text(prefix + log.read_text())
+    report = inspect_capture(_write(tmp_path / "chat.jsonl", rows), log)
     assert report["status"] == "ok"
     assert report["records"] == 3
     assert report["message_types"] == {"room_state": 1, "text_message": 2}

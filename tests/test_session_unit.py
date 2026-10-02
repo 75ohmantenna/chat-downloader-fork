@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from http.cookiejar import MozillaCookieJar
 from types import SimpleNamespace
 from typing import Any, ClassVar, cast
 
 import pytest
+from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from chat_downloader.errors import CookieError, InvalidParameter
 from chat_downloader.request_profiles import REQUEST_PROFILES
@@ -196,6 +198,35 @@ def test_http_session_requests_timeouts_json_and_close() -> None:
     assert fake.closed is True
     with pytest.raises(RuntimeError, match="HTTP session is closed"):
         http.get("https://example.com")
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+@pytest.mark.parametrize("failed", [False, True])
+def test_http_request_timing_covers_success_and_failure_without_tokens(
+    monkeypatch, caplog, method, failed
+):
+    fake = _FakeSession()
+    http = _http(fake)
+    ticks = iter([10.0, 10.125])
+    monkeypatch.setattr(
+        "chat_downloader.sites.session.perf_counter", lambda: next(ticks)
+    )
+    if failed:
+
+        def fail(*args, **kwargs):
+            raise RequestsConnectionError("offline")
+
+        monkeypatch.setattr(fake, method, fail)
+    url = "https://example.com/chat?continuation=PRIVATE_TOKEN"
+    with caplog.at_level(logging.DEBUG, logger="chat_downloader"):
+        if failed:
+            with pytest.raises(RequestsConnectionError, match="offline"):
+                getattr(http, method)(url)
+        else:
+            getattr(http, method)(url)
+    assert "PRIVATE_TOKEN" not in caplog.text
+    assert f"HTTP {method.upper()}" in caplog.text
+    assert "took 0.125s" in caplog.text
 
 
 def test_base_downloader_exposes_session_interface_and_rotation_warning(

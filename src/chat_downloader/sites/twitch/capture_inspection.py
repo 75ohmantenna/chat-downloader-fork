@@ -25,7 +25,10 @@ if TYPE_CHECKING:
 
 _KNOWN_TYPES = frozenset(t for group in MESSAGE_GROUPS.values() for t in group)
 _LOCATION = re.compile(r"([0-9]+)-([0-9]+)")
-_SUMMARY_PREFIX = b"[DEBUG] Run summary: "
+_SUMMARY_PREFIX = re.compile(
+    rb"(?:\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\] )?"
+    rb"\[DEBUG\] Run summary: "
+)
 _SUMMARY_LIMIT = 65536
 _INVALID_SUMMARY = "invalid_run_summary"
 _FRAME_KEYS = (
@@ -119,11 +122,12 @@ def _frame_accounting(path: Path) -> dict[str, int]:
     result: dict[str, int] | None = None
     with _open_input(path) as source:
         for line in source:
-            if not line.startswith(_SUMMARY_PREFIX):
+            prefix = _SUMMARY_PREFIX.match(line)
+            if prefix is None:
                 continue
             if result is not None or len(line) > _SUMMARY_LIMIT:
                 raise ValueError(_INVALID_SUMMARY)
-            summary = ast.literal_eval(line[len(_SUMMARY_PREFIX) :].decode("utf-8"))
+            summary = ast.literal_eval(line[prefix.end() :].decode("utf-8"))
             if not isinstance(summary, dict):
                 raise TypeError(_INVALID_SUMMARY)
             result = _account_frames(get_dict(summary, "provider_diagnostics"))

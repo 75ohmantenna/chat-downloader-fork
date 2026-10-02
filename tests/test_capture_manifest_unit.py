@@ -66,6 +66,47 @@ def test_manifest_certifies_closed_files_and_completed_run(
     assert "Record 1" not in (tmp_path / "run.json").read_text()
 
 
+@pytest.mark.parametrize("reasons", [{"invalid messages": 2, "PRIVATE": 1}, "PRIVATE"])
+def test_manifest_keeps_bounded_metrics_and_measured_duration(
+    monkeypatch, manifest, chat_state, params, reasons
+):
+    ticks = iter([10.0, 12.5])
+    monkeypatch.setattr("chat_downloader.runtime.runner.monotonic", lambda: next(ticks))
+    chat_state.update(
+        poll_count=3,
+        continuation_request_count=4,
+        continuation_retry_count=1,
+        non_emission_counts=reasons,
+        json_error_count="PRIVATE",
+        http_error_count=False,
+        private_message="PRIVATE",
+    )
+    result, report = manifest(**params)
+    assert result.success
+    assert result.elapsed_seconds == report["elapsed_seconds"] == 2.5
+    expected = {
+        "poll_count": 3,
+        "continuation_request_count": 4,
+        "continuation_retry_count": 1,
+    }
+    if isinstance(reasons, dict):
+        expected["non_emission_counts"] = {"invalid messages": 2}
+    assert report["provider_diagnostics"] == expected
+    assert "PRIVATE" not in json.dumps(report)
+    assert report["prefetched_after_deadline_count"] == 0
+    assert report["deadline_prefetch_count_complete"] is True
+
+
+def test_manifest_preserves_incomplete_deadline_accounting(tmp_path):
+    chat = Chat()
+    chat.chat = SimpleNamespace(deadline_prefetch_summary=lambda: (2, False))
+    path = tmp_path / "run.json"
+    RunManifest(str(path), None).write(chat, RunResult())
+    report = load_json(path)
+    assert report["prefetched_after_deadline_count"] == 2
+    assert report["deadline_prefetch_count_complete"] is False
+
+
 def test_manifest_reports_missing_parent_before_capture(tmp_path, params):
     missing = tmp_path / "missing"
 

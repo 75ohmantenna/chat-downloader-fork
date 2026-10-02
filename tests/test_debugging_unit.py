@@ -65,6 +65,12 @@ def test_console_handlers_install_only_when_cli_requests_them():
     assert logging.getLogger("urllib3").handlers.count(dbg.handler) == 1
 
 
+def test_cli_log_timestamp_uses_utc_clock_time():
+    record = logging.LogRecord("test", logging.DEBUG, "", 0, "message", (), None)
+    record.created = 1577841675.0
+    assert dbg.handler.format(record) == ("[2020-01-01 01:21:15 UTC] [DEBUG] message")
+
+
 @pytest.mark.parametrize(
     ("tty", "platform", "colorama", "environment", "expected"),
     [

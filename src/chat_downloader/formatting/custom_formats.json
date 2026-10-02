@@ -26,7 +26,10 @@
             "template": "{timestamp|time_text}{message}",
             "inherit": "default",
             "keys": {
-                "message": "{}"
+                "message": "{}",
+                "timestamp": {
+                    "format": "%H:%M:%S"
+                }
             }
         },
         {
@@ -40,13 +43,21 @@
                 "message": "{}",
                 "target_message_id": "[Message removed: {}]",
                 "author.id": "[Messages removed for author: {}]",
-                "action_type": "[Moderation action: {}]"
+                "action_type": "[Moderation action: {}]",
+                "timestamp": {
+                    "format": "%H:%M:%S"
+                }
             }
         },
         {
             "matching": "all",
             "inherit": "default",
-            "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}"
+            "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}",
+            "keys": {
+                "timestamp": {
+                    "format": "%H:%M:%S"
+                }
+            }
         }
     ],
     "24_hour": {
@@ -64,7 +75,7 @@
             "inherit": "default",
             "keys": {
                 "timestamp": {
-                    "format": "%H:%M"
+                    "format": "%H:%M:%S"
                 },
                 "message": "{}"
             }
@@ -78,7 +89,7 @@
             "inherit": "default",
             "keys": {
                 "timestamp": {
-                    "format": "%H:%M"
+                    "format": "%H:%M:%S"
                 },
                 "message": "{}",
                 "target_message_id": "[Message removed: {}]",
@@ -92,7 +103,7 @@
             "template": "{timestamp|time_text}{author.badges}{money.text}{author.display_name|author.name}{message}",
             "keys": {
                 "timestamp": {
-                    "format": "%H:%M"
+                    "format": "%H:%M:%S"
                 }
             }
         }

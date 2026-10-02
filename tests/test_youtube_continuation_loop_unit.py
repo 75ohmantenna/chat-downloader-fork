@@ -139,3 +139,23 @@ def test_run_raises_incomplete_when_live_chat_continuation_missing(
 
     with pytest.raises(IncompleteContinuationError):
         list(_make_loop().run())
+
+
+def test_real_request_and_action_loop_share_capture_diagnostics():
+    loop = _make_loop()
+    loop.downloader._session_post = lambda *_a, **_k: SimpleNamespace(
+        status_code=200,
+        text="",
+        json=lambda: {
+            "continuationContents": {"liveChatContinuation": {"actions": []}},
+        },
+    )
+    assert list(loop.run()) == []
+    assert loop.diagnostics == {
+        "poll_count": 1,
+        "continuation_request_count": 1,
+        "continuation_retry_count": 0,
+        "http_error_count": 0,
+        "network_error_count": 0,
+        "json_error_count": 0,
+    }

@@ -211,6 +211,9 @@ the public live feed cannot seek.
 Debug and automation:
 
 - `--logging debug`, `--verbose` — transport and parser debugging.
+  CLI logs include UTC dates and clock times. HTTP GET and POST debug records
+  report monotonic request duration, including failed requests. With streamed
+  HTTP responses, duration ends when response headers are received.
 - With `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`, Kick captures bounded,
   sanitized samples for unknown or malformed REST/Pusher payloads; see the
   Kick integration guide for storage and review guidance.
@@ -376,6 +379,14 @@ prevent a capture from qualifying as complete.
 `--run_manifest run.json` writes a JSON report after shutdown with program
 version, recording identity/window, success, completion, termination, parity,
 current/prior run message counts, and output writer counts and SHA-256 hashes.
+`elapsed_seconds` measures initialization through capture shutdown using a
+monotonic clock; output verification and manifest writing are excluded.
+`provider_diagnostics` retains supported bounded YouTube action and
+continuation counters, including skipped-action reasons and parsing loss.
+Other provider reports remain in `provider_inspection` when supported.
+`prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
+deadline accounting; an incomplete count must not be treated as proof of zero
+pending records. These fields are available without `--logging debug`.
 It contains no chat messages, request headers, cookies, or input URL. Hashes cover
 whole files; writer counts cover the current run. Unopened pre-existing files
 are not hashed unless a resume checkpoint verified them. The manifest must be

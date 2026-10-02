@@ -78,8 +78,8 @@ def test_format_control_characters(formatter, message, template, expected):
 @pytest.fixture(
     params=[
         ("youtube", "0:42 | "),
-        ("youtube_live_default", "2020-01-01 00:00:00 | "),
-        ("youtube_live_24_hour", "00:00 | "),
+        ("youtube_live_default", "00:00:00 | "),
+        ("youtube_live_24_hour", "00:00:00 | "),
         ("youtube_live_12_hour", "12:00 AM | "),
     ]
 )
@@ -135,6 +135,19 @@ def test_youtube_timestamp_and_author_separator(
     name, prefix = youtube_format
     item = {"timestamp": 1577836800000000, "time_text": "0:42", **fields}
     assert formatter.format(item, name) == prefix + notice
+
+
+@pytest.mark.parametrize("name", ["youtube_live_default", "youtube_live_24_hour"])
+def test_youtube_live_clock_time_includes_seconds_and_uses_message_time(
+    formatter, name
+):
+    item = {
+        "timestamp": 1577841675000000,
+        "time_text": "0:42",
+        "author": {"name": "user"},
+        "message": "hello",
+    }
+    assert formatter.format(item, name) == "01:21:15 | user: hello"
 
 
 def test_youtube_moderation_without_timing(formatter, youtube_format):

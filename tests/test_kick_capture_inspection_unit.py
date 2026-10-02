@@ -112,10 +112,13 @@ def _assert_bad_summary(capture, log, capsys):
     assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
 
 
-def test_clean_inspection_counts_shapes_and_informational_backsteps(tmp_path):
+@pytest.mark.parametrize("prefix", ["", "[2026-10-02 01:21:15 UTC] "])
+def test_clean_inspection_counts_shapes_and_informational_backsteps(tmp_path, prefix):
     rows = _clean_rows()
     rows[-1]["in_reply_to"] = {"message_id": "parent"}
-    report = inspect_capture(_write(tmp_path / "chat", rows), _log(tmp_path / "log"))
+    log = _log(tmp_path / "log")
+    log.write_text(prefix + log.read_text())
+    report = inspect_capture(_write(tmp_path / "chat", rows), log)
     expected = {
         "status": "ok",
         "records": 3,

@@ -189,6 +189,30 @@ positive values. The separate InnerTube `playerOffsetMs` polling position stays
 nonnegative and never moves backward when YouTube delivers an older message
 late.
 
+Live console and TXT output use the original message's UTC clock time,
+including seconds (`01:21:15`), with the default and `24_hour` formats.
+Replay output still uses elapsed video time. JSONL preserves the original
+microsecond `timestamp` and capture-relative timing fields. When a provider
+timestamp is absent, formatting falls back to existing timing fields; it does
+not invent a message timestamp.
+
+The live and replay action loops retain `poll_count`, `processed_action_count`,
+`emitted_message_count`, and `non_emission_counts` in capture diagnostics.
+`poll_count` includes polls whose action processing started; action totals
+include the consumed prefix of a poll interrupted by a capture limit.
+These are provider-processing totals; deadline prefetch can make them exceed
+the records delivered to output. Consult the manifest's deadline accounting
+before comparing provider totals with `message_count`.
+Unparsed actions and invalid messages increment `parse_error` for live chats
+as well as replays. Known control actions and intentional filtering are
+counted separately from parsing loss.
+
+Continuation diagnostics count requests, actual retry attempts after the
+first attempt of each poll, HTTP error responses, network errors, and JSON
+decoding errors. These exclude bootstrap requests and profile switches; a
+new request after a profile switch begins a fresh retry budget. Terminal
+failures remain counted even when the retry budget is exhausted.
+
 ### Replays and completed streams
 
 For replay content, the loop uses replay offsets and a `TimeRangeFilter` to

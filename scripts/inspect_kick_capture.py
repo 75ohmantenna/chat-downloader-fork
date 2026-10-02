@@ -27,7 +27,10 @@ if TYPE_CHECKING:
 
 _KNOWN_TYPES = frozenset(t for group in MESSAGE_GROUPS.values() for t in group)
 _LOCATION = re.compile(r"([0-9]+)-([0-9]+)")
-_SUMMARY_PREFIX = b"[DEBUG] Run summary: "
+_SUMMARY_PREFIX = re.compile(
+    rb"(?:\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\] )?"
+    rb"\[DEBUG\] Run summary: "
+)
 _SUMMARY_LIMIT = 65536
 _INVALID_SUMMARY = "invalid_run_summary"
 _FRAME_KEYS = (
@@ -164,11 +167,11 @@ def _run_summary(path: Path) -> dict[str, object]:
     result: dict[str, object] | None = None
     with _open_input(path) as source:
         while line := source.readline(_SUMMARY_LIMIT + 1):
-            is_summary = line.startswith(_SUMMARY_PREFIX)
-            if is_summary:
+            prefix = _SUMMARY_PREFIX.match(line)
+            if prefix is not None:
                 if result is not None or len(line) > _SUMMARY_LIMIT:
                     raise ValueError(_INVALID_SUMMARY)
-                result = _decode_summary(line[len(_SUMMARY_PREFIX) :])
+                result = _decode_summary(line[prefix.end() :])
             # Consume long unrelated log lines without treating their tail as a header.
             while not line.endswith(b"\n") and len(line) == _SUMMARY_LIMIT + 1:
                 line = source.readline(_SUMMARY_LIMIT + 1)

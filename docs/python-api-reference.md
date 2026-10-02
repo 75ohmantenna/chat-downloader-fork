@@ -102,6 +102,7 @@ these fields:
 | `parity_status` | `not_requested`, `not_run`, `passed`, or `failed`; parity verifies artifacts, not provider completeness |
 | `termination_reason` | Completion, message limit, timeout, interruption, or error; successful retrieval may be intentionally bounded |
 | `provider_inspection` | Content-free Twitch live inspection report when output verification runs; otherwise `None` |
+| `elapsed_seconds` | Monotonic duration from initialization through capture shutdown, excluding output verification and manifest writing |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.
@@ -185,7 +186,8 @@ trailing non-URL text are rejected. Host/path inputs without a scheme and
 protocol-relative inputs beginning with `//` are normalized to HTTPS.
 
 For YouTube live chats, the site default text format renders absolute
-timestamps before elapsed replay offsets and omits the author separator for
+UTC clock timestamps as `HH:MM:SS` (for example, `01:21:15`) before elapsed
+replay offsets and omits the author separator for
 authorless system events. Moderation events without message text render a
 bracketed notice containing the removed-message or affected-author identifier
 when available. Live `time_in_seconds` and `time_text` values are relative to

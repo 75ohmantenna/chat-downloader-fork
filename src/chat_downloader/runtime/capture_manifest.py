@@ -60,6 +60,41 @@ def has_record_loss(state: Mapping[str, object]) -> bool:
     )
 
 
+def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
+    """Select bounded capture counters without retaining arbitrary adapter data."""
+    counters: dict[str, object] = {
+        key: state[key]
+        for key in (
+            "poll_count",
+            "processed_action_count",
+            "emitted_message_count",
+            "parse_error",
+            "continuation_request_count",
+            "continuation_retry_count",
+            "http_error_count",
+            "network_error_count",
+            "json_error_count",
+        )
+        if type(state.get(key)) is int
+    }
+    reasons = state.get("non_emission_counts")
+    if isinstance(reasons, dict):
+        counters["non_emission_counts"] = {
+            key: reasons[key]
+            for key in (
+                "known ignored/control actions",
+                "known ignored renderers",
+                "unparsed actions",
+                "invalid messages",
+                "message type/group filtered",
+                "time-range filtered",
+                "time-range stop",
+            )
+            if type(reasons.get(key)) is int
+        }
+    return counters
+
+
 def _capture_outputs(chat: Chat, *, keep_created: bool = False) -> list[Path]:
     """Expand lazy paths while retaining opened artifact names when requested."""
     dispatcher = chat._output_dispatcher
@@ -132,6 +167,12 @@ class RunManifest:
                         raise ValueError(msg)
                     signature = hashlib.file_digest(source, "sha256").hexdigest()
             artifacts.append({**writer, "sha256": signature})
+        deadline_summary = getattr(
+            getattr(chat, "chat", None), "deadline_prefetch_summary", None
+        )
+        prefetched_count, prefetch_complete = (
+            deadline_summary() if callable(deadline_summary) else (0, True)
+        )
         payload = {
             "schema_version": 1,
             "program_version": __version__,
@@ -145,6 +186,12 @@ class RunManifest:
                 "prior_message_count", 0
             ),
             "message_type_counts": result.message_type_counts,
+            "elapsed_seconds": result.elapsed_seconds,
+            "provider_diagnostics": _manifest_diagnostics(
+                getattr(chat, "diagnostics", {})
+            ),
+            "prefetched_after_deadline_count": prefetched_count,
+            "deadline_prefetch_count_complete": prefetch_complete,
             "recording": {
                 "site_name": getattr(getattr(chat, "site", None), "_NAME", None),
                 **{

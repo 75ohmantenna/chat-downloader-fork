@@ -535,6 +535,7 @@ class _ContinuationLoop:
                     ctx.continuation_url,
                     self.downloader._session_post,
                     self.params,
+                    diagnostics=self.diagnostics,
                     json=continuation_params,
                 )
             except IncompleteContinuationError:

@@ -58,7 +58,8 @@ def _assert_poll_summary(log_calls, processed, emitted, non_emitted, reasons):
     } == reasons
 
 
-def test_replay_unknown_actions_count_as_record_loss(monkeypatch):
+@pytest.mark.parametrize("is_replay", [False, True])
+def test_unknown_actions_count_as_record_loss(monkeypatch, is_replay):
     reasons = [
         NonEmissionReason.KNOWN_IGNORED_ACTION,
         NonEmissionReason.UNPARSED_ACTION,
@@ -67,7 +68,14 @@ def test_replay_unknown_actions_count_as_record_loss(monkeypatch):
     process = Mock(side_effect=[_skip(reason) for reason in reasons])
     patch(monkeypatch, "message_pipeline.process_pipeline_action", process)
     diagnostics: dict[str, object] = {}
-    assert list(_actions([{} for _ in reasons], diagnostics=diagnostics)) == []
+    assert (
+        list(
+            _actions(
+                [{} for _ in reasons], diagnostics=diagnostics, is_replay=is_replay
+            )
+        )
+        == []
+    )
     assert diagnostics["parse_error"] == 2
 
 
@@ -149,13 +157,26 @@ def test_process_composes_parser_filters_and_poll_diagnostics(monkeypatch):
         "chat_downloader.sites.youtube.message_pipeline.log",
         lambda *args: log_calls.append(args),
     )
+    diagnostics = {}
     result = list(
         _actions(
             actions,
             msg_filter=MessageFilter(_MESSAGE_GROUPS, types_to_add=["text_message"]),
+            diagnostics=diagnostics,
         )
     )
     assert [message["message_type"] for message in result] == ["text_message"]
+    assert diagnostics == {
+        "poll_count": 1,
+        "processed_action_count": 4,
+        "emitted_message_count": 1,
+        "parse_error": 1,
+        "non_emission_counts": {
+            "known ignored/control actions": 1,
+            "unparsed actions": 1,
+            "message type/group filtered": 1,
+        },
+    }
     _assert_poll_summary(
         log_calls,
         4,
@@ -167,6 +188,20 @@ def test_process_composes_parser_filters_and_poll_diagnostics(monkeypatch):
             "message type/group filtered": 1,
         },
     )
+
+
+def test_partial_poll_keeps_diagnostics_before_generator_closes(monkeypatch):
+    process = Mock(side_effect=[_yield("first"), _yield("unconsumed")])
+    patch(monkeypatch, "message_pipeline.process_pipeline_action", process)
+    diagnostics = {}
+    gen = _actions([{}, {}], diagnostics=diagnostics)
+    assert next(gen) == {"text": "first"}
+    gen.close()
+    assert diagnostics == {
+        "poll_count": 1,
+        "processed_action_count": 1,
+        "emitted_message_count": 1,
+    }
 
 
 @pytest.mark.parametrize(

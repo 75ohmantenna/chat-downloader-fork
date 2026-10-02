@@ -7,9 +7,10 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from contextvars import ContextVar
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from .metadata import __program__ as logger_name
 from .redaction import render_for_log, sanitize_for_log
@@ -178,7 +179,8 @@ if supports_colour():
     handler = colorlog.StreamHandler()
     handler.setFormatter(
         colorlog.ColoredFormatter(
-            "[%(log_color)s%(levelname)s%(reset)s] %(message)s",
+            "[%(asctime)s UTC] [%(log_color)s%(levelname)s%(reset)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
             log_colors={
                 "DEBUG": "cyan",
                 "INFO": "green",
@@ -191,7 +193,14 @@ if supports_colour():
 
 else:  # fallback support
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+    handler.setFormatter(
+        logging.Formatter(
+            "[%(asctime)s UTC] [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
+
+cast("logging.Formatter", handler.formatter).converter = time.gmtime
 
 handler.addFilter(_SafeLogFilter())
 

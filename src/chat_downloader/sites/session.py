@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
+from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse
 
@@ -16,6 +17,7 @@ from chat_downloader._timeout_defaults import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_READ_TIMEOUT,
 )
+from chat_downloader.debugging import log
 from chat_downloader.errors import CookieError, InvalidParameter
 from chat_downloader.request_profiles import (
     get_request_profile_headers,
@@ -230,13 +232,21 @@ class ChatDownloaderSession:
         """POST with the configured default timeout."""
         self._require_open()
         kwargs.setdefault("timeout", self.timeout)
-        return self.session.post(url, **kwargs)
+        started = perf_counter()
+        try:
+            return self.session.post(url, **kwargs)
+        finally:
+            log("debug", f"HTTP POST {url} took {perf_counter() - started:.3f}s")
 
     def get(self, url: str, **kwargs: Any) -> requests.Response:
         """GET with the configured default timeout."""
         self._require_open()
         kwargs.setdefault("timeout", self.timeout)
-        return self.session.get(url, **kwargs)
+        started = perf_counter()
+        try:
+            return self.session.get(url, **kwargs)
+        finally:
+            log("debug", f"HTTP GET {url} took {perf_counter() - started:.3f}s")
 
     def get_json(self, url: str, **kwargs: Any) -> JSONAny:
         """GET and parse a JSON response."""

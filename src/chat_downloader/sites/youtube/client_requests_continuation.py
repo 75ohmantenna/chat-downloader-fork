@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from json.decoder import JSONDecodeError
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from requests.exceptions import RequestException
 
@@ -35,6 +35,7 @@ def _get_continuation_info(
     program_params: ChatRequest | dict[str, Any],
     *,
     require_live_chat_continuation: bool = True,
+    diagnostics: dict[str, object] | None = None,
     **post_kwargs: object,
 ) -> JSONDict:
     """Get continuation information from YouTube API with retry handling."""
@@ -53,11 +54,29 @@ def _get_continuation_info(
         interruptible_retry=False,
     )
 
+    counters = diagnostics if diagnostics is not None else {}
+    for key in (
+        "continuation_request_count",
+        "continuation_retry_count",
+        "http_error_count",
+        "network_error_count",
+        "json_error_count",
+    ):
+        counters.setdefault(key, 0)
     for attempt_number in range(1, max_attempts + 1):
+        counters["continuation_request_count"] = (
+            cast("int", counters["continuation_request_count"]) + 1
+        )
+        counters["continuation_retry_count"] = cast(
+            "int", counters["continuation_retry_count"]
+        ) + int(attempt_number > 1)
         response_text = ""
         try:
             response = session_post(continuation_url, **post_kwargs)
             response_text = getattr(response, "text", "")
+            counters["http_error_count"] = cast(
+                "int", counters["http_error_count"]
+            ) + int(response.status_code >= 400)
 
             if response.status_code >= 400 and _handle_http_error(
                 response,
@@ -92,6 +111,7 @@ def _get_continuation_info(
                 continue
 
         except JSONDecodeError:
+            counters["json_error_count"] = cast("int", counters["json_error_count"]) + 1
             log(
                 "error",
                 f"Unable to parse JSON (attempt {attempt_number}/"
@@ -107,6 +127,9 @@ def _get_continuation_info(
             continue
 
         except (RequestException, OSError) as exc:
+            counters["network_error_count"] = (
+                cast("int", counters["network_error_count"]) + 1
+            )
             log(
                 "error",
                 f"Network error (attempt {attempt_number}/{max_attempts}): "

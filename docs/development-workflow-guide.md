@@ -88,6 +88,11 @@ used custom formatting. If the capture used a nondefault formatted-message
 dedup cache, pass the same nonnegative value with
 `--max-seen-message-ids`; zero has the production default meaning.
 
+YouTube live default and `24_hour` output show UTC `HH:MM:SS` clock time,
+including seconds. To audit older files with the previous date-inclusive or
+minute-only live formats, supply a custom format file matching the original
+capture. Newly captured files use the current built-in definitions.
+
 By default, the JSONL input represents one logical retrieval run. For JSONL
 and TXT files formed by appending separate runs, repeat
 `--dedup-reset-before-jsonl-line LINE` in strictly increasing order at each
@@ -143,7 +148,8 @@ This supplements exact TXT parity; it does not prove the provider's original
 payload was parsed correctly or that Twitch delivered every message.
 
 `--debug-log` is optional. When supplied, it requires exactly one standard
-`[DEBUG] Run summary:` line from the same run and reports received IRC frames
+`[DEBUG] Run summary:` line from the same run, with or without the current
+UTC timestamp prefix, and reports received IRC frames
 minus benign controls minus parsed messages. A nonzero gap warrants review;
 unparsed frames at the retrieval deadline can explain a positive gap. The
 report does not equate this gap with lost output messages, and cannot verify

@@ -35,13 +35,14 @@ def _initial(session_get, params):
     )
 
 
-def _continuation(session_post, params, *, browse=False):
+def _continuation(session_post, params, *, browse=False, diagnostics=None):
     endpoint = "browse" if browse else "live_chat/get_live_chat"
     return _yt_continuation._get_continuation_info(
         f"https://www.youtube.com/youtubei/v1/{endpoint}",
         session_post,
         params,
         require_live_chat_continuation=not browse,
+        diagnostics=diagnostics,
         json={"continuation": "abc"},
     )
 
@@ -158,6 +159,41 @@ def test_get_continuation_info_retries(
     )
     assert _continuation(request, params) == _SUCCESS_CONTINUATION_PAYLOAD
     assert len(calls) == 2
+
+
+def test_continuation_diagnostics_accumulate_retries_and_failure_categories(
+    make_fake_http_response,
+):
+    def invalid_json():
+        raise JSONDecodeError("bad JSON", "", 0)
+
+    request, calls = _sequence(
+        RequestsConnectionError("offline"),
+        make_fake_http_response(503, {"error": {"code": 503}}),
+        SimpleNamespace(status_code=200, text="bad JSON", json=invalid_json),
+        make_fake_http_response(200, {"responseContext": {}}),
+        make_fake_http_response(200, _SUCCESS_CONTINUATION_PAYLOAD),
+        make_fake_http_response(200, _SUCCESS_CONTINUATION_PAYLOAD),
+    )
+    diagnostics = {}
+    for _ in range(2):
+        assert (
+            _continuation(
+                request,
+                {"max_attempts": 5, "retry_timeout": 0},
+                diagnostics=diagnostics,
+            )
+            == _SUCCESS_CONTINUATION_PAYLOAD
+        )
+    assert len(calls) == 6
+    assert diagnostics == {
+        "continuation_request_count": 6,
+        "continuation_retry_count": 4,
+        "http_error_count": 1,
+        "network_error_count": 1,
+        "json_error_count": 1,
+    }
+    assert all("diagnostics" not in kwargs for _, kwargs in calls)
 
 
 @pytest.mark.parametrize(

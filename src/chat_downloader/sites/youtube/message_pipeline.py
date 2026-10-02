@@ -223,6 +223,31 @@ def _apply_live_timing(
         loop_state.offset_milliseconds = max(current_poll_offset, live_offset, 0)
 
 
+def _record_action_diagnostics(
+    result: PipelineResult, diagnostics: dict[str, object]
+) -> None:
+    """Retain aggregate outcomes even when iteration stops inside a poll."""
+    diagnostics["processed_action_count"] = (
+        cast("int", diagnostics.get("processed_action_count", 0)) + 1
+    )
+    diagnostics["emitted_message_count"] = cast(
+        "int", diagnostics.get("emitted_message_count", 0)
+    ) + int(result.disposition == "yield")
+    reason = result.non_emission_reason
+    if reason is not None:
+        counts = cast(
+            "dict[str, int]", diagnostics.setdefault("non_emission_counts", {})
+        )
+        counts[reason.value] = counts.get(reason.value, 0) + 1
+        if reason in {
+            NonEmissionReason.UNPARSED_ACTION,
+            NonEmissionReason.INVALID_MESSAGE,
+        }:
+            diagnostics["parse_error"] = (
+                cast("int", diagnostics.get("parse_error", 0)) + 1
+            )
+
+
 def _process_actions(
     actions: list[JSONDict],
     offset: float | None,
@@ -249,7 +274,7 @@ def _process_actions(
         live_start_time_ms: Epoch-ms baseline for live offsets.
         is_replay: Suppress live-timing enrichment for replay streams.
         paid_events: Per-run cache enriching sparse paid tickers.
-        diagnostics: Mutable replay record-loss counters.
+        diagnostics: Mutable action and record-loss counters for live and replay.
 
     Returns:
         True on a "stop" disposition (terminate the outer loop).
@@ -257,6 +282,8 @@ def _process_actions(
     processed_action_count = 0
     emitted_message_count = 0
     non_emission_counts: Counter[NonEmissionReason] = Counter()
+    if diagnostics is not None:
+        diagnostics["poll_count"] = cast("int", diagnostics.get("poll_count", 0)) + 1
     for action in actions:
         pipeline_result = process_pipeline_action(
             action,
@@ -266,20 +293,10 @@ def _process_actions(
             paid_events,
         )
         processed_action_count += 1
+        if diagnostics is not None:
+            _record_action_diagnostics(pipeline_result, diagnostics)
         if pipeline_result.non_emission_reason is not None:
             non_emission_counts[pipeline_result.non_emission_reason] += 1
-            if (
-                is_replay
-                and diagnostics is not None
-                and pipeline_result.non_emission_reason
-                in {
-                    NonEmissionReason.UNPARSED_ACTION,
-                    NonEmissionReason.INVALID_MESSAGE,
-                }
-            ):
-                diagnostics["parse_error"] = (
-                    cast("int", diagnostics.get("parse_error", 0)) + 1
-                )
         if pipeline_result.disposition == "skip":
             continue
         if pipeline_result.disposition == "stop":
