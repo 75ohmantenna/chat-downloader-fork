@@ -538,6 +538,7 @@ def test_public_transport_owns_independent_connections_and_all_public_feeds(
         channel_id="123",
         diagnostic_callback=counters.append,
         trust_env=False,
+        proxy={"https": "http://proxy.test"},
     )
     transport._proxy_url = "http://proxy.test"
     transport.connect(1, force_discover=True)
@@ -679,6 +680,53 @@ def test_worker_access_failure_reaches_consumer_and_closes_its_http_owner(monkey
     assert isinstance(transport._queue.get(), CaptchaChallengeRequired)
     child.close.assert_called_once()
     client.close.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    ("trust_env", "configured", "expected"),
+    [
+        (True, None, [None, "http://environment.test:8000"]),
+        (False, None, [None, None]),
+        (
+            True,
+            {"https": "http://configured.test:8000"},
+            ["http://configured.test:8000"] * 2,
+        ),
+    ],
+)
+def test_public_proxy_resolution_honors_each_negotiated_host(
+    monkeypatch, trust_env, configured, expected
+):
+    monkeypatch.setenv("HTTPS_PROXY", "http://environment.test:8000")
+    monkeypatch.setenv("NO_PROXY", ".kick.com")
+    state = MagicMock()
+    state.metadata.return_value = {}
+    monkeypatch.setattr(pt, "KickPublicState", MagicMock(return_value=state))
+    clients = [MagicMock(), MagicMock()]
+    clients[0].negotiate.return_value = rc.RealtimeConnection(
+        "centrifugo", "wss://realtime.us-east-1.platform.kick.com/connection/websocket"
+    )
+    clients[1].negotiate.return_value = rc.RealtimeConnection(
+        "pusher", "wss://ws-us2.pusher.com/app/key"
+    )
+    factory = MagicMock(side_effect=clients)
+    monkeypatch.setattr(pt, "KickRealtimeClient", factory)
+    children = [MagicMock(), MagicMock()]
+    monkeypatch.setattr(
+        pt, "KickCentrifugoTransport", MagicMock(return_value=children[0])
+    )
+    monkeypatch.setattr(
+        pt, "_NegotiatedPusherTransport", MagicMock(return_value=children[1])
+    )
+    transport = pt.KickPublicTransport(
+        username="slug", channel_id="123", proxy=configured, trust_env=trust_env
+    )
+    transport._proxy_url = "http://legacy-derived-proxy.test:8000"
+    transport.connect(1)
+    assert [child._proxy_url for child in children] == expected
+    assert all(call.kwargs["proxy"] == configured for call in factory.call_args_list)
+    assert all(call.kwargs["trust_env"] == trust_env for call in factory.call_args_list)
+    transport.close()
 
 
 def test_shared_socket_cancellation_and_explicit_origin(monkeypatch):

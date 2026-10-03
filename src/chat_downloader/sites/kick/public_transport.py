@@ -10,11 +10,13 @@ from contextlib import suppress
 from functools import partial
 from queue import Empty, Full, Queue
 from threading import Event, Thread
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import logger
+from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.utils.json_types import get_str
 
 from .centrifugo_transport import KickCentrifugoTransport
@@ -69,6 +71,7 @@ class KickPublicTransport(KickPusherTransport):
         diagnostic_callback: Callable[[str], None] | None = None,
         trust_env: bool = True,
         http_timeout: tuple[float, float] = (10.0, 30.0),
+        proxy: dict[str, str] | None = None,
     ) -> None:
         """Initialize ownership, bounded buffering, and snapshot state."""
         super().__init__(diagnostic_callback=diagnostic_callback)
@@ -76,6 +79,7 @@ class KickPublicTransport(KickPusherTransport):
         self.channel_id = channel_id
         self._trust_env = trust_env
         self._http_timeout = http_timeout
+        self._configured_proxy = dict(proxy) if proxy else None
         self._stopped = Event()
         self._queue: Queue[JSONDict | Exception] = Queue(maxsize=1024)
         self._workers: list[Thread] = []
@@ -120,7 +124,7 @@ class KickPublicTransport(KickPusherTransport):
         """Negotiate chat and global descriptors separately, including regional URLs."""
         del force_discover
         try:
-            proxy = {"https": self._proxy_url} if self._proxy_url else None
+            proxy = self._configured_proxy
             # Explicit arguments keep transport/session ownership typed and isolated.
             self._state = KickPublicState(
                 proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
@@ -138,7 +142,10 @@ class KickPublicTransport(KickPusherTransport):
                     else _NegotiatedPusherTransport()
                 )
                 transport._url = connection.url
-                transport._proxy_url = self._proxy_url
+                transport._proxy_url = resolve_session_proxy(
+                    SimpleNamespace(proxies=proxy, trust_env=self._trust_env),
+                    connection.url.replace("wss://", "https://", 1),
+                )
                 transport._connector = partial(
                     _default_connector, origin="https://kick.com"
                 )

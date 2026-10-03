@@ -554,6 +554,10 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
             channel_id=channel_id,
             trust_env=getattr(getattr(downloader, "session", None), "trust_env", True),
             http_timeout=downloader._http_timeout,
+            proxy=dict(
+                getattr(getattr(downloader, "session", None), "proxies", {}) or {}
+            )
+            or None,
             diagnostic_callback=diagnostics.increment,
         )
     frame_iterator = frame_iterator or read_frames

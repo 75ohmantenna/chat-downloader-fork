@@ -87,7 +87,9 @@ The Kick flow depends on the target type.
    from account credentials and redirects are disabled. Open both sockets with
    the Kick browser origin and subscribe to the public feeds listed below.
    `proxy=""` opens a direct TLS socket even when environment proxy variables
-   are set; a configured proxy uses the same explicit socket path.
+   are set; a configured proxy uses the same explicit socket path. Environment
+   proxy and `NO_PROXY` rules are evaluated for each negotiated hostname;
+   anonymous HTTP sessions retain the explicit proxy configuration separately.
 6. Confirm each subscription, answer heartbeats, decode publications, and
    dispatch typed events. Deduplicate recent chat IDs and gift chunk identities,
    filter by message groups/types, and yield. Poll anonymous channel metadata and
