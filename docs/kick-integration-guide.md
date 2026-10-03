@@ -224,6 +224,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `parsing/moderation.py`: ban, unban, message-delete, and chat-clear
   normalization, including temporary-ban duration/permanence, Kick's
   AI-moderation flag, and violated-rule labels.
+- `deleted_message_cache.py`: bounded original-text and author-name retention
+  for live deletion notices.
 - `parsing/pins.py`: pinned-message created/deleted normalization.
 - `parsing/polls.py`: poll update/delete normalization. Updates retain the poll
   title, countdown, result-display duration, options, vote counts, and optional
@@ -524,6 +526,20 @@ Preloaded history plus VOD and clip replay do not receive this live-arrival
 field.
 AI-moderated deletion notices append `[AI moderated]` and any violated-rule
 labels, while ordinary deletion notices stay compact.
+When the original message is cached, deletion notices also append its author
+name and text, for example `[Message deleted: ID] [AI moderated] (rules: hate)
+Author: Original text`. JSONL retains these values in
+`metadata.deleted_message_text` and, when available,
+`metadata.deleted_message_author`; the deletion event's `message` stays empty.
+The per-chat FIFO cache stores only message IDs, normalized text, and author
+names from preloaded history, live messages, and reconnect backfill, including
+text messages excluded by output filters. It survives reconnects and holds up
+to 10,000 messages with a 16 MiB budget for retained strings and their Python
+object overhead; entry/container overhead is additional and bounded by the
+message limit. Oldest entries are evicted when either limit is reached, and a
+single message exceeding the byte budget is skipped without truncation.
+Messages never received, empty text, and evicted or oversized entries retain
+the existing ID-only deletion notice. This cache applies to live chat only.
 Poll events are live-only and opt-in through `polls` or `all`. Kick does not
 supply IDs or provider timestamps for the observed poll frames, so both event
 types receive monotonic, namespaced receive-time IDs and

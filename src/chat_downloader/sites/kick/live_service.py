@@ -39,6 +39,7 @@ from .constants import (
     PUSHER_SUBSCRIPTION_SUCCEEDED,
     is_numeric_id,
 )
+from .deleted_message_cache import _DeletedMessageCache
 from .errors import KickError, KickRealtimeRejected, KickServerError
 from .history import iter_forward_history
 from .live_iterator import KickLiveIterator
@@ -570,6 +571,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
 
     msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     seen_message_cache = _SeenMessageCache(limit=_KICK_LIVE_SEEN_MESSAGE_LIMIT)
+    deleted_message_cache = _DeletedMessageCache()
     successful_frame_capture = BoundedSampleCapture(
         _SUCCESSFUL_FRAME_CAPTURE_ENV, _SUCCESSFUL_FRAME_CAPTURE_LIMIT
     )
@@ -580,6 +582,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
             is_new, _evicted = seen_message_cache.register(message_id)
             if not is_new:
                 return False
+        deleted_message_cache.observe(message)
         return msg_filter.should_add(message)
 
     # 1. Preloaded history (best-effort; non-fatal on failure).
