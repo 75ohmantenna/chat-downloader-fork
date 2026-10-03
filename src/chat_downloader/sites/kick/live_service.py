@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from functools import partial
 from itertools import islice
+from threading import Lock
 from time import time_ns
 from typing import TYPE_CHECKING, Any
 
@@ -38,14 +39,16 @@ from .constants import (
     PUSHER_SUBSCRIPTION_SUCCEEDED,
     is_numeric_id,
 )
-from .errors import KickError, KickServerError
+from .errors import KickError, KickRealtimeRejected, KickServerError
 from .history import iter_forward_history
+from .live_iterator import KickLiveIterator
 from .parsing.events import (
     MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX,
     dispatch_event,
 )
 from .parsing.messages import iter_preloaded_messages
 from .parsing.pins import parse_pinned_message_created_event
+from .public_transport import KickPublicTransport
 from .pusher_discovery import _HttpClient, _RequestsHttpClient
 from .websocket_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
@@ -93,6 +96,7 @@ class _KickLiveDiagnostics:
     """Mutable counters shared by Kick live orchestration and run summaries."""
 
     def __init__(self) -> None:
+        self._counter_lock = Lock()
         self.summary: dict[str, object] = {
             "websocket_frame_count": 0,
             "control_frame_count": 0,
@@ -105,6 +109,12 @@ class _KickLiveDiagnostics:
             "websocket_reconnect_count": 0,
             "pusher_error_count": 0,
             "pusher_key_recovery_count": 0,
+            "pusher_connection_count": 0,
+            "centrifugo_connection_count": 0,
+            "public_state_poll_count": 0,
+            "public_state_poll_failure_count": 0,
+            "public_subscription_count": 0,
+            "synthetic_frame_count": 0,
             "preloaded_emitted_count": 0,
             "live_emitted_count": 0,
             "reconnect_backfill_emitted_count": 0,
@@ -115,16 +125,17 @@ class _KickLiveDiagnostics:
 
     def increment(self, name: str) -> None:
         """Increment one integer counter by name."""
-        if name.startswith(MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX):
-            message_type = name.removeprefix(MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX)
-            counts = self.summary["malformed_event_type_counts"]
-            if isinstance(counts, dict):
-                count = counts.get(message_type, 0)
-                counts[message_type] = count + 1 if isinstance(count, int) else 1
-            return
-        value = self.summary.get(name)
-        if isinstance(value, int):
-            self.summary[name] = value + 1
+        with self._counter_lock:
+            if name.startswith(MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX):
+                message_type = name.removeprefix(MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX)
+                counts = self.summary["malformed_event_type_counts"]
+                if isinstance(counts, dict):
+                    count = counts.get(message_type, 0)
+                    counts[message_type] = count + 1 if isinstance(count, int) else 1
+                return
+            value = self.summary.get(name)
+            if isinstance(value, int):
+                self.summary[name] = value + 1
 
     def record_backfill_gap(
         self, checkpoint_timestamp: int | None, recovery_floor: int
@@ -141,7 +152,7 @@ class _KickLiveDiagnostics:
             )
         return microseconds
 
-    def record_frame(self) -> int:
+    def record_frame(self, *, synthetic: bool = False) -> int:
         """Record and return a decoded frame's UTC receive timestamp."""
         received_timestamp = time_ns() // 1_000
         previous_timestamp = self.summary["last_websocket_frame_timestamp"]
@@ -150,7 +161,9 @@ class _KickLiveDiagnostics:
             and received_timestamp <= previous_timestamp
         ):
             received_timestamp = previous_timestamp + 1
-        self.increment("websocket_frame_count")
+        self.increment(
+            "synthetic_frame_count" if synthetic else "websocket_frame_count"
+        )
         self.summary["last_websocket_frame_timestamp"] = received_timestamp
         return received_timestamp
 
@@ -238,17 +251,22 @@ def get_chat_by_channel(
     status = "live" if isinstance(data.get("livestream"), dict) else "idle"
     diagnostics = _KickLiveDiagnostics()
 
+    control = KickLiveIterator() if transport_factory is None else None
+    source = _iter_chat_messages(
+        downloader,
+        username,
+        channel_id,
+        chatroom_id,
+        request,
+        diagnostics,
+        transport_factory=transport_factory,
+        frame_iterator=frame_iterator,
+        control=control,
+    )
+    if control is not None:
+        control.source = source
     return Chat(
-        _iter_chat_messages(
-            downloader,
-            username,
-            channel_id,
-            chatroom_id,
-            request,
-            diagnostics,
-            transport_factory=transport_factory,
-            frame_iterator=frame_iterator,
-        ),
+        control if control is not None else source,
         title=title,
         status=status,
         video_type="video",
@@ -266,6 +284,7 @@ def _open_subscribed_transport(
     proxy_url: str | None = None,
     pusher_http_client: _HttpClient | None = None,
     force_discover: bool = False,
+    control: KickLiveIterator | None = None,
 ) -> KickPusherTransport:
     """Open and subscribe a fresh transport using request retry/recv settings.
 
@@ -277,9 +296,12 @@ def _open_subscribed_transport(
         proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
         pusher_http_client: HTTP client for Pusher-key discovery.
         force_discover: Bypass the cached Pusher application key.
+        control: Optional owner for interrupting an active receive on cancellation.
     """
     for attempt_number in _attempt_numbers(request.max_attempts):
         transport = transport_factory()
+        if control is not None:
+            control.transport = transport
         transport._proxy_url = proxy_url
         transport._pusher_http_client = pusher_http_client
         try:
@@ -522,11 +544,16 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     transport_factory: Callable[[], KickPusherTransport] | None = None,
     frame_iterator: Callable[[KickPusherTransport], Generator[JSONDict, None, None]]
     | None = None,
+    control: KickLiveIterator | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized live chat messages for a channel."""
     if transport_factory is None:
         transport_factory = partial(
-            KickPusherTransport,
+            KickPublicTransport,
+            username=username,
+            channel_id=channel_id,
+            trust_env=getattr(getattr(downloader, "session", None), "trust_env", True),
+            http_timeout=downloader._http_timeout,
             diagnostic_callback=diagnostics.increment,
         )
     frame_iterator = frame_iterator or read_frames
@@ -554,6 +581,9 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         record_diagnostic=diagnostics.increment,
     )
 
+    if control is not None and control.stopped.is_set():
+        return
+
     # 2. Live WebSocket feed with reconnect.
     proxy_url = resolve_session_proxy(
         getattr(downloader, "session", None), "https://ws-us2.pusher.com"
@@ -575,8 +605,11 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         transport_factory,
         proxy_url=proxy_url,
         pusher_http_client=pusher_http_client,
+        control=control,
     )
     transport = open_transport()
+    if control is not None:
+        control.transport = transport
     consecutive_connection_failures = 0
     pusher_error_recoveries = 0
     last_provider_timestamp: int | None = None
@@ -585,12 +618,22 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     pending_reconnect_backfill = False
     try:
         while True:
+            if control is not None and control.stopped.is_set():
+                return
             try:
                 for frame in frame_iterator(transport):
+                    if control is not None and control.stopped.is_set():
+                        return
                     # A decoded application frame proves this connection made
                     # progress, even when it is not a chat-message event.
-                    consecutive_connection_failures = 0
-                    received_timestamp = diagnostics.record_frame()
+                    if (
+                        not str(frame.get("event", "")).startswith("pusher")
+                        and frame.get("source") != "public_rest"
+                    ):
+                        consecutive_connection_failures = 0
+                    received_timestamp = diagnostics.record_frame(
+                        synthetic=frame.get("source") == "public_rest"
+                    )
                     live_message = dispatch_event(
                         frame,
                         record_diagnostic=diagnostics.increment,
@@ -612,7 +655,11 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                             provider_clock_offset = 0
                     subscription_confirmed = (
                         frame.get("event") == PUSHER_SUBSCRIPTION_SUCCEEDED
-                        or live_message is not None
+                        and frame.get("channel")
+                        in (None, f"chatrooms.{chatroom_id}.v2")
+                    ) or (
+                        live_message is not None
+                        and live_message.get("message_type") == "text_message"
                     )
                     if pending_reconnect_backfill and subscription_confirmed:
                         checkpoint_timestamp = (
@@ -685,12 +732,17 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                                 successful_frame_capture.capture(
                                     "kick-websocket-frame-" + label, frame
                                 )
-                        pusher_error_recoveries = 0
+                        if frame.get("source") != "public_rest":
+                            pusher_error_recoveries = 0
                         if emit(live_message):
                             diagnostics.increment("live_emitted_count")
                             yield live_message
             except (ConnectionError, KickError) as error:
                 transport.close()
+                if control is not None and control.stopped.is_set():
+                    return
+                if isinstance(error, KickRealtimeRejected):
+                    raise
                 force_discover = isinstance(error, KickError)
                 if force_discover:
                     pusher_error_recoveries += 1
@@ -709,6 +761,8 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                     failure_count, error=error, request=request, provider=provider
                 )
                 transport = open_transport(force_discover=force_discover)
+                if control is not None:
+                    control.transport = transport
                 if force_discover:
                     log(
                         "warning",

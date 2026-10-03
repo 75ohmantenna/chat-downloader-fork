@@ -2,11 +2,13 @@
 
 This guide explains how the Kick integration works in
 `chat-downloader-fork`. It is intended for maintainers debugging the live
-Pusher path or the REST-backed VOD and clip replay paths.
+public realtime path or the REST-backed VOD and clip replay paths.
 
 The Kick stack is split across two transport families:
 
-- A Pusher (WebSocket) feed for live chat.
+- Independently negotiated Pusher or Centrifugo WebSockets for public chat
+  and channel events. Anonymous Centrifugo connection tokens are requested and
+  renewed automatically; no account, cookie, OAuth token, or login is needed.
 - Kick's public web JSON endpoints (`api/v2` for channel, clip, and message data,
   plus `api/v1/video` for VOD metadata) and the anonymous mobile `api/v1/clips`
   fallback. When a cookie file supplies a `kick.com` `session_token`, primary
@@ -26,7 +28,7 @@ The Kick implementation is responsible for:
 
 - matching Kick live channel, VOD, and clip URLs
 - retrieving channel, video, and web/mobile clip metadata
-- streaming live chat from the Pusher WebSocket (live *and* offline channels —
+- streaming live chat from negotiated public WebSockets (live *and* offline channels —
   the chatroom stays active when the stream is down)
 - emitting preloaded recent history and current pin state on connect, then
   deduplicating them against the live feed
@@ -79,19 +81,23 @@ The Kick flow depends on the target type.
 4. Fetch preloaded recent messages and the current pin state (best-effort;
    non-fatal on failure). The API returns messages newest-first; they are
    reversed into chronological order before the current pin is emitted.
-5. Open the Pusher WebSocket with the compiled public application key,
-   subscribe to the public chatroom channel, and stream live frames.
+5. Negotiate `web.kick.com/api/v1/realtime/connection` and
+   `realtime/channels/{channel_id}/chat/connection` independently. Each selects
+   Pusher credentials or a regional Centrifugo endpoint. Sessions are isolated
+   from account credentials and redirects are disabled. Open both sockets with
+   the Kick browser origin and subscribe to the public feeds listed below.
    `proxy=""` opens a direct TLS socket even when environment proxy variables
    are set; a configured proxy uses the same explicit socket path.
-6. Dispatch each frame to a typed parser, deduplicate against preloaded and
-   recent message IDs, filter by message groups/types, and yield.
-7. On disconnect, reconnect and resubscribe. If Pusher rejects the application
-   key, force one fresh discovery before treating a repeated rejection as
-   terminal. After either recovered subscription is confirmed, fetch a
-   ten-second timestamp baseline from the last provider message time through a
-   clock/latency-safe confirmation envelope, and emit only records absent from
-   the bounded deduplication cache. Refresh the current pin after the bounded
-   message backfill.
+6. Confirm each subscription, answer heartbeats, decode publications, and
+   dispatch typed events. Deduplicate recent chat IDs and gift chunk identities,
+   filter by message groups/types, and yield. Poll anonymous channel metadata and
+   current viewer counts every 60 seconds; emit only changed snapshots.
+7. On a temporary failure, reconnect and renegotiate both connections. After
+   the primary chat subscription is confirmed, fetch a ten-second timestamp
+   baseline through the bounded clock/latency-safe envelope, emit unseen records,
+   and refresh the current pin. Reconnect when the polled category changes so
+   drop feeds follow current categories. Permanent Centrifugo command rejections
+   terminate the run. Deadline cancellation wakes socket and queue readers.
 
 ### VODs
 
@@ -176,7 +182,14 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 
 ### Parsing and shared Kick data
 
-- `parsing/events.py`: Pusher frame dispatch. Maps raw event names to
+- `realtime_connection.py`: isolated anonymous negotiation and token requests.
+- `centrifugo_transport.py`: public protocol replies, publications, and lease renewal.
+- `public_transport.py`: independent connections, bounded queues, feed acknowledgements,
+  and snapshot polling.
+- `public_state.py`: anonymous channel/viewer state and category discovery.
+- `live_iterator.py`: interruptible ownership of the active live transport.
+- `parsing/public_events.py`: complete public lifecycle payloads and gift chunks.
+- `parsing/events.py`: public frame dispatch. Maps raw event names to
   normalized message types via `EVENT_NAME_MAP`, then to parser functions via
   `_PARSER_DISPATCH`. Decodes Kick's double-encoded `data` field. Control
   frames are omitted from output; unknown events are captured when explicitly
@@ -288,55 +301,68 @@ omits that field rather than inventing one. In both shapes,
 creation time; `metadata.pinned_message_created_at` remains as a compatibility
 alias with the same value.
 
-### Pusher transport
+### Public realtime transports
 
-Live chat uses the public Pusher WebSocket (`wss://ws-us2.pusher.com/app/...`).
-The transport:
+`public_transport.py` owns two independent negotiated connections and a bounded
+publication queue. The website's primary `chatrooms.{chatroom_id}.v2` feed uses
+its channel-chat connection; the other feeds use the global connection:
 
-- builds the URL from the resolved Pusher app key
-- subscribes anonymously (`auth: ""`) to `chatrooms.{chatroom_id}.v2`
-- applies the one-second receive-timeout minimum and debug-logs the requested
-  and effective values
-- answers Pusher `ping` frames with `pong` inside `read_frames`, then exposes
-  them to the orchestration layer for connection diagnostics
-- treats timed-out or malformed reads as skippable (`None`)
-- raises `ConnectionError` on a closed socket, which drives reconnect
+| Public feed | Available events |
+| --- | --- |
+| `chatrooms.{chatroom_id}.v2` | Chat, deletion, ban/unban, subscription, clear, pin, poll |
+| `chatrooms.{chatroom_id}` | Stream hosting |
+| `chatroom_{chatroom_id}` | Gifted subscription chunks and reward redemption |
+| `channel.{channel_id}` | Stream start/stop and chat movement |
+| `channel_{channel_id}` | Settings, Kicks, gift/Kicks leaderboards, goals, participants |
+| `predictions-channel-{channel_id}` | Prediction creation and updates |
+| `drops_category_{category_id}` | Category drop campaign start |
 
-Successful debug runs include live-connection diagnostics in the final run
-summary: decoded, control, parsed, unsupported, unknown-message-type,
-malformed, malformed-event counts grouped by normalized type, and invalid-frame
-counts; successful reconnect and Pusher-key recovery counts; and the last
-decoded-frame timestamp in UTC microseconds. Emitted-source counts distinguish
-initial preloaded history/current-pin records, live WebSocket records, and
-records recovered through reconnect backfill.
-When the last observed message predates the bounded recovery window, the
-summary also counts truncated reconnect windows and their cumulative uncovered
-duration in microseconds; a warning reports each uncovered interval.
-Per-type output counts remain separate because filtering and preloaded history
-can make them differ from raw Pusher counts.
+Anonymous probes on 2026-10-03 confirmed all these subscription families,
+including predictions. Subscription confirmation establishes access, not proof
+that every rare event occurred during the sample. Curated fixtures distinguish
+observed wire contracts from examples reconstructed from website bindings.
 
-Kick live channel URLs reject `start_time` and `end_time` because the public
-Pusher feed and short preloaded history cannot seek. Use a Kick VOD or clip URL
-for bounded replay. VOD offsets are relative to the recording start; clip
-offsets are relative to the clip. Both are clamped to the available recording.
+Pusher uses negotiated application keys and empty public subscription auth.
+The legacy `pusher_discovery.py` compiled-key/bundle scan remains available for
+its standalone transport and maintenance tests; production reconnects perform
+fresh anonymous negotiation rather than relying on that historical marker.
 
-### Pusher application key discovery
+Centrifugo translates newline-batched replies and publications into the same
+internal event envelope. Command acknowledgement waits are bounded. Empty JSON
+ping frames receive empty JSON pongs when the server requests them. Connection
+leases renew before expiry through anonymous `realtime/auth/connection`; tokens
+are never logged or persisted. Temporary command errors reconnect; permanent
+rejections terminate. See the [Centrifugo JSON protocol](https://centrifugal.dev/docs/transports/client_protocol).
 
-The compiled Pusher app key is not a secret — it grants only anonymous,
-read-only subscription to public chatrooms. The normal connection path uses
-that key without fetching Kick's homepage or JavaScript bundles. This avoids a
-bounded but unnecessary scan on every new CLI process.
+Both providers use short receive polls, bounded subscription waits, and idle
+watchdogs. Invalid shapes and unsupported event names remain visible in bounded
+diagnostics and opt-in sanitized samples. Counters include provider connections,
+confirmed public subscriptions, snapshot polls/failures, WebSocket frames, and
+synthetic REST frames separately. These fixed counters are retained in manifests.
 
-If Pusher returns `pusher:error`, `pusher_discovery.py::resolve_pusher_key`
-performs one best-effort compatibility scan for the historical
-`NEXT_PUBLIC_PUSHER_KEY` marker, caches a discovered replacement, and
-reconnects. Current Kick bundles may omit that marker, so refresh falls back to
-the compiled key when the homepage, bundle requests, or extraction do not
-succeed. Discovery follows the downloader's HTTP timeout policy, does not
-follow redirects, and retains a three-second per-request and ten-second total
-budget. A second Pusher error is terminal, preventing an invalid key from
-causing an unbounded reconnect loop. `force_discover=True` remains an internal
-test and maintenance seam on the transport.
+Channel snapshots supply public livestream status, title, category, follower
+count, and chat settings. `kick.com/current-viewers` supplies viewer counts for
+the current livestream. These are polled observations with receive timestamps,
+not private push events. Public lifecycle events retain their complete payload
+under `metadata.data`, plus event name, channel, and source. A provider entity ID
+is not used for deduplication because successive state updates may share it.
+Compact gifts preserve `gifted_total`, `gifter_total`, and `chunk_details` under
+`metadata.kick_event.data`; normalized `quantity` counts recipients in that
+chunk, preventing the overall gift total from being counted once per chunk.
+
+Private account, points, notifications, ads, age verification, and
+`private-livestream` update feeds remain outside anonymous coverage. Public
+metadata polling supplies snapshots of livestream changes. Reconnect history
+recovers chat and the current pin; the public APIs do not provide equivalent
+history for arbitrary lifecycle events, so transitions during an outage can be
+missed. Snapshot polling may miss transitions between polls. Long in-flight HTTP
+requests can delay shutdown; incomplete deadline accounting is explicitly
+reported for review by `scripts/inspect_kick_capture.py` rather than certified.
+
+The live service still reports truncated reconnect windows and uncovered time.
+The inspector subtracts counted deadline-prefetched records when reconciling
+emissions against persisted records. The default filter remains `messages`.
+Live URLs cannot seek with `start_time` or `end_time`; use a VOD or clip URL.
 
 ### Dedup and filtering
 
@@ -350,10 +376,11 @@ Before yielding, the live service:
 
 The receive loop runs under a reconnect wrapper: a `ConnectionError` closes the
 transport, reopens it, and resubscribes, retrying per the request's retry
-policy. A Pusher error gets the separate one-shot forced-discovery recovery
-described above. Both recovery paths wait until a Pusher subscription-success
-frame or an application message confirms that the replacement connection is
-active. They then query forward timestamp history from the newest provider
+policy. The legacy Pusher seam retains its one-shot key-discovery recovery;
+production transports renegotiate both descriptors. Recovery waits for the
+primary chat feed acknowledgement or a text chat message before history
+backfill. A lifecycle feed acknowledgement or REST snapshot cannot confirm
+that primary chat has resubscribed. They then query forward timestamp history from the newest provider
 timestamp already observed, or from the last parsed message's receive timestamp
 when no provider time exists. When the latest provider/client clock delta is
 within the ten-second recovery window, the envelope uses the earlier of local
@@ -406,6 +433,15 @@ message types:
 | `pins` | `pinned_message`, `pinned_message_deleted` |
 | `hosts` | `stream_host` |
 | `polls` | `poll_update`, `poll_deleted` |
+| `channel` | `stream_started`, `stream_stopped`, `chat_moved`, `chat_settings_changed`, `chatroom_updated`, `channel_metadata` |
+| `rewards` | `reward_redeemed` |
+| `kicks` | `kicks_gifted`, `kicks_gifted_deleted` |
+| `leaderboards` | `gifts_leaderboard_updated`, `kicks_leaderboard_updated` |
+| `goals` | `goal_created`, `goal_updated`, `goal_progress_updated`, `goal_achieved`, `goal_canceled` |
+| `events` | `event_participant_joined`, `event_participant_left` |
+| `drops` | `drops_campaign_started` |
+| `viewers` | `viewer_count` |
+| `predictions` | `prediction_created`, `prediction_updated` |
 
 The default message group surfaces only `messages`. Use `--message_groups all`
 for full-spectrum diagnostics, or pass a comma-separated subset such as

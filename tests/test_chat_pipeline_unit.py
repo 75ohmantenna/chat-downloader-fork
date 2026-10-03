@@ -27,6 +27,16 @@ def test_message_limit_preserves_selected_items(limit, expected) -> None:
     assert list(cast("Any", chat.chat)) == expected
 
 
+@pytest.mark.parametrize("stoppable", [True, False])
+def test_message_limit_preserves_optional_deadline_cancellation(stoppable):
+    source = MagicMock() if stoppable else iter(())
+    chat = Chat(source)
+    apply_message_limit(chat, 10)
+    chat.chat.request_stop()
+    if stoppable:
+        source.request_stop.assert_called_once()
+
+
 @pytest.mark.parametrize("interrupted", [False, True])
 def test_message_limit_closes_source_once(interrupted):
     source = MagicMock()

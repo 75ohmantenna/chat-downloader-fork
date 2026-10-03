@@ -48,6 +48,11 @@ from chat_downloader.sites.kick.parsing.polls import (
     parse_poll_deleted_event,
     parse_poll_update_event,
 )
+from chat_downloader.sites.kick.parsing.public_events import (
+    PUBLIC_MESSAGE_TYPES,
+    normalize_compact_gifts,
+    parse_public_event,
+)
 from chat_downloader.sites.kick.parsing.subscriptions import (
     parse_gifted_subscriptions_event,
     parse_subscription_event,
@@ -119,7 +124,7 @@ def _record_diagnostic(
         callback(name)
 
 
-def _normalize_compact_live_payload(
+def _normalize_compact_live_payload(  # noqa: C901 — independent compact provider event shapes
     message_type: str,
     payload: object,
     received_timestamp: int | None,
@@ -134,6 +139,14 @@ def _normalize_compact_live_payload(
 
     if message_type == "stream_host":
         return normalize_compact_host(payload, received_timestamp)
+
+    if message_type == "gifted_subscriptions":
+        return normalize_compact_gifts(payload, received_timestamp)
+
+    if message_type == "chat_clear" and (payload == [] or isinstance(payload, dict)):
+        normalized = dict(payload) if isinstance(payload, dict) else {}
+        normalized.setdefault("id", f"kick-chat-clear:{received_timestamp}")
+        return normalized
 
     if message_type == "pinned_message_deleted" and payload == []:
         return {"id": f"kick-unpin:{received_timestamp}"}
@@ -176,7 +189,7 @@ def _normalize_compact_live_payload(
     return normalized
 
 
-def dispatch_event(
+def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event accounting
     frame: Mapping[str, object],
     *,
     record_diagnostic: Callable[[str], None] | None = None,
@@ -243,6 +256,11 @@ def dispatch_event(
 
     # --- Look up the parser and run it ----------------------------------------
     parser = _PARSER_DISPATCH.get(message_type)
+    if message_type in PUBLIC_MESSAGE_TYPES:
+
+        def parser(payload: object) -> dict[str, object]:
+            return parse_public_event(frame, payload, message_type, received_timestamp)
+
     if parser is None:  # pragma: no cover — programming error guard
         _record_diagnostic(record_diagnostic, "malformed_event_count")
         _record_diagnostic(
@@ -262,10 +280,10 @@ def dispatch_event(
         return None
 
     try:
-        payload = _decode_event_data(frame.get("data"))
+        raw_payload = _decode_event_data(frame.get("data"))
         payload = _normalize_compact_live_payload(
             message_type,
-            payload,
+            raw_payload,
             received_timestamp,
         )
         if (
@@ -275,6 +293,16 @@ def dispatch_event(
         ):
             _record_diagnostic(record_diagnostic, "unknown_message_type_count")
         message = parser(payload)
+        if message is not None and event_name in {
+            "GiftedSubscriptionsEvent",
+            "App\\Events\\StreamHostedEvent",
+            "App\\Events\\ChatroomClearEvent",
+        }:
+            message.setdefault("metadata", {})["kick_event"] = {
+                "event_name": event_name,
+                "channel": frame.get("channel"),
+                "data": raw_payload,
+            }
     except (
         ParsingError,
         ValueError,

@@ -196,6 +196,37 @@
     ],
     "kick": [
         {
+            "matching": [
+                "stream_started",
+                "stream_stopped",
+                "chat_moved",
+                "chat_settings_changed",
+                "chatroom_updated",
+                "channel_metadata",
+                "reward_redeemed",
+                "kicks_gifted",
+                "kicks_gifted_deleted",
+                "gifts_leaderboard_updated",
+                "kicks_leaderboard_updated",
+                "goal_created",
+                "goal_updated",
+                "goal_progress_updated",
+                "goal_achieved",
+                "goal_canceled",
+                "event_participant_joined",
+                "event_participant_left",
+                "drops_campaign_started",
+                "viewer_count",
+                "prediction_created",
+                "prediction_updated"
+            ],
+            "template": "{timestamp|received_timestamp|time_text}{message}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]"
+            }
+        },
+        {
             "matching": "message_deleted",
             "template": "{timestamp|received_timestamp|time_text}{metadata.deleted_message_id|message_type}{metadata.ai_moderated}{metadata.violated_rules}",
             "inherit": "default",

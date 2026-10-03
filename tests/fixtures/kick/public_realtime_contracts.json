@@ -1,0 +1,101 @@
+{
+  "provenance": {
+    "date": "2026-10-03",
+    "channel": "clavicular",
+    "description": "Connection and protocol shapes observed anonymously. Rare event examples reconstructed from public website bindings; these are not observed live publications."
+  },
+  "connection": {
+    "data": {
+      "connections": [
+        {
+          "provider": "centrifugo",
+          "credentials": {
+            "url": "wss://realtime.us-east-1.platform.kick.com/connection/websocket"
+          }
+        }
+      ],
+      "mode": "websocket"
+    }
+  },
+  "connect_reply": {
+    "id": 1,
+    "connect": {
+      "client": "anonymous-client",
+      "expires": true,
+      "ttl": 2699,
+      "ping": 25,
+      "pong": true
+    }
+  },
+  "events": [
+    {
+      "event": "App\\Events\\ChatroomClearEvent",
+      "data": []
+    },
+    {
+      "event": "App\\Events\\StreamHostedEvent",
+      "data": {
+        "user": {
+          "username": "host"
+        },
+        "message": {
+          "numberOfViewers": 42
+        }
+      }
+    },
+    {
+      "event": "GiftedSubscriptionsEvent",
+      "data": {
+        "chatroom_id": 62484699,
+        "gifter_username": "gifter",
+        "gifted_usernames": [
+          "recipient"
+        ],
+        "gifted_total": 50,
+        "gifter_total": 100,
+        "chunk_details": {
+          "correlation_id": "gift-1",
+          "chunk_index": 0,
+          "total_chunks": 2
+        }
+      }
+    },
+    {
+      "event": "ChatSettingsChanged",
+      "data": {
+        "settings": {
+          "slow_mode": true
+        }
+      }
+    },
+    {
+      "event": "App\\Events\\StreamerIsLive",
+      "data": {
+        "livestream": {
+          "id": 130241576
+        }
+      }
+    },
+    {
+      "event": "App\\Events\\StopStreamBroadcast",
+      "data": {}
+    },
+    {
+      "event": "drops_campaign_started",
+      "data": 12345
+    }
+  ],
+  "additional_event_contracts": [
+    {
+      "event": "App\\Events\\ChatroomUpdatedEvent",
+      "data": {
+        "id": 62484699,
+        "slow_mode": true
+      },
+      "provenance": {
+        "event_name": "Observed nine times during the anonymous 2026-10-03 live validation.",
+        "payload": "Synthetic example; raw publications were not retained in that run. The parser preserves arbitrary JSON without assigning this schema."
+      }
+    }
+  ]
+}

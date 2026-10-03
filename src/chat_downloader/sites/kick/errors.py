@@ -20,6 +20,10 @@ class KickCountryBlocked(KickError):
     """Raised when Kick reports that the request's country is blocked."""
 
 
+class KickRealtimeRejected(KickError):
+    """A permanent anonymous protocol rejection; renegotiation cannot repair it."""
+
+
 class KickServerError(KickError):
     """Raised for transient Kick server problems (HTTP 429/5xx).
 

@@ -44,6 +44,12 @@ _FRAME_KEYS = (
     "websocket_reconnect_count",
     "pusher_error_count",
     "pusher_key_recovery_count",
+    "pusher_connection_count",
+    "centrifugo_connection_count",
+    "public_state_poll_count",
+    "public_state_poll_failure_count",
+    "public_subscription_count",
+    "synthetic_frame_count",
     "preloaded_emitted_count",
     "live_emitted_count",
     "reconnect_backfill_emitted_count",
@@ -54,6 +60,8 @@ _ANOMALIES = (
     "malformed_event_count",
     "invalid_websocket_frame_count",
     "pusher_error_count",
+    "public_state_poll_failure_count",
+    "deadline_accounting_incomplete",
 )
 _GAPS = (
     "unaccounted_frames",
@@ -197,19 +205,39 @@ def _frame_accounting(
     summary: dict[str, object], inspection: _Inspection
 ) -> dict[str, int]:
     """Reconcile decoded frames and emitted records; expose only fixed keys."""
-    counters = get_dict(summary, "provider_diagnostics")
+    counters = {
+        **dict.fromkeys(
+            (
+                "pusher_connection_count",
+                "centrifugo_connection_count",
+                "public_state_poll_count",
+                "public_state_poll_failure_count",
+                "public_subscription_count",
+                "synthetic_frame_count",
+            ),
+            0,
+        ),
+        **get_dict(summary, "provider_diagnostics"),
+    }
     result = {key: _counter(counters, key) for key in _FRAME_KEYS}
     if type(summary.get("success")) is not bool:
         raise ValueError(_INVALID_SUMMARY)
     result["run_failed"] = int(not summary["success"])
-    result["unaccounted_frames"] = result["websocket_frame_count"] - sum(
-        result[key]
-        for key in (
-            "control_frame_count",
-            "parsed_event_count",
-            "unsupported_event_count",
-            "malformed_event_count",
-            "pusher_error_count",
+    result["deadline_accounting_incomplete"] = int(
+        summary.get("deadline_prefetch_count_complete", True) is not True
+    )
+    result["unaccounted_frames"] = (
+        result["websocket_frame_count"]
+        + result["synthetic_frame_count"]
+        - sum(
+            result[key]
+            for key in (
+                "control_frame_count",
+                "parsed_event_count",
+                "unsupported_event_count",
+                "malformed_event_count",
+                "pusher_error_count",
+            )
         )
     )
     result["emitted_minus_records"] = (
@@ -222,6 +250,10 @@ def _frame_accounting(
             )
         )
         - inspection.records
+        - _counter(
+            {"prefetched_after_deadline_count": 0, **summary},
+            "prefetched_after_deadline_count",
+        )
     )
     result["summary_minus_records"] = (
         _counter(summary, "message_count") - inspection.records

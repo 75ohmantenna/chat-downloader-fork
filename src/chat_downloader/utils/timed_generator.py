@@ -7,6 +7,7 @@ from __future__ import annotations
 import queue as _queue
 import threading
 import time
+from contextlib import suppress
 from contextvars import copy_context
 from typing import TYPE_CHECKING, Any, NoReturn, Self
 
@@ -171,6 +172,11 @@ class TimedGenerator:
 
     def _cancel_timers(self) -> None:
         self._stop_requested.set()
+        request_stop = getattr(self.generator, "request_stop", None)
+        if callable(request_stop):
+            # Cancellation is best-effort; bounded close still follows.
+            with suppress(OSError, RuntimeError, ValueError):
+                request_stop()
         if self.timer is not None:
             self.timer.cancel()
         if self.inactivity_timer is not None:

@@ -48,7 +48,7 @@ if TYPE_CHECKING:
 
 _DEFAULT_TIMEOUT = (10.0, 30.0)
 _KICK_COUNTRY_BLOCKED_STATUS = 423
-_ResourceKind = Literal["channel", "video", "clip", "messages"]
+_ResourceKind = Literal["channel", "video", "clip", "messages", "realtime"]
 
 
 def _is_safe_bearer_token(token: object) -> bool:

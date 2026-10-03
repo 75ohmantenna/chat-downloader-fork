@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MIT
 from __future__ import annotations
 
+import ast
 import json
 import os
 import subprocess
@@ -110,6 +111,21 @@ def _replay_log(path, count=1, termination_reason="completed", **changes):
 def _assert_bad_summary(capture, log, capsys):
     assert main([str(capture), "--debug-log", str(log)]) == 2
     assert json.loads(capsys.readouterr().out) == {"error": "invalid_run_summary"}
+
+
+@pytest.mark.parametrize(("complete", "status"), [(True, "ok"), (False, "review")])
+def test_deadline_prefetch_is_accounted_and_pending_shutdown_needs_review(
+    capture, tmp_path, complete, status
+):
+    log = _log(tmp_path / "debug.log")
+    summary = ast.literal_eval(log.read_text().split("Run summary: ", 1)[1])
+    summary["provider_diagnostics"]["live_emitted_count"] += 1
+    summary["prefetched_after_deadline_count"] = 1
+    summary["deadline_prefetch_count_complete"] = complete
+    log.write_text("[DEBUG] Run summary: " + repr(summary) + "\n")
+    report = inspect_capture(capture, log)
+    assert report["status"] == status
+    assert report["frame_accounting"]["emitted_minus_records"] == 0
 
 
 @pytest.mark.parametrize("prefix", ["", "[2026-10-02 01:21:15 UTC] "])

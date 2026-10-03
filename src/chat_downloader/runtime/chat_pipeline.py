@@ -64,6 +64,12 @@ class _MessageLimitIterator:
         if callable(close):
             close()
 
+    def request_stop(self) -> None:
+        """Preserve cooperative cancellation through the message-limit wrapper."""
+        request_stop = getattr(self._source, "request_stop", None)
+        if callable(request_stop):
+            request_stop()
+
 
 def _apply_message_limit(chat: Chat, max_messages: int | None) -> None:
     """Apply maximum message limit to a chat generator."""

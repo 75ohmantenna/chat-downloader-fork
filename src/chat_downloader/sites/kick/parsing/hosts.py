@@ -16,7 +16,7 @@ from chat_downloader.sites.kick.parsing.common_fields import (
     _parse_author,
     _parse_timestamp,
 )
-from chat_downloader.utils.json_types import get_int, get_str
+from chat_downloader.utils.json_types import get_dict, get_int, get_str
 
 
 def normalize_compact_host(payload: object, received_timestamp: int) -> object:
@@ -30,6 +30,16 @@ def normalize_compact_host(payload: object, received_timestamp: int) -> object:
         return payload
     username = get_str(payload, "host_username").strip()
     viewers = get_int(payload, "number_viewers", -1)
+    if not username:
+        username = get_str(get_dict(payload, "user"), "username").strip()
+        viewers = get_int(get_dict(payload, "message"), "numberOfViewers", -1)
+        if username and viewers >= 0:
+            payload = {
+                **payload,
+                "host_username": username,
+                "number_viewers": viewers,
+                "chatroom_id": get_int(payload, "chatroom_id", 1),
+            }
     if not username or viewers < 0 or get_int(payload, "chatroom_id") < 1:
         return payload
     normalized = dict(payload)

@@ -31,8 +31,10 @@ from chat_downloader.sites.kick.constants import (
 from chat_downloader.sites.kick.errors import (
     KickError,
     KickForwardHistoryRejected,
+    KickRealtimeRejected,
     KickServerError,
 )
+from chat_downloader.sites.kick.live_iterator import KickLiveIterator
 from chat_downloader.sites.proxy import resolve_session_proxy
 from tests.kick_helpers import (
     FakeDownloader,
@@ -102,6 +104,60 @@ def _preloaded(downloader):
             lambda _message: True,
         )
     )
+
+
+@pytest.mark.parametrize(
+    "when", ["preload", "connect", "frame", "disconnect", "reconnect", "reject"]
+)
+def test_cooperative_cancellation_at_live_lifecycle_boundaries(when):
+    control = KickLiveIterator()
+    created = []
+    client = MagicMock()
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState([], None)
+    downloader = SimpleNamespace(_kick_client=client, _http_timeout=(1, 1))
+
+    def factory():
+        transport = FakeTransport()
+        created.append(transport)
+        if when == "connect":
+            control.stopped.set()
+        return transport
+
+    def frames(_transport):
+        if when == "frame":
+            control.stopped.set()
+            yield {"event": CHAT_MESSAGE_EVENT, "data": {"id": "late"}}
+        elif when == "disconnect":
+            control.stopped.set()
+            raise ConnectionError("stopped")
+        elif when == "reject":
+            raise KickRealtimeRejected("permanent")
+        elif when == "reconnect" and len(created) == 1:
+            raise ConnectionError("lost")
+
+    if when == "preload":
+        control.stopped.set()
+    source = live_service._iter_chat_messages(
+        downloader,
+        "slug",
+        "123",
+        "456",
+        _request(),
+        live_service._KickLiveDiagnostics(),
+        transport_factory=factory,
+        frame_iterator=frames,
+        control=control,
+    )
+    if when == "reject":
+        with pytest.raises(KickRealtimeRejected, match="permanent"):
+            list(source)
+    else:
+        assert list(source) == []
+    if when == "preload":
+        assert created == []
+    else:
+        assert control.transport is created[-1]
+        assert all(transport.close_count >= 1 for transport in created)
 
 
 def _reply_frame(message_id):
@@ -510,7 +566,9 @@ def test_get_chat_by_channel_default_transport_binds_diagnostics() -> None:
     transports: list[FakeTransport] = []
     callbacks: list[Any] = []
 
-    def transport_factory(*, diagnostic_callback: Any) -> FakeTransport:
+    def transport_factory(
+        *, diagnostic_callback: Any, **_kwargs: object
+    ) -> FakeTransport:
         callbacks.append(diagnostic_callback)
         transport = FakeTransport()
         transports.append(transport)
@@ -524,7 +582,7 @@ def test_get_chat_by_channel_default_transport_binds_diagnostics() -> None:
         _session_patch(session),
         patch.object(
             live_service,
-            "KickPusherTransport",
+            "KickPublicTransport",
             side_effect=transport_factory,
         ),
     ):
@@ -726,6 +784,12 @@ def test_get_chat_by_channel_reconnects_on_disconnect(transports, diagnostics) -
         "websocket_reconnect_count": 1,
         "pusher_error_count": 0,
         "pusher_key_recovery_count": 0,
+        "pusher_connection_count": 0,
+        "centrifugo_connection_count": 0,
+        "public_state_poll_count": 0,
+        "public_state_poll_failure_count": 0,
+        "public_subscription_count": 0,
+        "synthetic_frame_count": 0,
         "preloaded_emitted_count": 0,
         "live_emitted_count": 2,
         "reconnect_backfill_emitted_count": 0,

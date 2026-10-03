@@ -68,7 +68,7 @@ same interfaces as production callers.
 | Base HTTP session | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; YouTube and Twitch use it for provider requests, while Kick uses it for proxy resolution and rejected-key discovery; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures; Kick API retries stay in its dedicated client and services | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, a 180-second idle watchdog, and fixed-schema transport counters | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
 | Kick API HTTP | `kick/http_session.py` creates the Cloudflare-capable transports owned by `KickApiClient`, preserves explicit/environment proxy policy, lazily converts an applicable main-origin `session_token` cookie into bearer authentication, and origin-isolates the anonymous mobile host from credentials | Kick channel metadata plus reconnect/VOD/clip history and metadata retry transient network, malformed-response, 429, and 5xx failures; provider-specific HTTP 423 is a terminal country/region block; clip replay can fail over from unavailable web/source-VOD metadata to the anonymous mobile v1 contract while preserving terminal access policy and reconciling known channel and duration evidence; startup/reconnect preload state remains one-shot best-effort | `KickChatDownloader.close()` closes the client sessions and base session exactly once |
-| Kick live WebSocket | `kick/websocket_transport.py` opens, subscribes, applies a one-second minimum receive poll, and treats 180 seconds without a decoded frame as stale | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits, and permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Transport close in every setup-error, reconnect, generator-close, and normal-exit path |
+| Kick live WebSocket | `kick/public_transport.py` negotiates anonymous chat and channel connections independently; Pusher and Centrifugo readers confirm public feeds, answer heartbeats, and bound acknowledgement waits; Centrifugo renews anonymous connection tokens | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits, and permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Cooperative deadline cancellation wakes socket and queue readers; owned transports and sessions close on setup failure, reconnect, and exit |
 
 `Chat.close()` requests closure through message-limit and timeout wrappers before
 output writers are finalized. When the timeout worker is actively advancing the
@@ -281,10 +281,16 @@ module names.
 | `api_client.py` | Downloader-owned, origin-scoped sessions and unified status/challenge/JSON policy for Kick channel, history, VOD, and web/mobile clip endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
 | `pusher_discovery.py` | Default-first Pusher application-key selection, rejected-key refresh, cache ownership, and WebSocket URL construction |
-| `websocket_transport.py` | Pusher WebSocket transport (framing/IO only); injectable for testing |
+| `websocket_transport.py` | Shared secure socket IO and legacy Pusher framing; injectable for testing |
+| `realtime_connection.py` | Origin-isolated anonymous website negotiation and connection token ownership |
+| `centrifugo_transport.py` | Centrifugo acknowledgements, publications, heartbeat deadlines, and anonymous token renewal |
+| `public_transport.py` | Independent chat/channel connections, bounded event multiplexing, public feed confirmations, and REST polling |
+| `public_state.py` | Anonymous channel and viewer snapshots plus category drop feed discovery |
+| `live_iterator.py` | Cooperative deadline cancellation of the active live connection |
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |
 | `errors.py` | Terminal, transient, and validated history-fallback error classifications |
-| `parsing/events.py` | Pusher frame dispatch to typed event parsers |
+| `parsing/events.py` | Public event dispatch to typed parsers |
+| `parsing/public_events.py` | Complete public lifecycle payload preservation and compact gifted-subscription chunks |
 | `parsing/common_fields.py` | Shared scalar, timestamp, author, and badge normalization for Kick events |
 | `parsing/messages.py` | Chat message normalization (text messages) |
 | `parsing/emotes.py` | Inline emote marker parsing and structured metadata |

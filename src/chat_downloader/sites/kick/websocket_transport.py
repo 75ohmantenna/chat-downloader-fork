@@ -46,6 +46,7 @@ class _ConnectionOptions(TypedDict, total=False):
     """Optional socket supplied to the WebSocket connection factory."""
 
     socket: _ProxySocket
+    origin: str
 
 
 class _WebSocketConnection(Protocol):
@@ -89,6 +90,7 @@ def _default_connector(
     timeout: float | None,
     *,
     proxy_url: str | None = None,
+    origin: str | None = None,
 ) -> _WebSocketConnection:
     """Open a real ``websocket.WebSocket`` connection.
 
@@ -96,6 +98,7 @@ def _default_connector(
         url: WebSocket endpoint URL to connect to.
         timeout: Socket timeout in seconds, or ``None`` to block.
         proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
+        origin: Optional browser origin required by the negotiated provider.
     """
     socket_timeout = 10.0 if timeout is None else timeout
     parsed = urlparse(url)
@@ -110,6 +113,8 @@ def _default_connector(
     )
     try:
         connection_options: _ConnectionOptions = {"socket": proxy_socket}
+        if origin is not None:
+            connection_options["origin"] = origin
         return cast(
             "_WebSocketConnection",
             create_connection(
@@ -219,22 +224,21 @@ class KickPusherTransport:
     def subscribe(self, chatroom_id: str) -> None:
         """Subscribe to a public channel by numeric chatroom ID."""
         channel = CHATROOM_CHANNEL_TEMPLATE.format(chatroom_id=chatroom_id)
-        self._send(
-            {"event": PUSHER_SUBSCRIBE, "data": {"auth": "", "channel": channel}}
-        )
+        self.subscribe_channels([channel])
+
+    def subscribe_channels(self, channels: list[str]) -> None:
+        """Subscribe to an explicit list of public feeds."""
+        for channel in channels:
+            self._send(
+                {"event": PUSHER_SUBSCRIBE, "data": {"auth": "", "channel": channel}}
+            )
 
     def send_pong(self) -> None:
         """Reply to a Pusher ping to keep the connection alive."""
         self._send({"event": PUSHER_PONG, "data": {}})
 
-    def recv(self) -> JSONDict | None:
-        """Decode the next Pusher frame; return ``None`` on timeout or malformed input.
-
-        Callers skip both timeout and malformed reads.
-
-        Raises:
-            ConnectionError: If the connection is closed by the server.
-        """
+    def recv_raw(self) -> str | bytes | None:
+        """Read one wire frame with shared, credential-free IO errors."""
         if self._ws is None:
             msg = "Kick WebSocket is not connected."
             raise ConnectionError(msg)
@@ -253,6 +257,13 @@ class KickPusherTransport:
         if not raw:
             msg = "Kick WebSocket connection closed."
             raise ConnectionError(msg)
+        return raw
+
+    def recv(self) -> JSONDict | None:
+        """Decode the next Pusher frame; skip timeouts and malformed input."""
+        raw = self.recv_raw()
+        if raw is None:
+            return None
 
         try:
             frame = json.loads(raw)
@@ -275,6 +286,13 @@ class KickPusherTransport:
             logger.debug("Discarding non-object Kick WebSocket frame.")
             return None
         return cast("JSONDict", frame)
+
+    def request_stop(self) -> None:
+        """Wake a blocking receive before the owner closes the connection."""
+        abort = getattr(self._ws, "abort", None)
+        if callable(abort):
+            with suppress(OSError, WebSocketException):
+                abort()
 
     def close(self) -> None:
         """Close the WebSocket connection, ignoring errors."""
