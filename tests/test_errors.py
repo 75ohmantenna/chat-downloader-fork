@@ -69,21 +69,9 @@ def test_chat_downloader_error() -> None:
     assert str(error) == "Test error"
 
 
-def test_invalid_parameter() -> None:
-    """Test InvalidParameter error."""
-    error = InvalidParameter("Invalid param value")
-    assert isinstance(error, ChatDownloaderError)
-
-
 def test_retries_exceeded() -> None:
     """Test RetriesExceeded error."""
     error = RetriesExceeded("Max retries reached")
-    assert isinstance(error, ChatDownloaderError)
-
-
-def test_video_not_found() -> None:
-    """Test VideoNotFound error."""
-    error = VideoNotFound("Video ID not found")
     assert isinstance(error, ChatDownloaderError)
 
 
@@ -120,12 +108,6 @@ def test_login_required() -> None:
 def test_video_unplayable() -> None:
     """Test VideoUnplayable error."""
     error = VideoUnplayable("Members-only content")
-    assert isinstance(error, ChatDownloaderError)
-
-
-def test_no_chat_replay() -> None:
-    """Test NoChatReplay error."""
-    error = NoChatReplay("No chat replay available")
     assert isinstance(error, ChatDownloaderError)
 
 

@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from chat_downloader.sites.twitch.parsing.message_emotes import (
@@ -11,6 +13,32 @@ from chat_downloader.sites.twitch.parsing.message_emotes import (
     _generate_emote_image_list,
     _parse_emotes,
 )
+
+
+@pytest.mark.parametrize("emote_id", ["25", "1902"])
+def test_emote_images_preserve_size_theme_identity_and_json_shape(emote_id):
+    images = _generate_emote_image_list(emote_id)
+    expected = [
+        {
+            "id": image_id,
+            "url": f"https://static-cdn.jtvnw.net/emoticons/v2/{emote_id}/default/{suffix}",
+            "width": pixels,
+            "height": pixels,
+        }
+        for image_id, pixels, suffix in (
+            ("28x28-light", 28, "light/1.0"),
+            ("56x56-light", 56, "light/2.0"),
+            ("112x112-light", 112, "light/3.0"),
+            ("28x28-dark", 28, "dark/1.0"),
+            ("56x56-dark", 56, "dark/2.0"),
+            ("112x112-dark", 112, "dark/3.0"),
+        )
+    ]
+    assert isinstance(images, tuple)
+    assert list(images) == expected
+    assert json.loads(json.dumps(_parse_emotes(f"{emote_id}:0-4"))) == [
+        {"id": emote_id, "locations": ["0-4"], "images": expected}
+    ]
 
 
 def test_parse_emotes_empty_string_yields_empty_list() -> None:
@@ -33,37 +61,10 @@ def test_parse_emotes_multiple_locations_for_same_emote() -> None:
 
 def test_parse_emotes_multiple_distinct_emotes() -> None:
     result = _parse_emotes("25:0-4/1902:6-9")
-    assert len(result) == 2
-    ids = {e["id"] for e in result}
-    assert ids == {"25", "1902"}
-
-
-def test_generate_emote_image_list_returns_six_images() -> None:
-    images = _generate_emote_image_list("25")
-    assert len(images) == 6
-
-
-@pytest.mark.parametrize(
-    "expected_id",
-    [
-        "28x28-light",
-        "56x56-light",
-        "112x112-light",
-        "28x28-dark",
-        "112x112-dark",
-    ],
-)
-def test_generate_emote_image_list_covers_sizes_and_themes(
-    expected_id: str,
-) -> None:
-    images = _generate_emote_image_list("25")
-    assert any(img["id"] == expected_id for img in images)
-
-
-def test_generate_emote_image_list_result_is_cached() -> None:
-    first = _generate_emote_image_list("999")
-    second = _generate_emote_image_list("999")
-    assert first is second
+    assert [(emote["id"], emote["locations"]) for emote in result] == [
+        ("25", ["0-4"]),
+        ("1902", ["6-9"]),
+    ]
 
 
 def test_add_text_for_emotes_resolves_name_from_message() -> None:

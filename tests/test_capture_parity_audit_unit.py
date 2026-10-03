@@ -3,18 +3,23 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import sys
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 import pytest
 
+import chat_downloader.output.capture_parity as parity_module
 from chat_downloader.formatting import ItemFormatter
 from chat_downloader.output.capture_parity import audit_capture
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.models import Chat
+from scripts.audit_capture_parity import main
+from tests.core_third_helpers import restore_loggers
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "audit_capture_parity.py"
@@ -28,6 +33,18 @@ def _run_raw(*arguments, timeout=5.0):
         capture_output=True,
         text=True,
         timeout=timeout,
+    )
+
+
+def _run_cli(*arguments):
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with restore_loggers(), redirect_stdout(stdout), redirect_stderr(stderr):
+        try:
+            code = main(list(map(str, arguments)))
+        except SystemExit as error:
+            code = error.code
+    return subprocess.CompletedProcess(
+        arguments, code, stdout.getvalue(), stderr.getvalue()
     )
 
 
@@ -65,7 +82,7 @@ class Capture:
             **options,
         )
 
-    def run(self, *, timeout=5.0, **options):
+    def run(self, *, subprocess_timeout=None, **options):
         args = [self.jsonl, self.txt, "--format", self.format_name]
         if self.format_file is not None:
             args.extend(("--format-file", self.format_file))
@@ -73,10 +90,20 @@ class Capture:
             args.extend(("--max-seen-message-ids", options["max_seen_message_ids"]))
         for line in options.get("dedup_reset_before_lines", ()):
             args.extend(("--dedup-reset-before-jsonl-line", line))
-        return _run_raw(*args, timeout=timeout)
+        if subprocess_timeout is not None:
+            return _run_raw(*args, timeout=subprocess_timeout)
+        return _run_cli(*args)
 
-    def check(self, code=0, *, counters="", absent=("private",), **options):
-        result = self.run(**options)
+    def check(
+        self,
+        code=0,
+        *,
+        counters="",
+        absent=("private",),
+        subprocess_timeout=None,
+        **options,
+    ):
+        result = self.run(subprocess_timeout=subprocess_timeout, **options)
         direct = self.direct(**options)
         assert result.returncode == code, result.stdout + result.stderr
         assert direct.failed is bool(code)
@@ -389,7 +416,7 @@ def test_input_io_identity_and_nonblocking_errors(capture, kind):
             else:
                 capture.txt.symlink_to(capture.jsonl)
     try:
-        result = capture.run(timeout=2.0)
+        result = capture.run(subprocess_timeout=5.0 if kind == "fifo" else None)
         error = PermissionError if kind == "permission" else OSError
         with pytest.raises(
             error, match="not a regular file" if kind == "fifo" else None
@@ -431,19 +458,61 @@ def test_out_of_range_dedup_reset(capture):
     ],
 )
 def test_argument_errors_are_content_free(options):
-    result = _run_raw("private-jsonl", "private-txt", *options)
+    result = _run_cli("private-jsonl", "private-txt", *options)
     assert result.returncode == 2
     assert result.stdout == "ERROR kind=invalid_arguments\n"
     assert result.stderr == ""
 
 
-def test_auditor_streams_a_large_capture(capture):
+@pytest.mark.parametrize("outcome", ["passed", "failed", "format", "arguments"])
+def test_script_entry_point_preserves_exit_codes_and_content_free_output(
+    capture, outcome
+):
+    code = {"passed": 0, "failed": 1, "format": 2, "arguments": 2}[outcome]
+    capture.write([_message()], ": private\n" if code == 0 else "altered\n")
+    if outcome == "arguments":
+        result = _run_raw("private-jsonl", "private-txt", "--unknown-private")
+        assert result.returncode == 2
+        assert result.stdout == "ERROR kind=invalid_arguments\n"
+        assert result.stderr == ""
+    elif outcome == "format":
+        capture.format_name = "unknown-private"
+        result = capture.run(subprocess_timeout=5.0)
+        assert result.returncode == 2
+        assert result.stdout == "ERROR kind=unknown_format\n"
+        assert result.stderr == ""
+        assert "private" not in result.stdout
+    else:
+        capture.check(code, subprocess_timeout=5.0, absent=("private", "altered"))
+
+
+def test_auditor_streams_a_large_capture(capture, monkeypatch):
     count = 2_500
     capture.write(
         [_message(f"message-{i}") for i in range(count)],
         "".join(f": message-{i}\n" for i in range(count)),
     )
-    result = capture.run()
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert f"jsonl_records={count}" in result.stdout
-    assert f"txt_lines={count}" in result.stdout
+    original_fdopen = parity_module.os.fdopen
+    original_format = ItemFormatter.format
+    streams = []
+    read_ahead = []
+
+    def track_open(*args, **kwargs):
+        stream = original_fdopen(*args, **kwargs)
+        streams.append(stream)
+        return stream
+
+    def track_format(self, item, format_name):
+        if not read_ahead:
+            # Buffered read-ahead is allowed; consuming the entire input before
+            # the first render would make memory proportional to capture size.
+            read_ahead.append(streams[0].tell() < capture.jsonl.stat().st_size)
+        return original_format(self, item, format_name=format_name)
+
+    monkeypatch.setattr(parity_module.os, "fdopen", track_open)
+    monkeypatch.setattr(ItemFormatter, "format", track_format)
+    stats = capture.direct()
+    assert not stats.failed
+    assert stats.jsonl_records == stats.txt_lines == count
+    assert read_ahead == [True]
+    assert all(stream.closed for stream in streams)

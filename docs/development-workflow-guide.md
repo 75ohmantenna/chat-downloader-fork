@@ -290,6 +290,18 @@ detectors, not substitutes for design judgment. Rationale and reopen criteria
 for non-obvious choices live in
 [`maintenance-decisions.md`](maintenance-decisions.md).
 
+Keep detailed diagnostic CLI scenario matrices in-process, restoring logger
+state and asserting return codes, stdout, stderr, and content-free errors.
+Retain subprocess representatives for script entry points, process exit codes,
+and nonblocking rejection of special files. Test streaming by checking that
+processing begins before the entire input has been consumed; record counts
+alone do not establish bounded-memory behavior.
+
+Use controlled clocks for polling assertions and events to coordinate blocked
+workers. Keep real timer composition checks, but avoid narrow elapsed-time
+limits that depend on scheduler speed. Before removing a test, identify the
+remaining assertions that preserve its behavior and failure modes.
+
 ## Documentation ownership
 
 Update one authoritative document instead of copying the same explanation into

@@ -26,7 +26,7 @@ def create_kick_session(
     proxy: dict[str, str] | None = None,
     extra_headers: dict[str, str] | None = None,
     trust_env: bool = True,
-) -> _KickSession:  # pragma: no cover — live optional-dependency path
+) -> _KickSession:
     """Create a dedicated Kick API session with the first available backend."""
     session = _try_curl_cffi()
     if session is None:
