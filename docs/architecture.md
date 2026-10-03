@@ -82,7 +82,8 @@ when bounded shutdown returns while the provider worker is still advancing; in
 that case the count is explicitly a lower bound and may finish updating after
 the summary. This is the common Ctrl-C/SIGTERM and early-stop cleanup path.
 Provider diagnostics remain available on the returned `Chat` and appear in
-successful debug summaries; normal message output and file formats are unchanged.
+debug summaries, including failed runs; normal message output and file formats
+are unchanged.
 
 JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing
@@ -187,7 +188,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
-| `base.py` | `BaseChatDownloader` ABC: URL matching, session setup, cookie handling |
+| `base.py` | `BaseChatDownloader` shared base class: URL matching, session setup, cookie handling |
 | `common.py` | Stateless site utilities for key validation and mapped-key discovery |
 | `session.py` | `ChatDownloaderSession`: cohesive HTTP adapter, timeout, proxy, header/profile, cookie, and close ownership |
 | `proxy.py` | Shared proxy resolution and TLS tunneling for live transports |

@@ -311,8 +311,9 @@ Checked-in source code and configuration define implemented behavior; tests
 verify it and protect intended contracts. When prose and implementation
 disagree, inspect the code and configuration, then correct the prose or fix a
 demonstrated code bug. Documentation contract tests keep module
-inventories, typed field/default tables, CLI flags, output formats, public
-exports, and provider message-group tables aligned with those sources.
+inventories, literal repository paths, typed field/default tables, CLI flags
+and retrieval examples, request profiles, output formats, public exports, and
+provider message-group and live-diagnostic tables aligned with those sources.
 
 | Document | Owns |
 | --- | --- |

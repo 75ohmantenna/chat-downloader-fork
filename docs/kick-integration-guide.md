@@ -18,9 +18,9 @@ Kick's OAuth-scoped official Public API is a useful schema reference, but it
 does not expose the unauthenticated read-chat or replay stream this tool needs.
 See [Official Public API reference](#official-public-api-reference).
 
-Unlike Twitch and YouTube, Kick exposes no private GraphQL/InnerTube layer; the
-fragility points are the Pusher application key, the WebSocket event payload
-shapes, and Cloudflare bot-protection on the REST endpoints.
+The implementation uses REST and negotiated WebSockets. Fragility points
+include anonymous connection descriptors and token renewal, public feed names,
+WebSocket event payload shapes, and Cloudflare bot-protection on HTTP endpoints.
 
 ## What It Covers
 
@@ -38,7 +38,9 @@ The Kick implementation is responsible for:
 - reading historical chat for VODs and clips by paginating the channel message
   API and filtering to the selected replay window
 - parsing Kick-specific message, badge, emote, subscription, moderation, pin,
-  and host event data
+  poll, host, and public lifecycle event data
+- polling anonymous channel and viewer snapshots and following category drop
+  feeds as the current category changes
 
 Primary entry point:
 
@@ -182,14 +184,15 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   `send_pong` / `close`) plus the `read_frames` generator. The connector is
   injectable so the live path is fully unit-testable without network access.
 
-### Parsing and shared Kick data
-
 - `realtime_connection.py`: isolated anonymous negotiation and token requests.
 - `centrifugo_transport.py`: public protocol replies, publications, and lease renewal.
 - `public_transport.py`: independent connections, bounded queues, feed acknowledgements,
   and snapshot polling.
 - `public_state.py`: anonymous channel/viewer state and category discovery.
 - `live_iterator.py`: interruptible ownership of the active live transport.
+
+### Parsing and shared Kick data
+
 - `parsing/public_events.py`: complete public lifecycle payloads and gift chunks.
 - `parsing/events.py`: public frame dispatch. Maps raw event names to
   normalized message types via `EVENT_NAME_MAP`, then to parser functions via
@@ -233,8 +236,9 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   retryable `KickServerError` subclass.
 
 There is no `client.py` facade in the Kick package. Import focused modules
-directly for patch points: `api_client.py` for REST, `websocket_transport.py`
-for the live feed, and `parsing/` for message shaping.
+directly for patch points: `api_client.py` for REST, `public_transport.py`
+for negotiated live feeds, `websocket_transport.py` for socket/Pusher mechanics,
+and `parsing/` for message shaping.
 
 ## Official Public API reference
 
@@ -244,7 +248,7 @@ drop-in replacements for this tool's current capture path.
 Use the official [API documentation](https://docs.kick.com/) and
 [documentation changelog](https://github.com/KickEngineering/KickDevDocs/blob/main/changelog.md)
 when reviewing these external surfaces. Runtime behavior remains defined by
-this repository's constants, parsers, fixtures, and tests.
+this repository's code and configuration; fixtures and tests verify its contracts.
 
 Relevant documented surfaces:
 
@@ -280,7 +284,7 @@ Known gaps:
 The live path begins with an `api/v2/channels/{username}` lookup. A missing
 channel ID or chatroom ID is a terminal `KickError`. An absent `livestream`
 object means the channel is offline — this is logged but **not** an error,
-because Kick keeps the chatroom active and the Pusher feed flowing regardless of
+because the live path keeps the public chat connection available regardless of
 stream status. The reported `Chat.status` is `"live"` when a livestream is
 present and `"idle"` otherwise.
 
@@ -369,6 +373,38 @@ The live service still reports truncated reconnect windows and uncovered time.
 The inspector subtracts counted deadline-prefetched records when reconciling
 emissions against persisted records. The default filter remains `messages`.
 Live URLs cannot seek with `start_time` or `end_time`; use a VOD or clip URL.
+
+### Live diagnostics
+
+Each live `Chat` exposes this schema in `chat.diagnostics`. Debug run summaries
+retain it on success and failure. Run manifests select bounded integer counters
+from it; the offline inspector uses the debug summary for reconciliation.
+
+| Field | Meaning |
+| --- | --- |
+| `websocket_frame_count` | Decoded socket event envelopes |
+| `control_frame_count` | Recognized connection, subscription, and heartbeat controls |
+| `parsed_event_count` | Events successfully normalized by the parser |
+| `unsupported_event_count` | Unrecognized event names skipped by dispatch |
+| `unknown_message_type_count` | Chat payloads with an unrecognized subtype |
+| `malformed_event_count` | Known events rejected for malformed payloads |
+| `malformed_event_type_counts` | Bounded per-type malformed-event counts |
+| `invalid_websocket_frame_count` | Invalid frame JSON or envelope shapes |
+| `websocket_reconnect_count` | Successful reconnects after temporary connection failures |
+| `pusher_error_count` | Pusher error events |
+| `pusher_key_recovery_count` | Successful recovery reconnects after Pusher protocol errors |
+| `pusher_connection_count` | Opened negotiated Pusher connections |
+| `centrifugo_connection_count` | Opened negotiated Centrifugo connections |
+| `public_state_poll_count` | Successful public channel metadata polls |
+| `public_state_poll_failure_count` | Failed channel metadata or viewer polls |
+| `public_subscription_count` | Confirmed public feed subscriptions |
+| `synthetic_frame_count` | Event envelopes generated from REST snapshots |
+| `preloaded_emitted_count` | Emitted startup history and current pin records |
+| `live_emitted_count` | Emitted socket and REST snapshot records |
+| `reconnect_backfill_emitted_count` | Emitted reconnect history and current pin records |
+| `reconnect_backfill_truncated_count` | Outages extending beyond the bounded recovery window |
+| `reconnect_backfill_truncated_microseconds` | Accumulated uncovered time before the recovery floor |
+| `last_websocket_frame_timestamp` | UTC receive microseconds of the last decoded or synthetic frame |
 
 ### Dedup and filtering
 
@@ -537,11 +573,15 @@ When debugging Kick breakage, inspect modules in this order:
 
 1. `api_client.py` — REST status mapping and challenge detection
 2. `http_session.py` — optional backend selection and session setup
-3. `pusher_discovery.py` — Pusher-key discovery and fallback
-4. `constants.py` — endpoints and event/group maps
-5. `live_service.py` or `replay_service.py` — service-layer orchestration
-6. `websocket_transport.py` — Pusher framing, subscribe, reconnect signals
+3. `realtime_connection.py` — anonymous connection negotiation and token requests
+4. `public_transport.py`, `centrifugo_transport.py`, and `websocket_transport.py`
+   — public subscriptions, framing, heartbeats, snapshots, and reconnect signals
+5. `constants.py` — endpoints and event/group maps
+6. `live_service.py` or `replay_service.py` — service-layer orchestration
 7. `parsing/events.py` and per-event parsers — dispatch and field assembly
+
+For failures in the legacy standalone Pusher transport, also inspect
+`pusher_discovery.py` for compiled-key selection and bundle discovery.
 
 ## Debug Sample Capture
 

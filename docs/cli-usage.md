@@ -60,6 +60,10 @@ chat_downloader "https://kick.com/<channel>/clips/<clip_id>" \
   --output kick-clip.jsonl
 ```
 
+Replace `<uuid>` with the recording's lowercase canonical UUID, `<channel>`
+with its channel slug, and `<clip_id>` with the complete ID beginning with
+`clip_`. These placeholders represent provider identifiers, not literal URLs.
+
 Use cookies and custom headers:
 
 ```bash
@@ -163,9 +167,10 @@ that resolve to the same file are deduplicated so each message is written once.
 
 ## Common Flags
 
-Run `chat_downloader --help` for the complete argument list. The CLI is
-generated from metadata on `DownloaderConfig`, `ChatRequest`, and `RunConfig`
-in `src/chat_downloader/models/`.
+Run `chat_downloader --help` for the complete argument list. CLI help and
+defaults come from metadata on `DownloaderConfig`, `ChatRequest`, and
+`RunConfig` in `src/chat_downloader/models/`; argument registration remains
+explicit in `cli_args.py`.
 
 Filtering and output:
 
@@ -305,7 +310,7 @@ Debug and automation:
 ## Replay checkpoints and output verification
 
 ```bash
-chat_downloader "https://kick.com/examplechannel/videos/VIDEO_ID" \
+chat_downloader "https://kick.com/examplechannel/videos/<uuid>" \
   --output capture.jsonl --output capture.txt \
   --resume capture.checkpoint.json --verify_output --logging debug
 ```
@@ -382,8 +387,9 @@ current/prior run message counts, and output writer counts and SHA-256 hashes.
 `elapsed_seconds` measures initialization through capture shutdown using a
 monotonic clock; output verification and manifest writing are excluded.
 `provider_diagnostics` retains supported bounded YouTube action and
-continuation counters, including skipped-action reasons and parsing loss.
-Other provider reports remain in `provider_inspection` when supported.
+continuation counters, including skipped-action reasons and parsing loss, plus
+Kick live transport, public-feed, snapshot, and backfill counters. Automatic
+Twitch live inspection reports remain in `provider_inspection` when requested.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
 deadline accounting; an incomplete count must not be treated as proof of zero
 pending records. These fields are available without `--logging debug`.
@@ -396,7 +402,7 @@ the CLI reports a missing directory before starting capture. Failure to write
 the manifest fails the run.
 
 ```bash
-chat_downloader "https://kick.com/examplechannel/videos/VIDEO_ID" \
+chat_downloader "https://kick.com/examplechannel/videos/<uuid>" \
   --output capture.jsonl --output capture.txt \
   --resume capture.checkpoint.json --verify_output \
   --require_complete --run_manifest run.json

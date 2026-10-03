@@ -2,8 +2,8 @@
 
 Scope: `src/chat_downloader/sites/kick/`.
 
-- Keep Kick REST, Pusher, VOD/clip replay, and event-parser behavior inside this
-  package.
+- Keep Kick REST, anonymous realtime negotiation, Pusher/Centrifugo transports,
+  public snapshots, VOD/clip replay, and event-parser behavior inside this package.
 - Before parser reshaping, add or promote a raw fixture under
   `tests/fixtures/kick/`.
 - Use `utils/json_types` accessors for incoming Kick JSON; keep `Any` only for
@@ -12,7 +12,10 @@ Scope: `src/chat_downloader/sites/kick/`.
   reconnect backfill, and chronological VOD/clip output unless focused
   regression tests document a behavior change.
 - Keep endpoint status classification in `api_client.py`, transport construction
-  in `http_session.py`, and Pusher key discovery in `pusher_discovery.py`.
+  in `http_session.py`, anonymous connection negotiation in
+  `realtime_connection.py`, and public-feed orchestration in
+  `public_transport.py`. Keep legacy Pusher key discovery in
+  `pusher_discovery.py`.
 - Run focused checks after edits: `uv run pytest -q tests/test_kick_*`.
 
 Canonical references:

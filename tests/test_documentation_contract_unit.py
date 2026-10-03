@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import MISSING, Field, fields
@@ -15,8 +16,11 @@ from chat_downloader import __all__ as public_exports
 from chat_downloader.cli import _build_arg_parser
 from chat_downloader.models import ChatRequest, DownloaderConfig, RunConfig, SiteDefault
 from chat_downloader.output.continuous_write import SUPPORTED_OUTPUT_FORMATS
+from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.runtime import RunResult
+from chat_downloader.sites import get_all_sites
 from chat_downloader.sites.kick.constants import MESSAGE_GROUPS as KICK_MESSAGE_GROUPS
+from chat_downloader.sites.kick.live_service import _KickLiveDiagnostics
 from chat_downloader.sites.twitch.irc_diagnostics import (
     _EVENT_FRAME_CAPTURE_LIMIT,
     _TEXT_SHAPE_CAPTURE_LIMIT,
@@ -135,6 +139,25 @@ def test_project_does_not_reference_upstream_issues() -> None:
     assert not references, "upstream issue references found:\n" + "\n".join(references)
 
 
+def test_current_guides_reference_existing_repository_paths() -> None:
+    """Reject stale literal paths while retaining historical changelog entries."""
+    stale: list[str] = []
+    for document in _project_documents():
+        if document.name == "CHANGELOG.md":
+            continue
+        for reference in re.findall(
+            r"`((?:src|tests|scripts)/[^`\n]+)`",
+            document.read_text(encoding="utf-8"),
+        ):
+            path = reference.split("::", maxsplit=1)[0]
+            if any(char in path for char in "*<> ") or path == "tests/FILE.py":
+                continue
+            if not (ROOT / path).exists():
+                stale.append(f"{document.relative_to(ROOT)}: {reference}")
+
+    assert not stale, "stale repository paths:\n" + "\n".join(stale)
+
+
 def test_fork_history_does_not_reference_issue_numbers() -> None:
     """Reject commit messages that GitHub could link to upstream issues."""
     script = ROOT / "scripts" / "check_issue_references.py"
@@ -233,6 +256,78 @@ def test_cli_reference_lists_exact_output_formats() -> None:
     documented = set(re.findall(r"^\| `([a-z0-9]+)`\s*\|", section, re.MULTILINE))
 
     assert documented == set(SUPPORTED_OUTPUT_FORMATS)
+
+
+def test_documented_cli_examples_parse_and_match_supported_urls() -> None:
+    """Validate shell recipes offline using the actual parser and URL registry."""
+    parser = _build_arg_parser()
+    replacements = {
+        "<uuid>": "00000000-0000-0000-0000-000000000001",
+        "<channel>": "examplechannel",
+        "<clip_id>": "clip_example",
+        "${capture_dir}": "capture",
+    }
+    examples = 0
+    for document in _project_documents():
+        blocks = re.findall(
+            r"^```bash\n(.*?)^```",
+            document.read_text(encoding="utf-8"),
+            flags=re.DOTALL | re.MULTILINE,
+        )
+        for block in blocks:
+            for command in block.replace("\\\n", "").splitlines():
+                invocation = re.split(r"\s+\d*>>?\s*", command, maxsplit=1)[0]
+                tokens = shlex.split(invocation, comments=True)
+                if "chat_downloader" not in tokens:
+                    continue
+                args = tokens[tokens.index("chat_downloader") + 1 :]
+                if not args or args[0].startswith("-"):
+                    continue
+                for placeholder, value in replacements.items():
+                    args = [arg.replace(placeholder, value) for arg in args]
+                parsed = vars(parser.parse_args(args))
+                request = ChatRequest.from_kwargs(**parsed)
+                assert any(site.matches(request.url) for site in get_all_sites()), (
+                    f"{document.relative_to(ROOT)}: unsupported URL {request.url!r}"
+                )
+                examples += 1
+    assert examples > 0, "no documented CLI retrieval examples found"
+
+
+def test_configuration_guides_list_exact_request_profiles() -> None:
+    """Keep accepted preset names aligned with shared configuration validation."""
+    for reference, heading in (
+        (CLI_REFERENCE, "## Common Flags"),
+        (API_REFERENCE, "### `DownloaderConfig`"),
+        (
+            ROOT / "docs" / "youtube-integration-guide.md",
+            "### Request profiles and fallback",
+        ),
+    ):
+        section = _section(reference.read_text(encoding="utf-8"), heading)
+        if reference == API_REFERENCE:
+            section = next(
+                line
+                for line in section.splitlines()
+                if line.startswith("| `request_profile` |")
+            )
+        documented = set(
+            re.findall(
+                r"`((?:youtube|twitch)_[a-z0-9_]+)`",
+                section,
+            )
+        )
+        assert documented == set(REQUEST_PROFILES), reference.name
+
+
+def test_kick_guide_documents_exact_live_diagnostic_fields() -> None:
+    """Keep the Kick live diagnostic table aligned with its production schema."""
+    section = _section(
+        KICK_REFERENCE.read_text(encoding="utf-8"), "### Live diagnostics"
+    )
+    documented = re.findall(r"^\| `([a-z_]+)` \|", section, flags=re.MULTILINE)
+
+    assert documented == list(_KickLiveDiagnostics().summary)
 
 
 def test_kick_reference_lists_exact_message_groups() -> None:

@@ -242,8 +242,9 @@ target.
 
 `request_profile` can select `youtube_web`, `youtube_android`, or
 `youtube_ios`. The CLI and Python API both carry this through
-`DownloaderConfig`. Any other profile name raises `ValueError` during
-configuration.
+`DownloaderConfig`. The shared configuration also accepts `twitch_web`, which
+is a Twitch header preset rather than a YouTube client profile. Names outside
+these four presets raise `ValueError` during configuration.
 
 When `auto_profile_fallback` is enabled, initial bootstrap rotates YouTube
 profiles when an `UNPLAYABLE` response contains only a generic reason such as

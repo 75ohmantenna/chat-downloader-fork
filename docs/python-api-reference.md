@@ -246,7 +246,7 @@ chat = downloader.get_chat_request(request)
 | Field | Default | Description |
 | --- | --- | --- |
 | `quiet` | `False` | Suppress formatted chat output to stdout |
-| `resume` | `None` | Path to a validated replay shutdown checkpoint |
+| `resume` | `None` | Create or resume a validated replay shutdown checkpoint |
 | `verify_output` | `False` | Verify one JSONL/TXT output pair and supported provider diagnostics after successful retrieval |
 | `require_complete` | `False` | Fail unless the selected completed replay is exhausted without known record loss |
 | `run_manifest` | `None` | New filename for a JSON outcome, recording, and output-hash report |
@@ -278,16 +278,19 @@ the same class.
 wraps the underlying generator and carries metadata such as `title`, `id`,
 `status`, `video_type`, `start_time`, and `duration`. Provider-specific live
 diagnostics, when available, are exposed through `chat.diagnostics` and included
-in the successful debug run summary. Twitch live diagnostics use fixed-schema
-counters for recognized optional metadata degradations, connection setup and
-reconnects, IRC frames, recognized benign control frames, parsed messages,
-receive timeouts and idle-watchdog expirations, `PING`/`PONG` keepalives,
+in debug run summaries, including failed runs. Twitch live diagnostics use
+fixed-schema counters for recognized optional metadata degradations, connection
+setup and reconnects, IRC frames, recognized benign control frames, parsed
+messages, receive timeouts and idle-watchdog expirations, `PING`/`PONG` keepalives,
 duplicate suppression, filtering, and source emission. They contain no
 endpoint, error path/message, or chat-content fields.
 Kick live diagnostics likewise expose fixed-schema WebSocket, control, parsed,
-unsupported, malformed, reconnect, Pusher-key recovery, and
-preload/live/backfill emission counters, plus bounded malformed-event-type
-counts and the last frame's receive timestamp.
+unsupported, malformed, reconnect, Pusher-key recovery, Pusher/Centrifugo
+connection, public subscription, snapshot polling, synthetic-frame, and
+preload/live/backfill emission counters. They also retain bounded
+malformed-event-type counts, truncated backfill counts and uncovered time, and
+the last decoded or synthetic frame's receive timestamp. See the
+[Kick diagnostic schema](kick-integration-guide.md#live-diagnostics).
 
 In normal usage, treat it as an iterable of message dictionaries:
 

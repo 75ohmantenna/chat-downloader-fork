@@ -1,9 +1,11 @@
 # Repository Guide
 
-The checked-in source code, configuration, and tests define the implemented
-behavior. Keep this guide and the other documents aligned with them; when prose
-and implementation differ, verify the code and correct the prose. This guide
-sets repository workflow and review rules, not runtime behavior.
+The checked-in source code and configuration define the implemented behavior.
+Tests verify that behavior and protect intended contracts; documentation and
+fixtures describe it rather than override it. Keep this guide and the other
+documents aligned with the implementation; when prose and implementation
+differ, verify the code and correct the prose. This guide sets repository
+workflow and review rules, not runtime behavior.
 
 ## Project facts
 

@@ -84,6 +84,10 @@ Full CLI examples, output-format details, options, and troubleshooting are in
 
 ## Documentation
 
+Checked-in source code and configuration define implemented behavior. The
+guides describe that implementation, and tests check their contracts. When a
+guide disagrees with the code, verify the implementation and correct the guide.
+
 - [`docs/cli-usage.md`](docs/cli-usage.md) — CLI recipes, flags, output
   formats, troubleshooting
 - [`docs/python-api-reference.md`](docs/python-api-reference.md) — embeddable

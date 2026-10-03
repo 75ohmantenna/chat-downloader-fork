@@ -101,9 +101,10 @@ the loop's state or downloader/session ownership.
 
 **Decision:** Shared HTTP state is downloader-owned and closed through the
 normal chat/downloader lifecycle. Twitch owns its IRC transport and reconnect
-policy; Kick owns its HTTP client and Pusher transport; YouTube owns its HTTP
-continuation retry and profile-fallback behavior. Transport-specific recovery
-is not hidden behind a generic cross-site retry facade.
+policy; Kick owns its HTTP clients and negotiated Pusher/Centrifugo transports;
+YouTube owns its HTTP continuation retry and profile-fallback behavior.
+Transport-specific recovery is not hidden behind a generic cross-site retry
+facade.
 
 Early termination must propagate `close()` through runtime wrappers before
 writers are finalized. Reconnect loops remain bounded and reset failure streaks
