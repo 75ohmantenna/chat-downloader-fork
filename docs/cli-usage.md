@@ -442,5 +442,6 @@ name, or `null` when provider metadata is unavailable.
 
 Kick inspection additionally reconciles preloaded/live/backfill emission totals
 and per-type output counts, accounts for synthetic REST snapshot events, and
-flags known parser drops or incomplete deadline accounting for review. Use
-`scripts/inspect_kick_capture.py` with each run's debug log for replay archives.
+flags known parser drops, truncated reconnect backfill, or incomplete deadline
+accounting for review. Use `scripts/inspect_kick_capture.py` with each run's
+debug log for replay archives.

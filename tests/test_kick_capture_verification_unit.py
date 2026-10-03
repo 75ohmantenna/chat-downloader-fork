@@ -263,3 +263,23 @@ def test_invalid_live_counter_is_an_inspection_error(tmp_path):
     assert not result.success
     assert result.parity_status == "passed"
     assert result.provider_inspection["status"] == "error"
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["reconnect_backfill_truncated_count", "reconnect_backfill_truncated_microseconds"],
+)
+def test_known_reconnect_history_gap_requires_review_even_when_parity_passes(
+    tmp_path, key
+):
+    class Gap(LiveDownloader):
+        def get_chat(self, **kwargs):
+            chat = super().get_chat(**kwargs)
+            chat.diagnostics[key] = 1
+            return chat
+
+    result = execute_run(Gap, **_params(tmp_path))
+    assert not result.success
+    assert result.parity_status == "passed"
+    assert result.provider_inspection["status"] == "review"
+    assert result.provider_inspection["frame_accounting"][key] == 1

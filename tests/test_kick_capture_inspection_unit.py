@@ -394,6 +394,8 @@ def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_p
                     )
                 ],
                 {"malformed_event_type_counts": {"stream_host": 1}},
+                {"reconnect_backfill_truncated_count": 1},
+                {"reconnect_backfill_truncated_microseconds": 1},
             ]
         ],
         *[
@@ -404,6 +406,8 @@ def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_p
                 {"message_type_counts": []},
                 {"message_type_counts": {"text_message": -1}},
                 {"malformed_event_type_counts": {1: 1}},
+                {"reconnect_backfill_truncated_count": True},
+                {"reconnect_backfill_truncated_microseconds": -1},
                 *[{"received": counter} for counter in (True, -1, "5", None)],
             ]
         ],

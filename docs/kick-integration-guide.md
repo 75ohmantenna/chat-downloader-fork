@@ -372,7 +372,8 @@ requests can delay shutdown; incomplete deadline accounting is explicitly
 reported for review by automatic live verification and the offline inspector
 rather than certified.
 
-The live service still reports truncated reconnect windows and uncovered time.
+The live service reports truncated reconnect windows and uncovered time;
+both automatic and offline inspection flag these known gaps for review.
 The inspector subtracts counted deadline-prefetched records when reconciling
 emissions against persisted records. The default filter remains `messages`.
 Live URLs cannot seek with `start_time` or `end_time`; use a VOD or clip URL.

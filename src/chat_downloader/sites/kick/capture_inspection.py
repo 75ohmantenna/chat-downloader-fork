@@ -52,6 +52,8 @@ _FRAME_KEYS = (
     "preloaded_emitted_count",
     "live_emitted_count",
     "reconnect_backfill_emitted_count",
+    "reconnect_backfill_truncated_count",
+    "reconnect_backfill_truncated_microseconds",
 )
 _ANOMALIES = (
     "unsupported_event_count",
@@ -60,6 +62,8 @@ _ANOMALIES = (
     "invalid_websocket_frame_count",
     "pusher_error_count",
     "public_state_poll_failure_count",
+    "reconnect_backfill_truncated_count",
+    "reconnect_backfill_truncated_microseconds",
     "deadline_accounting_incomplete",
 )
 _GAPS = (
@@ -207,6 +211,8 @@ def _frame_accounting(
                 "public_state_poll_failure_count",
                 "public_subscription_count",
                 "synthetic_frame_count",
+                "reconnect_backfill_truncated_count",
+                "reconnect_backfill_truncated_microseconds",
             ),
             0,
         ),

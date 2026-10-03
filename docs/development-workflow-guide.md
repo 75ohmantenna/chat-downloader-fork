@@ -194,9 +194,12 @@ malformed, and Pusher-error counts. Unknown chat subtypes overlap parsed events
 and are not subtracted twice. It compares preloaded/live/backfill source totals,
 the run message count, and per-type counts with JSONL. Recorded parser drops,
 unknown types, invalid frames, failed runs, and inconsistent totals require
-review even when frame accounting balances and TXT parity passes. Reconnects
-and recovered backfill alone are informational. Filters, deduplication, and
-deadline prefetch can make parsed counts differ from output; a count gap is
+review even when frame accounting balances and TXT parity passes. Truncated
+backfill windows and their uncovered time require review; reconnects and fully
+recovered backfill alone are informational. Older logs lacking the truncation
+counters default them to zero and cannot establish that no historical gap
+occurred. Filters, deduplication, and deadline prefetch can make parsed counts
+differ from output; a count gap is
 evidence to investigate, not proof of message loss.
 
 For a Kick VOD or clip replay, the same command detects reverse-history
