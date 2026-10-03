@@ -8,6 +8,14 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Features
+
+- Inspect Kick live captures automatically with `--verify_output`, including
+  offline-channel chat. Report record findings, parser loss, source counts,
+  and deadline accounting alongside independent JSONL/TXT parity in run
+  results, debug summaries, and manifests. Keep the offline Kick inspector
+  available for existing live captures and resumed replay archives.
+
 ## 2.3.1 — 2026-09-23
 
 ### Fixes

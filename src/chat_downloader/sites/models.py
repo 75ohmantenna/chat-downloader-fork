@@ -89,9 +89,9 @@ class Chat:
         self.id = id
         self.diagnostics = diagnostics if diagnostics is not None else {}
 
-        self._capture_inspector: Callable[[Path | None], dict[str, object]] | None = (
-            None
-        )
+        self._capture_inspector: (
+            Callable[[Path | None, dict[str, object]], dict[str, object]] | None
+        ) = None
 
         # Site object that produced this chat — set by configure_chat().
         self.site: BaseChatDownloader | None = None

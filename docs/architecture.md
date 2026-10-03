@@ -272,6 +272,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `extractor.py` | `KickChatDownloader` — URL matching, public API entry point |
+| `capture_inspection.py` | Content-free JSONL record validation and live/replay ledger reconciliation shared by automatic live verification and the offline CLI |
 | `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, clock/latency-safe reconnect backfill, bounded diagnostics, and rejected-key recovery |
 | `replay_window.py` | Pure Kick replay bounds, reverse cursor, and skip classification |
 | `replay_service.py` | VOD metadata, reverse history spooling, replay-relative timestamps, filtering, and completion diagnostics |

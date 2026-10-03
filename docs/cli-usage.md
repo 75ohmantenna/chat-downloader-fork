@@ -389,7 +389,8 @@ monotonic clock; output verification and manifest writing are excluded.
 `provider_diagnostics` retains supported bounded YouTube action and
 continuation counters, including skipped-action reasons and parsing loss, plus
 Kick live transport, public-feed, snapshot, and backfill counters. Automatic
-Twitch live inspection reports remain in `provider_inspection` when requested.
+Twitch and Kick live inspection reports remain in `provider_inspection` when
+requested.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
 deadline accounting; an incomplete count must not be treated as proof of zero
 pending records. These fields are available without `--logging debug`.
@@ -418,22 +419,28 @@ Kick replay emits collection progress at info level at most every five seconds
 between pages, then announces chronological output. Metadata fallback
 and material end-time/duration disagreements are also explained at info level.
 
-For Twitch live channels (including upcoming streams), `--verify_output` also
-runs the Twitch capture inspector after outputs close. `provider_inspection` in
+For Twitch live channels (including upcoming streams) and Kick live channels
+(including offline chatrooms), `--verify_output` also runs the provider's capture
+inspector after outputs close. No debug log is required. `provider_inspection` in
 the run result, debug summary, and run manifest contains the same content-free
-JSONL findings and IRC frame accounting as the offline inspector. Its `status`
+JSONL findings and provider frame accounting as the offline inspector. Its `status`
 is `ok`, `review`, or `error`; a review or inspection error makes the run
 unsuccessful even when `parity_status` is `passed`. Parity is still checked if
-inspection fails, and its independent status remains available. Other providers
-and Twitch replays retain parity-only verification. Closed partial captures are
+inspection fails, and its independent status remains available. YouTube and
+Twitch/Kick replays retain parity-only verification. Closed partial captures are
 also inspected after retrieval failures when
 the output pair was validated; the original error remains authoritative and
 parity stays `not_run`.
 
 The report also records `prefetched_after_deadline_count` and
-`deadline_prefetch_count_complete`. Parsed IRC messages need not equal output
+`deadline_prefetch_count_complete`. Parsed provider messages need not equal output
 records: filtering, deduplication, and deadline prefetch can exclude messages.
 A deadline can leave frame accounting incomplete; a gap requests review rather
 than proving lost output. Empty lazy captures are inspected without creating
 files. Run manifests identify the recording through its configured provider's
 name, or `null` when provider metadata is unavailable.
+
+Kick inspection additionally reconciles preloaded/live/backfill emission totals
+and per-type output counts, accounts for synthetic REST snapshot events, and
+flags known parser drops or incomplete deadline accounting for review. Use
+`scripts/inspect_kick_capture.py` with each run's debug log for replay archives.

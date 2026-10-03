@@ -218,7 +218,7 @@ def _verify_capture_outputs(
     """Run provider inspection, parity verification, and checkpoint save."""
     try:
         if verification_bound and chat is not None:
-            result.provider_inspection = inspect_provider_capture(chat)
+            result.provider_inspection = inspect_provider_capture(chat, result)
         if run_config.verify_output and result.success and chat is not None:
             resets = (
                 tuple(

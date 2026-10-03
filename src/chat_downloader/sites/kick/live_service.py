@@ -33,6 +33,7 @@ from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.json_types import get_dict, get_list
 
+from .capture_inspection import inspect_capture
 from .constants import (
     KICK_DEBUG_SAMPLE_LIMIT,
     MESSAGE_GROUPS,
@@ -265,7 +266,7 @@ def get_chat_by_channel(
     )
     if control is not None:
         control.source = source
-    return Chat(
+    chat = Chat(
         control if control is not None else source,
         title=title,
         status=status,
@@ -273,6 +274,10 @@ def get_chat_by_channel(
         id=username,
         diagnostics=diagnostics.summary,
     )
+    chat._capture_inspector = lambda path, summary: inspect_capture(
+        path, run_summary=summary
+    )
+    return chat
 
 
 def _open_subscribed_transport(

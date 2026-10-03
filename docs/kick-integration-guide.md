@@ -190,6 +190,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   and snapshot polling.
 - `public_state.py`: anonymous channel/viewer state and category discovery.
 - `live_iterator.py`: interruptible ownership of the active live transport.
+- `capture_inspection.py`: content-free JSONL validation and live/replay ledger
+  reconciliation shared by automatic live verification and the offline command.
 
 ### Parsing and shared Kick data
 
@@ -367,7 +369,8 @@ recovers chat and the current pin; the public APIs do not provide equivalent
 history for arbitrary lifecycle events, so transitions during an outage can be
 missed. Snapshot polling may miss transitions between polls. Long in-flight HTTP
 requests can delay shutdown; incomplete deadline accounting is explicitly
-reported for review by `scripts/inspect_kick_capture.py` rather than certified.
+reported for review by automatic live verification and the offline inspector
+rather than certified.
 
 The live service still reports truncated reconnect windows and uncovered time.
 The inspector subtracts counted deadline-prefetched records when reconciling
@@ -378,7 +381,8 @@ Live URLs cannot seek with `start_time` or `end_time`; use a VOD or clip URL.
 
 Each live `Chat` exposes this schema in `chat.diagnostics`. Debug run summaries
 retain it on success and failure. Run manifests select bounded integer counters
-from it; the offline inspector uses the debug summary for reconciliation.
+from it. Automatic live inspection uses in-memory run counts and diagnostics;
+the offline inspector uses the debug summary for reconciliation.
 
 | Field | Meaning |
 | --- | --- |
@@ -653,6 +657,15 @@ This detects recorded parser drops as well as output/diagnostic count gaps;
 it supplements exact TXT/JSONL parity. See the
 [capture inspection workflow](development-workflow-guide.md#kick-capture-inspection)
 for report and exit-code semantics.
+
+For live capture, `--verify_output` automatically runs this inspector after
+shutdown using the same record checks and counter reconciliation without a
+debug log. The content-free report appears in the run result, debug summary,
+and manifest under `provider_inspection`; `review` or `error` fails the run
+even when JSONL/TXT parity passes. Offline-channel chat uses the same behavior.
+Partial captures after retrieval errors are inspected while preserving the
+original error. Kick VOD and clip verification remains parity-only: replay
+inspection uses the offline command with one debug log per appended run.
 
 ## Testing
 

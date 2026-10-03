@@ -143,6 +143,25 @@ separate `scripts/audit_capture_parity.py` command layer.
 **Revisit when:** input reading or semantic comparison gains an independent
 production consumer with a contract that removes shared alignment state.
 
+## Share Kick capture inspection with its offline command
+
+**Decision:** `sites/kick/capture_inspection.py` owns JSONL record integrity,
+exact duplicate tracking, and live/replay counter reconciliation. The offline
+command and automatic live verification use the same content-free report.
+The module is intentionally allowlisted above 400 lines: moving the existing
+offline inspector into the provider package preserves its coupled record and
+ledger validation rather than splitting it into scan phases. The command layer
+retains argument parsing and exit-code handling.
+
+Generic runtime passes run counts, provider diagnostics, and deadline accounting
+to an inspector attached by the owning provider. It does not import a concrete
+provider. Kick replay remains offline because appended archives require the
+ledger from every resumed run, not just the current run's counters.
+
+**Revisit when:** an independent integrity check gains a second production
+consumer, or replay checkpoints retain enough ledger history for automatic
+inspection of an appended archive.
+
 ## Keep orchestration and session ownership deep
 
 **Decision:** Runtime callers cross two orchestration interfaces:

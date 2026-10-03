@@ -303,7 +303,7 @@ def get_chat_by_stream_id(
         id=stream_id,
         diagnostics=diagnostics.summary,
     )
-    chat._capture_inspector = lambda path: inspect_capture(
+    chat._capture_inspector = lambda path, _summary: inspect_capture(
         path, diagnostics=diagnostics.summary
     )
     return chat

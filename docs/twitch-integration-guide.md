@@ -503,8 +503,9 @@ the run result, debug summary, and run manifest contains the same content-free
 JSONL findings and IRC frame accounting as the offline inspector. Its `status`
 is `ok`, `review`, or `error`; a review or inspection error makes the run
 unsuccessful even when `parity_status` is `passed`. Parity is still checked if
-inspection fails, and its independent status remains available. Other providers
-and Twitch replays retain parity-only verification. Closed partial captures are
+inspection fails, and its independent status remains available. YouTube and
+Twitch/Kick replays retain parity-only verification; Kick live capture attaches
+its own provider inspector. Closed partial captures are
 also inspected after retrieval failures when
 the output pair was validated; the original error remains authoritative and
 parity stays `not_run`.

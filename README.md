@@ -37,7 +37,7 @@ the stable replay network contracts on Python 3.14.
 | --- | --- |
 | YouTube | Live and replay chat, including paid messages and memberships |
 | Twitch | Live IRC events plus text-message replay for VODs and clips |
-| Kick | Live Pusher events plus bounded, chronological VOD and clip replay |
+| Kick | Negotiated Pusher/Centrifugo live events plus bounded, chronological VOD and clip replay |
 
 ## Installation
 

@@ -23,7 +23,7 @@ large refactors, parser reshaping, or tooling changes.
 | Replay shutdown checkpoints with verified request/artifact identity and overlap deduplication | `runtime/capture_checkpoint.py` | checkpoint writer-composition tests |
 | Optional automatic JSONL/TXT verification and failure summaries | `runtime/capture_verification.py`, `runtime/runner.py` | checkpoint/parity composition and runner tests |
 | Offline JSONL/TXT capture parity audit with exact formatting, semantic deduplication, physical-line validation, and content-free diagnostics | `output/capture_parity.py`, `scripts/audit_capture_parity.py` | capture-parity subprocess and writer-composition tests |
-| Offline Kick live/replay capture inspection and debug-summary reconciliation | `scripts/inspect_kick_capture.py` | Kick capture-inspection subprocess and recorded-replay tests |
+| Automatic Kick live inspection plus offline live/replay inspection and debug-summary reconciliation | `sites/kick/capture_inspection.py`, `scripts/inspect_kick_capture.py` | Kick capture-verification composition, capture-inspection subprocess, and recorded-replay tests |
 | Filtering, provider-aware text formatting, conditional/singular format fields, time windows | `sites/filters.py`, `formatting/format.py`, `formatting/custom_formats.json`, `runtime/chat_pipeline.py` (`configure_chat`) | filtering, formatting, provider-format, configured-chat composition |
 | Cookies, sessions, auth, explicit/environment proxy safety | `ChatDownloader`, `_SiteSessionPool`, `ChatDownloaderSession`, `runtime/config_guards.py`, `sites/proxy.py`, YouTube auth | HTTP adapter, downloader lifecycle, proxy transport, auth, facade redaction |
 | Retry, timeout, interruption, cleanup | `sites/retry.py`, `utils/retry_utils.py`, `runtime/runner.py`, `Chat.close`, `TimedGenerator` | retry, network-retry, runner, chat-model, live-service, timed-generator tests |
@@ -46,6 +46,7 @@ large refactors, parser reshaping, or tooling changes.
   site, a failing capability, or an organic threshold breach during feature
   work.
 
-Twitch live `--verify_output` combines exact parity with content-free provider
-inspection from `sites/twitch/capture_inspection.py`; the report is shared by the
-run result, debug summary, and run manifest.
+Twitch and Kick live `--verify_output` combine exact parity with content-free
+provider inspection from their respective `capture_inspection.py` modules. The
+report is shared by the run result, debug summary, and run manifest. Kick replay
+inspection remains an offline command that can reconcile multiple resumed runs.

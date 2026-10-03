@@ -17,6 +17,8 @@ if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
     from chat_downloader.utils.json_types import JSONDict
 
+    from .runner import RunResult
+
 
 class _ChatFormatter:
     def __init__(self, chat: Chat) -> None:
@@ -91,7 +93,7 @@ def validate_verification(parameters: dict[str, Any], *, resume: bool) -> None:
         raise ValueError(msg)
 
 
-def inspect_provider_capture(chat: Chat) -> dict[str, object] | None:
+def inspect_provider_capture(chat: Chat, result: RunResult) -> dict[str, object] | None:
     """Run the provider's optional closed-artifact inspector without log contents."""
     if chat._capture_inspector is None:
         return None
@@ -102,10 +104,20 @@ def inspect_provider_capture(chat: Chat) -> dict[str, object] | None:
             item["file_created"] and Path(item["file_name"]).suffix.lower() == ".jsonl"
             for item in dispatcher.writer_summaries
         )
-        report = chat._capture_inspector(path if created else None)
         deadline_summary = getattr(chat.chat, "deadline_prefetch_summary", None)
         count, complete = (
             deadline_summary() if callable(deadline_summary) else (0, True)
+        )
+        report = chat._capture_inspector(
+            path if created else None,
+            {
+                "success": result.success,
+                "message_count": result.message_count,
+                "message_type_counts": dict(result.message_type_counts),
+                "provider_diagnostics": dict(chat.diagnostics),
+                "prefetched_after_deadline_count": count,
+                "deadline_prefetch_count_complete": complete,
+            },
         )
         report["prefetched_after_deadline_count"] = count
         report["deadline_prefetch_count_complete"] = complete

@@ -10,7 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts.inspect_kick_capture import inspect_capture, main
+from chat_downloader.sites.kick.capture_inspection import inspect_capture
+from scripts.inspect_kick_capture import main
 
 
 def _write(path, rows):
@@ -148,6 +149,39 @@ def test_clean_inspection_counts_shapes_and_informational_backsteps(tmp_path, pr
     }
     assert {key: report[key] for key in expected} == expected
     assert report["frame_accounting"]["unaccounted_frames"] == 0
+
+
+def test_in_memory_run_summary_matches_offline_log_report(capture, tmp_path):
+    log = _log(tmp_path / "debug.log")
+    summary = ast.literal_eval(log.read_text().split("Run summary: ", 1)[1])
+    assert inspect_capture(capture, run_summary=summary) == inspect_capture(
+        capture, log
+    )
+
+
+def test_log_and_in_memory_summary_are_mutually_exclusive(capture, tmp_path):
+    with pytest.raises(ValueError, match="either debug logs or a run summary"):
+        inspect_capture(capture, _log(tmp_path / "log"), run_summary={})
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("success", 1),
+        ("termination_reason", "PRIVATE_SENTINEL"),
+        ("parity_status", "PRIVATE_SENTINEL"),
+        ("prior_record_loss", 1),
+    ],
+)
+def test_corrupt_replay_ledger_is_rejected_without_echoing_values(
+    tmp_path, capsys, key, value
+):
+    capture = _write(tmp_path / "chat", [_text()])
+    log = _replay_log(tmp_path / "log")
+    summary = ast.literal_eval(log.read_text().split("Run summary: ", 1)[1])
+    target = summary["provider_diagnostics"] if key == "prior_record_loss" else summary
+    target[key] = value
+    _assert_bad_summary(capture, _summary(log, summary), capsys)
 
 
 def test_scans_past_bad_records_without_echoing_content(tmp_path, capsys):

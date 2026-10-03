@@ -101,7 +101,7 @@ these fields:
 | `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error, and messages without a string type use the `<missing>` key |
 | `parity_status` | `not_requested`, `not_run`, `passed`, or `failed`; parity verifies artifacts, not provider completeness |
 | `termination_reason` | Completion, message limit, timeout, interruption, or error; successful retrieval may be intentionally bounded |
-| `provider_inspection` | Content-free Twitch live inspection report when output verification runs; otherwise `None` |
+| `provider_inspection` | Content-free Twitch or Kick live inspection report when output verification runs, including closed partial captures after retrieval failures; otherwise `None` |
 | `elapsed_seconds` | Monotonic duration from initialization through capture shutdown, excluding output verification and manifest writing |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
@@ -534,6 +534,15 @@ JSONL and TXT output paths to resume a completed recording. These are runtime
 controls on `run()`, not fields of `ChatRequest` or `get_chat()`.
 See [CLI capture recovery](cli-usage.md#replay-checkpoints-and-output-verification)
 for shutdown semantics, immutable settings, and recovery limits.
+
+For Kick live URLs, `run(verify_output=True, ...)` also inspects closed JSONL
+records and reconciles provider counters with the current run without requiring
+debug logging. The content-free report appears in `RunResult.provider_inspection`
+and run manifests. Review findings or inspection errors fail the run even when
+TXT parity passes; an original retrieval error retains priority. Kick replay
+verification remains parity-only; use the offline inspector with the debug
+logs from each replay run to reconcile an appended archive.
+
 Kick VOD and clip messages now include `time_in_seconds` and `time_text`,
 relative to the recording or clip origin even when selecting a later start.
 Absolute provider timestamps remain available in `timestamp`.

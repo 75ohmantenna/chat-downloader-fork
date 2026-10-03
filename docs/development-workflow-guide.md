@@ -167,6 +167,16 @@ The existing parity auditor remains responsible for physical newline checks.
 
 ### Kick capture inspection
 
+Kick live captures with `--verify_output` automatically run the same inspector
+after outputs close, using in-memory diagnostics and run counts. No debug log
+is required. The report is retained in `provider_inspection` on the run result,
+debug summary, and run manifest. Review findings or inspector errors fail the
+run independently of TXT parity. Closed partial captures retain findings
+without replacing their original retrieval error. Empty lazy captures are
+inspected without creating output files.
+
+To inspect an existing live capture or replay archive offline:
+
 ```bash
 uv run python scripts/inspect_kick_capture.py capture.jsonl --debug-log debug.log
 ```
