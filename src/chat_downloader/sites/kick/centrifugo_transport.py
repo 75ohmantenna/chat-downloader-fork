@@ -25,18 +25,33 @@ from .errors import KickRealtimeRejected, KickServerError
 from .websocket_transport import KickPusherTransport
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from chat_downloader.utils.json_types import JSONDict
 
     from .realtime_connection import KickRealtimeClient
+    from .websocket_transport import _PusherConnector
 
 
 class KickCentrifugoTransport(KickPusherTransport):
     """Translate the website's JSON protocol to provider-independent event frames."""
 
-    def __init__(self, *, client: KickRealtimeClient) -> None:
+    def __init__(
+        self,
+        *,
+        client: KickRealtimeClient,
+        url: str | None = None,
+        proxy_url: str | None = None,
+        connector: _PusherConnector | None = None,
+        diagnostic_callback: Callable[[str], None] | None = None,
+    ) -> None:
         """Initialize the anonymous protocol state and its owning client."""
-        # Explicit transport options are set by the public connection owner.
-        super().__init__()
+        super().__init__(
+            url=url,
+            proxy_url=proxy_url,
+            connector=connector,
+            diagnostic_callback=diagnostic_callback,
+        )
         self.client = client
         self._commands: dict[int, tuple[str, str, float]] = {}
         self._next_id = 0

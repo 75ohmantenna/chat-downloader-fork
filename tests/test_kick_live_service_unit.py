@@ -344,6 +344,47 @@ def test_open_subscribed_transport_terminal_error(
         )
 
 
+@pytest.mark.parametrize("stage", ["subscribe", "set_timeout"])
+def test_terminal_setup_error_closes_transport_without_retry(stage):
+    transport = FakeTransport()
+    setattr(transport, stage, MagicMock(side_effect=KickRealtimeRejected("denied")))
+    downloader = FakeDownloader()
+    downloader.retry = MagicMock()
+    with pytest.raises(KickRealtimeRejected, match="denied"):
+        live_service._open_subscribed_transport(
+            downloader, "1", _request(), lambda: transport
+        )
+    assert transport.connected
+    assert transport.close_count == 1
+    downloader.retry.assert_not_called()
+
+
+@pytest.mark.parametrize("stage", ["factory", "connect", "subscribe", "failed_connect"])
+def test_cancelled_setup_never_advances_or_retries(stage):
+    transport = FakeTransport()
+    control = KickLiveIterator()
+    downloader = FakeDownloader()
+    downloader.retry = MagicMock()
+    transport.set_timeout = MagicMock()
+
+    def cancel(*_args, **_kwargs):
+        control.request_stop()
+        if stage == "failed_connect":
+            raise ConnectionError("stopped during connect")
+
+    if stage == "factory":
+        control.request_stop()
+    else:
+        setattr(transport, "connect" if stage == "failed_connect" else stage, cancel)
+    opened = live_service._open_subscribed_transport(
+        downloader, "1", _request(), lambda: transport, control=control
+    )
+    assert opened is transport
+    assert transport.close_count == 1
+    transport.set_timeout.assert_not_called()
+    downloader.retry.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("checkpoint", "expected"),
     [

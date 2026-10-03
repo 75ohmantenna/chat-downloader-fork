@@ -283,10 +283,10 @@ module names.
 | `api_client.py` | Downloader-owned, origin-scoped sessions and unified status/challenge/JSON policy for Kick channel, history, VOD, and web/mobile clip endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |
 | `pusher_discovery.py` | Default-first Pusher application-key selection, rejected-key refresh, cache ownership, and WebSocket URL construction |
-| `websocket_transport.py` | Shared secure socket IO and legacy Pusher framing; injectable for testing |
+| `websocket_transport.py` | Structural live-feed lifecycle, shared secure socket IO, and legacy Pusher framing; injectable for testing |
 | `realtime_connection.py` | Origin-isolated anonymous website negotiation and connection token ownership |
 | `centrifugo_transport.py` | Centrifugo acknowledgements, publications, heartbeat deadlines, and anonymous token renewal |
-| `public_transport.py` | Independent chat/channel connections, bounded event multiplexing, public feed confirmations, and REST polling |
+| `public_transport.py` | Independent chat/channel connections with complete protocol construction, cancellation-aware setup, bounded event multiplexing, public feed confirmations, and REST polling |
 | `public_state.py` | Anonymous channel and viewer snapshots plus category drop feed discovery |
 | `live_iterator.py` | Cooperative deadline cancellation of the active live connection |
 | `constants.py` | URL patterns, Pusher config, event names, message types, emote patterns, Cloudflare markers |

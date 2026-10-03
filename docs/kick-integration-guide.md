@@ -312,7 +312,14 @@ alias with the same value.
 ### Public realtime transports
 
 `public_transport.py` owns two independent negotiated connections and a bounded
-publication queue. The website's primary `chatrooms.{chatroom_id}.v2` feed uses
+publication queue. Each protocol transport receives complete connection
+configuration at construction; the public owner does not change its private
+socket settings. Live orchestration uses the same cancellable iterator for
+production and injected transports. Cancellation during setup closes late
+resources before another connection or subscription can begin, and terminal
+setup failures close the transport without retrying.
+
+The website's primary `chatrooms.{chatroom_id}.v2` feed uses
 its channel-chat connection; the other feeds use the global connection:
 
 | Public feed | Available events |

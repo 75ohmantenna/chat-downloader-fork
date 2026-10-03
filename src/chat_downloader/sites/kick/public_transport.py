@@ -31,13 +31,27 @@ if TYPE_CHECKING:
 
     from chat_downloader.utils.json_types import JSONDict, JSONList
 
+    from .websocket_transport import _PusherConnector
+
 
 class _NegotiatedPusherTransport(KickPusherTransport):
     """Require confirmation of every public subscription before its deadline."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        url: str | None = None,
+        proxy_url: str | None = None,
+        connector: _PusherConnector | None = None,
+        diagnostic_callback: Callable[[str], None] | None = None,
+    ) -> None:
         """Track pending public feed acknowledgements."""
-        super().__init__()
+        super().__init__(
+            url=url,
+            proxy_url=proxy_url,
+            connector=connector,
+            diagnostic_callback=diagnostic_callback,
+        )
         self._pending_subscriptions: dict[str, float] = {}
 
     def subscribe_channels(self, channels: list[str]) -> None:
@@ -60,7 +74,7 @@ class _NegotiatedPusherTransport(KickPusherTransport):
         return frame
 
 
-class KickPublicTransport(KickPusherTransport):
+class KickPublicTransport:
     """Multiplex the website's independent negotiated transports with backpressure."""
 
     def __init__(
@@ -74,7 +88,7 @@ class KickPublicTransport(KickPusherTransport):
         proxy: dict[str, str] | None = None,
     ) -> None:
         """Initialize ownership, bounded buffering, and snapshot state."""
-        super().__init__(diagnostic_callback=diagnostic_callback)
+        self._diagnostic_callback = diagnostic_callback
         self.username = username
         self.channel_id = channel_id
         self._trust_env = trust_env
@@ -92,6 +106,15 @@ class KickPublicTransport(KickPusherTransport):
         self._next_poll = 0.0
         self._receive_timeout = 1.0
         self._pending: deque[JSONDict | Exception] = deque()
+
+    def _record_diagnostic(self, name: str) -> None:
+        if self._diagnostic_callback is not None:
+            self._diagnostic_callback(name)
+
+    def _check_stopped(self) -> None:
+        if self._stopped.is_set():
+            msg = "Kick public transport was stopped."
+            raise ConnectionError(msg)
 
     def _put(self, item: JSONDict | Exception) -> None:
         while not self._stopped.is_set():
@@ -124,34 +147,45 @@ class KickPublicTransport(KickPusherTransport):
         """Negotiate chat and global descriptors separately, including regional URLs."""
         del force_discover
         try:
+            self._check_stopped()
             proxy = self._configured_proxy
             # Explicit arguments keep transport/session ownership typed and isolated.
             self._state = KickPublicState(
                 proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
             )
             self._channel = self._state.metadata(self.username)
+            self._check_stopped()
             for channel_id in (self.channel_id, None):
                 client = KickRealtimeClient(
                     proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
                 )
                 self._clients.append(client)
                 connection = client.negotiate(channel_id)
-                transport = (
-                    KickCentrifugoTransport(client=client)
-                    if connection.provider == "centrifugo"
-                    else _NegotiatedPusherTransport()
-                )
-                transport._url = connection.url
-                transport._proxy_url = resolve_session_proxy(
+                self._check_stopped()
+                proxy_url = resolve_session_proxy(
                     SimpleNamespace(proxies=proxy, trust_env=self._trust_env),
                     connection.url.replace("wss://", "https://", 1),
                 )
-                transport._connector = partial(
-                    _default_connector, origin="https://kick.com"
+                connector = partial(_default_connector, origin="https://kick.com")
+                transport = (
+                    KickCentrifugoTransport(
+                        client=client,
+                        url=connection.url,
+                        proxy_url=proxy_url,
+                        connector=connector,
+                        diagnostic_callback=self._diagnostic_callback,
+                    )
+                    if connection.provider == "centrifugo"
+                    else _NegotiatedPusherTransport(
+                        url=connection.url,
+                        proxy_url=proxy_url,
+                        connector=connector,
+                        diagnostic_callback=self._diagnostic_callback,
+                    )
                 )
-                transport._diagnostic_callback = self._diagnostic_callback
                 self._transports.append(transport)
                 transport.connect(timeout)
+                self._check_stopped()
                 self._record_diagnostic(f"{connection.provider}_connection_count")
         except (
             KickServerError,
@@ -169,11 +203,13 @@ class KickPublicTransport(KickPusherTransport):
 
     def subscribe(self, chatroom_id: str) -> None:
         """Subscribe to public feeds using the website connection scopes."""
+        self._check_stopped()
         self._transports[0].subscribe_channels(
             [
                 f"chatrooms.{chatroom_id}.v2",
             ]
         )
+        self._check_stopped()
         self._transports[1].subscribe_channels(
             [
                 f"channel.{self.channel_id}",
@@ -187,14 +223,17 @@ class KickPublicTransport(KickPusherTransport):
 
     def set_timeout(self, timeout: float | None) -> None:
         """Start one bounded reader per connection after subscriptions are sent."""
+        self._check_stopped()
         self._receive_timeout = min(timeout or 1.0, 1.0)
         for index, transport in enumerate(self._transports):
             transport.set_timeout(self._receive_timeout)
+            self._check_stopped()
             worker = Thread(
                 target=self._read, args=(transport, self._clients[index]), daemon=True
             )
-            self._workers.append(worker)
             worker.start()
+            self._workers.append(worker)
+            self._check_stopped()
 
     def _poll(self) -> None:
         if self._state is None or time.monotonic() < self._next_poll:
@@ -242,9 +281,7 @@ class KickPublicTransport(KickPusherTransport):
 
     def recv(self) -> JSONDict | None:
         """Yield merged events without dropping buffered publications."""
-        if self._stopped.is_set():
-            msg = "Kick public transport was stopped."
-            raise ConnectionError(msg)
+        self._check_stopped()
         self._poll()
         if self._pending:
             item = self._pending.popleft()

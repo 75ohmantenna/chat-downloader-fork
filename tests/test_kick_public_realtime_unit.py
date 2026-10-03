@@ -11,6 +11,9 @@ import pytest
 from requests.exceptions import RequestException
 
 from chat_downloader.errors import CaptchaChallengeRequired
+from chat_downloader.models import ChatRequest
+from chat_downloader.sites.kick import live_service
+from chat_downloader.sites.kick import public_state as ps
 from chat_downloader.sites.kick import public_transport as pt
 from chat_downloader.sites.kick import realtime_connection as rc
 from chat_downloader.sites.kick.centrifugo_transport import KickCentrifugoTransport
@@ -32,10 +35,13 @@ from chat_downloader.sites.kick.public_state import KickPublicState, category_fe
 from chat_downloader.sites.kick.websocket_transport import KickPusherTransport
 from chat_downloader.utils.timed_generator import TimedGenerator
 from tests.kick_helpers import (
+    FakeDownloader,
     FakeKickSession,
     FakeResponse,
     FakeWebSocket,
     load_fixture,
+    pusher_frame,
+    raw_message,
 )
 
 
@@ -237,9 +243,11 @@ def test_anonymous_http_cleanup_is_idempotent_and_cannot_mask_failure(owner):
 def centrifugo(frames=()):
     ws = FakeWebSocket(list(frames))
     client = SimpleNamespace(connection_token=MagicMock(return_value="secret-token"))
-    transport = KickCentrifugoTransport(client=client)
-    transport._url = "wss://realtime.us-east-1.platform.kick.com/connection/websocket"
-    transport._connector = lambda *_a, **_kw: ws
+    transport = KickCentrifugoTransport(
+        client=client,
+        url="wss://realtime.us-east-1.platform.kick.com/connection/websocket",
+        connector=lambda *_a, **_kw: ws,
+    )
     transport.connect(1)
     return transport, ws, client
 
@@ -540,7 +548,6 @@ def test_public_transport_owns_independent_connections_and_all_public_feeds(
         trust_env=False,
         proxy={"https": "http://proxy.test"},
     )
-    transport._proxy_url = "http://proxy.test"
     transport.connect(1, force_discover=True)
     transport.subscribe("456")
     transport.set_timeout(99)
@@ -711,22 +718,22 @@ def test_public_proxy_resolution_honors_each_negotiated_host(
     )
     factory = MagicMock(side_effect=clients)
     monkeypatch.setattr(pt, "KickRealtimeClient", factory)
-    children = [MagicMock(), MagicMock()]
-    monkeypatch.setattr(
-        pt, "KickCentrifugoTransport", MagicMock(return_value=children[0])
-    )
-    monkeypatch.setattr(
-        pt, "_NegotiatedPusherTransport", MagicMock(return_value=children[1])
-    )
+    clients[0].connection_token.return_value = "anonymous-token"
+    sockets = [FakeWebSocket(), FakeWebSocket()]
+    connector = MagicMock(side_effect=sockets)
+    monkeypatch.setattr(pt, "_default_connector", connector)
     transport = pt.KickPublicTransport(
         username="slug", channel_id="123", proxy=configured, trust_env=trust_env
     )
-    transport._proxy_url = "http://legacy-derived-proxy.test:8000"
     transport.connect(1)
-    assert [child._proxy_url for child in children] == expected
+    assert [call.kwargs["proxy_url"] for call in connector.call_args_list] == expected
+    assert all(
+        call.kwargs["origin"] == "https://kick.com" for call in connector.call_args_list
+    )
     assert all(call.kwargs["proxy"] == configured for call in factory.call_args_list)
     assert all(call.kwargs["trust_env"] == trust_env for call in factory.call_args_list)
     transport.close()
+    assert all(socket.closed for socket in sockets)
 
 
 def test_shared_socket_cancellation_and_explicit_origin(monkeypatch):
@@ -742,4 +749,160 @@ def test_shared_socket_cancellation_and_explicit_origin(monkeypatch):
     connector = MagicMock()
     monkeypatch.setattr(wt, "create_connection", connector)
     wt._default_connector("wss://example.test/", 1, origin="https://kick.com")
+
+
+@pytest.mark.parametrize("stage", ["before", "metadata", "negotiate", "socket"])
+def test_cancellation_during_setup_closes_late_resources(monkeypatch, stage):
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    state = MagicMock()
+    clients = [MagicMock(), MagicMock()]
+    descriptor = rc.RealtimeConnection("pusher", "wss://ws-us2.pusher.com/app/key")
+    for client in clients:
+        client.negotiate.return_value = descriptor
+    socket = FakeWebSocket()
+    connector = MagicMock(return_value=socket)
+    state_factory = MagicMock(return_value=state)
+    factory = MagicMock(side_effect=clients)
+    monkeypatch.setattr(pt, "KickPublicState", state_factory)
+    monkeypatch.setattr(pt, "KickRealtimeClient", factory)
+    monkeypatch.setattr(pt, "_default_connector", connector)
+
+    def cancel(value):
+        transport.request_stop()
+        return value
+
+    state.metadata.return_value = {}
+    if stage == "before":
+        transport.request_stop()
+    elif stage == "metadata":
+        state.metadata.side_effect = lambda *_: cancel({})
+    elif stage == "negotiate":
+        clients[0].negotiate.side_effect = lambda *_: cancel(descriptor)
+    else:
+        connector.side_effect = lambda *_a, **_kw: cancel(socket)
+
+    with pytest.raises(ConnectionError, match="setup failed"):
+        transport.connect(1)
+    transport.close()
+    clients[1].negotiate.assert_not_called()
+    assert connector.call_count == (stage == "socket")
+    assert socket.closed is (stage == "socket")
+    assert state.close.call_count == (stage != "before")
+    assert bool(clients[0].close.call_count) is (stage in {"negotiate", "socket"})
+
+
+def test_worker_start_failure_keeps_http_cleanup_with_setup_owner(monkeypatch):
+    state = MagicMock()
+    state.metadata.return_value = {}
+    clients = [MagicMock(), MagicMock()]
+    for client in clients:
+        client.negotiate.return_value = rc.RealtimeConnection(
+            "pusher", "wss://ws-us2.pusher.com/app/key"
+        )
+    sockets = [FakeWebSocket(), FakeWebSocket()]
+    monkeypatch.setattr(pt, "KickPublicState", MagicMock(return_value=state))
+    monkeypatch.setattr(pt, "KickRealtimeClient", MagicMock(side_effect=clients))
+    monkeypatch.setattr(pt, "_default_connector", MagicMock(side_effect=sockets))
+    worker = MagicMock()
+    worker.start.side_effect = RuntimeError("unable to start")
+    monkeypatch.setattr(pt, "Thread", MagicMock(return_value=worker))
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    with pytest.raises(RuntimeError, match="unable to start"):
+        live_service._open_subscribed_transport(
+            FakeDownloader(), "456", ChatRequest(), lambda: transport
+        )
+    worker.join.assert_not_called()
+    assert all(socket.closed for socket in sockets)
+    assert all(client.close.call_count == 1 for client in clients)
+
+
+def test_public_subscription_cancellation_prevents_other_feed_and_readers():
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    children = [MagicMock(), MagicMock()]
+    transport._transports = children
+    children[0].subscribe_channels.side_effect = lambda *_: transport.request_stop()
+    with pytest.raises(ConnectionError, match="stopped"):
+        transport.subscribe("456")
+    children[1].subscribe_channels.assert_not_called()
+    with pytest.raises(ConnectionError, match="stopped"):
+        transport.set_timeout(1)
+    assert all(child.set_timeout.call_count == 0 for child in children)
+    transport.close()
+
+
+def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
+    monkeypatch,
+):
+    channel = {"id": 123, "chatroom": {"id": 456}, "livestream": None}
+    state_session = FakeKickSession([FakeResponse(payload=channel)] * 2)
+    sessions = [
+        PostSession(
+            [FakeResponse(payload=connection("pusher", app_key="key", cluster="us2"))]
+        ),
+        PostSession(
+            [
+                FakeResponse(
+                    payload=connection(
+                        url="wss://realtime.us-east-1.platform.kick.com/connection/websocket"
+                    )
+                ),
+                FakeResponse(payload={"data": {"token": "anonymous-token"}}),
+            ]
+        ),
+    ]
+    monkeypatch.setattr(ps, "create_kick_session", lambda **_: state_session)
+    monkeypatch.setattr(rc, "create_kick_session", MagicMock(side_effect=sessions))
+    sockets = [
+        BlockingSocket(
+            [
+                json.dumps({"event": PUSHER_CONNECTION_ESTABLISHED}),
+                json.dumps(
+                    {
+                        "event": PUSHER_SUBSCRIPTION_SUCCEEDED,
+                        "channel": "chatrooms.456.v2",
+                    }
+                ),
+                json.dumps(
+                    pusher_frame(
+                        "App\\Events\\ChatMessageEvent", raw_message("composed")
+                    )
+                ),
+            ]
+        ),
+        BlockingSocket(
+            [
+                json.dumps({"id": 1, "connect": {}}),
+                *[
+                    json.dumps({"id": number, "subscribe": {}})
+                    for number in range(2, 7)
+                ],
+            ]
+        ),
+    ]
+    connector = MagicMock(side_effect=sockets)
+    monkeypatch.setattr(pt, "_default_connector", connector)
+    downloader = FakeDownloader()
+    downloader._kick_api_client = MagicMock()
+    downloader._kick_api_client.fetch_channel.return_value = channel
+    downloader._kick_api_client.fetch_preloaded_chat_state.return_value = None
+    chat = live_service.get_chat_by_channel(
+        downloader, "slug", ChatRequest(message_groups=["all"])
+    )
+    try:
+        for message in chat:
+            if message.get("message_id") == "composed":
+                break
+        else:
+            pytest.fail("negotiated chat record was not emitted")
+    finally:
+        chat.close()
+    assert all(socket.closed for socket in sockets)
+    assert state_session.close_calls == 1
+    assert all(session.close_calls == 1 for session in sessions)
+    assert chat.diagnostics["pusher_connection_count"] == 1
+    assert chat.diagnostics["centrifugo_connection_count"] == 1
+    assert [call.args[0].split("/")[2] for call in connector.call_args_list] == [
+        "ws-us2.pusher.com",
+        "realtime.us-east-1.platform.kick.com",
+    ]
     assert connector.call_args.kwargs["origin"] == "https://kick.com"

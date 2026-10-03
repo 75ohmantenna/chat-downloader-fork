@@ -70,6 +70,20 @@ class _PusherConnector(Protocol):
     ) -> _WebSocketConnection | None: ...
 
 
+class _KickTransport(Protocol):
+    """Live feed lifecycle shared by legacy and negotiated transports."""
+
+    def connect(
+        self, timeout: float | None, *, force_discover: bool = False
+    ) -> None: ...
+    def subscribe(self, chatroom_id: str) -> None: ...
+    def set_timeout(self, timeout: float | None) -> None: ...
+    def recv(self) -> JSONDict | None: ...
+    def send_pong(self) -> None: ...
+    def request_stop(self) -> None: ...
+    def close(self) -> None: ...
+
+
 _IDLE_WATCHDOG_SECONDS = 180.0
 _MIN_RECEIVE_TIMEOUT_SECONDS = 1.0
 
@@ -307,7 +321,7 @@ class KickPusherTransport:
 
 
 def read_frames(
-    transport: KickPusherTransport,
+    transport: _KickTransport,
     *,
     idle_timeout: float = _IDLE_WATCHDOG_SECONDS,
 ) -> Generator[JSONDict, None, None]:

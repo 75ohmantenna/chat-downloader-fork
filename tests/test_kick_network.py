@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+from functools import partial
 
 import pytest
 from websocket import WebSocketBadStatusException
@@ -54,9 +55,11 @@ def test_live_channel_connects_and_subscribes():
             downloader,
             chatroom_id,
             options,
-            KickPusherTransport,
-            proxy_url=resolve_session_proxy(
-                getattr(downloader, "session", None), "https://ws-us2.pusher.com"
+            partial(
+                KickPusherTransport,
+                proxy_url=resolve_session_proxy(
+                    getattr(downloader, "session", None), "https://ws-us2.pusher.com"
+                ),
             ),
         )
     except CaptchaChallengeRequired as error:

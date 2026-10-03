@@ -16,7 +16,7 @@ from chat_downloader.sites.kick import live_service
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
-    from chat_downloader.sites.kick.websocket_transport import KickPusherTransport
+    from chat_downloader.sites.kick.websocket_transport import _KickTransport
 
 from chat_downloader.sites.retry import retry as _perform_retry
 
@@ -202,13 +202,16 @@ class FakeTransport:
     def subscribe(self, chatroom_id: str) -> None:
         self.subscribed_to = chatroom_id
 
+    def request_stop(self) -> None:
+        self.connected = False
+
     def close(self) -> None:
         self.close_count += 1
 
 
 def make_frame_iterator(
     batches: list[list[Any]],
-) -> Callable[[KickPusherTransport], Generator[dict[str, Any], None, None]]:
+) -> Callable[[_KickTransport], Generator[dict[str, Any], None, None]]:
     """Return a frame-iterator callable that yields successive ``batches``.
 
     Each batch is a list of frames; an :class:`Exception` instance within a
@@ -217,7 +220,7 @@ def make_frame_iterator(
     iterator = iter(batches)
 
     def frame_iterator(
-        _transport: KickPusherTransport,
+        _transport: _KickTransport,
     ) -> Generator[dict[str, Any], None, None]:
         for item in next(iterator):
             if isinstance(item, Exception):

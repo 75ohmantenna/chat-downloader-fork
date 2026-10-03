@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
     from chat_downloader.utils.json_types import JSONDict
 
-    from .websocket_transport import KickPusherTransport
+    from .websocket_transport import _KickTransport
 
 
 class KickLiveIterator:
@@ -22,7 +22,7 @@ class KickLiveIterator:
         """Initialize cancellation before any network operation begins."""
         self.stopped = Event()
         self.source: Iterator[JSONDict] = iter(())
-        self.transport: KickPusherTransport | None = None
+        self.transport: _KickTransport | None = None
 
     def __iter__(self) -> KickLiveIterator:
         """Return the cancellation-aware source iterator."""

@@ -106,6 +106,14 @@ YouTube owns its HTTP continuation retry and profile-fallback behavior.
 Transport-specific recovery is not hidden behind a generic cross-site retry
 facade.
 
+Kick live orchestration accepts a structural feed lifecycle rather than a
+concrete Pusher parent. The public owner configures negotiated protocol
+transports through construction, including each endpoint's proxy and origin;
+legacy discovery remains explicit in standalone Pusher construction. Injected
+transports use the same cancellation owner as production. Setup retains HTTP
+client ownership until its reader starts successfully, and checks cancellation
+after blocking negotiation and connection operations before advancing setup.
+
 Early termination must propagate `close()` through runtime wrappers before
 writers are finalized. Reconnect loops remain bounded and reset failure streaks
 only after useful traffic.

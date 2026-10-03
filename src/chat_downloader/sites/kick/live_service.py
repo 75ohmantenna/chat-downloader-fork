@@ -29,7 +29,6 @@ from chat_downloader.redaction import BoundedSampleCapture, capture_debug_sample
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.json_types import get_dict, get_list
 
@@ -50,10 +49,8 @@ from .parsing.events import (
 from .parsing.messages import iter_preloaded_messages
 from .parsing.pins import parse_pinned_message_created_event
 from .public_transport import KickPublicTransport
-from .pusher_discovery import _HttpClient, _RequestsHttpClient
 from .websocket_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
-    KickPusherTransport,
     read_frames,
 )
 
@@ -65,6 +62,7 @@ if TYPE_CHECKING:
 
     from .api_client import PreloadedChatState
     from .extractor import KickChatDownloader
+    from .websocket_transport import _KickTransport
 
 _KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000
 _SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_KICK_FRAMES"
@@ -231,8 +229,8 @@ def get_chat_by_channel(
     username: str,
     request: ChatRequest,
     *,
-    transport_factory: Callable[[], KickPusherTransport] | None = None,
-    frame_iterator: Callable[[KickPusherTransport], Generator[JSONDict, None, None]]
+    transport_factory: Callable[[], _KickTransport] | None = None,
+    frame_iterator: Callable[[_KickTransport], Generator[JSONDict, None, None]]
     | None = None,
 ) -> Chat:
     """Build a Chat yielding normalized messages for a channel username/slug.
@@ -252,7 +250,7 @@ def get_chat_by_channel(
     status = "live" if isinstance(data.get("livestream"), dict) else "idle"
     diagnostics = _KickLiveDiagnostics()
 
-    control = KickLiveIterator() if transport_factory is None else None
+    control = KickLiveIterator()
     source = _iter_chat_messages(
         downloader,
         username,
@@ -264,10 +262,9 @@ def get_chat_by_channel(
         frame_iterator=frame_iterator,
         control=control,
     )
-    if control is not None:
-        control.source = source
+    control.source = source
     chat = Chat(
-        control if control is not None else source,
+        control,
         title=title,
         status=status,
         video_type="video",
@@ -280,17 +277,15 @@ def get_chat_by_channel(
     return chat
 
 
-def _open_subscribed_transport(
+def _open_subscribed_transport(  # noqa: C901 — retry, cancellation, and cleanup share one transport lifecycle
     downloader: KickChatDownloader,
     chatroom_id: str,
     request: ChatRequest,
-    transport_factory: Callable[[], KickPusherTransport],
+    transport_factory: Callable[[], _KickTransport],
     *,
-    proxy_url: str | None = None,
-    pusher_http_client: _HttpClient | None = None,
     force_discover: bool = False,
     control: KickLiveIterator | None = None,
-) -> KickPusherTransport:
+) -> _KickTransport:
     """Open and subscribe a fresh transport using request retry/recv settings.
 
     Args:
@@ -298,8 +293,6 @@ def _open_subscribed_transport(
         chatroom_id: Numeric chatroom identifier to subscribe to.
         request: Chat request carrying retry and receive-timeout settings.
         transport_factory: Factory producing a fresh transport.
-        proxy_url: Optional HTTP, HTTPS, or SOCKS proxy URL.
-        pusher_http_client: HTTP client for Pusher-key discovery.
         force_discover: Bypass the cached Pusher application key.
         control: Optional owner for interrupting an active receive on cancellation.
     """
@@ -307,17 +300,20 @@ def _open_subscribed_transport(
         transport = transport_factory()
         if control is not None:
             control.transport = transport
-        transport._proxy_url = proxy_url
-        transport._pusher_http_client = pusher_http_client
+            if control.stopped.is_set():
+                transport.close()
+                return transport
         try:
-            if force_discover:
-                transport.connect(
-                    downloader._http_timeout[0],
-                    force_discover=True,
-                )
-            else:
-                transport.connect(downloader._http_timeout[0])
+            transport.connect(
+                downloader._http_timeout[0], force_discover=force_discover
+            )
+            if control is not None and control.stopped.is_set():
+                transport.close()
+                return transport
             transport.subscribe(chatroom_id)
+            if control is not None and control.stopped.is_set():
+                transport.close()
+                return transport
             effective_receive_timeout = max(
                 request.message_receive_timeout,
                 _MIN_RECEIVE_TIMEOUT_SECONDS,
@@ -331,11 +327,16 @@ def _open_subscribed_transport(
             transport.set_timeout(effective_receive_timeout)
         except ConnectionError as error:
             transport.close()
+            if control is not None and control.stopped.is_set():
+                return transport
             try:
                 downloader.retry(attempt_number, error=error, request=request)
             except RetriesExceeded as exhausted:
                 msg = f"{exhausted} Last Kick WebSocket error: {error}"
                 raise RetriesExceeded(msg) from error
+        except BaseException:
+            transport.close()
+            raise
         else:
             return transport
     msg = "unreachable: retry should have raised RetriesExceeded"
@@ -546,8 +547,8 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     request: ChatRequest,
     diagnostics: _KickLiveDiagnostics,
     *,
-    transport_factory: Callable[[], KickPusherTransport] | None = None,
-    frame_iterator: Callable[[KickPusherTransport], Generator[JSONDict, None, None]]
+    transport_factory: Callable[[], _KickTransport] | None = None,
+    frame_iterator: Callable[[_KickTransport], Generator[JSONDict, None, None]]
     | None = None,
     control: KickLiveIterator | None = None,
 ) -> Generator[dict[str, Any], None, None]:
@@ -594,26 +595,12 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         return
 
     # 2. Live WebSocket feed with reconnect.
-    proxy_url = resolve_session_proxy(
-        getattr(downloader, "session", None), "https://ws-us2.pusher.com"
-    )
-    session = getattr(downloader, "session", None)
-    pusher_http_client = (
-        _RequestsHttpClient(
-            session,
-            configured_timeout=getattr(downloader, "_http_timeout", None),
-        )
-        if session is not None
-        else None
-    )
     open_transport = partial(
         _open_subscribed_transport,
         downloader,
         chatroom_id,
         request,
         transport_factory,
-        proxy_url=proxy_url,
-        pusher_http_client=pusher_http_client,
         control=control,
     )
     transport = open_transport()
