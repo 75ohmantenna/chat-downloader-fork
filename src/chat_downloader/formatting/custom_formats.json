@@ -204,7 +204,6 @@
                 "chatroom_updated",
                 "channel_metadata",
                 "reward_redeemed",
-                "kicks_gifted",
                 "kicks_gifted_deleted",
                 "gifts_leaderboard_updated",
                 "kicks_leaderboard_updated",
@@ -343,6 +342,22 @@
                 "author.display_name": " {}",
                 "author.name": " {}",
                 "message": " — {}"
+            }
+        },
+        {
+            "matching": "kicks_gifted",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{metadata.data.sender.username}{metadata.data.gift.amount}{metadata.data.gift.name}{metadata.data.message}",
+            "inherit": "default",
+            "keys": {
+                "received_timestamp": {
+                    "template": "{} | ",
+                    "format": "%Y-%m-%d %H:%M:%S"
+                },
+                "message_type": "[Kicks gifted]",
+                "metadata.data.sender.username": " {}",
+                "metadata.data.gift.amount": " — {} Kicks",
+                "metadata.data.gift.name": " ({})",
+                "metadata.data.message": ": {}"
             }
         },
         {

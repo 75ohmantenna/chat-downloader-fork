@@ -204,7 +204,8 @@ absolute timestamp window. Kick live channel URLs reject `start_time` and
 `end_time` because the public live feed cannot seek. A Kick live WebSocket event
 that lacks a valid provider `timestamp` receives a distinct
 UTC-microsecond `received_timestamp`; provider timestamps retain priority, TXT
-labels the fallback `[received]`, and replay/preloaded records are unchanged.
+labels the fallback `[received]` except for `kicks_gifted` notices, which use a
+plain timestamp. Replay/preloaded records are unchanged.
 
 Validation raises `ValueError` for non-positive or non-integer message, retry,
 or buffer counts; malformed or non-finite start/end times; a non-finite

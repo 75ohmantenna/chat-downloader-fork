@@ -136,7 +136,9 @@ state update with its title, countdown, options, and vote counts, followed by a
 JSONL is the lossless representation for changing poll state. When
 a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
-display fallback. AI deletion notices retain their AI-moderated marker and
+display fallback, except `kicks_gifted` notices use a plain timestamp alongside
+the sender, amount in Kicks, gift name, and attached message when present.
+AI deletion notices retain their AI-moderated marker and
 violated-rule labels in TXT instead of becoming indistinguishable from ordinary
 deletions.
 

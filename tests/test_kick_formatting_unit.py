@@ -175,6 +175,53 @@ def test_moderation_receive_timestamp_is_only_a_fallback(formatter):
 
 
 @pytest.mark.parametrize(
+    ("data", "suffix"),
+    [
+        (
+            {
+                "sender": {"username": "GiftUser"},
+                "gift": {"amount": 500, "name": "Rage Quit"},
+                "message": "Great stream!",
+            },
+            " GiftUser — 500 Kicks (Rage Quit): Great stream!",
+        ),
+        (
+            {
+                "sender": {"username": "GiftUser"},
+                "gift": {"amount": 500, "name": "Rage Quit"},
+                "message": "",
+            },
+            " GiftUser — 500 Kicks (Rage Quit)",
+        ),
+        ({"gift": {"amount": 500}}, " — 500 Kicks"),
+        ({}, ""),
+        (
+            {
+                "sender": {"username": "GiftUser\nForged\x1b"},
+                "gift": {"amount": 500, "name": "Rage\nQuit"},
+                "message": "Hello\r\nWorld\x1b",
+            },
+            r" GiftUser\nForged — 500 Kicks (Rage\nQuit): Hello\r\nWorld",
+        ),
+    ],
+)
+def test_kicks_gifted_details_and_plain_receive_timestamp(formatter, data, suffix):
+    item = {
+        "message_type": "kicks_gifted",
+        "message": "kicks gifted",
+        "received_timestamp": 1_577_836_800_000_000,
+        "metadata": {"data": data},
+    }
+    assert formatter.format(item, format_name="kick") == (
+        f"2020-01-01 00:00:00 | [Kicks gifted]{suffix}"
+    )
+    item["timestamp"] = 1_577_923_200_000_000
+    assert formatter.format(item, format_name="kick") == (
+        f"2020-01-02 00:00:00 | [Kicks gifted]{suffix}"
+    )
+
+
+@pytest.mark.parametrize(
     ("reply", "label"),
     [
         ({"author": {"display_name": "Parent", "name": "slug"}}, "replying to Parent"),

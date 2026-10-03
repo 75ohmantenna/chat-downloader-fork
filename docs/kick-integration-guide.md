@@ -518,6 +518,10 @@ events. Empty-message events such as deletions and chat clears render bracketed
 notices rather than blank lines. Live WebSocket events without a valid provider
 `timestamp` retain a distinct UTC-microsecond `received_timestamp`; the Kick
 formatter uses it only as a fallback and marks it `[received]` in TXT.
+For captured `kicks_gifted` records, TXT shows `[Kicks gifted]`, the sender,
+amount in Kicks, gift name, and attached message when present. This notice uses
+a plain timestamp without `[received]`; JSONL keeps the separate receive time
+and original gift metadata.
 Compact subscriptions containing only `chatroom_id`, `username`, and `months`
 retain the username and month count; empty-array pin deletions emit an ID-less
 provider state change as `[Pinned message removed]`. Both receive namespaced
