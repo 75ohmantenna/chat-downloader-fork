@@ -1,0 +1,635 @@
+{
+  "provenance": {
+    "url": "https://kick.com/sam/videos/01a0f35a-2798-777a-a660-d237ee729c31",
+    "captured_at": "2026-10-03T06:06:23.179127+00:00",
+    "source": "Independent curl-cffi HTTP requests; no downloader parser or paginator used.",
+    "source_page_counts": [
+      25,
+      22,
+      25,
+      24
+    ],
+    "source_page_sha256": {
+      "page-0.json": "747b0fb88963263bccb9de64c8c564f10fe58d07f42d09e82121fe82f30d03a9",
+      "page-1.json": "bb1cd53c748a2b62485f368fc1b9e0b8ca4530160e27b070d04ac5dee2deb4cb",
+      "page-2.json": "799185016c17ccb126d331012ca68c221c116377d6852f4af1c8654804d3b577",
+      "page-3.json": "f3c58ee26debc70c3f8da56ff2a6abdd86cd51f0e03b6676d9248cc903cdc639"
+    },
+    "curation": "Preserved real message IDs, timestamps, cursors, envelope and sender/badge shapes. Selected 13 of 96 records. Replaced sender identities and plain chat content; retained four emote markers and one reply parent shape. Removed nested reply history and unrelated video fields. JSON formatting is normalized.",
+    "source_hash_format": "SHA-256 of the complete independently fetched page JSON, saved with indent=2 and one trailing newline before curation."
+  },
+  "legacy_video_status": 404,
+  "channel": {
+    "id": 328683,
+    "slug": "sam"
+  },
+  "web_video": {
+    "data": {
+      "id": "01a0f35a-2798-777a-a660-d237ee729c31",
+      "channel": {
+        "id": 328683,
+        "slug": "sam",
+        "username": "Sam"
+      },
+      "start_time": "2026-09-30T17:26:07Z",
+      "end_time": "2026-09-30T21:35:05Z",
+      "duration": 14842,
+      "status": "public",
+      "is_live": false,
+      "title": "Recorded replay fixture"
+    },
+    "message": "Success"
+  },
+  "request": {
+    "start_time": 600,
+    "end_time": 720
+  },
+  "pages": [
+    {
+      "request_cursor": "1790789888000000",
+      "response": {
+        "data": {
+          "messages": [
+            {
+              "id": "f3d41b40-57f4-49a7-b8b4-288fc3430405",
+              "chat_id": 328683,
+              "user_id": 1,
+              "content": "[emote:3331556:djrhysandthesoundletsgodj]",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789886858\"}",
+              "created_at": "2026-09-30T17:38:06Z",
+              "sender": {
+                "id": 1,
+                "slug": "replayuser1",
+                "username": "ReplayUser1",
+                "identity": {
+                  "color": "#FF2C56",
+                  "badges": [
+                    {
+                      "type": "subscriber",
+                      "text": "Subscriber",
+                      "count": 17,
+                      "sort_order": 9
+                    },
+                    {
+                      "type": "sub_gifter",
+                      "text": "Sub Gifter",
+                      "count": 26,
+                      "sort_order": 8
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/43_385f1c39-bfd7-4f12-ba32-9cd8d7f7360d.png",
+                      "metadata": {
+                        "level": 43
+                      },
+                      "selected": true,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "3eba8b31-987e-4a00-a51b-966d0045a55e",
+              "chat_id": 328683,
+              "user_id": 2,
+              "content": "Replay message 0-1",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789883028\"}",
+              "created_at": "2026-09-30T17:38:06Z",
+              "sender": {
+                "id": 2,
+                "slug": "replayuser2",
+                "username": "ReplayUser2",
+                "identity": {
+                  "color": "#E5FFAB",
+                  "badges": [],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/30_019f35ce-4729-789b-8883-af0ad1702318.png",
+                      "metadata": {
+                        "level": 30
+                      },
+                      "selected": false,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "333b8c05-50c5-4d99-a1d6-fccdd5d7e5e4",
+              "chat_id": 328683,
+              "user_id": 3,
+              "content": "Replay message 0-11",
+              "type": "reply",
+              "metadata": "{\"original_message\":{\"id\":\"a97fce8e-1634-494b-b1be-2c31d5152cc6\",\"chatroom_id\":328681,\"content\":\"Earlier replay message\",\"type\":\"message\",\"created_at\":\"2026-09-30T17:37:39+00:00\",\"sender\":{\"id\":2,\"username\":\"ReplayUser2\",\"slug\":\"replayuser2\",\"identity\":{\"color\":\"#E5FFAB\",\"badges\":[],\"badges_v2\":[{\"name\":\"level\",\"badge_type\":\"global\",\"image_url\":\"https://ext.cdn.kick.com/chat/badges/30_019f35ce-4729-789b-8883-af0ad1702318.png\",\"metadata\":{\"level\":30},\"selected\":false,\"sort_order\":1}]}}},\"original_sender\":{\"id\":2,\"username\":\"ReplayUser2\",\"slug\":\"replayuser2\",\"identity\":{\"color\":\"#E5FFAB\",\"badges\":[],\"badges_v2\":[{\"name\":\"level\",\"badge_type\":\"global\",\"image_url\":\"https://ext.cdn.kick.com/chat/badges/30_019f35ce-4729-789b-8883-af0ad1702318.png\",\"metadata\":{\"level\":30},\"selected\":false,\"sort_order\":1}]}}}",
+              "created_at": "2026-09-30T17:37:50Z",
+              "sender": {
+                "id": 3,
+                "slug": "replayuser3",
+                "username": "ReplayUser3",
+                "identity": {
+                  "color": "#FF9D00",
+                  "badges": [
+                    {
+                      "type": "bot",
+                      "text": "Bot",
+                      "sort_order": 4
+                    },
+                    {
+                      "type": "moderator",
+                      "text": "Moderator",
+                      "sort_order": 12
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/1_17be7ee9-9ede-4f58-b6da-a2e1e4b1e56a.png",
+                      "metadata": {
+                        "level": 1
+                      },
+                      "selected": false,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "e52c2f4c-5f6b-4c5b-9417-82c016cf07e9",
+              "chat_id": 328683,
+              "user_id": 4,
+              "content": "[emote:2833351:samLVLUP]",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789865143\"}",
+              "created_at": "2026-09-30T17:37:44Z",
+              "sender": {
+                "id": 4,
+                "slug": "replayuser4",
+                "username": "ReplayUser4",
+                "identity": {
+                  "color": "#BC66FF",
+                  "badges": [],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/45_82077115-61cb-4b5d-b036-31f13b96cfeb.png",
+                      "metadata": {
+                        "level": 45
+                      },
+                      "selected": true,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "cursor": "1790789864843488"
+        }
+      }
+    },
+    {
+      "request_cursor": "1790789864843488",
+      "response": {
+        "data": {
+          "messages": [
+            {
+              "id": "34a0dbb8-48fa-4a43-918d-bbc92bf9cc5a",
+              "chat_id": 328683,
+              "user_id": 5,
+              "content": "[emote:5748119:collectiblespeepoWave]",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789863886\"}",
+              "created_at": "2026-09-30T17:37:43Z",
+              "sender": {
+                "id": 5,
+                "slug": "replayuser5",
+                "username": "ReplayUser5",
+                "identity": {
+                  "color": "#E9113C",
+                  "badges": [
+                    {
+                      "type": "subscriber",
+                      "text": "Subscriber",
+                      "count": 5,
+                      "sort_order": 9
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/35_019f35ce-472b-7696-9b84-ad0c5488a4e4.png",
+                      "metadata": {
+                        "level": 35
+                      },
+                      "selected": true,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "b322b565-4529-41e1-b46b-6536de4095ab",
+              "chat_id": 328683,
+              "user_id": 6,
+              "content": "Replay message 1-21",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789840174\"}",
+              "created_at": "2026-09-30T17:37:27Z",
+              "sender": {
+                "id": 6,
+                "slug": "replayuser6",
+                "username": "ReplayUser6",
+                "identity": {
+                  "color": "#FFC466",
+                  "badges": [
+                    {
+                      "type": "subscriber",
+                      "text": "Subscriber",
+                      "count": 2,
+                      "sort_order": 9
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/36_019f35ce-472c-788f-b36a-dbedaa04d6c5.png",
+                      "metadata": {
+                        "level": 36
+                      },
+                      "selected": false,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "cursor": "1790789847066589"
+        }
+      }
+    },
+    {
+      "request_cursor": "1790789847066589",
+      "response": {
+        "data": {
+          "messages": [
+            {
+              "id": "19a48d74-eb5c-43c4-9741-5e722b608362",
+              "chat_id": 328683,
+              "user_id": 7,
+              "content": "Replay message 2-0",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789846341\"}",
+              "created_at": "2026-09-30T17:37:26Z",
+              "sender": {
+                "id": 7,
+                "slug": "replayuser7",
+                "username": "ReplayUser7",
+                "identity": {
+                  "color": "#31D6C2",
+                  "badges": [
+                    {
+                      "type": "subscriber",
+                      "text": "Subscriber",
+                      "count": 1,
+                      "sort_order": 9
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/38_019f35ce-472d-7f0e-8f57-85ad80d14680.png",
+                      "metadata": {
+                        "level": 38
+                      },
+                      "selected": true,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "827d5ff1-0a92-450c-a4ca-eb1efcfdbca6",
+              "chat_id": 328683,
+              "user_id": 3,
+              "content": "Replay message 2-24",
+              "type": "message",
+              "metadata": "{\"sender_type\":\"bot\"}",
+              "created_at": "2026-09-30T17:37:00Z",
+              "sender": {
+                "id": 3,
+                "slug": "replayuser3",
+                "username": "ReplayUser3",
+                "identity": {
+                  "color": "#FF9D00",
+                  "badges": [
+                    {
+                      "type": "bot",
+                      "text": "Bot",
+                      "sort_order": 4
+                    },
+                    {
+                      "type": "moderator",
+                      "text": "Moderator",
+                      "sort_order": 12
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/1_17be7ee9-9ede-4f58-b6da-a2e1e4b1e56a.png",
+                      "metadata": {
+                        "level": 1
+                      },
+                      "selected": false,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "cursor": "1790789820077664"
+        }
+      }
+    },
+    {
+      "request_cursor": "1790789820077664",
+      "response": {
+        "data": {
+          "messages": [
+            {
+              "id": "3ed68c53-425d-4725-a1d4-f75d766c4a29",
+              "chat_id": 328683,
+              "user_id": 8,
+              "content": "Replay message 3-0",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789818661\"}",
+              "created_at": "2026-09-30T17:36:58Z",
+              "sender": {
+                "id": 8,
+                "slug": "replayuser8",
+                "username": "ReplayUser8",
+                "identity": {
+                  "color": "#FF4117",
+                  "badges": [
+                    {
+                      "type": "subscriber",
+                      "text": "Subscriber",
+                      "count": 6,
+                      "sort_order": 9
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "kick_founder22",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/kick_founder22_2a2d3875-276e-4d87-ab63-d7578d2e10c0.png",
+                      "selected": true,
+                      "sort_order": 2
+                    },
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/43_385f1c39-bfd7-4f12-ba32-9cd8d7f7360d.png",
+                      "metadata": {
+                        "level": 43
+                      },
+                      "selected": true,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "7f0dbe2c-a6c1-4fd2-aa81-d25ab6ac4d18",
+              "chat_id": 328683,
+              "user_id": 9,
+              "content": "[emote:5748031:collectibleswideKEKW]",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789770300\"}",
+              "created_at": "2026-09-30T17:36:11Z",
+              "sender": {
+                "id": 9,
+                "slug": "replayuser9",
+                "username": "ReplayUser9",
+                "identity": {
+                  "color": "#4CFF75",
+                  "badges": [
+                    {
+                      "type": "subscriber",
+                      "text": "Subscriber",
+                      "count": 1,
+                      "sort_order": 9
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/43_385f1c39-bfd7-4f12-ba32-9cd8d7f7360d.png",
+                      "metadata": {
+                        "level": 43
+                      },
+                      "selected": true,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "a08f8dd1-a730-4561-95d4-c915128cfb05",
+              "chat_id": 328683,
+              "user_id": 3,
+              "content": "Replay message 3-21",
+              "type": "message",
+              "metadata": "{\"sender_type\":\"bot\"}",
+              "created_at": "2026-09-30T17:36:08Z",
+              "sender": {
+                "id": 3,
+                "slug": "replayuser3",
+                "username": "ReplayUser3",
+                "identity": {
+                  "color": "#FF9D00",
+                  "badges": [
+                    {
+                      "type": "bot",
+                      "text": "Bot",
+                      "sort_order": 4
+                    },
+                    {
+                      "type": "moderator",
+                      "text": "Moderator",
+                      "sort_order": 12
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/1_17be7ee9-9ede-4f58-b6da-a2e1e4b1e56a.png",
+                      "metadata": {
+                        "level": 1
+                      },
+                      "selected": false,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "9d3060af-2645-4b1d-b85c-554da15ebd6d",
+              "chat_id": 328683,
+              "user_id": 10,
+              "content": "Replay message 3-22",
+              "type": "message",
+              "metadata": "{\"message_ref\":\"1790789762929\"}",
+              "created_at": "2026-09-30T17:36:02Z",
+              "sender": {
+                "id": 10,
+                "slug": "replayuser10",
+                "username": "ReplayUser10",
+                "identity": {
+                  "color": "#00CCB3",
+                  "badges": [],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/21_45650ac2-eab5-4ec8-a295-a939b4ef9f0f.png",
+                      "metadata": {
+                        "level": 21
+                      },
+                      "selected": false,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "id": "5939e594-74bc-44d7-8518-32847f148b5c",
+              "chat_id": 328683,
+              "user_id": 3,
+              "content": "Replay message 3-23",
+              "type": "message",
+              "metadata": "{\"sender_type\":\"bot\"}",
+              "created_at": "2026-09-30T17:36:02Z",
+              "sender": {
+                "id": 3,
+                "slug": "replayuser3",
+                "username": "ReplayUser3",
+                "identity": {
+                  "color": "#FF9D00",
+                  "badges": [
+                    {
+                      "type": "bot",
+                      "text": "Bot",
+                      "sort_order": 4
+                    },
+                    {
+                      "type": "moderator",
+                      "text": "Moderator",
+                      "sort_order": 12
+                    }
+                  ],
+                  "badges_v2": [
+                    {
+                      "name": "level",
+                      "badge_type": "global",
+                      "image_url": "https://ext.cdn.kick.com/chat/badges/1_17be7ee9-9ede-4f58-b6da-a2e1e4b1e56a.png",
+                      "metadata": {
+                        "level": 1
+                      },
+                      "selected": false,
+                      "sort_order": 1
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          "cursor": "1790789762279996"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "f3d41b40-57f4-49a7-b8b4-288fc3430405": {
+      "timestamp": 1790789886000000,
+      "time_in_seconds": 719,
+      "message": ":djrhysandthesoundletsgodj:"
+    },
+    "3eba8b31-987e-4a00-a51b-966d0045a55e": {
+      "timestamp": 1790789886000000,
+      "time_in_seconds": 719,
+      "message": "Replay message 0-1"
+    },
+    "333b8c05-50c5-4d99-a1d6-fccdd5d7e5e4": {
+      "timestamp": 1790789870000000,
+      "time_in_seconds": 703,
+      "message": "Replay message 0-11"
+    },
+    "e52c2f4c-5f6b-4c5b-9417-82c016cf07e9": {
+      "timestamp": 1790789864000000,
+      "time_in_seconds": 697,
+      "message": ":samLVLUP:"
+    },
+    "34a0dbb8-48fa-4a43-918d-bbc92bf9cc5a": {
+      "timestamp": 1790789863000000,
+      "time_in_seconds": 696,
+      "message": ":collectiblespeepoWave:"
+    },
+    "b322b565-4529-41e1-b46b-6536de4095ab": {
+      "timestamp": 1790789847000000,
+      "time_in_seconds": 680,
+      "message": "Replay message 1-21"
+    },
+    "19a48d74-eb5c-43c4-9741-5e722b608362": {
+      "timestamp": 1790789846000000,
+      "time_in_seconds": 679,
+      "message": "Replay message 2-0"
+    },
+    "827d5ff1-0a92-450c-a4ca-eb1efcfdbca6": {
+      "timestamp": 1790789820000000,
+      "time_in_seconds": 653,
+      "message": "Replay message 2-24"
+    },
+    "3ed68c53-425d-4725-a1d4-f75d766c4a29": {
+      "timestamp": 1790789818000000,
+      "time_in_seconds": 651,
+      "message": "Replay message 3-0"
+    },
+    "7f0dbe2c-a6c1-4fd2-aa81-d25ab6ac4d18": {
+      "timestamp": 1790789771000000,
+      "time_in_seconds": 604,
+      "message": ":collectibleswideKEKW:"
+    },
+    "a08f8dd1-a730-4561-95d4-c915128cfb05": {
+      "timestamp": 1790789768000000,
+      "time_in_seconds": 601,
+      "message": "Replay message 3-21"
+    }
+  }
+}

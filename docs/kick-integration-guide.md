@@ -590,6 +590,43 @@ To add coverage for a new event type:
    `events.py::_PARSER_DISPATCH`.
 4. Add a parser unit test and run `make ci`.
 
+### External replay validation
+
+`tests/test_kick_recorded_replay_unit.py` composes the real metadata client,
+reverse paginator, parser, and recording-relative timing against curated
+responses from a public Sam recording. The fixture retains four cursor-linked
+pages, same-second messages, two records before the selected window, emotes,
+and string-encoded reply metadata. Its provenance records the source URL,
+capture time, original page counts and hashes, and all curation steps.
+
+The external recording check requires an explicitly selected contract because
+Kick VODs expire. A contract contains the URL, recording ID, relative start/end,
+independently observed message IDs and timestamps, and plain-text probes. While
+the recorded Sam asset remains available, run:
+
+```bash
+KICK_TEST_REPLAY_CASE=tests/fixtures/kick/replay_network_case_sam.json \
+  uv run pytest -q tests/test_kick_replay_network.py --run-network
+```
+
+This test uses the `network_environment` scope because the asset must be
+configured and refreshed. It does not run in the weekly stable replay job.
+Without a configured contract it reports a skip; with one, expired assets,
+challenge blocks, missing messages, and protocol failures fail the check.
+Refresh the contract from independently fetched provider responses rather than
+using downloader output as its own expected result. Observed history
+timestamps have second precision, so checks require chronological timestamps
+and exactly one occurrence of each expected ID without imposing an order on
+equal times.
+
+For external validation, capture a bounded window with `--require_complete`,
+`--verify_output`, `--run_manifest`, and debug logging, then inspect it with
+`scripts/inspect_kick_capture.py`. Compare all selected IDs and timestamps
+against separate HTTP history requests and confirm text probes directly from
+those responses. Keep raw responses privately, review their contents, and
+promote only curated fixtures. API agreement establishes correct retrieval of
+the history Kick currently supplies; it cannot prove that every original live
+message was retained by the provider.
 
 ## Replay audit diagnostics
 

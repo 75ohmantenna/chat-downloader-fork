@@ -33,6 +33,25 @@ def load_text_fixture(name: str) -> str:
     return (_FIXTURES / name).read_text(encoding="utf-8")
 
 
+def assert_replay_contract(messages, expected):
+    """Check independently recorded IDs, fields and chronological delivery.
+
+    Recorded history timestamps have second precision. Messages at the same
+    timestamp have no asserted relative order, but each ID must occur once.
+    """
+    assert expected, "A replay contract must contain independently known messages."
+    assert len(messages) == len(expected)
+    by_id = {message["message_id"]: message for message in messages}
+    assert by_id.keys() == expected.keys()
+    timestamps = [message["timestamp"] for message in messages]
+    assert timestamps == sorted(timestamps)
+    for message_id, fields in expected.items():
+        assert {"timestamp", "time_in_seconds"} <= fields.keys()
+        message = by_id[message_id]
+        assert message["message_type"] == "text_message"
+        assert {key: message[key] for key in fields} == fields
+
+
 class FakeResponse:
     """Minimal stand-in for ``requests.Response``."""
 

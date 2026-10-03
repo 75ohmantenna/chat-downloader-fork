@@ -1,0 +1,394 @@
+{
+  "provenance": {
+    "url": "https://kick.com/sam/videos/01a0f35a-2798-777a-a660-d237ee729c31",
+    "captured_at": "2026-10-03T06:06:23.179127+00:00",
+    "source": "Independent curl-cffi HTTP requests; no downloader parser or paginator used."
+  },
+  "url": "https://kick.com/sam/videos/01a0f35a-2798-777a-a660-d237ee729c31",
+  "recording_id": "01a0f35a-2798-777a-a660-d237ee729c31",
+  "start_time": 600,
+  "end_time": 720,
+  "expected": {
+    "f3d41b40-57f4-49a7-b8b4-288fc3430405": {
+      "timestamp": 1790789886000000,
+      "time_in_seconds": 719
+    },
+    "3eba8b31-987e-4a00-a51b-966d0045a55e": {
+      "timestamp": 1790789886000000,
+      "time_in_seconds": 719
+    },
+    "23ec07ff-909a-4748-ab1c-cd23bdd7f68c": {
+      "timestamp": 1790789883000000,
+      "time_in_seconds": 716
+    },
+    "536b0c0c-67c7-497f-99fc-13f51b1ac28c": {
+      "timestamp": 1790789883000000,
+      "time_in_seconds": 716
+    },
+    "f867ed61-a4c8-40c3-abc0-824a904b2da2": {
+      "timestamp": 1790789882000000,
+      "time_in_seconds": 715
+    },
+    "d3c92f75-6193-4b5a-9a98-4ee0bb646ade": {
+      "timestamp": 1790789881000000,
+      "time_in_seconds": 714
+    },
+    "8cb374b2-b804-4ea1-a758-80b9ef7a6515": {
+      "timestamp": 1790789880000000,
+      "time_in_seconds": 713
+    },
+    "86005eed-ed3a-4877-a289-d7759a6712bf": {
+      "timestamp": 1790789879000000,
+      "time_in_seconds": 712
+    },
+    "2097d9d1-470f-41d0-a5c0-f3be6d31491a": {
+      "timestamp": 1790789877000000,
+      "time_in_seconds": 710
+    },
+    "98d1a862-06a0-477b-8662-f711abd413fc": {
+      "timestamp": 1790789876000000,
+      "time_in_seconds": 709
+    },
+    "4f04dce8-022c-4d3d-9af5-9dec7eb8797c": {
+      "timestamp": 1790789874000000,
+      "time_in_seconds": 707
+    },
+    "333b8c05-50c5-4d99-a1d6-fccdd5d7e5e4": {
+      "timestamp": 1790789870000000,
+      "time_in_seconds": 703
+    },
+    "88cec5de-ec53-4ac5-87be-c0df50fb0063": {
+      "timestamp": 1790789869000000,
+      "time_in_seconds": 702
+    },
+    "0d90a8af-c395-4e16-ae76-84e4d4e35379": {
+      "timestamp": 1790789869000000,
+      "time_in_seconds": 702
+    },
+    "a40b7f13-0bea-4273-936a-195f3041a707": {
+      "timestamp": 1790789869000000,
+      "time_in_seconds": 702
+    },
+    "3d110453-0f62-488b-b928-49c58d2f19da": {
+      "timestamp": 1790789868000000,
+      "time_in_seconds": 701
+    },
+    "0c5a6d89-e7e9-41cc-970d-3dac87e0b764": {
+      "timestamp": 1790789868000000,
+      "time_in_seconds": 701
+    },
+    "3d58566a-1f51-4a34-ad41-8f38d7d8aa71": {
+      "timestamp": 1790789868000000,
+      "time_in_seconds": 701
+    },
+    "05e5d028-cac2-4862-849e-f9dd71770af4": {
+      "timestamp": 1790789868000000,
+      "time_in_seconds": 701
+    },
+    "687dd24c-ecbd-46f0-acf3-82850a6af505": {
+      "timestamp": 1790789867000000,
+      "time_in_seconds": 700
+    },
+    "7acff52d-c0df-4b9b-af3e-f4093ad6bd3d": {
+      "timestamp": 1790789867000000,
+      "time_in_seconds": 700
+    },
+    "50e58769-a674-41d8-82f5-3a3005accd17": {
+      "timestamp": 1790789867000000,
+      "time_in_seconds": 700
+    },
+    "42a4918a-a3ba-4c2b-a5bd-bba2761b22cc": {
+      "timestamp": 1790789867000000,
+      "time_in_seconds": 700
+    },
+    "7e3c3826-8b3f-408b-bffb-67e0927b13b9": {
+      "timestamp": 1790789867000000,
+      "time_in_seconds": 700
+    },
+    "e52c2f4c-5f6b-4c5b-9417-82c016cf07e9": {
+      "timestamp": 1790789864000000,
+      "time_in_seconds": 697
+    },
+    "34a0dbb8-48fa-4a43-918d-bbc92bf9cc5a": {
+      "timestamp": 1790789863000000,
+      "time_in_seconds": 696
+    },
+    "b9f6b49f-c5a2-4d3c-a1d0-4a46dda59537": {
+      "timestamp": 1790789862000000,
+      "time_in_seconds": 695
+    },
+    "08b3eec6-cc03-4800-b91b-e34b6b10cff7": {
+      "timestamp": 1790789862000000,
+      "time_in_seconds": 695
+    },
+    "45ab52b4-5a41-48b4-ab6b-357ad2c44c47": {
+      "timestamp": 1790789861000000,
+      "time_in_seconds": 694
+    },
+    "a97fce8e-1634-494b-b1be-2c31d5152cc6": {
+      "timestamp": 1790789859000000,
+      "time_in_seconds": 692
+    },
+    "446f4d44-b8b8-4d01-9341-73675cf6071f": {
+      "timestamp": 1790789857000000,
+      "time_in_seconds": 690
+    },
+    "bbbdcb53-12b1-42b0-a7c2-9c7e8f4314ee": {
+      "timestamp": 1790789853000000,
+      "time_in_seconds": 686
+    },
+    "e34b0e8c-1ed7-4682-89ed-27bab51ae075": {
+      "timestamp": 1790789853000000,
+      "time_in_seconds": 686
+    },
+    "dcbb9235-d000-4223-964d-b5e1eb4a1e2a": {
+      "timestamp": 1790789853000000,
+      "time_in_seconds": 686
+    },
+    "0284c1d5-c8ae-4327-b3bb-b49cc7837305": {
+      "timestamp": 1790789852000000,
+      "time_in_seconds": 685
+    },
+    "0da6c62e-3304-40b4-b18c-cab193b5484a": {
+      "timestamp": 1790789852000000,
+      "time_in_seconds": 685
+    },
+    "a367c506-b158-4e36-bdec-14b0455d7e67": {
+      "timestamp": 1790789852000000,
+      "time_in_seconds": 685
+    },
+    "53695521-fa6d-4a71-ac47-cd4f3bd34867": {
+      "timestamp": 1790789852000000,
+      "time_in_seconds": 685
+    },
+    "b6365641-a625-4415-9ca9-c5d74335f4d4": {
+      "timestamp": 1790789852000000,
+      "time_in_seconds": 685
+    },
+    "6fad6695-60ab-49a7-a870-65b78eb1cf98": {
+      "timestamp": 1790789852000000,
+      "time_in_seconds": 685
+    },
+    "f062dfc0-fbcb-494a-b92d-839fce9928f8": {
+      "timestamp": 1790789851000000,
+      "time_in_seconds": 684
+    },
+    "63106ad0-e9d6-4426-9aa4-117447bad72f": {
+      "timestamp": 1790789851000000,
+      "time_in_seconds": 684
+    },
+    "488cc2e6-a294-4b52-a2d3-6a141190aa4d": {
+      "timestamp": 1790789851000000,
+      "time_in_seconds": 684
+    },
+    "82920e64-7f34-4f66-87d2-37ac81f71574": {
+      "timestamp": 1790789849000000,
+      "time_in_seconds": 682
+    },
+    "2c4ee9ab-d64e-4f58-a22e-c61d391a6060": {
+      "timestamp": 1790789849000000,
+      "time_in_seconds": 682
+    },
+    "8d1965cf-1c2b-4da8-861a-7877dbfd0e6d": {
+      "timestamp": 1790789848000000,
+      "time_in_seconds": 681
+    },
+    "b322b565-4529-41e1-b46b-6536de4095ab": {
+      "timestamp": 1790789847000000,
+      "time_in_seconds": 680
+    },
+    "19a48d74-eb5c-43c4-9741-5e722b608362": {
+      "timestamp": 1790789846000000,
+      "time_in_seconds": 679
+    },
+    "8e28417a-9d8e-497a-aa27-9e797f9901d8": {
+      "timestamp": 1790789845000000,
+      "time_in_seconds": 678
+    },
+    "0251bd35-3219-44cf-8670-ce8d9c657883": {
+      "timestamp": 1790789844000000,
+      "time_in_seconds": 677
+    },
+    "5ef59879-db0a-44b6-81a4-7c5c331d9c21": {
+      "timestamp": 1790789844000000,
+      "time_in_seconds": 677
+    },
+    "2991198f-df45-44dc-ac29-884e24e36207": {
+      "timestamp": 1790789839000000,
+      "time_in_seconds": 672
+    },
+    "141d4e37-95fb-4653-82b2-0aa49414ed28": {
+      "timestamp": 1790789839000000,
+      "time_in_seconds": 672
+    },
+    "d5ca7f9f-4920-426b-be37-f8e23b60037b": {
+      "timestamp": 1790789837000000,
+      "time_in_seconds": 670
+    },
+    "6c298737-b042-4358-9c2e-0bd1783ed063": {
+      "timestamp": 1790789837000000,
+      "time_in_seconds": 670
+    },
+    "2895ad19-b1e2-4180-a6fd-342fa5cfd9f6": {
+      "timestamp": 1790789837000000,
+      "time_in_seconds": 670
+    },
+    "8cbb0145-8ff4-4c95-a464-17915baa2e79": {
+      "timestamp": 1790789835000000,
+      "time_in_seconds": 668
+    },
+    "875f7cbd-3377-455f-88e9-992112c52132": {
+      "timestamp": 1790789835000000,
+      "time_in_seconds": 668
+    },
+    "e2198baa-12ef-43c2-a0ca-f6ed4fd356d9": {
+      "timestamp": 1790789835000000,
+      "time_in_seconds": 668
+    },
+    "85d5cddc-f8e5-4761-8a1c-bb0e831a81a0": {
+      "timestamp": 1790789835000000,
+      "time_in_seconds": 668
+    },
+    "b5125246-df7e-42c1-85d2-a699d7b61a7a": {
+      "timestamp": 1790789835000000,
+      "time_in_seconds": 668
+    },
+    "62c85e7f-b26a-436b-9242-fd575f1ac422": {
+      "timestamp": 1790789835000000,
+      "time_in_seconds": 668
+    },
+    "6436be91-1bac-4f32-bad4-66ba96fb5bfb": {
+      "timestamp": 1790789834000000,
+      "time_in_seconds": 667
+    },
+    "7e37ca7e-c0fa-429f-9b7f-6982d602f6a9": {
+      "timestamp": 1790789834000000,
+      "time_in_seconds": 667
+    },
+    "82083531-a937-4bff-baba-fcb5216af82b": {
+      "timestamp": 1790789832000000,
+      "time_in_seconds": 665
+    },
+    "56000eca-4ba6-4812-8da6-a7e4e6851ce4": {
+      "timestamp": 1790789830000000,
+      "time_in_seconds": 663
+    },
+    "18eca205-356a-4bee-be24-46ec901fa02c": {
+      "timestamp": 1790789829000000,
+      "time_in_seconds": 662
+    },
+    "0e32ecb6-ee4d-4e05-8aed-fe3398a69398": {
+      "timestamp": 1790789829000000,
+      "time_in_seconds": 662
+    },
+    "d6905869-5180-4ff0-a084-ca902029f3a4": {
+      "timestamp": 1790789828000000,
+      "time_in_seconds": 661
+    },
+    "cb2a8404-bbb2-480d-b9f8-8de2a7a1dda6": {
+      "timestamp": 1790789825000000,
+      "time_in_seconds": 658
+    },
+    "1a128038-1214-495d-a79c-5bf18c502877": {
+      "timestamp": 1790789821000000,
+      "time_in_seconds": 654
+    },
+    "827d5ff1-0a92-450c-a4ca-eb1efcfdbca6": {
+      "timestamp": 1790789820000000,
+      "time_in_seconds": 653
+    },
+    "3ed68c53-425d-4725-a1d4-f75d766c4a29": {
+      "timestamp": 1790789818000000,
+      "time_in_seconds": 651
+    },
+    "4a37eef1-0897-412d-ae66-e69e486c1661": {
+      "timestamp": 1790789813000000,
+      "time_in_seconds": 646
+    },
+    "ec5007e4-bd18-4cea-aaad-f889ad4750da": {
+      "timestamp": 1790789811000000,
+      "time_in_seconds": 644
+    },
+    "de2f4c12-0e20-4eeb-af90-47099cd252e4": {
+      "timestamp": 1790789808000000,
+      "time_in_seconds": 641
+    },
+    "a5e468e3-dea2-444f-b4f1-af3abc4be04e": {
+      "timestamp": 1790789807000000,
+      "time_in_seconds": 640
+    },
+    "b6b00e17-8421-4ece-8c9e-3ac4be491abd": {
+      "timestamp": 1790789801000000,
+      "time_in_seconds": 634
+    },
+    "fd894046-88c1-450f-9c8e-208915b396c9": {
+      "timestamp": 1790789796000000,
+      "time_in_seconds": 629
+    },
+    "69353082-fe84-4f67-ab3a-5c5b13bcd84f": {
+      "timestamp": 1790789793000000,
+      "time_in_seconds": 626
+    },
+    "9bf993b5-dd10-46fd-b23f-f659852121c6": {
+      "timestamp": 1790789793000000,
+      "time_in_seconds": 626
+    },
+    "72266daf-eceb-499d-9aee-1ead44b6ca35": {
+      "timestamp": 1790789792000000,
+      "time_in_seconds": 625
+    },
+    "e8ed4844-0fc1-40b8-b2f4-7616476e019a": {
+      "timestamp": 1790789792000000,
+      "time_in_seconds": 625
+    },
+    "a88e6bd3-9d0f-4e4e-94be-db281c2b86c9": {
+      "timestamp": 1790789791000000,
+      "time_in_seconds": 624
+    },
+    "a0004072-fd8a-4e9a-94f6-46b17d87b0bb": {
+      "timestamp": 1790789784000000,
+      "time_in_seconds": 617
+    },
+    "3ed0ab9f-e3b4-4e47-94e9-95dd368a3c33": {
+      "timestamp": 1790789779000000,
+      "time_in_seconds": 612
+    },
+    "7f0dbe2c-a6c1-4fd2-aa81-d25ab6ac4d18": {
+      "timestamp": 1790789771000000,
+      "time_in_seconds": 604
+    },
+    "c1894b98-0714-467f-8903-7c9c7073ba91": {
+      "timestamp": 1790789770000000,
+      "time_in_seconds": 603
+    },
+    "5d9e8be0-19f7-4601-b805-55a3fc8f0a37": {
+      "timestamp": 1790789770000000,
+      "time_in_seconds": 603
+    },
+    "e5cbc7d9-2ab0-4c19-89d7-3c85efe9d521": {
+      "timestamp": 1790789770000000,
+      "time_in_seconds": 603
+    },
+    "92dd5829-8f58-4d18-93d1-40661432617c": {
+      "timestamp": 1790789769000000,
+      "time_in_seconds": 602
+    },
+    "72c83f15-e14d-40f4-bc56-dcd416bce02c": {
+      "timestamp": 1790789769000000,
+      "time_in_seconds": 602
+    },
+    "9e1206d2-dab0-4163-8991-0dae4321dd92": {
+      "timestamp": 1790789768000000,
+      "time_in_seconds": 601
+    },
+    "a08f8dd1-a730-4561-95d4-c915128cfb05": {
+      "timestamp": 1790789768000000,
+      "time_in_seconds": 601
+    }
+  },
+  "text_probes": {
+    "b322b565-4529-41e1-b46b-6536de4095ab": "%no 250",
+    "19a48d74-eb5c-43c4-9741-5e722b608362": "Great Kanye song",
+    "3ed68c53-425d-4725-a1d4-f75d766c4a29": "$credits"
+  }
+}
