@@ -104,10 +104,8 @@ def inspect_provider_capture(chat: Chat, result: RunResult) -> dict[str, object]
             item["file_created"] and Path(item["file_name"]).suffix.lower() == ".jsonl"
             for item in dispatcher.writer_summaries
         )
-        deadline_summary = getattr(chat.chat, "deadline_prefetch_summary", None)
-        count, complete = (
-            deadline_summary() if callable(deadline_summary) else (0, True)
-        )
+        count = result.prefetched_after_deadline_count
+        complete = result.deadline_prefetch_count_complete
         report = chat._capture_inspector(
             path if created else None,
             {

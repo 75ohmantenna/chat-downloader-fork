@@ -103,6 +103,8 @@ these fields:
 | `termination_reason` | Completion, message limit, timeout, interruption, or error; successful retrieval may be intentionally bounded |
 | `provider_inspection` | Content-free Twitch or Kick live inspection report when output verification runs, including closed partial captures after retrieval failures; otherwise `None` |
 | `elapsed_seconds` | Monotonic duration from initialization through capture shutdown, excluding output verification and manifest writing |
+| `prefetched_after_deadline_count` | One observation after bounded capture shutdown; an incomplete count is a lower bound |
+| `deadline_prefetch_count_complete` | Whether deadline accounting had finished when observed; inspection, manifest, and debug summary use the same observation |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.

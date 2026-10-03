@@ -192,8 +192,22 @@ inspection of an appended archive.
 `dispatch_chat` constructs a configured chat, while `configure_chat` applies
 the provider-neutral pipeline. URL correction, site-default resolution,
 wrapper ordering, formatting, and writer setup remain implementation details.
+
+The run result owns one deadline-accounting observation after bounded shutdown.
+Provider inspection, manifest writing, and debug logging consume that same
+observation: a worker can remain active after close, so an incomplete count is
+a lower bound rather than a value to resample independently in each report.
+Checkpoint ownership computes reset positions for both parity verification and
+checkpoint saving; the runner does not reconstruct append arithmetic.
+Observation failures retain an incomplete lower bound, preserve an earlier
+capture error, and allow safe checkpoint and manifest persistence.
 Tests drive these interfaces instead of treating each stage as a separate
 caller surface.
+
+Successful binding and failed cleanup remain distinct eligibility facts within
+the cohesive run lifecycle. A controller that only forwards those facts and
+their ordering would not deepen the interface. Revisit this ownership if
+another production caller or an eligibility defect demonstrates a useful seam.
 
 Checkpointed record consumption owns emission and replay-position observation
 as one operation. The output dispatcher restores file prefixes and its own

@@ -188,12 +188,6 @@ class RunManifest:
                         raise ValueError(msg)
                     signature = hashlib.file_digest(source, "sha256").hexdigest()
             artifacts.append({**writer, "sha256": signature})
-        deadline_summary = getattr(
-            getattr(chat, "chat", None), "deadline_prefetch_summary", None
-        )
-        prefetched_count, prefetch_complete = (
-            deadline_summary() if callable(deadline_summary) else (0, True)
-        )
         payload = {
             "schema_version": 1,
             "program_version": __version__,
@@ -211,8 +205,8 @@ class RunManifest:
             "provider_diagnostics": _manifest_diagnostics(
                 getattr(chat, "diagnostics", {})
             ),
-            "prefetched_after_deadline_count": prefetched_count,
-            "deadline_prefetch_count_complete": prefetch_complete,
+            "prefetched_after_deadline_count": result.prefetched_after_deadline_count,
+            "deadline_prefetch_count_complete": result.deadline_prefetch_count_complete,
             "recording": {
                 "site_name": getattr(getattr(chat, "site", None), "_NAME", None),
                 **{

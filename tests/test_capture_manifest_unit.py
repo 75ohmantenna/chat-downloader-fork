@@ -99,11 +99,58 @@ def test_manifest_keeps_bounded_metrics_and_measured_duration(
 
 def test_manifest_preserves_incomplete_deadline_accounting(tmp_path):
     chat = Chat()
-    chat.chat = SimpleNamespace(deadline_prefetch_summary=lambda: (2, False))
     path = tmp_path / "run.json"
-    RunManifest(str(path), None).write(chat, RunResult())
+    RunManifest(str(path), None).write(
+        chat,
+        RunResult(
+            prefetched_after_deadline_count=2, deadline_prefetch_count_complete=False
+        ),
+    )
     report = load_json(path)
     assert report["prefetched_after_deadline_count"] == 2
+    assert report["deadline_prefetch_count_complete"] is False
+
+
+@pytest.mark.parametrize("primary_failure", [False, True])
+def test_deadline_observation_failure_preserves_artifacts_and_primary_error(
+    tmp_path, params, manifest, primary_failure
+):
+    class FailedObservation(Downloader):
+        def get_chat(self, **kwargs):
+            chat = super().get_chat(**kwargs)
+            source = chat.chat
+
+            class Source:
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    try:
+                        return next(source)
+                    except StopIteration:
+                        if primary_failure:
+                            raise RuntimeError("primary capture failure") from None
+                        raise
+
+                def close(self):
+                    source.close()
+
+                def deadline_prefetch_summary(self):
+                    raise OSError("observation failed")
+
+            chat.chat = Source()
+            return chat
+
+    result, report = manifest(FailedObservation, **params)
+    assert not result.success
+    assert result.message_count == report["message_count"] == 4
+    assert load_json(tmp_path / "checkpoint.json")["total"] == 4
+    assert result.error_message == (
+        "primary capture failure"
+        if primary_failure
+        else "Unable to observe deadline accounting: observation failed"
+    )
+    assert report["prefetched_after_deadline_count"] == 0
     assert report["deadline_prefetch_count_complete"] is False
 
 

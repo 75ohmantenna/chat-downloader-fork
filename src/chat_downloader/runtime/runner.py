@@ -138,6 +138,31 @@ class RunResult:
     termination_reason: str = "error"
     provider_inspection: dict[str, object] | None = None
     elapsed_seconds: float = 0.0
+    prefetched_after_deadline_count: int = 0
+    deadline_prefetch_count_complete: bool = True
+
+    def observe_shutdown(self, chat: Chat | None) -> None:
+        """Freeze one deadline observation after bounded capture cleanup.
+
+        An incomplete count is a lower bound even if a worker finishes later.
+        All reports consume this observation rather than sampling that worker.
+        """
+        try:
+            deadline_summary = getattr(
+                getattr(chat, "chat", None), "deadline_prefetch_summary", None
+            )
+            (
+                self.prefetched_after_deadline_count,
+                self.deadline_prefetch_count_complete,
+            ) = deadline_summary() if callable(deadline_summary) else (0, True)
+        except Exception as error:  # noqa: BLE001 — observation must preserve artifact finalization
+            self.prefetched_after_deadline_count = 0
+            self.deadline_prefetch_count_complete = False
+            self.success = False
+            self.termination_reason = "error"
+            message = f"Unable to observe deadline accounting: {error}"
+            self.error_message = self.error_message or message
+            log("error", message)
 
 
 def create_message_callback(
@@ -168,12 +193,6 @@ def _log_run_summary(
     """Log status and final message/writer counts, including failed runs."""
     output_dispatcher = getattr(chat, "_output_dispatcher", None)
     writer_summaries = getattr(output_dispatcher, "writer_summaries", [])
-    deadline_summary = getattr(
-        getattr(chat, "chat", None), "deadline_prefetch_summary", None
-    )
-    prefetched_after_deadline_count, deadline_prefetch_count_complete = (
-        deadline_summary() if callable(deadline_summary) else (0, True)
-    )
     summary = sanitize_for_log(
         {
             "success": getattr(result, "success", True),
@@ -186,8 +205,12 @@ def _log_run_summary(
             "formatted_duplicates_suppressed": getattr(
                 output_dispatcher, "formatted_duplicates_suppressed", 0
             ),
-            "prefetched_after_deadline_count": prefetched_after_deadline_count,
-            "deadline_prefetch_count_complete": deadline_prefetch_count_complete,
+            "prefetched_after_deadline_count": getattr(
+                result, "prefetched_after_deadline_count", 0
+            ),
+            "deadline_prefetch_count_complete": getattr(
+                result, "deadline_prefetch_count_complete", True
+            ),
             "provider_diagnostics": getattr(chat, "diagnostics", {}),
             "output_writers": writer_summaries,
         }
@@ -220,22 +243,14 @@ def _verify_capture_outputs(
         if verification_bound and chat is not None:
             result.provider_inspection = inspect_provider_capture(chat, result)
         if run_config.verify_output and result.success and chat is not None:
-            resets = (
-                tuple(
-                    checkpoint.resets
-                    + (
-                        [checkpoint.total + 1]
-                        if checkpoint.total and result.message_count
-                        else []
-                    )
-                )
-                if checkpoint is not None
-                else ()
-            )
             result.parity_status = "failed"
             verify_capture(
                 chat,
-                resets=resets,
+                resets=(
+                    checkpoint.reset_positions(result.message_count)
+                    if checkpoint is not None
+                    else ()
+                ),
                 allow_existing=checkpoint is not None and checkpoint.loaded,
             )
             result.parity_status = "passed"
@@ -418,6 +433,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 log("error", result.error_message)
                 checkpoint_bound = False
                 verification_bound = False
+            result.observe_shutdown(chat)
             result.elapsed_seconds = monotonic() - started
             _verify_capture_outputs(
                 chat,

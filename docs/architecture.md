@@ -141,7 +141,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
-| `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, replay overlap suppression, and accepted-record consumption |
+| `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, replay overlap suppression, accepted-record consumption, and append reset positions |
 | `capture_manifest.py` | Exclusive JSON run manifests, artifact hashes, and replay completeness policy |
 | `capture_replay_order.py` | Pure ordering of opening zero-offset replay notices after negative preroll messages for checkpoints |
 | `capture_verification.py` | Optional post-shutdown verification using the resolved production formatter |
@@ -149,7 +149,7 @@ module names.
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
 | `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
 | `config_guards.py` | Explicit/environment proxy and cookie-authentication safety validation |
-| `runner.py` | Top-level run loop, structured `RunResult`, final diagnostics, testing-mode selection, and cleanup |
+| `runner.py` | Top-level run loop, structured `RunResult`, one shutdown deadline observation for every report, final diagnostics, testing-mode selection, and cleanup |
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
 
 ### `output/`

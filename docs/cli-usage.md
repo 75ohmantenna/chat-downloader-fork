@@ -395,8 +395,10 @@ Kick live transport, public-feed, snapshot, and backfill counters. Automatic
 Twitch and Kick live inspection reports remain in `provider_inspection` when
 requested.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
-deadline accounting; an incomplete count must not be treated as proof of zero
-pending records. These fields are available without `--logging debug`.
+one deadline observation after bounded shutdown, shared with provider inspection
+and the debug summary. An incomplete count is a lower bound even if a worker
+finishes later, and must not be treated as proof of zero pending records. These
+fields are available without `--logging debug`.
 It contains no chat messages, request headers, cookies, or input URL. Hashes cover
 whole files; writer counts cover the current run. Unopened pre-existing files
 are not hashed unless a resume checkpoint verified them. The manifest must be

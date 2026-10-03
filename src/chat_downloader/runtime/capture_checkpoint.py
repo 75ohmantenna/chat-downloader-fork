@@ -347,6 +347,14 @@ class CaptureCheckpoint:
                 raise
         return item
 
+    def reset_positions(self, count: int) -> tuple[int, ...]:
+        """Include this appended run's rendering reset only when it emits."""
+        return (
+            (*self.resets, self.total + 1)
+            if count and self.total
+            else tuple(self.resets)
+        )
+
     def save(self, chat: Chat, count: int) -> None:
         """Keep partial-writer failures from becoming valid resume points."""
         dispatcher = chat._output_dispatcher
@@ -357,8 +365,7 @@ class CaptureCheckpoint:
         ):
             msg = "Checkpoint not saved: output records disagree."
             raise ChatDownloaderError(msg)
-        if count and self.total:
-            self.resets.append(self.total + 1)
+        self.resets = list(self.reset_positions(count))
         self.total += count
         record_loss = has_record_loss(chat.diagnostics)
         _atomic_json(

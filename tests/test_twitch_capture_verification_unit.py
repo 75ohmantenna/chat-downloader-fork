@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import sqlite3
 from typing import ClassVar
@@ -152,7 +153,14 @@ def test_provider_report_survives_parity_failure(tmp_path):
     assert result.provider_inspection["status"] == "ok"
 
 
-def test_deadline_prefetch_information_is_retained(tmp_path):
+def test_all_reports_share_one_shutdown_deadline_observation(tmp_path, monkeypatch):
+    observations = iter([(1, False), (2, False), (3, True)])
+    logged = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.log",
+        lambda level, message: logged.append((level, str(message))),
+    )
+
     class Deadline(LiveDownloader):
         def get_chat(self, **kwargs):
             chat = super().get_chat(**kwargs)
@@ -166,14 +174,25 @@ def test_deadline_prefetch_information_is_retained(tmp_path):
                     return next(source)
 
                 def deadline_prefetch_summary(self):
-                    return 1, False
+                    return next(observations)
 
             chat.chat = Source()
             return chat
 
     result = execute_run(Deadline, **_params(tmp_path))
-    assert result.provider_inspection["prefetched_after_deadline_count"] == 1
-    assert result.provider_inspection["deadline_prefetch_count_complete"] is False
+    manifest = json.loads((tmp_path / "run.json").read_text())
+    summary = ast.literal_eval(
+        next(
+            message.removeprefix("Run summary: ")
+            for _, message in logged
+            if message.startswith("Run summary: ")
+        )
+    )
+    for report in (result.provider_inspection, manifest, summary):
+        assert report["prefetched_after_deadline_count"] == 1
+        assert report["deadline_prefetch_count_complete"] is False
+    assert result.prefetched_after_deadline_count == 1
+    assert result.deadline_prefetch_count_complete is False
 
 
 def test_inspection_error_does_not_mask_partial_capture_failure(tmp_path):
