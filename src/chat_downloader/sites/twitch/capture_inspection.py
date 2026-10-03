@@ -5,23 +5,19 @@
 from __future__ import annotations
 
 import ast
-import json
-import math
-import os
 import re
 import sqlite3
-import stat
 import tempfile
-from contextlib import closing, contextmanager
+from contextlib import closing
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chat_downloader.sites.twitch.constants import MESSAGE_GROUPS
+from chat_downloader.utils.capture_reader import open_capture_input, read_capture_lines
 from chat_downloader.utils.json_types import get_dict, get_str
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
-    from typing import BinaryIO
+    from collections.abc import Mapping
 
 _KNOWN_TYPES = frozenset(t for group in MESSAGE_GROUPS.values() for t in group)
 _LOCATION = re.compile(r"([0-9]+)-([0-9]+)")
@@ -36,44 +32,6 @@ _FRAME_KEYS = (
     "benign_irc_control_frame_count",
     "parsed_irc_message_count",
 )
-
-
-@contextmanager
-def _open_input(path: Path) -> Iterator[BinaryIO]:
-    """Reject special files without blocking on a FIFO waiting for a writer."""
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
-    try:
-        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
-            raise OSError
-        with os.fdopen(descriptor, "rb", closefd=False) as stream:
-            yield stream
-    finally:
-        os.close(descriptor)
-
-
-def _json_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    """Reject ambiguous duplicate keys instead of silently keeping the last."""
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError
-        result[key] = value
-    return result
-
-
-def _validate_json(value: object) -> None:
-    """Reject non-finite numbers and lone surrogates, even in unused fields."""
-    if isinstance(value, str):
-        value.encode("utf-8")
-    elif isinstance(value, float) and not math.isfinite(value):
-        raise ValueError
-    elif isinstance(value, dict):
-        for key, item in value.items():
-            _validate_json(key)
-            _validate_json(item)
-    elif isinstance(value, list):
-        for item in value:
-            _validate_json(item)
 
 
 def _emotes_valid(record: Mapping[str, object]) -> bool:
@@ -120,7 +78,7 @@ def _account_frames(counters: Mapping[str, object]) -> dict[str, int]:
 def _frame_accounting(path: Path) -> dict[str, int]:
     """Read exactly one bounded Python-literal run summary from a debug log."""
     result: dict[str, int] | None = None
-    with _open_input(path) as source:
+    with open_capture_input(path) as source:
         for line in source:
             prefix = _SUMMARY_PREFIX.match(line)
             if prefix is None:
@@ -207,20 +165,12 @@ class _Inspection:
         self.previous_timestamp = timestamp
 
     def read(self, path: Path) -> None:
-        with _open_input(path) as source:
-            for self.lines, line in enumerate(source, 1):
-                try:
-                    record = json.loads(
-                        line.decode("utf-8"), object_pairs_hook=_json_object
-                    )
-                    _validate_json(record)
-                except (UnicodeError, ValueError, RecursionError):
-                    self.issue("invalid_jsonl")
-                    continue
-                if not isinstance(record, dict):
-                    self.issue("non_object_record")
-                    continue
-                self.record(record)
+        for line in read_capture_lines(path):
+            self.lines = line.line_number
+            if line.issue is not None:
+                self.issue(line.issue)
+            elif line.record is not None:
+                self.record(line.record)
 
     def report(self) -> dict[str, object]:
         return {

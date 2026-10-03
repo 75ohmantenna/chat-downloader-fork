@@ -151,9 +151,25 @@ separate `scripts/audit_capture_parity.py` command layer.
 **Revisit when:** input reading or semantic comparison gains an independent
 production consumer with a contract that removes shared alignment state.
 
+## Share strict capture reading across provider inspectors
+
+**Decision:** `utils/capture_reader.py` owns regular-file opening, physical
+JSONL line traversal, duplicate-key rejection, recursive finite-number and
+Unicode validation, and content-free findings. Kick and Twitch have two real
+consumers with the same contract; their inspectors retain provider record
+validation, exact ID membership, and ledger accounting. Debug-summary parsers
+share regular-file opening but retain their distinct literal parsing rules.
+
+The parity auditor retains its own artifact identity and JSONL policy. Sharing
+its decoder would change that contract rather than remove duplicate knowledge.
+Reader tests use real temporary files and cover continuation and resource
+closure; each provider retains a composition test through its inspector.
+
+**Revisit when:** another capture consumer needs this same strict contract.
+
 ## Share Kick capture inspection with its offline command
 
-**Decision:** `sites/kick/capture_inspection.py` owns JSONL record integrity,
+**Decision:** `sites/kick/capture_inspection.py` owns provider record integrity,
 exact duplicate tracking, and live/replay counter reconciliation. The offline
 command and automatic live verification use the same content-free report.
 The module is intentionally allowlisted above 400 lines: moving the existing

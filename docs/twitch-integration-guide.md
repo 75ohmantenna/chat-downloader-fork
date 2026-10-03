@@ -510,6 +510,10 @@ also inspected after retrieval failures when
 the output pair was validated; the original error remains authoritative and
 parity stays `not_run`.
 
+Kick and Twitch inspection use `utils/capture_reader.py` for strict UTF-8 JSONL
+reading and regular-file ownership. Provider record rules and ledger accounting
+remain in their site packages.
+
 The report also records `prefetched_after_deadline_count` and
 `deadline_prefetch_count_complete`. Parsed IRC messages need not equal output
 records: filtering, deduplication, and deadline prefetch can exclude messages.

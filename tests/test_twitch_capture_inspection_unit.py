@@ -194,24 +194,16 @@ def test_script_entry_point_handles_empty_capture(tmp_path):
     assert report["frame_accounting"] is None
 
 
-@pytest.mark.parametrize(
-    "raw",
-    [
-        '{"message_type":"room_state","message_type":"text_message"}',
-        '{"message_type":"room_state","unused":NaN}',
-        '{"message_type":"room_state","unused":[Infinity]}',
-        '{"message_type":"room_state","unused":1e9999}',
-        r'{"message_type":"room_state","unused":"\ud800"}',
-        r'{"message_type":"room_state","unused":{"\ud800":0}}',
-        "[" * 2000 + "0" + "]" * 2000,
-    ],
-)
-def test_ambiguous_or_unencodable_json_is_a_bounded_finding(tmp_path, raw):
+def test_strict_reader_findings_compose_with_provider_validation(tmp_path):
     path = tmp_path / "chat.jsonl"
-    path.write_text(raw + '\n{"message_type":"room_state"}\n', encoding="utf-8")
+    path.write_text(
+        '{"message_type":"room_state","message_type":"text_message"}'
+        '\n{"message_type":"room_state"}\n',
+        encoding="utf-8",
+    )
     report = inspect_capture(path)
     assert report["records"] == 1
-    assert report["issues"] == {"invalid_jsonl": {"count": 1, "first_line": 1}}
+    assert report["issues"]["invalid_jsonl"] == {"count": 1, "first_line": 1}
 
 
 def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_path):

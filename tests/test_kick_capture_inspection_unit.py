@@ -344,21 +344,13 @@ def test_script_entry_point_empty_or_nonblocking_fifo(tmp_path, fifo):
         )
 
 
-@pytest.mark.parametrize(
-    "raw",
-    [
-        '{"message_type":"poll_deleted","message_type":"text_message"}',
-        '{"message_type":"poll_deleted","unused":NaN}',
-        '{"message_type":"poll_deleted","unused":[Infinity]}',
-        '{"message_type":"poll_deleted","unused":1e9999}',
-        r'{"message_type":"poll_deleted","unused":"\ud800"}',
-        r'{"message_type":"poll_deleted","unused":{"\ud800":0}}',
-        "[" * 2000 + "0" + "]" * 2000,
-    ],
-)
-def test_ambiguous_or_unencodable_json_is_bounded(tmp_path, raw):
-    path = tmp_path / "chat"
-    path.write_text(raw + '\n{"message_type":"poll_deleted"}\n', encoding="utf-8")
+def test_strict_reader_findings_compose_with_provider_validation(tmp_path):
+    path = tmp_path / "chat.jsonl"
+    path.write_text(
+        '{"message_type":"poll_deleted","message_type":"text_message"}'
+        '\n{"message_type":"poll_deleted"}\n',
+        encoding="utf-8",
+    )
     report = inspect_capture(path)
     assert report["records"] == 1
     assert report["issues"]["invalid_jsonl"] == {"count": 1, "first_line": 1}

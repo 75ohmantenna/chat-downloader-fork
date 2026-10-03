@@ -190,8 +190,9 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   and snapshot polling.
 - `public_state.py`: anonymous channel/viewer state and category discovery.
 - `live_iterator.py`: interruptible ownership of the active live transport.
-- `capture_inspection.py`: content-free JSONL validation and live/replay ledger
-  reconciliation shared by automatic live verification and the offline command.
+- `capture_inspection.py`: content-free Kick record validation and live/replay
+  ledger reconciliation shared by automatic live verification and the offline
+  command; strict JSONL reading uses `utils/capture_reader.py`.
 
 ### Parsing and shared Kick data
 
