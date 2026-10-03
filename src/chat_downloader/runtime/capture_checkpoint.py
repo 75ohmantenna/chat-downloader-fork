@@ -10,9 +10,8 @@ import math
 import os
 import tempfile
 from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeGuard, cast
+from typing import TYPE_CHECKING, Any, Protocol, TypeGuard, cast
 
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.formatting import format as format_module
@@ -31,15 +30,10 @@ if TYPE_CHECKING:
 _BOUNDARY_LIMIT = 10_000
 
 
-@dataclass(frozen=True, slots=True)
-class _RecordBoundary:
-    """File and in-memory state before one checkpointed emission."""
+class _RecordCounter(Protocol):
+    """Accepted-record count participating in checkpointed emission."""
 
-    sizes: tuple[int | None, ...]
-    writer_counts: dict[int, int]
-    formatted_duplicates: int
-    offset: float | None
-    ids: frozenset[str]
+    message_count: int
 
 
 def _valid_offset(value: object) -> TypeGuard[int | float]:
@@ -334,34 +328,24 @@ class CaptureCheckpoint:
             self.offset, self.ids = offset, set()
         self.ids.add(cast("str", item["message_id"]))
 
-    def begin_record(self, chat: Chat) -> _RecordBoundary:
-        """Snapshot append positions before requesting the next record."""
+    def advance(self, chat: Chat, counter: _RecordCounter) -> JSONDict:
+        """Consume one fully emitted record or restore its pre-emission state."""
         dispatcher = chat._output_dispatcher
         if dispatcher is None:
             msg = "Resume requires attached output writers."
             raise ChatDownloaderError(msg)
-        sizes = tuple(
-            path.stat().st_size if path.exists() else None for path in self.outputs
-        )
-        return _RecordBoundary(
-            sizes,
-            dict(dispatcher._records_written_by_writer),
-            dispatcher._formatted_duplicates_suppressed,
-            self.offset,
-            frozenset(self.ids),
-        )
-
-    def rollback_record(self, chat: Chat, boundary: _RecordBoundary) -> None:
-        """Discard a torn emission before saving an interrupted checkpoint."""
-        for path, previous_size in zip(self.outputs, boundary.sizes, strict=True):
-            if path.exists():
-                with path.open("r+b") as stream:
-                    stream.truncate(previous_size or 0)
-        dispatcher = chat._output_dispatcher
-        assert dispatcher is not None  # noqa: S101 — bound checkpoint retains its dispatcher
-        dispatcher._records_written_by_writer = boundary.writer_counts
-        dispatcher._formatted_duplicates_suppressed = boundary.formatted_duplicates
-        self.offset, self.ids = boundary.offset, set(boundary.ids)
+        offset, ids = self.offset, self.ids.copy()
+        count = counter.message_count
+        with dispatcher.record_transaction(self.outputs):
+            try:
+                item = next(chat)
+                self.observe(item)
+                counter.message_count += 1
+            except BaseException:
+                self.offset, self.ids = offset, ids
+                counter.message_count = count
+                raise
+        return item
 
     def save(self, chat: Chat, count: int) -> None:
         """Keep partial-writer failures from becoming valid resume points."""

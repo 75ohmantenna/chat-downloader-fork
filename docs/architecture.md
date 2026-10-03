@@ -141,7 +141,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
-| `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, and replay overlap suppression |
+| `capture_checkpoint.py` | Exclusive shutdown checkpoints, request/artifact verification, replay overlap suppression, and accepted-record consumption |
 | `capture_manifest.py` | Exclusive JSON run manifests, artifact hashes, and replay completeness policy |
 | `capture_replay_order.py` | Pure ordering of opening zero-offset replay notices after negative preroll messages for checkpoints |
 | `capture_verification.py` | Optional post-shutdown verification using the resolved production formatter |
@@ -195,7 +195,7 @@ module names.
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Message-group validation and per-message filter application |
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output and deduplication are delegated to `_ChatOutputDispatcher` |
-| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted dispatch, completed-record and suppression counts, and shutdown |
+| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted dispatch, record rollback with owned ledgers, completed-record and suppression counts, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_message_dedup.py` | Shared formatted-message policy: paid/ticker semantic deduplication for console and formatted files |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO deduplication cache |

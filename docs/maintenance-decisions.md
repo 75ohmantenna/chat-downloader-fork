@@ -179,6 +179,15 @@ wrapper ordering, formatting, and writer setup remain implementation details.
 Tests drive these interfaces instead of treating each stage as a separate
 caller surface.
 
+Checkpointed record consumption owns emission and replay-position observation
+as one operation. The output dispatcher restores file prefixes and its own
+successful-write ledger after a torn record; checkpoints never copy or replace
+that private ledger. The runner counts only accepted records and does not
+coordinate the rollback recipe. Failed consumption ends the capture, so its
+formatted deduplication cache is not reused after rollback.
+Failed file recovery remains sticky even when accepted-record counts match;
+it must prevent saving a checkpoint that certifies a torn output pair.
+
 Shared provider HTTP state belongs to `ChatDownloaderSession`, while cached
 site instances and explicitly propagated cookies belong to `_SiteSessionPool`.
 Neither module accepts its whole owning downloader or a protocol that

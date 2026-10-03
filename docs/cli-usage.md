@@ -332,7 +332,8 @@ message-limited, or interrupted shutdown. A one-second overlap preserves
 messages at the saved timestamp while suppressing IDs already written. The
 checkpoint writer places opening zero-offset replay notices after any negative
 preroll messages so their saved offsets remain chronological. The
-runner discards a record interrupted during writing or checkpoint observation
+capture discards a record interrupted during writing, checkpoint observation,
+or accepted-record counting
 before saving, including a partial write to one of two outputs. The next run
 retrieves that record again. The record limit counts newly written messages.
 Formatted TXT may write fewer lines
@@ -346,6 +347,8 @@ The version check applies to releases; avoid resuming across unreleased source
 changes that affect output. If chat or downloader shutdown fails, the
 checkpoint does not advance. A writer close failure also withholds the
 checkpoint; if capture already failed, its original error remains reported.
+If file rollback fails, the checkpoint also stays unchanged even when writer
+counts match; the torn artifacts require inspection before resuming.
 
 A process crash, power failure, or failed chat or downloader close can leave
 output newer than its checkpoint.

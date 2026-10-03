@@ -252,8 +252,8 @@ def _verify_capture_outputs(
     except (ChatDownloaderError, OSError, ValueError) as error:
         result.success = False
         result.termination_reason = "error"
-        result.error_message = str(error)
-        log("error", result.error_message)
+        result.error_message = result.error_message or str(error)
+        log("error", str(error))
 
 
 def _complete_run_record(
@@ -349,20 +349,14 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
 
         source = iter(chat)
         while True:
-            boundary = checkpoint.begin_record(chat) if checkpoint is not None else None
-            previous_count = result.message_count
             try:
-                message = next(source)
                 if checkpoint is not None:
-                    checkpoint.observe(message)
-                result.message_count += 1
+                    message = checkpoint.advance(chat, result)
+                else:
+                    message = next(source)
+                    result.message_count += 1
             except StopIteration:
                 break
-            except BaseException:
-                result.message_count = previous_count
-                if checkpoint is not None and boundary is not None:
-                    checkpoint.rollback_record(chat, boundary)
-                raise
             message_type = message.get("message_type")
             counter_key = message_type if isinstance(message_type, str) else "<missing>"
             result.message_type_counts[counter_key] = (

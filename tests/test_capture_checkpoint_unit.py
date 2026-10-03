@@ -392,6 +392,67 @@ def test_interrupted_record_rolls_back_before_resume(
     assert [item["message_id"] for item in rows] == ["1", "2", "3", "4"]
 
 
+@pytest.mark.parametrize("resumed", [False, True])
+def test_failed_record_recovery_never_certifies_torn_files(
+    tmp_path, monkeypatch, params, resumed
+):
+    from chat_downloader.output.continuous_write import ContinuousWriter
+
+    params["verify_output"] = False
+    checkpoint_path = tmp_path / "checkpoint.json"
+    previous = None
+    if resumed:
+        assert execute_run(Downloader, **params, max_messages=1).success
+        previous = checkpoint_path.read_bytes()
+    original_write = ContinuousWriter.write
+    original_open = Path.open
+    torn_record = False
+
+    def torn_write(writer, item, *, flush=False):
+        nonlocal torn_record
+        original_write(writer, item, flush=flush)
+        if writer.file_name.endswith(".jsonl") and item["message_id"] == "2":
+            torn_record = True
+            raise RuntimeError("failure after appending before acceptance")
+
+    def failed_truncation(path, mode="r", *args, **kwargs):
+        if torn_record and path.suffix == ".jsonl" and mode == "r+b":
+            raise OSError("record recovery denied")
+        return original_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(ContinuousWriter, "write", torn_write)
+    monkeypatch.setattr(Path, "open", failed_truncation)
+    result = execute_run(Downloader, **params)
+    assert not result.success
+    assert result.error_message == "record recovery denied"
+    assert len((tmp_path / "chat.jsonl").read_text().splitlines()) == 2
+    assert len((tmp_path / "chat.txt").read_text().splitlines()) == 1
+    if previous is None:
+        assert not checkpoint_path.exists()
+    else:
+        assert checkpoint_path.read_bytes() == previous
+
+
+def test_interrupted_acceptance_count_restores_safe_checkpoint(
+    tmp_path, monkeypatch, params
+):
+    from chat_downloader.runtime import runner
+
+    class InterruptingResult(runner.RunResult):
+        def __setattr__(self, name, value):
+            if name == "message_count" and value == 2:
+                raise KeyboardInterrupt
+            super().__setattr__(name, value)
+
+    monkeypatch.setattr(runner, "RunResult", InterruptingResult)
+    result = execute_run(Downloader, **params)
+    assert result.interrupted
+    assert result.message_count == 1
+    assert load_json(tmp_path / "checkpoint.json")["total"] == 1
+    assert len((tmp_path / "chat.jsonl").read_text().splitlines()) == 1
+    assert len((tmp_path / "chat.txt").read_text().splitlines()) == 1
+
+
 def test_negative_replay_offsets_can_resume(tmp_path, monkeypatch, params) -> None:
     records = [message(1, -15), message(2, -14), message(3, 1)]
     monkeypatch.setattr(Downloader, "records", records)
@@ -609,7 +670,7 @@ def test_checkpoint_record_snapshot_requires_writers(tmp_path) -> None:
     )
     chat = Chat(iter(()))
     with pytest.raises(ChatDownloaderError, match="attached output writers"):
-        checkpoint.begin_record(chat)
+        checkpoint.advance(chat, SimpleNamespace(message_count=0))
     with pytest.raises(ChatDownloaderError, match="output records disagree"):
         checkpoint.save(chat, 0)
 

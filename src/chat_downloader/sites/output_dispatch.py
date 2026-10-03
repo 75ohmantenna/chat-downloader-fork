@@ -4,7 +4,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol, TypedDict
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
@@ -14,6 +15,10 @@ from chat_downloader.utils.filename_utils import (
 )
 
 from ._message_dedup import _FormattedMessageDeduplicator
+
+if TYPE_CHECKING:
+    from collections.abc import Generator, Sequence
+    from pathlib import Path
 
 
 class ChatOutputWriter(Protocol):
@@ -91,6 +96,7 @@ class _ChatOutputDispatcher:
         self._records_written_by_writer: dict[int, int] = {}
         self._formatted_duplicates_suppressed = 0
         self._write_error_count: int = 0
+        self._record_recovery_failed = False
         self.closed = False
         self._formatted_deduplicator = _FormattedMessageDeduplicator(
             max_seen_message_ids,
@@ -148,6 +154,33 @@ class _ChatOutputDispatcher:
             writer.write(formatted_item, flush=True)
             self._records_written_by_writer[id(writer)] += 1
 
+    @contextmanager
+    def record_transaction(self, paths: Sequence[Path]) -> Generator[None, None, None]:
+        """Restore file prefixes and successful counts after a torn emission.
+
+        Checkpointed iteration stops after a failed record, so the formatted
+        deduplication cache is discarded with the capture rather than reused.
+        """
+        sizes = tuple(path.stat().st_size if path.exists() else None for path in paths)
+        counts = dict(self._records_written_by_writer)
+        duplicates = self._formatted_duplicates_suppressed
+        try:
+            yield
+        except StopIteration:
+            raise
+        except BaseException:
+            try:
+                for path, previous_size in zip(paths, sizes, strict=True):
+                    if path.exists():
+                        with path.open("r+b") as stream:
+                            stream.truncate(previous_size or 0)
+            except BaseException:
+                self._record_recovery_failed = True
+                raise
+            self._records_written_by_writer = counts
+            self._formatted_duplicates_suppressed = duplicates
+            raise
+
     def close(self) -> None:
         """Close all attached writers once and log any cleanup failures."""
         if self.closed:
@@ -176,8 +209,8 @@ class _ChatOutputDispatcher:
         return self._formatted_duplicates_suppressed
 
     def counts_match(self, raw_count: int) -> bool:
-        """Check each writer against the records its output mode should receive."""
-        return all(
+        """Require successful recovery and each writer's expected record count."""
+        return not self._record_recovery_failed and all(
             self._records_written_by_writer[id(writer)]
             == (
                 raw_count - self._formatted_duplicates_suppressed
