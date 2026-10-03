@@ -61,7 +61,7 @@ def parse_public_event(
         "message_type": message_type,
         "message_id": f"kick-{message_type}:{received_timestamp}",
         "received_timestamp": received_timestamp,
-        "message": message_type.replace("_", " "),
+        "message": _public_event_message(payload, message_type),
         "metadata": {
             "event_name": frame.get("event"),
             "channel": frame.get("channel"),
@@ -69,6 +69,17 @@ def parse_public_event(
             "source": frame.get("source", "websocket"),
         },
     }
+
+
+def _public_event_message(payload: object, message_type: str) -> str:
+    """Summarize a single current-stream count while retaining opaque payloads."""
+    label = message_type.replace("_", " ")
+    if message_type != "viewer_count" or not isinstance(payload, list):
+        return label
+    if len(payload) != 1 or not isinstance(payload[0], dict):
+        return label
+    count = get_int(payload[0], "viewers", -1)
+    return f"{label}: {count}" if count >= 0 else label
 
 
 def normalize_compact_gifts(payload: object, received_timestamp: int) -> object:

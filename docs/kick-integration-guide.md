@@ -345,9 +345,13 @@ synthetic REST frames separately. These fixed counters are retained in manifests
 Channel snapshots supply public livestream status, title, category, follower
 count, and chat settings. `kick.com/current-viewers` supplies viewer counts for
 the current livestream. These are polled observations with receive timestamps,
-not private push events. Public lifecycle events retain their complete payload
-under `metadata.data`, plus event name, channel, and source. A provider entity ID
-is not used for deduplication because successive state updates may share it.
+not private push events. Viewer-count text summaries include the count when the
+snapshot contains a single nonnegative integer count, including zero (for
+example, `[viewer count: 42]`). Empty or unrecognized snapshots retain the
+`[viewer count]` label without assuming a count. Public lifecycle events retain
+their complete payload under `metadata.data`, plus event name, channel, and
+source. A provider entity ID is not used for deduplication because successive
+state updates may share it.
 Compact gifts preserve `gifted_total`, `gifter_total`, and `chunk_details` under
 `metadata.kick_event.data`; normalized `quantity` counts recipients in that
 chunk, preventing the overall gift total from being counted once per chunk.
