@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import closing
+from copy import deepcopy
+
 import pytest
 
 from chat_downloader.errors import VideoUnavailable, VideoUnplayable
 from chat_downloader.models import ChatRequest
+from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.chat_users_router import (
     YouTubeChatUsersRouterMixin,
 )
@@ -136,3 +140,63 @@ def test_chat_user_router_helper_methods_delegate_expected_keys() -> None:
         ({"custom_username": "custom"}, params),
         ({"handle": "@handle"}, params),
     ]
+
+
+@pytest.mark.parametrize(
+    ("method", "key"),
+    [
+        ("get_chat_by_channel_id", "channel_id"),
+        ("get_chat_by_user_id", "user_id"),
+        ("get_chat_by_custom_username", "custom_username"),
+        ("get_chat_by_handle", "handle"),
+    ],
+)
+@pytest.mark.parametrize("typed", [False, True])
+def test_user_chat_params_compose_with_lazy_retrieval(monkeypatch, method, key, typed):
+    params = {"ignore": ["ignored"], "message_types": ["all"], "max_attempts": 2}
+    before = deepcopy(params)
+    supplied = ChatRequest(**params) if typed else params
+    discovered = []
+    requested = []
+    message = {"message_type": "text_message", "message": "fixture"}
+
+    def discover(**kwargs):
+        discovered.append(kwargs)
+        return iter(
+            {"video_id": video, "title": video, "video_type": "LIVE"}
+            for video in ("ignored", "target")
+        )
+
+    def retrieve(video_id, request):
+        requested.append((video_id, request))
+        return Chat(iter([message]), id=video_id, title="resolved", status="live")
+
+    with closing(YouTubeChatDownloader()) as site:
+        monkeypatch.setattr(site, "get_user_videos", discover)
+        monkeypatch.setattr(site, "get_chat_by_video_id", retrieve)
+        chat = getattr(site, method)("identity", supplied)
+        try:
+            assert next(iter(chat)) == message
+            assert chat.id == "target"
+            request = requested[0][1]
+            assert isinstance(request, ChatRequest)
+            assert request.ignore == ["ignored"]
+            assert request.message_types == ["all"]
+            assert requested == [("target", request)]
+            assert discovered == [
+                {key: "identity", "video_type": "live", "params": request}
+            ]
+            if typed:
+                assert request is supplied
+            assert params == before
+        finally:
+            chat.chat.close()
+
+
+@pytest.mark.parametrize("params", [{"unknown": True}, {"max_attempts": 0}])
+def test_user_chat_rejects_invalid_params_before_iteration(params):
+    with (
+        closing(YouTubeChatDownloader()) as site,
+        pytest.raises((TypeError, ValueError)),
+    ):
+        site.get_chat_by_channel_id("identity", params)

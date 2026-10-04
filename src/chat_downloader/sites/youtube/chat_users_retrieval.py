@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import ChatDownloaderError
+from chat_downloader.models import coerce_chat_request
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.dict_utils import try_get_first_value
 
@@ -33,15 +34,16 @@ class YouTubeChatUsersRetrievalMixin:
     def _get_chat_by_user_args(
         self,
         user_video_args: dict[str, str],
-        params: ChatRequest,
+        params: ChatRequest | dict[str, object],
     ) -> Chat:
         """Get chat by user arguments."""
+        request = coerce_chat_request(params)
         title = try_get_first_value(user_video_args)
         chat_item = Chat(title=title, id=title)
         chat_item.chat = self._get_chat_messages_by_user_args(
             user_video_args,
             chat_item,
-            params,
+            request,
         )
 
         return chat_item
