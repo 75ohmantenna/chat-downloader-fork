@@ -81,8 +81,8 @@ def _patch_browse(monkeypatch, tabs, *, ytcfg=None, context=None):
 def _patch_playlist(monkeypatch, items, *, parse=False):
     returns(
         monkeypatch,
-        "discovery_playlists._get_rendered_content",
-        wrap("playlistVideoListRenderer.contents", items),
+        "discovery_playlists._get_playlist_initial_items",
+        items,
     )
     returns(
         monkeypatch,
@@ -335,9 +335,9 @@ def test_testing_items_deduplicates_direct_videos(monkeypatch):
 
 
 def test_rendered_content():
-    assert discovery._get_rendered_content(
+    assert discovery_playlists._get_playlist_initial_items(
         _browse([_tab(_section([{"target": "value"}]))])
-    ) == {"target": "value"}
+    ) == [{"target": "value"}]
 
 
 @pytest.mark.parametrize("params", [{"url": PLAYLIST}, None])

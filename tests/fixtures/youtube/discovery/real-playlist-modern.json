@@ -1,0 +1,196 @@
+{
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "",
+            "selected": true,
+            "content": {
+              "sectionListRenderer": {
+                "contents": [
+                  {
+                    "itemSectionRenderer": {
+                      "contents": [
+                        {
+                          "lockupViewModel": {
+                            "contentId": "Z6ZxUJu8xjg",
+                            "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                            "metadata": {
+                              "lockupMetadataViewModel": {
+                                "title": {
+                                  "content": "Santo Ros\u00e1rio | 7 Dias de Ora\u00e7\u00e3o 2025 | 03:40 | 07/11 | 7\u00ba Dia | Live Ao vivo"
+                                },
+                                "metadata": {
+                                  "contentMetadataViewModel": {
+                                    "delimiter": " ",
+                                    "metadataRows": [
+                                      {
+                                        "metadataParts": [
+                                          {
+                                            "icon": {
+                                              "accessibilityLabel": "Verified",
+                                              "height": 14,
+                                              "name": "CHECK_CIRCLE_FILLED",
+                                              "width": 14
+                                            },
+                                            "text": {
+                                              "commandRuns": [
+                                                {
+                                                  "length": 36,
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "browseEndpoint": {
+                                                        "browseId": "UCbh6_TmFnAJLI56aAQeD3qw",
+                                                        "canonicalBaseUrl": "/@FreiGilsonSomdoMonteOFICIAL"
+                                                      },
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "apiUrl": "/youtubei/v1/browse",
+                                                          "rootVe": 3611,
+                                                          "url": "/@FreiGilsonSomdoMonteOFICIAL",
+                                                          "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                                                        }
+                                                      }
+                                                    }
+                                                  },
+                                                  "startIndex": 0
+                                                }
+                                              ],
+                                              "content": "Fixture channel",
+                                              "styleRuns": [
+                                                {
+                                                  "length": 36,
+                                                  "startIndex": 0,
+                                                  "weightLabel": "FONT_WEIGHT_NORMAL"
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "metadataParts": [
+                                          {
+                                            "accessibilityLabel": "1.4 million views",
+                                            "leadingIcon": {
+                                              "height": 12,
+                                              "name": "PLAY_ARROW_OUTLINED",
+                                              "width": 12
+                                            },
+                                            "text": {
+                                              "content": "1.4M"
+                                            }
+                                          },
+                                          {
+                                            "accessibilityLabel": "Streamed 10 months ago",
+                                            "text": {
+                                              "content": "Streamed 10mo ago"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "lockupViewModel": {
+                            "contentId": "bwM9z43AbXQ",
+                            "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                            "metadata": {
+                              "lockupMetadataViewModel": {
+                                "title": {
+                                  "content": "Santo Ros\u00e1rio | 7 Dias de Ora\u00e7\u00e3o 2025 | 03:40 | 06/11 | 6\u00ba Dia | Live Ao vivo"
+                                },
+                                "metadata": {
+                                  "contentMetadataViewModel": {
+                                    "delimiter": " ",
+                                    "metadataRows": [
+                                      {
+                                        "metadataParts": [
+                                          {
+                                            "icon": {
+                                              "accessibilityLabel": "Verified",
+                                              "height": 14,
+                                              "name": "CHECK_CIRCLE_FILLED",
+                                              "width": 14
+                                            },
+                                            "text": {
+                                              "commandRuns": [
+                                                {
+                                                  "length": 36,
+                                                  "onTap": {
+                                                    "innertubeCommand": {
+                                                      "browseEndpoint": {
+                                                        "browseId": "UCbh6_TmFnAJLI56aAQeD3qw",
+                                                        "canonicalBaseUrl": "/@FreiGilsonSomdoMonteOFICIAL"
+                                                      },
+                                                      "commandMetadata": {
+                                                        "webCommandMetadata": {
+                                                          "apiUrl": "/youtubei/v1/browse",
+                                                          "rootVe": 3611,
+                                                          "url": "/@FreiGilsonSomdoMonteOFICIAL",
+                                                          "webPageType": "WEB_PAGE_TYPE_CHANNEL"
+                                                        }
+                                                      }
+                                                    }
+                                                  },
+                                                  "startIndex": 0
+                                                }
+                                              ],
+                                              "content": "Fixture channel",
+                                              "styleRuns": [
+                                                {
+                                                  "length": 36,
+                                                  "startIndex": 0,
+                                                  "weightLabel": "FONT_WEIGHT_NORMAL"
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        ]
+                                      },
+                                      {
+                                        "metadataParts": [
+                                          {
+                                            "accessibilityLabel": "1.1 million views",
+                                            "leadingIcon": {
+                                              "height": 12,
+                                              "name": "PLAY_ARROW_OUTLINED",
+                                              "width": 12
+                                            },
+                                            "text": {
+                                              "content": "1.1M"
+                                            }
+                                          },
+                                          {
+                                            "accessibilityLabel": "Streamed 10 months ago",
+                                            "text": {
+                                              "content": "Streamed 10mo ago"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

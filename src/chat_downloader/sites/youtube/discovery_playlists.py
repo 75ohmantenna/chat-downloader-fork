@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import dig, get_dict, get_list, get_str
 
 from .client_context import _get_innertube_context
 from .client_requests_initial import _get_initial_info
@@ -16,7 +16,7 @@ from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
-from .discovery import _get_rendered_content
+from .discovery import _report_discovery_drift
 from .helpers import (
     _extract_browse_continuation_token_from_item,
     _extract_browse_continuation_token_from_response,
@@ -29,12 +29,41 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.utils.json_types import JSONDict, JSONList
 
     from ._protocols import YouTubeDownloaderProto
 
 
+def _playlist_section_items(content: JSONDict) -> JSONList:
+    """Flatten only playlist list containers, excluding menus and sidebars."""
+    for key in (
+        "sectionListRenderer",
+        "itemSectionRenderer",
+        "playlistVideoListRenderer",
+    ):
+        renderer = get_dict(content, key)
+        if renderer:
+            items: JSONList = []
+            for item in get_list(renderer, "contents"):
+                if isinstance(item, dict):
+                    items.extend(_playlist_section_items(item))
+            return items
+    return [content]
+
+
+def _get_playlist_initial_items(initial: JSONDict) -> JSONList:
+    """Select the playlist tab and retain all legacy or modern list items."""
+    tabs = dig(initial, "contents", "twoColumnBrowseResultsRenderer", "tabs")
+    if not isinstance(tabs, list) or not tabs:
+        return []
+    renderers = [get_dict(tab, "tabRenderer") for tab in tabs if isinstance(tab, dict)]
+    selected = next((tab for tab in renderers if tab.get("selected")), None)
+    tab = selected if selected is not None else next(iter(renderers), {})
+    return _playlist_section_items(get_dict(tab, "content"))
+
+
 def _extract_playlist_items(
-    items: list[Any],
+    items: JSONList,
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Return video dicts and next continuation token from a playlist page."""
     videos: list[dict[str, Any]] = []
@@ -42,12 +71,18 @@ def _extract_playlist_items(
     for item in items:
         if not isinstance(item, dict):
             continue
-        vid = item.get("playlistVideoRenderer")
+        vid = get_dict(item, "playlistVideoRenderer")
+        lockup = get_dict(item, "lockupViewModel")
         continuation = _extract_browse_continuation_token_from_item(item)
         if vid:
             videos.append(_parse_video(vid))
+        elif get_str(lockup, "contentType") == "LOCKUP_CONTENT_TYPE_VIDEO":
+            parsed = _parse_video({"lockupViewModel": lockup})
+            if isinstance(parsed.get("video_id"), str) and parsed["video_id"]:
+                videos.append(parsed)
         elif continuation:
             token = continuation
+    _report_discovery_drift(items)
     return videos, token
 
 
@@ -79,16 +114,11 @@ class YouTubePlaylistDiscoveryMixin:
             _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
 
-        page_contents = _get_rendered_content(yt_initial_data)
-        page_container = page_contents if isinstance(page_contents, dict) else {}
-
         api_key = require_innertube_api_key(ytcfg)
         continuation_url = f"{_YT_HOME}/youtubei/v1/browse?key={api_key}"
         continuation_params: dict[str, Any] = {"context": _get_innertube_context(ytcfg)}
 
-        first_items: list[Any] = (
-            multi_get(page_container, "playlistVideoListRenderer", "contents") or []
-        )
+        first_items = _get_playlist_initial_items(yt_initial_data)
         videos, continuation = _extract_playlist_items(first_items)
         yield from videos
 

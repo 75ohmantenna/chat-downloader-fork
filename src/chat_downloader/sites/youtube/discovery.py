@@ -6,8 +6,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from chat_downloader.debugging import log
+from chat_downloader.debugging import debug_log, log
 from chat_downloader.errors import InvalidParameter, NoVideos, UserNotFound
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import dig, get_dict
 
@@ -70,29 +71,6 @@ def _iter_video_ids(content: JSONAny) -> Iterator[str]:
     if isinstance(content, list):
         for item in content:
             yield from _iter_video_ids(item)
-
-
-def _get_rendered_content(yt_info: JSONDict, tab_index: int = 0) -> JSONAny:
-    """Extract rendered playlist content from YouTube initial data."""
-    return cast(
-        "JSONAny",
-        multi_get(
-            yt_info,
-            "contents",
-            "twoColumnBrowseResultsRenderer",
-            "tabs",
-            tab_index,
-            "tabRenderer",
-            "content",
-            "sectionListRenderer",
-            "contents",
-            0,
-            "itemSectionRenderer",
-            "contents",
-            0,
-            default={},
-        ),
-    )
 
 
 def _build_channel_url(
@@ -165,14 +143,48 @@ def _process_page_items(
         rich = get_dict(get_dict(item, "richItemRenderer"), "content")
         video = get_dict(rich, "videoRenderer")
         lockup = get_dict(rich, "lockupViewModel")
+        shorts = get_dict(rich, "shortsLockupViewModel")
         continuation = _extract_browse_continuation_token_from_item(item)
         if video:
             videos.append(_parse_video(video))
         elif lockup:
             videos.append(_parse_video({"lockupViewModel": lockup}))
+        elif shorts:
+            parsed = _parse_video({"shortsLockupViewModel": shorts})
+            if parsed.get("video_id"):
+                videos.append(parsed)
         elif continuation:
             token = continuation
+    _report_discovery_drift(items)
     return videos, token
+
+
+def _report_discovery_drift(items: JSONList) -> None:
+    """Report populated unknown models without confusing pagination with emptiness."""
+    known = {
+        "videoRenderer",
+        "playlistVideoRenderer",
+        "lockupViewModel",
+        "shortsLockupViewModel",
+        "continuationItemRenderer",
+        "continuationItemViewModel",
+    }
+    unsupported: JSONList = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        content = get_dict(get_dict(item, "richItemRenderer"), "content") or item
+        if known.isdisjoint(content) and any(
+            key.endswith(("Renderer", "ViewModel")) for key in content
+        ):
+            unsupported.append(content)
+    if unsupported:
+        capture_debug_sample(
+            "youtube-unsupported-discovery-items",
+            {"count": len(unsupported), "items": unsupported[:10]},
+            sample_limit=10,
+        )
+        debug_log(f"Skipped {len(unsupported)} unsupported YouTube discovery items")
 
 
 class YouTubeDiscoveryMixin:

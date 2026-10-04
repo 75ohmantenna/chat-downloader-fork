@@ -1,0 +1,66 @@
+{
+  "contents": {
+    "twoColumnBrowseResultsRenderer": {
+      "tabs": [
+        {
+          "tabRenderer": {
+            "title": "Shorts",
+            "selected": true,
+            "content": {
+              "richGridRenderer": {
+                "contents": [
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "shortsLockupViewModel": {
+                          "onTap": {
+                            "innertubeCommand": {
+                              "reelWatchEndpoint": {
+                                "videoId": "05fFq5uPMV0"
+                              }
+                            }
+                          },
+                          "overlayMetadata": {
+                            "primaryText": {
+                              "content": "You are the reason for my living"
+                            },
+                            "secondaryText": {
+                              "content": "106K views"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "richItemRenderer": {
+                      "content": {
+                        "shortsLockupViewModel": {
+                          "onTap": {
+                            "innertubeCommand": {
+                              "reelWatchEndpoint": {
+                                "videoId": "fk2oCDqq2nQ"
+                              }
+                            }
+                          },
+                          "overlayMetadata": {
+                            "primaryText": {
+                              "content": "I will go wherever You go, Lord!"
+                            },
+                            "secondaryText": {
+                              "content": "76K views"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
