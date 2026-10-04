@@ -7,8 +7,11 @@ from __future__ import annotations
 from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
+from requests.exceptions import RequestException
+
 from chat_downloader.debugging import log
 from chat_downloader.errors import CaptchaChallengeRequired, ParsingError
+from chat_downloader.utils.json_types import get_dict, get_int, get_str
 
 from .client_requests_bootstrap import BootstrapRequests, get_innertube_video_bootstrap
 from .client_requests_initial import _get_initial_info
@@ -44,31 +47,64 @@ class YouTubeVideoMetadataCoreMixin:
 
         proto = cast("YouTubeDownloaderProto", self)
         bootstrap = BootstrapRequests()
-        try:
-            yt_initial_data, ytcfg, player_response_info = _get_initial_info(
-                original_url,
-                partial(bootstrap.request, proto._session_get),
-                params,
-                _YT_INITIAL_DATA_RE,
-                _YT_CFG_RE,
-                _YT_INITIAL_PLAYER_RESPONSE_RE,
-            )
-        except (CaptchaChallengeRequired, ParsingError) as error:
-            if video_type == "clip":
-                raise
-            log(
-                "warning",
-                "Falling back to YouTube InnerTube bootstrap after the "
-                f"watch-page bootstrap failed ({type(error).__name__}).",
-            )
-            bootstrap.diagnostics["bootstrap_fallback_count"] = 1
-            yt_initial_data, ytcfg, player_response_info = (
-                get_innertube_video_bootstrap(
+        initial: tuple[JSONDict, JSONDict, JSONDict] | None = None
+        if (
+            video_type != "clip"
+            and getattr(self, "_request_profile", None)
+            in {"youtube_android", "youtube_ios"}
+            and not getattr(self, "_has_auth_cookies", False)
+        ):
+            try:
+                initial = get_innertube_video_bootstrap(
                     video_id,
                     partial(bootstrap.request, proto._session_post),
                     getattr(self, "_request_profile", None),
                 )
-            )
+                if (
+                    not get_str(get_dict(initial[2], "videoDetails"), "videoId")
+                    or not initial[0]
+                    or "error" in initial[0]
+                    or "error" in initial[2]
+                ):
+                    msg = "Mobile bootstrap did not supply video details"
+                    raise ParsingError(msg)  # noqa: TRY301 - recover through the page
+            except (RequestException, OSError, ValueError, ParsingError) as error:
+                initial = None
+                bootstrap.diagnostics["bootstrap_fallback_count"] = 1
+                log(
+                    "warning",
+                    "Falling back to YouTube watch-page bootstrap after the "
+                    f"mobile InnerTube bootstrap failed ({type(error).__name__}).",
+                )
+
+        if initial is None:
+            try:
+                initial = _get_initial_info(
+                    original_url,
+                    partial(bootstrap.request, proto._session_get),
+                    params,
+                    _YT_INITIAL_DATA_RE,
+                    _YT_CFG_RE,
+                    _YT_INITIAL_PLAYER_RESPONSE_RE,
+                )
+            except (CaptchaChallengeRequired, ParsingError) as error:
+                if video_type == "clip":
+                    raise
+                log(
+                    "warning",
+                    "Falling back to YouTube InnerTube bootstrap after the "
+                    f"watch-page bootstrap failed ({type(error).__name__}).",
+                )
+                bootstrap.diagnostics["bootstrap_fallback_count"] = (
+                    get_int(bootstrap.diagnostics, "bootstrap_fallback_count") + 1
+                )
+                initial = get_innertube_video_bootstrap(
+                    video_id,
+                    partial(bootstrap.request, proto._session_post),
+                    getattr(self, "_request_profile", None),
+                )
+
+        yt_initial_data, ytcfg, player_response_info = initial
 
         if not player_response_info:
             log("debug", yt_initial_data)

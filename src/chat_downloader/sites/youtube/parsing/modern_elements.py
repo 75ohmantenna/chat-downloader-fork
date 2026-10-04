@@ -41,6 +41,12 @@ def _paid_author(data: JSONDict) -> JSONDict:
     return {key: value for key, value in fields.items() if value}
 
 
+def _banner_message(model: JSONDict) -> JSONDict:
+    """Require pinned banner content before accepting the mobile model."""
+    fields = _text_message(model)
+    return fields if fields.get("message") else {}
+
+
 def _paid_message(model: JSONDict) -> JSONDict:
     data = get_dict(model, "paidMessageData")
     if not data:
@@ -77,6 +83,7 @@ def _engagement(model: JSONDict) -> JSONDict:
 
 _MODELS = {
     "liveChatTextMessageModel": ("liveChatTextMessageRenderer", _text_message),
+    "liveChatTextMessageBannerModel": ("liveChatTextMessageRenderer", _banner_message),
     "superChatItemModel": ("liveChatPaidMessageRenderer", _paid_message),
     "liveChatPaidStickerModel": ("liveChatPaidStickerRenderer", _paid_sticker),
     "viewerEngagementMessageModel": (

@@ -217,7 +217,7 @@ module names.
 |--------|---------|
 | `client_auth.py` | SAPISIDHASH authentication header generation |
 | `client_context.py` | InnerTube context dict construction and request-profile application |
-| `client_requests_bootstrap.py` | Fallback InnerTube bootstrap requests (initial video data) |
+| `client_requests_bootstrap.py` | Direct mobile and fallback InnerTube bootstrap requests (initial video data) |
 | `client_requests_continuation.py` | HTTP continuation polling: request dispatch, retry, error surfacing |
 | `client_requests_errors.py` | HTTP/JSON error classification, CAPTCHA detection, and retry helpers |
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |

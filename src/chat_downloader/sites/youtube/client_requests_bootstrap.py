@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from requests.exceptions import RequestException
+from requests.exceptions import HTTPError, RequestException
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, MutableMapping
@@ -106,6 +106,10 @@ def _post_innertube_json(
         f"{_YT_HOME}/youtubei/v1/{endpoint}?key={_DEFAULT_INNERTUBE_API_KEY}",
         json=payload,
     )
+    status = getattr(response, "status_code", 200)
+    if status >= 400:
+        msg = f"YouTube {endpoint} bootstrap returned HTTP {status}"
+        raise HTTPError(msg, response=response)
     data = response.json()
     return data if isinstance(data, dict) else {}
 

@@ -153,6 +153,8 @@ _KEYS_TO_IGNORE = [
     "header",
     "contents",
     "actionId",
+    "onExpandCommand",
+    "onCollapseCommand",
     # tooltipRenderer
     "dismissStrategy",
     "suggestedPosition",

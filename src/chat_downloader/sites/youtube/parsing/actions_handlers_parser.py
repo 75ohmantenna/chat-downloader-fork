@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from chat_downloader.debugging import debug_log
+from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _PATH_BANNER_RENDERER,
     _PATH_ITEM,
@@ -12,6 +13,7 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _PATH_TOOLTIP,
     _RENDERER_BANNER_CHAT_SUMMARY,
 )
+from chat_downloader.sites.youtube.constants_patterns import YOUTUBE_DEBUG_SAMPLE_LIMIT
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
 from chat_downloader.utils.json_types import (
     JSONDict,
@@ -170,11 +172,22 @@ def _handle_add_banner_action(
     offset: float,
 ) -> tuple[JSONDict, JSONDict, str | None, str]:
     """Handle add banner actions."""
-    original_item = multi_get(action, original_action_type, _PATH_BANNER_RENDERER)
+    original_item = get_dict(
+        get_dict(action, original_action_type), _PATH_BANNER_RENDERER
+    )
     if original_item:
         original_message_type = try_get_first_key(original_item)
-        contents = original_item[original_message_type].get("contents")
+        renderer = get_dict(original_item, original_message_type or "")
+        contents = normalize_element(get_dict(renderer, "contents"))
         content_message_type = try_get_first_key(contents)
+        if not renderer or content_message_type == "elementRenderer":
+            capture_debug_sample(
+                "youtube-unsupported-banner-content",
+                {"contents": contents},
+                sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
+            )
+            debug_log("Unsupported banner content")
+            return (data, original_item, None, original_action_type)
         parsed_contents = _parse_item(contents, offset=offset)
         data.update(parsed_contents)
         if content_message_type == _RENDERER_BANNER_CHAT_SUMMARY:

@@ -35,13 +35,13 @@ The normal YouTube flow is:
 1. Match the incoming URL to a supported YouTube target.
 2. Resolve a channel, user, or handle `/live` shortcut to the canonical video
    ID so video-specific playability errors remain visible.
-3. Load the watch page and parse initial JSON state.
-4. If the watch page is challenged or cannot be parsed, fall back to the
-   InnerTube `player` and `next` endpoints for video bootstrap metadata.
+3. Bootstrap video metadata through the page, or directly through InnerTube
+   `player` and `next` for unauthenticated Android and iOS video requests.
+4. Recover a failed bootstrap through the alternate path for regular videos.
 5. Extract video details, playability information, client config, and initial
    chat continuation hints.
-6. Load the chat page once to recover the active `Top chat` and `Live chat`
-   continuation tokens.
+6. For page bootstrap, load the chat page when continuation hints permit to
+   recover the active `Top chat` and `Live chat` tokens.
 7. Build browser-like request headers, optionally adding auth headers when
    cookies are available.
 8. Poll the private InnerTube chat continuation endpoint.
@@ -113,7 +113,8 @@ The normal YouTube flow is:
 
 ### Watch-page bootstrap
 
-The downloader starts with the YouTube watch page. That page provides:
+Web profiles, authenticated sessions, and clips start with the YouTube page.
+That page provides:
 
 - `ytInitialData`
 - `ytcfg`
@@ -122,6 +123,13 @@ The downloader starts with the YouTube watch page. That page provides:
 
 This is enough to determine whether the target is live, replay, post-live, or
 unavailable.
+
+Unauthenticated regular video requests with an explicit Android or iOS profile
+start with InnerTube `player` and `next` requests. This avoids the mobile watch
+redirect and its incompatible initial-data layout. A transport, HTTP, decoding,
+or incomplete-response failure recovers through the watch page. A returned
+video identity must match the request. Authenticated requests and clips retain
+page bootstrap so authentication and clip bounds remain available.
 
 When the watch page is blocked by a YouTube/Google challenge or the page no
 longer exposes parseable initial JSON, regular video targets can fall back to
@@ -204,6 +212,10 @@ negative `time_in_seconds` value and signed `time_text`; later messages use
 positive values. The separate InnerTube `playerOffsetMs` polling position stays
 nonnegative and never moves backward when YouTube delivers an older message
 late.
+
+Message output preserves provider arrival order. Original timestamps may move
+backward within a poll, and an initial pinned banner can substantially predate
+capture; neither observation alone establishes message loss.
 
 Live console and TXT output use the original message's UTC clock time,
 including seconds (`01:21:15`), with the default and `24_hour` formats.
@@ -316,12 +328,18 @@ no replay.
 Android and iOS `next` responses use mobile-specific `playerOverlays` and
 `engagementPanels` layouts rather than the desktop conversation bar. The
 bootstrap recognizes their filter-mode models to preserve distinct Top and
-Live chat selections. Mobile `elementRenderer` text, Super Chat, paid-sticker,
-and viewer-engagement models are normalized into the corresponding classic
-message types. Inline emote images use their UTF-16 attachment ranges to restore
-labels and image metadata; malformed or overlapping ranges retain the original
+Live chat selections. Mobile `elementRenderer` text, pinned banner, Super Chat,
+paid-sticker, and viewer-engagement models are normalized into the corresponding
+classic message types. Inline emote images use their UTF-16 attachment ranges to
+restore labels and image metadata; malformed or overlapping ranges retain the original
 text. Paid stickers retain their accessibility description as message text.
 Unknown models remain visible in debug diagnostics.
+
+Mobile pinned banners retain their text, author, message ID, avatar, and observed
+verification badge. Transparent author-layout images are not membership badges.
+Banner expansion and collapse commands are recognized UI metadata. Unsupported
+or malformed mobile banner content is captured for review and counted as parsing
+loss instead of being emitted as an empty banner.
 
 Cross-profile archives preserve provider text and emoji metadata. Web renderers
 can provide emoji shortcut labels, IDs, search terms, and image variants that
@@ -393,7 +411,10 @@ so consumers can track a growing gift combo.
 
 `ban_user` is the normalized `message_type` for three distinct wire actions:
 `remove_chat_item`, `remove_chat_item_by_author`, and
-`mark_chat_items_by_author_as_deleted`. Reviewed captures for all three are
+`mark_chat_items_by_author_as_deleted`. A `ban_user` count therefore does not
+measure distinct banned users; inspect `action_type`, `target_message_id`, and
+`author.id` to distinguish single-message removal from author-wide actions.
+Reviewed captures for all three are
 preserved under `tests/fixtures/youtube/live_events/`.
 
 `deleted_message` (from `markChatItemAsDeletedAction`) is implemented but has

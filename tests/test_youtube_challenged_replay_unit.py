@@ -58,8 +58,8 @@ def test_generic_web_failure_with_tokens_bootstraps_mobile_before_poll(monkeypat
         )
         assert list(chat) == []
         assert site._request_profile == "youtube_android"
-        assert chat.diagnostics["bootstrap_request_count"] == 6
-        assert chat.diagnostics["bootstrap_fallback_count"] == 2
+        assert chat.diagnostics["bootstrap_request_count"] == 5
+        assert chat.diagnostics["bootstrap_fallback_count"] == 1
         assert chat.diagnostics["bootstrap_profile_switch_count"] == 1
         assert chat.diagnostics["initial_request_profile"] == "youtube_web"
         assert chat.diagnostics["active_request_profile"] == "youtube_android"

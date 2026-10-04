@@ -86,15 +86,39 @@ def attributed_text(value: JSONDict) -> JSONDict:
 
 
 def author_badges(attributed: JSONDict) -> JSONList:
-    """Adapt the observed inline mobile membership badges."""
+    """Adapt mobile membership and verification badges, excluding layout images."""
     badges: JSONList = []
     author = get_dict(attributed, "authorName")
     for attachment in get_list(author, "attachmentRuns"):
         if not isinstance(attachment, dict):
             continue
         image = dig(attachment, "element", "type", "imageType", "image")
+        if isinstance(image, dict) and any(
+            get_str(get_dict(source, "clientResource"), "imageName")
+            == "yt_fill_check_circle_grey600_24"
+            for source in get_list(image, "sources")
+            if isinstance(source, dict)
+        ):
+            badges.append(
+                {
+                    "liveChatAuthorBadgeRenderer": {
+                        "icon": {"iconType": "VERIFIED"},
+                        "tooltip": "Verified",
+                    }
+                }
+            )
+            continue
         thumbnails = image_thumbnails(image) if isinstance(image, dict) else {}
         if thumbnails:
+            thumbnails["thumbnails"] = [
+                source
+                for source in get_list(thumbnails, "thumbnails")
+                if isinstance(source, dict)
+                and not get_str(source, "url")
+                .split("?", 1)[0]
+                .endswith("/ic_transparent_v1.png")
+            ]
+        if get_list(thumbnails, "thumbnails"):
             badges.append(
                 {
                     "liveChatAuthorBadgeRenderer": {

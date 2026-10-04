@@ -1,0 +1,145 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addBannerToLiveChatCommand": {
+            "bannerRenderer": {
+              "liveChatBannerRenderer": {
+                "backgroundType": "LIVE_CHAT_BANNER_BACKGROUND_TYPE_STATIC",
+                "bannerType": "LIVE_CHAT_BANNER_TYPE_PINNED_MESSAGE",
+                "isStackable": false,
+                "viewerIsCreator": false,
+                "actionId": "fixture-banner-action",
+                "contents": {
+                  "elementRenderer": {
+                    "compatibilityOptions": {
+                      "liveChatId": "fixture-mobile-banner",
+                      "liveChatAuthorExternalChannelId": "UC1dGHGJTXU_dkiR8tW3qQgg"
+                    },
+                    "newElement": {
+                      "properties": {
+                        "identifierProperties": {
+                          "uniqueLoggingIdentifier": "1791121552047807294"
+                        }
+                      },
+                      "type": {
+                        "componentType": {
+                          "model": {
+                            "liveChatTextMessageBannerModel": {
+                              "messageData": {
+                                "attributedTextData": {
+                                  "authorName": {
+                                    "content": " @MPLIndonesia   ",
+                                    "attachmentRuns": [
+                                      {
+                                        "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                        "element": {
+                                          "properties": {},
+                                          "type": {
+                                            "imageType": {
+                                              "image": {
+                                                "sources": [
+                                                  {
+                                                    "clientResource": {
+                                                      "imageColor": 4279176975,
+                                                      "imageName": "yt_fill_check_circle_grey600_24"
+                                                    },
+                                                    "height": 16,
+                                                    "width": 16
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "length": 1,
+                                        "startIndex": 14
+                                      },
+                                      {
+                                        "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                        "element": {
+                                          "properties": {},
+                                          "type": {
+                                            "imageType": {
+                                              "image": {
+                                                "sources": [
+                                                  {
+                                                    "url": "https://gstatic.com/youtube/img/livestream/live_chat/icons/ic_transparent_v1.png"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "length": 1,
+                                        "startIndex": 0
+                                      },
+                                      {
+                                        "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                        "element": {
+                                          "properties": {},
+                                          "type": {
+                                            "imageType": {
+                                              "image": {
+                                                "sources": [
+                                                  {
+                                                    "url": "https://gstatic.com/youtube/img/livestream/live_chat/icons/ic_transparent_v1.png"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "length": 1,
+                                        "startIndex": 16
+                                      }
+                                    ]
+                                  },
+                                  "contentText": {
+                                    "content": "Pinned chat message 🙏"
+                                  }
+                                },
+                                "authorAvatar": {
+                                  "image": {
+                                    "sources": [
+                                      {
+                                        "url": "https://example.com/avatar.png",
+                                        "width": 32,
+                                        "height": 32
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "onExpandCommand": {
+                  "elementsCommand": {
+                    "setEntityCommand": {
+                      "entity": "fixture-onExpandCommand",
+                      "identifier": "fixture-banner-state"
+                    }
+                  }
+                },
+                "onCollapseCommand": {
+                  "elementsCommand": {
+                    "setEntityCommand": {
+                      "entity": "fixture-onCollapseCommand",
+                      "identifier": "fixture-banner-state"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
