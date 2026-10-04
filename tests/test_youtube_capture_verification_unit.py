@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from copy import deepcopy
 
@@ -214,3 +215,62 @@ def test_lazy_user_routes_attach_inspection_before_discovery(
     assert result.success
     assert result.provider_inspection["status"] == "ok"
     assert result.provider_inspection["records"] == 1
+
+
+@pytest.mark.parametrize("title", ["Fixture", "Fixture {id}"])
+def test_lazy_channel_manifest_hashes_resolved_output_names(
+    tmp_path, youtube, monkeypatch, title
+):
+    youtube.append(_text(1))
+    monkeypatch.setattr(
+        YouTubeChatDownloader,
+        "get_user_videos",
+        lambda *_args, **_kwargs: iter(
+            [{"video_id": "abcdefghijk", "video_type": "LIVE", "title": title}]
+        ),
+    )
+    result = run(
+        **_params(
+            tmp_path,
+            url="https://www.youtube.com/@fixture",
+            output=[
+                str(tmp_path / "{title}-{id}.jsonl"),
+                str(tmp_path / "{title}-{id}.txt"),
+            ],
+        ),
+        max_messages=1,
+    )
+    assert result.success
+    manifest = json.loads((tmp_path / "run.json").read_text())
+    for writer in manifest["outputs"]:
+        name = writer["file_name"]
+        assert "abcdefghijk" in name
+        assert (
+            writer["sha256"]
+            == hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+        )
+
+
+def test_late_manifest_collision_preserves_capture(tmp_path, youtube, monkeypatch):
+    youtube.append(_text(1))
+    monkeypatch.setattr(
+        YouTubeChatDownloader,
+        "get_user_videos",
+        lambda *_args, **_kwargs: iter(
+            [{"video_id": "abcdefghijk", "video_type": "LIVE", "title": "Fixture"}]
+        ),
+    )
+    result = run(
+        **_params(
+            tmp_path,
+            url="https://www.youtube.com/@fixture",
+            output=[str(tmp_path / "{id}.jsonl"), str(tmp_path / "{id}.txt")],
+            run_manifest=str(tmp_path / "abcdefghijk.jsonl"),
+        ),
+        max_messages=1,
+    )
+    assert not result.success
+    assert "Run manifest must be distinct from chat outputs" in result.error_message
+    rows = (tmp_path / "abcdefghijk.jsonl").read_text().splitlines()
+    assert len(rows) == 1
+    assert json.loads(rows[0])["message_type"] == "text_message"

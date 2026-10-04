@@ -190,15 +190,14 @@ class RunManifest:
                 f"Run manifest parent directory must already exist: {self.path.parent}"
             )
             raise ValueError(msg)
-        self.outputs: list[Path] = []
         self.valid = True
 
     def bind(self, chat: Chat) -> None:
         """Resolve lazy names before any output writer can open its file."""
         self.valid = False
-        self.outputs = _capture_outputs(chat)
+        outputs = _capture_outputs(chat)
         destination = self.path.resolve()
-        if any(path.resolve() == destination for path in self.outputs):
+        if any(path.resolve() == destination for path in outputs):
             msg = "Run manifest must be distinct from chat outputs."
             raise ValueError(msg)
 
@@ -213,8 +212,14 @@ class RunManifest:
             raise ValueError(msg)
         dispatcher = getattr(chat, "_output_dispatcher", None)
         writers = dispatcher.writer_summaries if dispatcher else []
+        # Lazy channel discovery can change metadata after preflight. Opened
+        # writers retain the actual path, including literal braces in titles.
+        outputs = _capture_outputs(chat, keep_created=True) if chat is not None else []
+        if any(path.resolve() == self.path.resolve() for path in outputs):
+            msg = "Run manifest must be distinct from chat outputs."
+            raise ValueError(msg)
         artifacts: list[dict[str, object]] = []
-        for path, writer in zip(self.outputs, writers, strict=True):
+        for path, writer in zip(outputs, writers, strict=True):
             signature = None
             # Unopened files can predate this run: never certify them as output.
             if writer["file_created"] or (verified_existing and path.exists()):
