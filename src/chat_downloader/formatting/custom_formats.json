@@ -444,6 +444,60 @@
             }
         }
     ],
+    "twitch_events": [
+        {
+            "matching": "text_message",
+            "inherit": "default",
+            "template": "{time_text|timestamp}{message_type}{pinned_chat_paid_amount}{pinned_chat_paid_exponent}{pinned_chat_paid_currency}{is_shared_chat_message}{shared_chat_effective_source_channel_id}{author.badges}{author.display_name|author.name}{message}",
+            "keys": {
+                "message_type": "",
+                "pinned_chat_paid_amount": "[PAID PINNED amount={}] ",
+                "pinned_chat_paid_exponent": "[amount exponent={}] ",
+                "pinned_chat_paid_currency": "[currency={}] ",
+                "is_shared_chat_message": {
+                    "template": "[SHARED CHAT] ",
+                    "omit_if_false": true
+                },
+                "shared_chat_effective_source_channel_id": "[source channel={}] "
+            }
+        },
+        {
+            "matching": "announcement",
+            "inherit": "default",
+            "template": "{time_text|timestamp}{message_type}{pinned_chat_paid_amount}{pinned_chat_paid_exponent}{pinned_chat_paid_currency}{is_shared_chat_message}{shared_chat_effective_source_channel_id}{author.badges}{author.display_name|author.name}{message}",
+            "keys": {
+                "message_type": "[ANNOUNCEMENT] ",
+                "pinned_chat_paid_amount": "[PAID PINNED amount={}] ",
+                "pinned_chat_paid_exponent": "[amount exponent={}] ",
+                "pinned_chat_paid_currency": "[currency={}] ",
+                "is_shared_chat_message": {
+                    "template": "[SHARED CHAT] ",
+                    "omit_if_false": true
+                },
+                "shared_chat_effective_source_channel_id": "[source channel={}] "
+            }
+        },
+        {
+            "matching": "animated-message",
+            "inherit": "default",
+            "template": "{time_text|timestamp}{message_type}{pinned_chat_paid_amount}{pinned_chat_paid_exponent}{pinned_chat_paid_currency}{is_shared_chat_message}{shared_chat_effective_source_channel_id}{author.badges}{author.display_name|author.name}{message}",
+            "keys": {
+                "message_type": "[ANIMATED] ",
+                "pinned_chat_paid_amount": "[PAID PINNED amount={}] ",
+                "pinned_chat_paid_exponent": "[amount exponent={}] ",
+                "pinned_chat_paid_currency": "[currency={}] ",
+                "is_shared_chat_message": {
+                    "template": "[SHARED CHAT] ",
+                    "omit_if_false": true
+                },
+                "shared_chat_effective_source_channel_id": "[source channel={}] "
+            }
+        },
+        {
+            "matching": "all",
+            "inherit": "twitch"
+        }
+    ],
     "twitch": [
         {
             "matching": [

@@ -9,7 +9,7 @@ import re
 import string
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
 from chat_downloader.formatting.summaries import format_goal, format_leaderboard
@@ -163,30 +163,10 @@ class ItemFormatter:
                 msg = f'Format not found: "{format_name}"'
                 raise FormatNotFound(msg)
 
-        candidates: Any = selected
-        if isinstance(candidates, list):
-            message_type = item.get(self.KEY_MESSAGE_TYPE)
-            for candidate in candidates:
-                matching = candidate.get(self.KEY_MATCHING)
-                if matching == self.MATCH_ALL or (
-                    message_type in matching
-                    if isinstance(matching, list)
-                    else matching == message_type
-                ):
-                    selected = cast("dict[str, Any]", candidate)
-                    break
-            else:
-                selected = self.format_file.get(self.DEFAULT_FORMAT_NAME)
-
+        selected = self._resolve_format(selected, item.get(self.KEY_MESSAGE_TYPE))
         if not selected:
             msg = f'No valid format found for "{format_name}"'
             raise FormatNotFound(msg)
-
-        inherit = selected.get(self.KEY_INHERIT)
-
-        if inherit:
-            parent = self.format_file.get(inherit) or {}
-            selected = nested_update(deepcopy(parent), selected)
 
         template = selected.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
         keys = selected.get(self.KEY_KEYS, {})
@@ -203,6 +183,41 @@ class ItemFormatter:
             .encode("utf-8", errors="backslashreplace")
             .decode("utf-8")
         )
+
+    def _resolve_format(self, candidates: Any, message_type: object) -> dict[str, Any]:
+        """Select matching parents and merge inheritance without mutating presets."""
+        layers = []
+        seen: set[str] = set()
+        while candidates:
+            if isinstance(candidates, list):
+                candidates = next(
+                    (
+                        candidate
+                        for candidate in candidates
+                        if candidate.get(self.KEY_MATCHING) == self.MATCH_ALL
+                        or (
+                            message_type in candidate[self.KEY_MATCHING]
+                            if isinstance(candidate.get(self.KEY_MATCHING), list)
+                            else candidate.get(self.KEY_MATCHING) == message_type
+                        )
+                    ),
+                    self.format_file.get(self.DEFAULT_FORMAT_NAME),
+                )
+            if not candidates:
+                break
+            layers.append(candidates)
+            inherit = candidates.get(self.KEY_INHERIT)
+            if not inherit:
+                break
+            if inherit in seen:
+                msg = "Cyclic format inheritance"
+                raise ValueError(msg)
+            seen.add(inherit)
+            candidates = self.format_file.get(inherit)
+        resolved: dict[str, Any] = {}
+        for layer in reversed(layers):
+            nested_update(resolved, deepcopy(layer))
+        return resolved
 
     def _replace_placeholder(
         self,

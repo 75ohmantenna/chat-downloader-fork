@@ -276,6 +276,52 @@ def test_inheritance_preserves_parent_and_prefers_child(formatter, parent) -> No
     assert formatter.format_file["base"]["template"] == "parent"
 
 
+@pytest.mark.parametrize("message_type", ["text_message", "other_type"])
+def test_inheritance_selects_list_parent_and_merges_nested_overrides(
+    formatter, message_type
+):
+    formatter.format_file.update(
+        base={
+            "inherit": "default",
+            "template": "{message}",
+            "keys": {"message": "base {}"},
+        },
+        choices=[{"matching": "text_message", "inherit": "base"}],
+        child={"inherit": "choices", "keys": {"message": "child {}"}},
+    )
+    before = json.dumps(formatter.format_file)
+    item = {"message_type": message_type, "message": "hello"}
+    assert formatter.format(item, "child") == "child hello"
+    assert json.dumps(formatter.format_file) == before
+
+
+@pytest.mark.parametrize("cycle", ["self", "two_parents", "list_fallback"])
+def test_inheritance_cycles_fail_without_recursing(formatter, cycle):
+    if cycle == "self":
+        formatter.format_file["cycle"] = {"inherit": "cycle"}
+    elif cycle == "two_parents":
+        formatter.format_file["cycle"] = {"inherit": "other"}
+        formatter.format_file["other"] = {"inherit": "cycle"}
+    else:
+        formatter.format_file["cycle"] = [{"matching": "absent"}]
+        formatter.format_file["default"] = {"inherit": "cycle"}
+    with pytest.raises(ValueError, match="Cyclic format inheritance"):
+        formatter.format({"message_type": "text_message"}, "cycle")
+
+
+def test_long_inheritance_chain_does_not_use_python_recursion(formatter):
+    for index in range(1100):
+        formatter.format_file[str(index)] = {"inherit": str(index + 1)}
+    formatter.format_file["1100"] = {"template": "{message}"}
+    assert formatter.format({"message": "hello"}, "0") == "hello"
+
+
+def test_unmatched_list_without_default_raises_format_error(formatter):
+    formatter.format_file = {"choices": [{"matching": "other"}]}
+    with pytest.raises(FormatNotFound, match="No valid format"):
+        formatter.format({"message_type": "text_message"}, "choices")
+
+
 @pytest.mark.parametrize(
     "kwargs", [{"format_name": "nonexistent_format"}, {"format_object": {}}, {}]
 )

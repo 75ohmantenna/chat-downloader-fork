@@ -232,6 +232,13 @@ the event lacks text, author, or target ID. JSONL retains the structured record.
 
 ### Shared Chat attribution
 
+The optional `--format twitch_events` preset labels Shared Chat source
+attribution on ordinary text messages, announcements, and animated messages.
+It also labels paid pinned metadata using exact integer amount, exponent, and
+currency fields, and distinguishes announcements and animated messages. Other
+events retain the default Twitch rendering. See
+[text output](cli-usage.md#output-formats) for details.
+
 The IRC parser preserves raw Shared Chat tags and emits derived attribution
 fields that are useful for analysis:
 
@@ -414,10 +421,13 @@ CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1 \
 CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES=1 \
 uv run chat_downloader "https://www.twitch.tv/auronplay" \
   --message_groups all \
+  --format twitch_events \
   --logging debug \
   --timeout 240 \
   --output "${capture_dir}/chat.jsonl" \
   --output "${capture_dir}/chat.txt" \
+  --verify_output \
+  --run_manifest "${capture_dir}/run.json" \
   --quiet \
   2> "${capture_dir}/debug.log"
 ```
@@ -448,6 +458,16 @@ during the window rather than enabling drift detection itself. Transport-control
 records and duplicate message IDs can still be handled internally. The option
 also cannot make rare events occur; use curated fixtures or repeated targeted
 runs when the complete parser surface needs coverage.
+
+For release validation, repeat the capture in fresh directories during windows
+with subscriptions or gifts, moderation, raids, replies, and emote traffic.
+Record the observed `provider_inspection.message_types` and `shape_counts` from
+each manifest alongside its connection counters, parity result, and drift
+findings. An absent event is unverified live even when parity passes; use the
+curated fixture suite to supplement it. Retain reviewed new raw shapes as
+regression fixtures using the workflow below. Complete frame accounting covers
+traffic received by the downloader, not a server-side guarantee that anonymous
+IRC delivered every website event.
 
 To turn a captured drift sample into a permanent regression anchor:
 

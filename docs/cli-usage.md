@@ -118,11 +118,24 @@ message ID. Even when these optional fields are absent, the deletion label
 remains visible. JSONL remains the lossless structured format when downstream
 processing needs provider-specific metadata.
 
+Use `--format twitch_events` to opt into `[ANNOUNCEMENT]` and `[ANIMATED]`
+labels, paid pinned metadata, and Shared Chat attribution on ordinary Twitch
+text messages. Paid amounts retain their exact integer amount, exponent, and
+currency in separate brackets: `[PAID PINNED amount=1250] [amount exponent=2]
+[currency=USD]` means USD 12.50. Zero amounts and exponents remain visible;
+missing components are omitted. Shared Chat uses `[SHARED CHAT]` and the
+effective source channel ID when available, including same-channel source
+attribution. Other event types keep the standard Twitch rendering. The preset
+applies to stdout and TXT; JSONL keeps the original structured data.
+
 Custom format field definitions accept a `template`, optional
 `singular_template`, and optional `omit_if_false`. The singular form is selected
 only for an exact numeric value of one; zero, other numbers, booleans, and
 numeric strings use the normal template. `omit_if_false: true` suppresses the
 field's complete rendered fragment for false, zero, empty, or null values.
+Format inheritance follows named parents, selecting a parent's matching event
+rule when it is a list. Child fields override parent fields; inheritance cycles
+raise an error rather than hanging. Missing parents contribute no fields.
 
 Kick's default text format labels subscription, pin, host, and moderation
 events. Host notices include the host name, viewer count, and optional message,
