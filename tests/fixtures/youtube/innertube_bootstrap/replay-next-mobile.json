@@ -1,0 +1,106 @@
+{
+  "engagementPanels": [
+    {
+      "engagementPanelSectionListRenderer": {
+        "header": {
+          "engagementPanelTitleHeaderRenderer": {
+            "actionButtons": [
+              {
+                "buttonRenderer": {
+                  "command": {
+                    "elementsCommand": {
+                      "showActionSheetCommand": {
+                        "listOption": [
+                          {
+                            "type": {
+                              "componentType": {
+                                "model": {
+                                  "liveChatFilterModeOptionModel": {
+                                    "filterMode": "LIVE_CHAT_FILTER_MODE_DEFAULT",
+                                    "unselectedCommand": {
+                                      "serialCommand": {
+                                        "commands": [
+                                          {
+                                            "innertubeCommand": {
+                                              "reloadLiveChatCommand": {
+                                                "continuation": {
+                                                  "reloadContinuationData": {
+                                                    "continuation": "fixture-mobile-top"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "type": {
+                              "componentType": {
+                                "model": {
+                                  "liveChatFilterModeOptionModel": {
+                                    "filterMode": "LIVE_CHAT_FILTER_MODE_UNFILTERED",
+                                    "unselectedCommand": {
+                                      "serialCommand": {
+                                        "commands": [
+                                          {
+                                            "innertubeCommand": {
+                                              "reloadLiveChatCommand": {
+                                                "continuation": {
+                                                  "reloadContinuationData": {
+                                                    "continuation": "fixture-mobile-live"
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "content": {
+          "sectionListRenderer": {
+            "contents": [
+              {
+                "itemSectionRenderer": {
+                  "contents": [
+                    {
+                      "liveChatRenderer": {
+                        "continuations": [
+                          {
+                            "reloadContinuationData": {
+                              "continuation": "fixture-mobile-primary-top"
+                            }
+                          }
+                        ],
+                        "isReplay": true
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

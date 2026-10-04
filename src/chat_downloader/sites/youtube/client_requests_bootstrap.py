@@ -153,12 +153,19 @@ def _build_fallback_initial_data(
 ) -> JSONDict:
     initial_data = dict(yt_next_data)
     continuation_info = extract_chat_submenu_continuations(initial_data)
-    continuation_info.update(_extract_mobile_filter_continuations(initial_data))
+    mobile_filters = _extract_mobile_filter_continuations(initial_data)
+    continuation_info.update(mobile_filters)
+    has_mobile_filter_models = any(
+        "liveChatFilterModeOptionModel" in node
+        for node in _walk_json_dicts(initial_data)
+    )
     primary_continuation = _extract_primary_live_continuation(initial_data)
-    if primary_continuation:
+    if primary_continuation and not has_mobile_filter_models:
         # The selector submenu continuations from youtubei/v1/next can be
         # too short for the first live_chat poll. The primary renderer
         # continuation is the one observed to bootstrap the polling loop.
+        # Mobile filter models identify the views explicitly; their primary
+        # renderer can select Top chat and must not replace the Live token.
         continuation_info["Live chat"] = primary_continuation
         continuation_info.setdefault("Top chat", primary_continuation)
     if continuation_info:

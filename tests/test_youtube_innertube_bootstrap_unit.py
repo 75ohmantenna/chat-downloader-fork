@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from contextlib import closing
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from chat_downloader.errors import CaptchaChallengeRequired
+from chat_downloader.errors import CaptchaChallengeRequired, NoContinuation
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.client_requests_bootstrap import (
     _build_fallback_initial_data,
@@ -16,9 +18,11 @@ from chat_downloader.sites.youtube.client_requests_bootstrap import (
     _extract_reload_continuation,
     get_innertube_video_bootstrap,
 )
+from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
 from chat_downloader.sites.youtube.video_metadata import (
     YouTubeVideoMetadataCoreMixin,
 )
+from tests.youtube_third_helpers import http_response, response, video_info
 
 _FIXTURE_DIR = (
     Path(__file__).resolve().parent / "fixtures" / "youtube" / "innertube_bootstrap"
@@ -94,7 +98,7 @@ def test_innertube_bootstrap_extracts_mobile_chat_continuations(profile: str) ->
 
     assert yt_initial_data["_chat_downloader_continuation_info"] == {
         "Top chat": "mobile-top-token",
-        "Live chat": "mobile-primary-live-token",
+        "Live chat": "mobile-filter-live-token",
     }
     expected_client = "ANDROID" if profile == "youtube_android" else "IOS"
     expected_client_id = 3 if profile == "youtube_android" else 5
@@ -188,3 +192,78 @@ def test_build_fallback_initial_data_omits_empty_continuation_metadata() -> None
 
 def test_extract_reload_continuation_ignores_malformed_entries() -> None:
     assert _extract_reload_continuation({"continuations": [None]}) is None
+
+
+@pytest.mark.parametrize("profile", ["youtube_android", "youtube_ios"])
+@pytest.mark.parametrize("view", ["top", "live"])
+def test_mobile_replay_selector_reaches_poll_request(monkeypatch, profile, view):
+    initial = _build_fallback_initial_data(_load_fixture("replay-next-mobile.json"))
+    calls = []
+
+    def post(_url, **kwargs):
+        calls.append(kwargs["json"])
+        return http_response(payload=response())
+
+    with closing(YouTubeChatDownloader(request_profile=profile)) as site:
+        monkeypatch.setattr(site, "_session_post", post)
+        monkeypatch.setattr(
+            site,
+            "_get_initial_video_info",
+            lambda *_: (
+                video_info("was_live")
+                | {"continuation_info": initial["_chat_downloader_continuation_info"]},
+                {"INNERTUBE_API_KEY": "fixture"},
+            ),
+        )
+        messages = list(
+            site.get_chat_by_video_id("ch8nhMihz04", ChatRequest(chat_type=view))
+        )
+        assert [m["message_type"] for m in messages] == ["chat_ended"]
+    assert calls[0]["continuation"] == f"fixture-mobile-{view}"
+
+
+@pytest.mark.parametrize("missing", ["top", "live"])
+def test_partial_mobile_selector_never_substitutes_primary_token(monkeypatch, missing):
+    data = deepcopy(_load_fixture("replay-next-mobile.json"))
+    options = data["engagementPanels"][0]["engagementPanelSectionListRenderer"][
+        "header"
+    ]["engagementPanelTitleHeaderRenderer"]["actionButtons"][0]["buttonRenderer"][
+        "command"
+    ]["elementsCommand"]["showActionSheetCommand"]["listOption"]
+    options.pop(0 if missing == "top" else 1)
+    initial = _build_fallback_initial_data(data)
+    with closing(YouTubeChatDownloader()) as site:
+        monkeypatch.setattr(
+            site,
+            "_get_initial_video_info",
+            lambda *_: (
+                {
+                    "status": "was_live",
+                    "continuation_info": initial["_chat_downloader_continuation_info"],
+                },
+                {"INNERTUBE_API_KEY": "fixture"},
+            ),
+        )
+        with pytest.raises(NoContinuation):
+            list(
+                site.get_chat_by_video_id("ch8nhMihz04", ChatRequest(chat_type=missing))
+            )
+
+
+def test_malformed_mobile_filter_tokens_do_not_relabel_primary_as_live():
+    data = _load_fixture("replay-next-mobile.json")
+
+    def corrupt(value):
+        if isinstance(value, dict):
+            if "reloadLiveChatCommand" in value:
+                value["reloadLiveChatCommand"] = {"continuation": {}}
+            for child in value.values():
+                corrupt(child)
+        elif isinstance(value, list):
+            for child in value:
+                corrupt(child)
+
+    corrupt(data)
+    assert "_chat_downloader_continuation_info" not in _build_fallback_initial_data(
+        data
+    )
