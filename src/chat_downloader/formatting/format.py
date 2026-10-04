@@ -207,18 +207,11 @@ class ItemFormatter:
 
         format_string = field_config.get(self.KEY_FORMAT)
         if format_string:
-            if field_path in {self.FIELD_TIMESTAMP, self.FIELD_RECEIVED_TIMESTAMP}:
-                value = microseconds_to_timestamp(value, format_string)
-            elif field_path == self.FIELD_TIME_TEXT:
-                value = seconds_to_time(
-                    time_to_seconds(value),
-                    format=format_string,
-                    remove_leading_zeroes=bool(
-                        field_config.get(self.KEY_COLLAPSE_LEADING_ZEROES)
-                    ),
-                )
+            value = self._convert_field_value(field_path, value, field_config)
 
-        separator = field_config.get(self.KEY_SEPARATOR)
+        separator = (
+            None if format_string == "json" else field_config.get(self.KEY_SEPARATOR)
+        )
         if separator and field_path == self.FIELD_AUTHOR_BADGES:
             value = separator.join(
                 filter(None, (badge.get("title") for badge in value))
@@ -231,3 +224,27 @@ class ItemFormatter:
             if omit_if_false and not value
             else _SAFE_FORMATTER.format(template, value)
         )
+
+    @classmethod
+    def _convert_field_value(
+        cls, field_path: str, value: Any, field_config: dict[str, Any]
+    ) -> Any:
+        """Apply a field's JSON or time representation before templating."""
+        format_string = field_config[cls.KEY_FORMAT]
+        if format_string == "json":
+            return (
+                json.dumps(value, ensure_ascii=False, sort_keys=True)
+                .encode("utf-8", errors="backslashreplace")
+                .decode("utf-8")
+            )
+        if field_path in {cls.FIELD_TIMESTAMP, cls.FIELD_RECEIVED_TIMESTAMP}:
+            return microseconds_to_timestamp(value, format_string)
+        if field_path == cls.FIELD_TIME_TEXT:
+            return seconds_to_time(
+                time_to_seconds(value),
+                format=format_string,
+                remove_leading_zeroes=bool(
+                    field_config.get(cls.KEY_COLLAPSE_LEADING_ZEROES)
+                ),
+            )
+        return value

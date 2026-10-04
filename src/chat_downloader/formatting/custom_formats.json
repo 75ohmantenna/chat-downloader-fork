@@ -196,13 +196,23 @@
     ],
     "kick": [
         {
+            "matching": "channel_metadata",
+            "template": "{timestamp|received_timestamp|time_text}[channel metadata]{metadata}",
+            "inherit": "default",
+            "keys": {
+                "metadata": {
+                    "template": " {}",
+                    "format": "json"
+                }
+            }
+        },
+        {
             "matching": [
                 "stream_started",
                 "stream_stopped",
                 "chat_moved",
                 "chat_settings_changed",
                 "chatroom_updated",
-                "channel_metadata",
                 "reward_redeemed",
                 "kicks_gifted_deleted",
                 "gifts_leaderboard_updated",

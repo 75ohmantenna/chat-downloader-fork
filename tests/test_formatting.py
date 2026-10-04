@@ -306,6 +306,13 @@ def test_missing_format_raises(formatter, kwargs):
             "before [present]after",
         ),
         (
+            "value",
+            {"title": "Live 🎙️\nstream", "live": True, "missing": None},
+            {"template": "{}", "format": "json"},
+            "{value}",
+            '{"live": true, "missing": null, "title": "Live 🎙️\\nstream"}',
+        ),
+        (
             "time_text",
             "1:30:00",
             {"template": "{}", "format": "{}:{:02}:{:02}"},
@@ -336,6 +343,19 @@ def test_field_configuration(formatter, field, value, config, template, expected
 def test_field_separator(formatter, field, value, separator, expected) -> None:
     config = {"template": "{}", "separator": separator}
     assert format_field(formatter, field, value, config) == expected
+
+
+def test_json_badges_bypass_inherited_separator(formatter):
+    badges = [{"title": "Moderator"}, {"title": "Subscriber"}]
+    rendered = formatter.format(
+        {"author": {"badges": badges}},
+        format_object={
+            "inherit": "default",
+            "template": "{author.badges}",
+            "keys": {"author.badges": {"template": "{}", "format": "json"}},
+        },
+    )
+    assert json.loads(rendered) == badges
 
 
 def test_omit_if_false_after_badge_separator(formatter):

@@ -676,6 +676,12 @@ microseconds. JSONL preserves host/viewer metadata and a separate
 viewer count, and any optional message. Existing wrapped host payloads keep
 their provider IDs and timestamps. Blank IDs are rejected rather than repaired.
 
+The default Kick TXT format appends the full `channel_metadata` metadata object
+as compact JSON after `[channel metadata]`. Public-state snapshots include
+stream details, viewer and follower counts, chat settings, IDs, and thumbnail
+URLs when present. Each snapshot stays on one physical line and retains the
+`[received]` timestamp marker when no provider timestamp is available.
+
 For offline inspection of a completed all-groups live capture, run:
 
 ```bash

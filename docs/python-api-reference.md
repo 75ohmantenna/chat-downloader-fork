@@ -312,7 +312,11 @@ for item in chat:
 Custom `ItemFormatter` field definitions may provide a `template`, an optional
 `singular_template`, and `omit_if_false: true`. The singular template is used
 only for an exact numeric value of one; booleans and numeric strings continue to
-use the normal template. Conditional fields suppress their complete rendered
+use the normal template. A field definition with `format: "json"` renders its
+value as compact JSON with sorted keys and readable Unicode characters.
+JSON formatting bypasses separators and escapes lone Unicode surrogates so
+the result can be written as UTF-8.
+Conditional fields suppress their complete rendered
 fragment for false, zero, empty, or null values. The final formatted string,
 including custom-template text, renders carriage returns, newlines, and Unicode
 line separators visibly as `\r`, `\n`, `\u0085`, `\u2028`, or `\u2029` and

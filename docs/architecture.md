@@ -164,7 +164,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
-| `format.py` | `ItemFormatter`: safe template resolution, inheritance, field formatting, singular/conditional fragments, and output sanitization |
+| `format.py` | `ItemFormatter`: safe template resolution, inheritance, time/JSON field formatting, singular/conditional fragments, and output sanitization |
 | `custom_formats.json` | Built-in default, provider-specific, live, and time-display format definitions |
 
 ### `utils/`

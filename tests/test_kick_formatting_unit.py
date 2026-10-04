@@ -7,6 +7,7 @@ import json
 import pytest
 
 from chat_downloader.formatting.format import ItemFormatter
+from chat_downloader.output.writers import TextContinuousWriter
 from chat_downloader.sites.kick.parsing.events import dispatch_event
 from chat_downloader.sites.kick.parsing.messages import parse_chat_message
 from chat_downloader.sites.kick.parsing.moderation import parse_message_deleted_event
@@ -175,6 +176,55 @@ def test_moderation_receive_timestamp_is_only_a_fallback(formatter):
     assert formatter.format(item, format_name="kick") == (
         "2020-01-02 00:00:00 | [User banned: BadUser]"
     )
+
+
+def test_channel_metadata_renders_full_public_state(formatter):
+    payload = load_fixture("channel_live.json")
+    frame = {
+        "event": "kick:public_state",
+        "source": "public_rest",
+        "data": payload,
+    }
+    item = dispatch_event(frame, received_timestamp=1_577_836_800_000_000)
+    assert item is not None
+    rendered = formatter.format(item, format_name="kick")
+    prefix = "2020-01-01 00:00:00 [received] | [channel metadata] "
+    assert rendered.startswith(prefix)
+    assert json.loads(rendered.removeprefix(prefix)) == item["metadata"]
+    assert "\n" not in rendered
+    item["timestamp"] = 1_577_923_200_000_000
+    assert formatter.format(item, format_name="kick").startswith(
+        "2020-01-02 00:00:00 | [channel metadata] "
+    )
+
+
+def test_channel_metadata_without_metadata_keeps_notice(formatter):
+    assert (
+        formatter.format(
+            {"message_type": "channel_metadata", "message": "channel metadata"}, "kick"
+        )
+        == "[channel metadata]"
+    )
+
+
+def test_channel_metadata_with_surrogates_writes_lossless_json(formatter, tmp_path):
+    payload = {"livestream": {"session_title": "Live 🎙️\ud800title\udfff"}}
+    item = dispatch_event(
+        {"event": "kick:public_state", "source": "public_rest", "data": payload},
+        received_timestamp=1_577_836_800_000_000,
+    )
+    assert item is not None
+    path = tmp_path / "capture.txt"
+    writer = TextContinuousWriter(str(path))
+    try:
+        writer.write(formatter.format(item, "kick"))
+    finally:
+        writer.close()
+    text = path.read_text(encoding="utf-8")
+    assert len(text.splitlines()) == 1
+    assert "🎙️" in text
+    metadata = text.split("[channel metadata] ", 1)[1]
+    assert json.loads(metadata) == item["metadata"]
 
 
 @pytest.mark.parametrize(
