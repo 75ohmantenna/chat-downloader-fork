@@ -6,16 +6,48 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
-## Unreleased
+## 2.4.0 — 2026-10-04
 
 ### Features
 
+- Capture Kick's public chat and channel feeds through negotiated Pusher or
+  Centrifugo connections, including channel state, rewards, Kicks gifts,
+  leaderboards, goals, drops, viewer counts, and predictions. Add message groups
+  for these events and periodic public metadata and viewer snapshots.
 - Inspect Kick live captures automatically with `--verify_output`, including
   offline-channel chat. Report record findings, parser loss, source counts,
   known reconnect history gaps, and deadline accounting alongside independent
   JSONL/TXT parity in run results, debug summaries, and manifests. Keep the
-  offline Kick inspector
-  available for existing live captures and resumed replay archives.
+  offline Kick inspector available for existing live captures and resumed
+  replay archives.
+- Include cached author and message text in Kick deletion notices when the
+  removed message was observed during the current live capture.
+- Render Kick gift senders, amounts, gift names, attached messages, channel
+  metadata, viewer counts, and subscription-month celebrations in TXT output.
+- Add UTC timestamps to CLI logs, HTTP request durations to debug logs, and
+  elapsed capture time and deadline accounting to run results and manifests.
+  Include bounded provider diagnostics in manifests.
+
+### Fixes
+
+- Resolve Kick proxy settings for each negotiated endpoint and preserve
+  cancellation and cleanup across public-feed setup and reconnects.
+- Keep checkpoint record acceptance and output rollback aligned, and prevent
+  failed rollback from advancing a checkpoint past torn output files.
+- Share one shutdown deadline observation across inspection, manifests, and
+  debug summaries; retain incomplete counts and the original capture error
+  when finalization encounters another failure.
+- Label Twitch deleted messages with `[DELETED]`, retaining the author, removed
+  text, and target message ID when available.
+
+### Compatibility
+
+- YouTube live default and `24_hour` TXT formats now show UTC `HH:MM:SS`,
+  replacing date-inclusive and minute-only timestamps respectively. Use a
+  matching custom format when auditing captures made with the older formats.
+- Replay checkpoints remain bound to the package version and built-in formats.
+  Finish a resumable capture with its original version or start a new capture
+  after upgrading to 2.4.0; checkpoints from older versions cannot be appended.
 
 ## 2.3.1 — 2026-09-23
 
