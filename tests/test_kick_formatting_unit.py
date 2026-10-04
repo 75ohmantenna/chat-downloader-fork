@@ -224,23 +224,68 @@ def test_moderation_receive_timestamp_is_only_a_fallback(formatter):
     )
 
 
-def test_channel_metadata_renders_full_public_state(formatter):
+def test_channel_metadata_renders_title_and_start_time(formatter):
     payload = load_fixture("channel_live.json")
+    payload["livestream"].update(
+        {
+            "session_title": "Camp Looksmax 24/7 Marathon Day 3 | !apply !clipping",
+            "start_time": "2026-10-03 17:50:06",
+        }
+    )
     frame = {
         "event": "kick:public_state",
         "source": "public_rest",
         "data": payload,
     }
-    item = dispatch_event(frame, received_timestamp=1_577_836_800_000_000)
+    item = dispatch_event(frame, received_timestamp=1_791_122_684_000_000)
     assert item is not None
     rendered = formatter.format(item, format_name="kick")
-    prefix = "2020-01-01 00:00:00 [received] | [channel metadata] "
-    assert rendered.startswith(prefix)
-    assert json.loads(rendered.removeprefix(prefix)) == item["metadata"]
-    assert "\n" not in rendered
+    details = (
+        "[channel metadata] Title: Camp Looksmax 24/7 Marathon Day 3"
+        " | !apply !clipping Start_time: 2026-10-03 17:50:06"
+    )
+    assert rendered == f"2026-10-04 14:04:44 [received] | {details}"
+    assert item["metadata"]["data"] == payload
     item["timestamp"] = 1_577_923_200_000_000
-    assert formatter.format(item, format_name="kick").startswith(
-        "2020-01-02 00:00:00 | [channel metadata] "
+    assert formatter.format(item, format_name="kick") == (
+        f"2020-01-02 00:00:00 | {details}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("livestream", "suffix"),
+    [
+        (None, ""),
+        ({}, ""),
+        ({"session_title": "", "start_time": None}, ""),
+        ({"session_title": "Title only"}, " Title: Title only"),
+        ({"start_time": "2026-10-03 17:50:06"}, " Start_time: 2026-10-03 17:50:06"),
+        ({"start_time": "2026-10-03T17:50:06Z"}, " Start_time: 2026-10-03 17:50:06"),
+        (
+            {"start_time": "2026-10-03T19:50:06.123+02:00"},
+            " Start_time: 2026-10-03 17:50:06",
+        ),
+        ({"start_time": "invalid"}, ""),
+        ({"start_time": "2026-13-03T17:50:06Z"}, ""),
+        ({"start_time": True}, ""),
+        ({"start_time": {}}, ""),
+        ({"session_title": "Live\nstream\x1b"}, r" Title: Live\nstream"),
+    ],
+)
+def test_channel_metadata_omits_missing_fields_and_keeps_one_line(
+    formatter, livestream, suffix
+):
+    item = dispatch_event(
+        {
+            "event": "kick:public_state",
+            "source": "public_rest",
+            "data": {"livestream": livestream},
+        },
+        received_timestamp=1_577_836_800_000_000,
+    )
+    assert item is not None
+    assert formatter.format(item, "kick") == (
+        f"2020-01-01 00:00:00 [received] | [channel metadata]{suffix}"
     )
 
 
@@ -253,7 +298,7 @@ def test_channel_metadata_without_metadata_keeps_notice(formatter):
     )
 
 
-def test_channel_metadata_with_surrogates_writes_lossless_json(formatter, tmp_path):
+def test_channel_metadata_with_surrogates_writes_readable_title(formatter, tmp_path):
     payload = {"livestream": {"session_title": "Live 🎙️\ud800title\udfff"}}
     item = dispatch_event(
         {"event": "kick:public_state", "source": "public_rest", "data": payload},
@@ -267,10 +312,11 @@ def test_channel_metadata_with_surrogates_writes_lossless_json(formatter, tmp_pa
     finally:
         writer.close()
     text = path.read_text(encoding="utf-8")
-    assert len(text.splitlines()) == 1
-    assert "🎙️" in text
-    metadata = text.split("[channel metadata] ", 1)[1]
-    assert json.loads(metadata) == item["metadata"]
+    assert text == (
+        "2020-01-01 00:00:00 [received] | [channel metadata]"
+        " Title: Live 🎙️\\ud800title\\udfff\n"
+    )
+    assert item["metadata"]["data"] == payload
 
 
 @pytest.mark.parametrize(

@@ -322,14 +322,18 @@ It derives the total from complete nonnegative integer option counts, omits
 percentages for a zero total, and uses `votes unknown` with no total or
 percentages for incomplete counts. Remaining seconds are optional. The built-in
 Kick format applies this conversion to `metadata` for poll updates.
+A field definition with `format: "iso8601"` renders a date string as UTC
+`YYYY-MM-DD HH:MM:SS`, treating dates without a timezone as UTC. Invalid dates
+render as an empty value; use `omit_if_false: true` to omit their template too.
 Conditional fields suppress their complete rendered
 fragment for false, zero, empty, or null values. The final formatted string,
 including custom-template text, renders carriage returns, newlines, and Unicode
 line separators visibly as `\r`, `\n`, `\u0085`, `\u2028`, or `\u2029` and
 preserves horizontal tabs while removing other terminal controls. This keeps
-one physical line per record while JSONL remains lossless. These controls
-support natural event notices without adding presentation-only fields to
-normalized JSONL records.
+one physical line per record while JSONL remains lossless. Lone Unicode
+surrogates in the final text are escaped so it can be written as UTF-8. These
+controls support natural event notices without adding presentation-only fields
+to normalized JSONL records.
 
 The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat

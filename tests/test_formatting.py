@@ -58,6 +58,8 @@ def test_item_formatter_invalid_path() -> None:
             ("\u2028", r"\u2028"),
             ("\u2029", r"\u2029"),
             ("\t", "\t"),
+            ("\ud800", r"\ud800"),
+            ("\udfff", r"\udfff"),
         ]
     ]
     + [
@@ -318,6 +320,20 @@ def test_missing_format_raises(formatter, kwargs):
             {"template": "{}", "format": "{}:{:02}:{:02}"},
             "{time_text}",
             "1:30:00",
+        ),
+        (
+            "value",
+            "2026-10-03T19:50:06+02:00",
+            {"template": "Start: {}", "format": "iso8601"},
+            "{value}",
+            "Start: 2026-10-03 17:50:06",
+        ),
+        (
+            "value",
+            "invalid date",
+            {"template": "Start: {}", "format": "iso8601"},
+            "{value}",
+            "Start: ",
         ),
     ],
 )

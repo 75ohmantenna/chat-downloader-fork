@@ -197,12 +197,14 @@
     "kick": [
         {
             "matching": "channel_metadata",
-            "template": "{timestamp|received_timestamp|time_text}[channel metadata]{metadata}",
+            "template": "{timestamp|received_timestamp|time_text}[channel metadata]{metadata.data.livestream.session_title}{metadata.data.livestream.start_time}",
             "inherit": "default",
             "keys": {
-                "metadata": {
-                    "template": " {}",
-                    "format": "json"
+                "metadata.data.livestream.session_title": " Title: {}",
+                "metadata.data.livestream.start_time": {
+                    "template": " Start_time: {}",
+                    "format": "iso8601",
+                    "omit_if_false": true
                 }
             }
         },

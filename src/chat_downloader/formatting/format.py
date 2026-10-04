@@ -17,6 +17,7 @@ from chat_downloader.utils.json_types import get_int, get_list, get_str
 from chat_downloader.utils.json_utils import nested_update
 from chat_downloader.utils.time_utils import (
     microseconds_to_timestamp,
+    parse_iso8601,
     seconds_to_time,
     time_to_seconds,
 )
@@ -194,8 +195,12 @@ class ItemFormatter:
             lambda match: self._replace_placeholder(match, item, keys),
             template,
         )
-        return self.CONTROL_CHARS_RE.sub(
-            "", text.translate(self.LINE_SEPARATOR_TRANSLATION)
+        return (
+            self.CONTROL_CHARS_RE.sub(
+                "", text.translate(self.LINE_SEPARATOR_TRANSLATION)
+            )
+            .encode("utf-8", errors="backslashreplace")
+            .decode("utf-8")
         )
 
     def _replace_placeholder(
@@ -274,6 +279,11 @@ class ItemFormatter:
         format_string = field_config[cls.KEY_FORMAT]
         if format_string == "poll":
             return _format_poll_metadata(value)
+        if format_string == "iso8601":
+            try:
+                return microseconds_to_timestamp(parse_iso8601(value))
+            except (ValueError, TypeError, OverflowError, OSError):
+                return ""
         if format_string == "json":
             return (
                 json.dumps(value, ensure_ascii=False, sort_keys=True)
