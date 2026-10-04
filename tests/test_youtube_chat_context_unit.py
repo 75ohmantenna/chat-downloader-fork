@@ -78,6 +78,30 @@ def test_context_applies_profile(monkeypatch):
 
 
 @pytest.mark.parametrize(
+    "status", ["live", "upcoming", "past", "was_live", "post_live"]
+)
+@pytest.mark.parametrize("view", ["live", "top"])
+@pytest.mark.parametrize("profile", ["youtube_web", "youtube_android", "youtube_ios"])
+def test_view_diagnostics_follow_replay_mode_without_changing_selected_token(
+    monkeypatch, status, view, profile
+):
+    _patch_http(monkeypatch)
+    replay = status in {"past", "was_live", "post_live"}
+    suffix = " replay" if profile == "youtube_web" and replay else ""
+    label = f"{view.title()} chat{suffix}"
+    info = {"status": status, "continuation_info": {label: "selected-token"}}
+    owner = Downloader()
+    owner._request_profile = profile
+    loop = _loop(owner, info=info, chat_type=view)
+    context = loop._build_context()
+    assert context.is_replay is replay
+    assert context.loop_state.continuation == "selected-token"
+    assert loop.diagnostics["chat_view"] == f"{view.title()} chat" + (
+        " replay" if replay else ""
+    )
+
+
+@pytest.mark.parametrize(
     ("info", "params", "error", "match"),
     [
         (

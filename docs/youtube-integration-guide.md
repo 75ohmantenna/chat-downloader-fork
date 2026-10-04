@@ -235,7 +235,9 @@ Separate `bootstrap_request_count`, `bootstrap_http_error_count`,
 bootstrap calls preceding a returned chat, including actual page retries.
 `continuation_profile_switch_count` covers polling profile changes. Diagnostics
 also retain `initial_request_profile`, `active_request_profile`, and the chosen
-`chat_view` label. Bootstrap failures that prevent creation of a chat still
+`chat_view` label. The view label uses `Top chat` or `Live chat` with a `replay`
+suffix when polling the replay endpoint, independent of the client profile's
+bootstrap token labels. Bootstrap failures that prevent creation of a chat still
 require debug logs; there is no chat diagnostic object to attach to that run.
 
 The offline [YouTube capture inspector](development-workflow-guide.md#youtube-capture-inspection)
@@ -320,6 +322,12 @@ message types. Inline emote images use their UTF-16 attachment ranges to restore
 labels and image metadata; malformed or overlapping ranges retain the original
 text. Paid stickers retain their accessibility description as message text.
 Unknown models remain visible in debug diagnostics.
+
+Cross-profile archives preserve provider text and emoji metadata. Web renderers
+can provide emoji shortcut labels, IDs, search terms, and image variants that
+mobile models omit or represent as Unicode text and image URLs. Matching message
+IDs and replay offsets do not imply byte-identical text or emote metadata across
+profiles; JSONL/TXT parity compares outputs within one capture.
 
 Mobile response logging identifiers are not original-message timestamps.
 Mobile messages therefore omit `timestamp` when the provider supplies only a
