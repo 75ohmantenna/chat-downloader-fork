@@ -146,8 +146,16 @@ percentages. Remaining seconds appear when available, including zero. Deletions
 remain `[Poll deleted]`. JSONL retains the structured changing poll state. When
 a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
-display fallback, except `kicks_gifted` notices use a plain timestamp alongside
-the sender, amount in Kicks, gift name, and attached message when present.
+display fallback. `kicks_gifted` notices use the same marker alongside the sender,
+amount in Kicks, gift name, and attached message when present.
+Kick leaderboard notices show the first three supplied entries for each
+explicitly enabled weekly, monthly, and lifetime period, preserving provider
+order and labeling quantities in Kicks or gifts. Empty enabled lists show
+`empty`; invalid entries and missing or disabled periods are omitted.
+Goal notices show available nonnegative integer current/target values and status,
+for example `[goal progress updated] | Followers: 188,912 / 200,000 | Status: active`.
+Each event stays on one physical line. JSONL retains the complete payload,
+including all leaderboard entries and goal fields.
 AI deletion notices retain their AI-moderated marker and
 violated-rule labels in TXT instead of becoming indistinguishable from ordinary
 deletions.

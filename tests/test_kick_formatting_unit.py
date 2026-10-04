@@ -350,7 +350,7 @@ def test_channel_metadata_with_surrogates_writes_readable_title(formatter, tmp_p
         ),
     ],
 )
-def test_kicks_gifted_details_and_plain_receive_timestamp(formatter, data, suffix):
+def test_kicks_gifted_details_and_marked_receive_timestamp(formatter, data, suffix):
     item = {
         "message_type": "kicks_gifted",
         "message": "kicks gifted",
@@ -358,7 +358,7 @@ def test_kicks_gifted_details_and_plain_receive_timestamp(formatter, data, suffi
         "metadata": {"data": data},
     }
     assert formatter.format(item, format_name="kick") == (
-        f"2020-01-01 00:00:00 | [Kicks gifted]{suffix}"
+        f"2020-01-01 00:00:00 [received] | [Kicks gifted]{suffix}"
     )
     item["timestamp"] = 1_577_923_200_000_000
     assert formatter.format(item, format_name="kick") == (
@@ -388,7 +388,7 @@ def test_recorded_kicks_gifted_dispatch_and_formatting(formatter, encoded):
         "source": "websocket",
     }
     assert formatter.format(item, format_name="kick") == (
-        "2026-10-03 22:39:42 | [Kicks gifted] GiftUser"
+        "2026-10-03 22:39:42 [received] | [Kicks gifted] GiftUser"
         " — 500 Kicks (Rage Quit): Great stream!"
     )
 

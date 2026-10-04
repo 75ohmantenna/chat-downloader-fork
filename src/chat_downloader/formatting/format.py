@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
+from chat_downloader.formatting.summaries import format_goal, format_leaderboard
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_int, get_list, get_str
 from chat_downloader.utils.json_utils import nested_update
@@ -279,6 +280,10 @@ class ItemFormatter:
         format_string = field_config[cls.KEY_FORMAT]
         if format_string == "poll":
             return _format_poll_metadata(value)
+        if format_string == "leaderboard":
+            return format_leaderboard(value, get_str(field_config, "unit"))
+        if format_string == "goal":
+            return format_goal(value)
         if format_string == "iso8601":
             try:
                 return microseconds_to_timestamp(parse_iso8601(value))

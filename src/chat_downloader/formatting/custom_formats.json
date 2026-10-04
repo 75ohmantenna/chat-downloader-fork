@@ -209,6 +209,50 @@
             }
         },
         {
+            "matching": "kicks_leaderboard_updated",
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data": {
+                    "format": "leaderboard",
+                    "unit": "Kicks",
+                    "template": "{}"
+                }
+            }
+        },
+        {
+            "matching": "gifts_leaderboard_updated",
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data": {
+                    "format": "leaderboard",
+                    "unit": "gifts",
+                    "template": "{}"
+                }
+            }
+        },
+        {
+            "matching": [
+                "goal_created",
+                "goal_updated",
+                "goal_progress_updated",
+                "goal_achieved",
+                "goal_canceled"
+            ],
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data": {
+                    "format": "goal",
+                    "template": "{}"
+                }
+            }
+        },
+        {
             "matching": [
                 "stream_started",
                 "stream_stopped",
@@ -217,13 +261,6 @@
                 "chatroom_updated",
                 "reward_redeemed",
                 "kicks_gifted_deleted",
-                "gifts_leaderboard_updated",
-                "kicks_leaderboard_updated",
-                "goal_created",
-                "goal_updated",
-                "goal_progress_updated",
-                "goal_achieved",
-                "goal_canceled",
                 "event_participant_joined",
                 "event_participant_left",
                 "drops_campaign_started",
@@ -365,10 +402,6 @@
             "template": "{timestamp|received_timestamp|time_text}{message_type}{metadata.data.sender.username}{metadata.data.gift.amount}{metadata.data.gift.name}{metadata.data.message}",
             "inherit": "default",
             "keys": {
-                "received_timestamp": {
-                    "template": "{} | ",
-                    "format": "%Y-%m-%d %H:%M:%S"
-                },
                 "message_type": "[Kicks gifted]",
                 "metadata.data.sender.username": " {}",
                 "metadata.data.gift.amount": " — {} Kicks",

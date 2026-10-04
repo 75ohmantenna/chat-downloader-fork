@@ -1,0 +1,204 @@
+{
+  "provenance": {
+    "source_file": "capture.jsonl",
+    "captured_date": "2026-10-04",
+    "source": "Observed live public event metadata from a ten-minute channel capture.",
+    "source_hash_format": "SHA-256 of the original JSONL line including its trailing newline.",
+    "curation": "Reconstructed decoded event envelopes; original wire encoding is not retained. Replaced channel and goal identifiers, emoji identifier, and leaderboard user IDs and names with consistent synthetic values. Preserved payload keys, value types, counts, order, enabled flags, timestamps, and all thirty leaderboard entries."
+  },
+  "events": [
+    {
+      "source_line": 1833,
+      "source_line_sha256": "002ee99d92257ff74e63d86e8bc0221a698e3b40cd1f475bf5f4998a181d3c1f",
+      "received_timestamp": 1791124883754677,
+      "frame": {
+        "event": "KicksLeaderboardUpdated",
+        "channel": "channel_123",
+        "data": {
+          "gifts_lifetime": [
+            {
+              "quantity": 1320000,
+              "user_id": 12,
+              "username": "User12"
+            },
+            {
+              "quantity": 682100,
+              "user_id": 6,
+              "username": "User6"
+            },
+            {
+              "quantity": 670000,
+              "user_id": 13,
+              "username": "User13"
+            },
+            {
+              "quantity": 300000,
+              "user_id": 8,
+              "username": "User8"
+            },
+            {
+              "quantity": 288013,
+              "user_id": 5,
+              "username": "User5"
+            },
+            {
+              "quantity": 193500,
+              "user_id": 14,
+              "username": "User14"
+            },
+            {
+              "quantity": 191740,
+              "user_id": 4,
+              "username": "User4"
+            },
+            {
+              "quantity": 138500,
+              "user_id": 10,
+              "username": "User10"
+            },
+            {
+              "quantity": 129100,
+              "user_id": 3,
+              "username": "User3"
+            },
+            {
+              "quantity": 110000,
+              "user_id": 15,
+              "username": "User15"
+            }
+          ],
+          "gifts_lifetime_enabled": true,
+          "gifts_month": [
+            {
+              "quantity": 10000,
+              "user_id": 6,
+              "username": "User6"
+            },
+            {
+              "quantity": 10000,
+              "user_id": 3,
+              "username": "User3"
+            },
+            {
+              "quantity": 10000,
+              "user_id": 1,
+              "username": "User1"
+            },
+            {
+              "quantity": 10000,
+              "user_id": 7,
+              "username": "User7"
+            },
+            {
+              "quantity": 7000,
+              "user_id": 8,
+              "username": "User8"
+            },
+            {
+              "quantity": 6061,
+              "user_id": 4,
+              "username": "User4"
+            },
+            {
+              "quantity": 6004,
+              "user_id": 5,
+              "username": "User5"
+            },
+            {
+              "quantity": 5000,
+              "user_id": 11,
+              "username": "User11"
+            },
+            {
+              "quantity": 4100,
+              "user_id": 9,
+              "username": "User9"
+            },
+            {
+              "quantity": 4000,
+              "user_id": 10,
+              "username": "User10"
+            }
+          ],
+          "gifts_month_enabled": true,
+          "gifts_week": [
+            {
+              "quantity": 20000,
+              "user_id": 1,
+              "username": "User1"
+            },
+            {
+              "quantity": 11000,
+              "user_id": 2,
+              "username": "User2"
+            },
+            {
+              "quantity": 11000,
+              "user_id": 3,
+              "username": "User3"
+            },
+            {
+              "quantity": 10090,
+              "user_id": 4,
+              "username": "User4"
+            },
+            {
+              "quantity": 10005,
+              "user_id": 5,
+              "username": "User5"
+            },
+            {
+              "quantity": 10000,
+              "user_id": 6,
+              "username": "User6"
+            },
+            {
+              "quantity": 10000,
+              "user_id": 7,
+              "username": "User7"
+            },
+            {
+              "quantity": 9000,
+              "user_id": 8,
+              "username": "User8"
+            },
+            {
+              "quantity": 6100,
+              "user_id": 9,
+              "username": "User9"
+            },
+            {
+              "quantity": 6000,
+              "user_id": 10,
+              "username": "User10"
+            }
+          ],
+          "gifts_week_enabled": true
+        }
+      }
+    },
+    {
+      "source_line": 1838,
+      "source_line_sha256": "039aa545cd31059a6a56d831c402997bbddc249fe7e50d7fcc5e1e65f38c2193",
+      "received_timestamp": 1791124884448762,
+      "frame": {
+        "event": "GoalProgressUpdateEvent",
+        "channel": "channel_123",
+        "data": {
+          "achieved_at": null,
+          "channel_id": "channel_example",
+          "count_from_creation": true,
+          "created_at": "2026-04-22T23:47:38.220838Z",
+          "current_value": 188912,
+          "end_date": null,
+          "id": "goal_example",
+          "progress_bar_emoji_id": "emotes/123",
+          "status": "active",
+          "target_value": 200000,
+          "type": "followers",
+          "updated_at": "2026-10-04T14:41:24.244091456Z"
+        }
+      }
+    }
+  ]
+}

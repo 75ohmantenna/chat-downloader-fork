@@ -523,8 +523,22 @@ notices rather than blank lines. Live WebSocket events without a valid provider
 formatter uses it only as a fallback and marks it `[received]` in TXT.
 For captured `kicks_gifted` records, TXT shows `[Kicks gifted]`, the sender,
 amount in Kicks, gift name, and attached message when present. This notice uses
-a plain timestamp without `[received]`; JSONL keeps the separate receive time
+the same `[received]` fallback marker; JSONL keeps the separate receive time
 and original gift metadata.
+
+Leaderboard TXT notices show at most the first three supplied entries for each
+weekly, monthly, and lifetime `gifts_*` list whose matching `*_enabled` flag is
+boolean `true`. Quantities use comma grouping and are labeled `Kicks` for
+`kicks_leaderboard_updated` and `gifts` for `gifts_leaderboard_updated`. Entries
+retain provider order; missing names, invalid or negative integer quantities,
+and disabled or unusable periods are omitted. A valid enabled empty list displays
+`empty`. JSONL keeps every original entry and flag. Goal TXT notices show
+nonnegative integer `current_value` and `target_value`, the goal `type` label,
+and a string `status` when available. A missing current value with a valid target
+displays `target N` rather than guessing zero. Goal events without usable details
+keep their event label. Summaries stay on one physical line through the shared
+formatter's text sanitization and do not modify event payloads.
+
 Compact subscriptions containing only `chatroom_id`, `username`, and `months`
 retain the username and month count; empty-array pin deletions emit an ID-less
 provider state change as `[Pinned message removed]`. Both receive namespaced
