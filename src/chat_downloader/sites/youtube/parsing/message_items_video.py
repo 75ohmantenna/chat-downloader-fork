@@ -18,27 +18,23 @@ _COMPACT_VIEW_COUNT = re.compile(r"[\d,.]+\s*[KMB]?", re.IGNORECASE)
 
 def _parse_lockup_badge_style(lockup: JSONDict) -> str | None:
     """Return a video type style from a modern lockup thumbnail badge."""
-    overlays = multi_get(
-        lockup,
-        "contentImage",
-        "thumbnailViewModel",
-        "overlays",
-    )
-    for overlay in overlays or []:
-        badges = multi_get(overlay, "thumbnailBottomOverlayViewModel", "badges")
-        for badge in badges or []:
-            badge_model = badge.get("thumbnailBadgeViewModel", {})
-            text = (badge_model.get("text") or "").upper()
-            image_name = (
-                multi_get(
-                    badge_model,
-                    "icon",
-                    "sources",
-                    0,
-                    "clientResource",
-                    "imageName",
-                )
-                or ""
+    thumbnail = get_dict(get_dict(lockup, "contentImage"), "thumbnailViewModel")
+    overlays = get_list(thumbnail, "overlays")
+    for overlay in overlays:
+        if not isinstance(overlay, dict):
+            continue
+        badges = get_list(
+            get_dict(overlay, "thumbnailBottomOverlayViewModel"), "badges"
+        )
+        for badge in badges:
+            if not isinstance(badge, dict):
+                continue
+            badge_model = get_dict(badge, "thumbnailBadgeViewModel")
+            text = get_str(badge_model, "text").upper()
+            sources = get_list(get_dict(badge_model, "icon"), "sources")
+            source = sources[0] if sources and isinstance(sources[0], dict) else {}
+            image_name = get_str(
+                get_dict(source, "clientResource"), "imageName"
             ).upper()
             if text == "LIVE" or image_name == "LIVE":
                 return "LIVE"
@@ -80,16 +76,19 @@ def _lockup_view_model_to_video_renderer(
     """Convert YouTube's modern lockup view model into videoRenderer shape."""
     metadata = get_dict(get_dict(lockup, "metadata"), "lockupMetadataViewModel")
     view_count = _lockup_view_count(metadata)
+    endpoint = dig(
+        lockup,
+        "rendererContext",
+        "commandContext",
+        "onTap",
+        "innertubeCommand",
+        "watchEndpoint",
+    )
 
     video_renderer: JSONDict = {
         "videoId": get_str(lockup, "contentId")
-        or multi_get(
-            lockup,
-            "rendererContext",
-            "commandContext",
-            "onTap",
-            "innertubeCommand",
-            "watchEndpoint",
+        or get_str(
+            endpoint if isinstance(endpoint, dict) else {},
             "videoId",
         ),
         "title": multi_get(metadata, "title") or {},
@@ -131,7 +130,7 @@ def _parse_video(video_renderer: JSONDict) -> dict[str, Any]:
 
     if "lockupViewModel" in video_renderer:
         video_renderer = _lockup_view_model_to_video_renderer(
-            video_renderer["lockupViewModel"]  # type: ignore[arg-type]
+            get_dict(video_renderer, "lockupViewModel")
         )
     elif "shortsLockupViewModel" in video_renderer:
         video_renderer = _shorts_view_model_to_video_renderer(

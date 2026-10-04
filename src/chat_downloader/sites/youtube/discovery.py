@@ -10,7 +10,7 @@ from chat_downloader.debugging import debug_log, log
 from chat_downloader.errors import InvalidParameter, NoVideos, UserNotFound
 from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import dig, get_dict
+from chat_downloader.utils.json_types import dig, get_dict, get_str
 
 from .client_context import _get_innertube_context
 from .client_requests_initial import _get_initial_info
@@ -147,8 +147,13 @@ def _process_page_items(
         continuation = _extract_browse_continuation_token_from_item(item)
         if video:
             videos.append(_parse_video(video))
-        elif lockup:
-            videos.append(_parse_video({"lockupViewModel": lockup}))
+        elif lockup and get_str(lockup, "contentType") in {
+            "",
+            "LOCKUP_CONTENT_TYPE_VIDEO",
+        }:
+            parsed = _parse_video({"lockupViewModel": lockup})
+            if isinstance(parsed.get("video_id"), str) and parsed["video_id"]:
+                videos.append(parsed)
         elif shorts:
             parsed = _parse_video({"shortsLockupViewModel": shorts})
             if parsed.get("video_id"):

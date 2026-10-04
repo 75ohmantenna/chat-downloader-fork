@@ -254,3 +254,49 @@ def test_legacy_unlabeled_view_counts_remain_supported(text):
         ],
     )
     assert _parse_video({"lockupViewModel": lockup})["view_count"] == text
+
+
+@pytest.mark.parametrize("bad_id", [None, "", 123])
+def test_channel_skips_missing_video_ids_and_nonvideo_lockups(bad_id):
+    lockup = _fixture("uploads-modern.json")["contents"][
+        "twoColumnBrowseResultsRenderer"
+    ]["tabs"][0]["tabRenderer"]["content"]["sectionListRenderer"]["contents"][0][
+        "itemSectionRenderer"
+    ]["contents"][0]["lockupViewModel"]
+    bad = deepcopy(lockup)
+    bad["contentId"] = bad_id
+    bad["rendererContext"] = {}
+    playlist = deepcopy(lockup)
+    playlist["contentType"] = "LOCKUP_CONTENT_TYPE_PLAYLIST"
+    items = [
+        wrap("richItemRenderer.content.lockupViewModel", model)
+        for model in (bad, playlist, lockup)
+    ]
+    items.append(
+        wrap(
+            "continuationItemRenderer.continuationEndpoint.continuationCommand.token",
+            "next",
+        )
+    )
+    videos, continuation = discovery._process_page_items(items)
+    assert [v["video_id"] for v in videos] == ["_1xR5zVKwUE"]
+    assert continuation == "next"
+
+
+@pytest.mark.parametrize(
+    "bad", [None, "bad", 123, {"thumbnailBadgeViewModel": {"text": 123}}]
+)
+def test_malformed_lockup_badges_do_not_hide_valid_live_badge(bad):
+    lockup = wrap(
+        "contentImage.thumbnailViewModel.overlays",
+        [
+            None,
+            "bad",
+            wrap(
+                "thumbnailBottomOverlayViewModel.badges",
+                [bad, {"thumbnailBadgeViewModel": {"text": "LIVE"}}],
+            ),
+        ],
+    )
+    lockup["contentId"] = "fixture-video"
+    assert _parse_video({"lockupViewModel": lockup})["video_type"] == "LIVE"
