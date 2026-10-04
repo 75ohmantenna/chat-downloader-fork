@@ -93,7 +93,9 @@ def validate_verification(parameters: dict[str, Any], *, resume: bool) -> None:
         raise ValueError(msg)
 
 
-def inspect_provider_capture(chat: Chat, result: RunResult) -> dict[str, object] | None:
+def inspect_provider_capture(
+    chat: Chat, result: RunResult, *, allow_existing: bool = False
+) -> dict[str, object] | None:
     """Run the provider's optional closed-artifact inspector without log contents."""
     if chat._capture_inspector is None:
         return None
@@ -107,10 +109,11 @@ def inspect_provider_capture(chat: Chat, result: RunResult) -> dict[str, object]
         count = result.prefetched_after_deadline_count
         complete = result.deadline_prefetch_count_complete
         report = chat._capture_inspector(
-            path if created else None,
+            path if created or allow_existing else None,
             {
                 "success": result.success,
                 "message_count": result.message_count,
+                "prior_message_count": chat.diagnostics.get("prior_message_count", 0),
                 "message_type_counts": dict(result.message_type_counts),
                 "provider_diagnostics": dict(chat.diagnostics),
                 "prefetched_after_deadline_count": count,

@@ -404,8 +404,8 @@ monotonic clock; output verification and manifest writing are excluded.
 `provider_diagnostics` retains supported bounded YouTube action and
 continuation counters, including skipped-action reasons and parsing loss, plus
 Kick live transport, public-feed, snapshot, and backfill counters. Automatic
-Twitch and Kick live inspection reports remain in `provider_inspection` when
-requested.
+YouTube, Twitch live, and Kick live inspection reports remain in
+`provider_inspection` when requested.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
 one deadline observation after bounded shutdown, shared with provider inspection
 and the debug summary. An incomplete count is a lower bound even if a worker
@@ -436,17 +436,18 @@ Kick replay emits collection progress at info level at most every five seconds
 between pages, then announces chronological output. Metadata fallback
 and material end-time/duration disagreements are also explained at info level.
 
-For Twitch live channels (including upcoming streams) and Kick live channels
-(including offline chatrooms), `--verify_output` also runs the provider's capture
+For YouTube captures, Twitch live channels (including upcoming streams), and
+Kick live channels (including offline chatrooms), `--verify_output` also runs the provider's capture
 inspector after outputs close. No debug log is required. `provider_inspection` in
 the run result, debug summary, and run manifest contains the same content-free
 JSONL findings and provider frame accounting as the offline inspector. Its `status`
 is `ok`, `review`, or `error`; a review or inspection error makes the run
 unsuccessful even when `parity_status` is `passed`. Parity is still checked if
-inspection fails, and its independent status remains available. YouTube and
-Twitch/Kick replays retain parity-only verification. Closed partial captures are
-also inspected after retrieval failures when
-the output pair was validated; the original error remains authoritative and
+inspection fails, and its independent status remains available. Twitch/Kick
+replays retain parity-only verification. YouTube resume inspection includes
+checkpoint-verified prior records and flags known prior parser loss. Closed
+partial captures are also inspected after retrieval failures when the output
+pair was validated; the original error remains authoritative and
 parity stays `not_run`.
 
 The report also records `prefetched_after_deadline_count` and

@@ -19,7 +19,9 @@ from .constants_message import _MESSAGE_TYPES
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-_KNOWN_TYPES = frozenset(_MESSAGE_TYPES) - {"all"} | {"chat_ended"}
+# Known UI controls are emitted by the all-types filter but are deliberately
+# excluded from selectable message groups.
+_KNOWN_TYPES = frozenset(_MESSAGE_TYPES) - {"all"} | {"tooltip", "remove_banner"}
 _PROFILES = {"youtube_web", "youtube_android", "youtube_ios", "twitch_web"}
 _VIEWS = {"Top chat", "Live chat", "Top chat replay", "Live chat replay"}
 _INVALID_SUMMARY = "invalid_run_summary"
@@ -150,12 +152,14 @@ def _accounting(
         counters[key] = value
     count = summary.get("message_count")
     prior = summary.get("prior_message_count", 0)
+    prior_loss = diagnostics.get("prior_record_loss", False)
     types = get_dict(summary, "message_type_counts")
     if (
         type(count) is not int
         or count < 0
         or type(prior) is not int
         or prior < 0
+        or type(prior_loss) is not bool
         or type(summary.get("success")) is not bool
         or not isinstance(summary.get("message_type_counts"), dict)
         or any(type(v) is not int or v < 0 for v in types.values())
@@ -176,6 +180,7 @@ def _accounting(
         "chat_view": _choice(diagnostics.get("chat_view"), _VIEWS),
         "summary_minus_records": count + prior - inspection.records,
         "type_counts_comparable": prior == 0,
+        "prior_record_loss": prior_loss,
         "message_type_count_mismatches": mismatches if prior == 0 else None,
         "run_failed": summary.get("success") is not True,
         "parity_failed": summary.get("parity_status") == "failed",
@@ -215,6 +220,7 @@ def inspect_capture(
                     accounting["summary_minus_records"]
                     or accounting["message_type_count_mismatches"]
                     or accounting["run_failed"]
+                    or accounting["prior_record_loss"]
                     or accounting["parity_failed"]
                     or get_dict(accounting, "counters")["parse_error"]
                 )

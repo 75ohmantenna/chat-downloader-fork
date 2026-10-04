@@ -128,6 +128,13 @@ dedup reset boundaries are audit failures.
 
 ### YouTube capture inspection
 
+YouTube captures using `--verify_output` run this inspector after outputs close.
+The run result, debug summary, and manifest retain the content-free report in
+`provider_inspection`. Findings or inspection errors fail the verified run even
+when output parity passes. Missing mobile timestamps remain observations.
+Resumed files include checkpoint-verified prior records; known prior parser
+loss remains a finding. Empty lazy captures are inspected without creating files.
+
 Inspect a closed YouTube JSONL capture without printing messages or identifiers:
 
 ```bash
@@ -141,8 +148,10 @@ Use the matching manifest from one retrieval run. A resumed file can contain
 prior records: total counts include `prior_message_count`, while current-run
 type counts are explicitly marked incomparable with the whole file.
 
-The fixed report includes unknown message types, duplicate text-message IDs,
-invalid source timestamps or replay offsets, and strict JSONL findings. Missing
+The fixed report recognizes supported tooltip and banner-removal controls even
+though they have no selectable message group. It includes unknown message types,
+duplicate text-message IDs, invalid source timestamps or replay offsets, and
+strict JSONL findings. Missing
 source timestamps, zero-offset records without timestamps, signed preroll, and
 offset backsteps are observations rather than automatic failures. Paid events
 and their tickers may share IDs. Manifest input is limited to one MiB and must

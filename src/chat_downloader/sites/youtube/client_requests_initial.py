@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import urlsplit
 
 from requests.exceptions import RequestException
 
@@ -37,6 +38,18 @@ _CHALLENGE_HINTS: tuple[str, ...] = (
     "unusual traffic",
     "recaptcha",
     "challenge",
+)
+
+_INITIAL_PAGE_HOSTS = frozenset(
+    {
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "www.google.com",
+        "consent.google.com",
+        "consent.youtube.com",
+        "accounts.google.com",
+    }
 )
 
 
@@ -102,6 +115,19 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
         try:
             response = session_get(url)
             html = response.text
+            response_url = getattr(response, "url", None)
+            try:
+                final_host = urlsplit(
+                    response_url if isinstance(response_url, str) else url
+                ).hostname
+            except ValueError:
+                final_host = None
+            safe_host = final_host if final_host in _INITIAL_PAGE_HOSTS else "other"
+            log(
+                "debug",
+                f"YouTube initial page response: HTTP {response.status_code}; "
+                f"final_host={safe_host}",
+            )
 
             if response.status_code != 200:
                 title = get_title_of_webpage(html)

@@ -92,7 +92,7 @@ The normal YouTube flow is:
 - `continuations.py`: continuation parsing models and utilities
 - `message_pipeline.py`: filtering and action-to-message pipeline boundary
 - `paid_events.py`: bounded per-run paid-event cache for sparse tickers
-- `capture_inspection.py`: offline JSONL timing and manifest diagnostics
+- `capture_inspection.py`: automatic and offline JSONL timing and manifest diagnostics
 
 ### Parsing
 
@@ -125,9 +125,11 @@ unavailable.
 
 When the watch page is blocked by a YouTube/Google challenge or the page no
 longer exposes parseable initial JSON, regular video targets can fall back to
-InnerTube `player` and `next` requests. That fallback preserves the active
-request profile and builds a minimal `ytcfg`. Desktop bootstrap uses the primary
-`liveChatRenderer` token when present. Mobile bootstrap preserves explicit
+InnerTube `player` and `next` requests. Debug logs identify the final page host
+using a fixed safe vocabulary, and the fallback warning names the exception
+class without printing its text or redirect URL. The fallback preserves the
+active request profile and builds a minimal `ytcfg`. Desktop bootstrap uses the
+primary `liveChatRenderer` token when present. Mobile bootstrap preserves explicit
 Top/Live filter tokens: its primary renderer can select Top chat, so it cannot
 replace an explicit Live token or supply a missing view. This fallback supports
 live and replay video targets; clips remain on the normal page bootstrap because
@@ -233,12 +235,19 @@ Separate `bootstrap_request_count`, `bootstrap_http_error_count`,
 bootstrap calls preceding a returned chat, including actual page retries.
 `continuation_profile_switch_count` covers polling profile changes. Diagnostics
 also retain `initial_request_profile`, `active_request_profile`, and the chosen
-`chat_view` label. Bootstrap failures that prevent creation of a chat still
+`chat_view` label. The view label uses `Top chat` or `Live chat` with a `replay`
+suffix when polling the replay endpoint, independent of the client profile's
+bootstrap token labels. Bootstrap failures that prevent creation of a chat still
 require debug logs; there is no chat diagnostic object to attach to that run.
 
 The offline [YouTube capture inspector](development-workflow-guide.md#youtube-capture-inspection)
 reports these counters alongside missing source timestamps, zero-offset mobile
 records, and record/type-count reconciliation without printing chat content.
+YouTube `--verify_output` runs the same inspector after output closes, including
+video, clip, and channel/handle retrieval. Its report is retained in
+`provider_inspection`; findings or inspection errors fail the verified run even
+when JSONL/TXT parity passes. Resume accounting includes verified prior records
+and retains known prior parser loss. Missing mobile timestamps remain observations.
 
 ### Replays and completed streams
 
@@ -313,6 +322,12 @@ message types. Inline emote images use their UTF-16 attachment ranges to restore
 labels and image metadata; malformed or overlapping ranges retain the original
 text. Paid stickers retain their accessibility description as message text.
 Unknown models remain visible in debug diagnostics.
+
+Cross-profile archives preserve provider text and emoji metadata. Web renderers
+can provide emoji shortcut labels, IDs, search terms, and image variants that
+mobile models omit or represent as Unicode text and image URLs. Matching message
+IDs and replay offsets do not imply byte-identical text or emote metadata across
+profiles; JSONL/TXT parity compares outputs within one capture.
 
 Mobile response logging identifiers are not original-message timestamps.
 Mobile messages therefore omit `timestamp` when the provider supplies only a

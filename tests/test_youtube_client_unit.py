@@ -14,6 +14,7 @@ import chat_downloader.sites.youtube.client_requests_initial as _yt_initial
 from chat_downloader.errors import (
     CaptchaChallengeRequired,
     IncompleteContinuationError,
+    ParsingError,
     RetriesExceeded,
 )
 from chat_downloader.models import ChatRequest
@@ -408,3 +409,29 @@ def test_get_initial_info_raises_retries_exceeded_on_network_error() -> None:
     request, _ = _sequence(RequestsConnectionError("connection refused"))
     with pytest.raises(RequestsConnectionError):
         _initial(request, {"max_attempts": 1})
+
+
+@pytest.mark.parametrize(
+    ("final_url", "host"),
+    [
+        ("https://m.youtube.com/watch?token=PRIVATE_SENTINEL", "m.youtube.com"),
+        (
+            "https://user:PRIVATE_SENTINEL@www.google.com/sorry/private",
+            "www.google.com",
+        ),
+        ("https://PRIVATE_SENTINEL.example/private?token=PRIVATE_SENTINEL", "other"),
+        ("https://[PRIVATE_SENTINEL", "other"),
+        (None, "www.youtube.com"),
+        ("", "other"),
+    ],
+)
+def test_initial_page_diagnostics_report_safe_final_host(
+    final_url, host, caplog, monkeypatch
+):
+    caplog.set_level("DEBUG", logger="chat_downloader")
+    _patch_initial_parser(monkeypatch, "", valid=False)
+    result = SimpleNamespace(status_code=200, text="<html></html>", url=final_url)
+    with pytest.raises(ParsingError):
+        _initial(lambda _: result, None)
+    assert f"HTTP 200; final_host={host}" in caplog.text
+    assert "PRIVATE_SENTINEL" not in caplog.text

@@ -344,7 +344,9 @@ class _ContinuationLoop:
             is_replay=is_replay,
         )
         log("debug", f"Getting {chat_type.title()} chat ({continuation_label}).")
-        self.diagnostics["chat_view"] = continuation_label
+        self.diagnostics["chat_view"] = f"{chat_type.title()} chat" + (
+            " replay" if is_replay else ""
+        )
         self.diagnostics["active_request_profile"] = (
             getattr(self.downloader, "_request_profile", None) or "youtube_web"
         )
