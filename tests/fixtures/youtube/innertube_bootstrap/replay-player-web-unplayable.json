@@ -1,0 +1,28 @@
+{
+  "playabilityStatus": {
+    "status": "UNPLAYABLE",
+    "reason": "Video unavailable",
+    "errorScreen": {
+      "playerErrorMessageRenderer": {
+        "reason": {
+          "runs": [
+            {
+              "text": "The page needs to be reloaded."
+            }
+          ]
+        },
+        "subreason": {
+          "simpleText": "The page needs to be reloaded."
+        }
+      }
+    }
+  },
+  "videoDetails": {
+    "videoId": "ch8nhMihz04",
+    "title": "Santo Ros\u00e1rio | Sexta-feira | 04:00 | 02/10/2026 | Live Ao vivo",
+    "lengthSeconds": "9288",
+    "channelId": "UCbh6_TmFnAJLI56aAQeD3qw",
+    "author": "Fixture channel",
+    "isLiveContent": true
+  }
+}

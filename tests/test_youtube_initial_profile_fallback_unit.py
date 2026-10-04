@@ -110,17 +110,19 @@ def test_initial_profile_fallback_failure_policy(
 
 
 def test_initial_profile_fallback_can_recover_chat_continuation() -> None:
+    recovered = _response("", continuation=True)
+    recovered[1]["playabilityStatus"] = {"status": "OK"}
     downloader = _Downloader(
         [
             _response("Video unavailable"),
-            _response("", continuation=True),
+            recovered,
         ]
     )
 
     details, ytcfg = downloader._get_initial_video_info("LLpNUqHVam8", _request())
 
     assert details["continuation_info"] == {"Live chat": "token"}
-    assert ytcfg == {"profile": ""}
+    assert ytcfg["profile"] == ""
     assert downloader.applied_profiles == ["youtube_android"]
 
 
@@ -143,3 +145,22 @@ def test_initial_profile_fallback_does_not_rotate_login_required() -> None:
 
     assert downloader.applied_profiles == []
     assert downloader.parse_calls == 1
+
+
+@pytest.mark.parametrize("auto", [False, True])
+def test_generic_bootstrap_tokens_do_not_bypass_unplayability(auto):
+    downloader = _Downloader(
+        [_response("Video unavailable", continuation=True)] * (3 if auto else 1),
+        auto_fallback=auto,
+    )
+    with pytest.raises(VideoUnplayable, match="Video unavailable"):
+        downloader._get_initial_video_info("LLpNUqHVam8", _request())
+    assert downloader.parse_calls == (3 if auto else 1)
+
+
+def test_specific_video_restriction_keeps_available_chat_tokens():
+    response = _response("This video is restricted", continuation=True)
+    downloader = _Downloader([response])
+    details, _ = downloader._get_initial_video_info("LLpNUqHVam8", _request())
+    assert details["continuation_info"] == {"Live chat": "token"}
+    assert downloader.applied_profiles == []

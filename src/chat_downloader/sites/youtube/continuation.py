@@ -498,8 +498,8 @@ class _ContinuationLoop:
     def _retry_rejected_initial_replay(self, response: JSONDict) -> bool:
         """Try the next profile for an initial replay INVALID_ARGUMENT error.
 
-        Reuse continuation/seek bounds. Never restart or switch on this terminal
-        error after an accepted response.
+        Obtain a fresh token for the new profile, preserving seek bounds. Never
+        restart or switch on this terminal error after an accepted response.
         """
         error = get_dict(response, "error")
         if (
@@ -507,11 +507,23 @@ class _ContinuationLoop:
             or not self.ctx.is_replay
             or str(error.get("code")) != "400"
             or get_str(error, "status") != "INVALID_ARGUMENT"
+            or not get_str(self.initial_info, "original_video_id")
         ):
             return False
-        return self._recover_incomplete_continuation(
+        if not self._recover_incomplete_continuation(
             "a rejected initial replay request"
+        ):
+            return False
+        details, ytcfg = self.downloader._get_initial_video_info(
+            get_str(self.initial_info, "original_video_id"), self.params
         )
+        self.initial_info = {
+            **self.initial_info,
+            "continuation_info": details["continuation_info"],
+        }
+        self.ytcfg = ytcfg
+        self.ctx = self._build_context()
+        return True
 
     # -- main loop ----------------------------------------------------------
 
@@ -520,9 +532,8 @@ class _ContinuationLoop:
     ) -> Generator[JSONDict, None, None]:
         """Yield chat messages from a YouTube continuation endpoint."""
         self.ctx = self._build_context()
-        ctx = self.ctx
-
         while True:
+            ctx = self.ctx
             continuation_params = build_continuation_params(
                 ctx.innertube_context,
                 ctx.loop_state,

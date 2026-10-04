@@ -110,7 +110,10 @@ class YouTubeVideoInitializationMixin:
                         "checks when required.",
                     )
 
-            if details["continuation_info"]:
+            bootstrap_unplayable = bool(
+                yt_initial_data.get("_chat_downloader_continuation_info")
+            ) and _has_generic_unplayable_reason(player_response_info)
+            if details["continuation_info"] and not bootstrap_unplayable:
                 return details, ytcfg
 
             next_profile = (

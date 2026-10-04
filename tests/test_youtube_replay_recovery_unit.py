@@ -27,7 +27,11 @@ def _error():
 def _loop(provider, *, status="was_live"):
     return _ContinuationLoop(
         provider,
-        {"status": status, "continuation_info": {"Live chat": "first"}},
+        {
+            "status": status,
+            "original_video_id": "fixture",
+            "continuation_info": {"Live chat": "first"},
+        },
         {"INNERTUBE_API_KEY": "fixture"},
         ChatRequest(
             url="https://www.youtube.com/watch?v=fixture",
@@ -38,7 +42,7 @@ def _loop(provider, *, status="was_live"):
     )
 
 
-def test_initial_replay_400_switches_profile_preserving_token_seek_and_headers(
+def test_initial_replay_400_refreshes_token_preserving_seek_and_headers(
     monkeypatch,
 ):
     provider = YouTubeChatDownloader(
@@ -59,6 +63,15 @@ def test_initial_replay_400_switches_profile_preserving_token_seek_and_headers(
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._get_continuation_info", respond
     )
+    refresh = []
+
+    def bootstrap(video_id, params):
+        refresh.append((video_id, params))
+        return {"continuation_info": {"Live chat": "fresh-mobile"}}, {
+            "INNERTUBE_API_KEY": "fresh-key",
+        }
+
+    monkeypatch.setattr(provider, "_get_initial_video_info", bootstrap)
     try:
         messages = list(_loop(provider).run())
         assert provider._request_profile == "youtube_android"
@@ -66,7 +79,9 @@ def test_initial_replay_400_switches_profile_preserving_token_seek_and_headers(
     finally:
         provider.close()
     assert len(requests) == 2
-    assert [r["continuation"] for r in requests] == ["first", "first"]
+    assert [r["continuation"] for r in requests] == ["first", "fresh-mobile"]
+    assert refresh[0][0] == "fixture"
+    assert refresh[0][1].end_time == 8400
     assert [r["currentPlayerState"]["playerOffsetMs"] for r in requests] == [
         8295000,
         8295000,
@@ -96,6 +111,14 @@ def test_initial_400_recovery_is_bounded_optional_and_replay_only(
 
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._get_continuation_info", reject
+    )
+    monkeypatch.setattr(
+        provider,
+        "_get_initial_video_info",
+        lambda *_: (
+            {"continuation_info": {"Live chat": f"fresh-{provider._request_profile}"}},
+            {"INNERTUBE_API_KEY": "fixture"},
+        ),
     )
     try:
         with pytest.raises(
