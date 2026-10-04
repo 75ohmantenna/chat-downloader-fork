@@ -285,11 +285,15 @@
         },
         {
             "matching": "poll_update",
-            "template": "{timestamp|received_timestamp|time_text}{message_type}{message}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{message}{metadata}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Poll update]",
-                "message": " {}"
+                "message": " {}",
+                "metadata": {
+                    "template": "{}",
+                    "format": "poll"
+                }
             }
         },
         {

@@ -137,8 +137,13 @@ the badges and author's name when a total-month count is available, using
 `month` for one.
 When a Kick live poll is active, the opt-in `polls` message group emits each poll
 state update with its title, countdown, options, and vote counts, followed by a
-`poll_deleted` state event when Kick removes it. TXT labels both event types;
-JSONL is the lossless representation for changing poll state. When
+`poll_deleted` state event when Kick removes it. TXT shows each update as
+`[Poll update] Title | Option: 17 votes (25.4%) | Other: 50 votes (74.6%) | Total: 67 | Remaining: 3s`.
+Percentages appear when all options have valid vote counts and the total is
+positive; zero-vote polls show counts and `Total: 0` without percentages.
+Missing or invalid counts display `votes unknown` and suppress totals and
+percentages. Remaining seconds appear when available, including zero. Deletions
+remain `[Poll deleted]`. JSONL retains the structured changing poll state. When
 a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
 display fallback, except `kicks_gifted` notices use a plain timestamp alongside

@@ -551,8 +551,13 @@ Poll events are live-only and opt-in through `polls` or `all`. Kick does not
 supply IDs or provider timestamps for the observed poll frames, so both event
 types receive monotonic, namespaced receive-time IDs and
 `received_timestamp`. Poll updates preserve each changing state rather than
-deduplicating by title; TXT labels the update or deletion while JSONL retains
-the structured option and vote data.
+deduplicating by title. TXT updates show the title, each option's votes,
+one-decimal percentages when the complete vote total is positive, the total,
+and remaining seconds when available. Zero-vote polls omit percentages;
+incomplete vote counts display `votes unknown` and omit totals and percentages.
+Missing option labels fall back to `Option` plus the option ID or its one-based
+position. Deletions remain `[Poll deleted]`. JSONL retains the structured option
+and vote data.
 
 ## Cloudflare Dependency
 

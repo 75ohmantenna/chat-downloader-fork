@@ -904,6 +904,8 @@ def test_get_chat_by_channel_emits_poll_state_events() -> None:
     formatter = ItemFormatter()
     assert formatter.format(messages[0], format_name="kick") == (
         "1970-01-01 00:00:00 [received] | [Poll update] Example poll"
+        " | Option A: 0 votes (0.0%) | Option B: 1 vote (100.0%)"
+        " | Total: 1 | Remaining: 119s"
     )
     assert formatter.format(messages[1], format_name="kick") == (
         "1970-01-01 00:00:00 [received] | [Poll deleted]"

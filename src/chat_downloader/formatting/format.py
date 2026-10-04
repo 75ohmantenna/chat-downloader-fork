@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_int, get_list, get_str
 from chat_downloader.utils.json_utils import nested_update
 from chat_downloader.utils.time_utils import (
     microseconds_to_timestamp,
@@ -40,6 +41,46 @@ class _SafeFormatter(string.Formatter):
 
 
 _SAFE_FORMATTER = _SafeFormatter()
+
+
+def _format_poll_option(
+    option: JSONDict, position: int, votes: int, total: int | None
+) -> str:
+    """Render an option with explicit fallbacks for missing data."""
+    option_id = get_int(option, "id", -1)
+    label = get_str(option, "label") or (
+        f"Option {option_id if option_id >= 0 else position + 1}"
+    )
+    if votes < 0:
+        return f"{label}: votes unknown"
+    unit = "vote" if votes == 1 else "votes"
+    text = f"{label}: {votes} {unit}"
+    if total:
+        text += f" ({votes / total:.1%})"
+    return text
+
+
+def _format_poll_metadata(value: object) -> str:
+    """Render poll state, deriving totals only from complete valid counts."""
+    if not isinstance(value, dict):
+        return ""
+    options = get_list(value, "options")
+    counts = [
+        get_int(option, "votes", -1) if isinstance(option, dict) else -1
+        for option in options
+    ]
+    total = sum(counts) if counts and min(counts) >= 0 else None
+    fragments = [
+        _format_poll_option(option, position, counts[position], total)
+        for position, option in enumerate(options)
+        if isinstance(option, dict)
+    ]
+    if total is not None:
+        fragments.append(f"Total: {total}")
+    remaining = get_int(value, "remaining", -1)
+    if remaining >= 0:
+        fragments.append(f"Remaining: {remaining}s")
+    return "".join(f" | {fragment}" for fragment in fragments)
 
 
 class ItemFormatter:
@@ -229,8 +270,10 @@ class ItemFormatter:
     def _convert_field_value(
         cls, field_path: str, value: Any, field_config: dict[str, Any]
     ) -> Any:
-        """Apply a field's JSON or time representation before templating."""
+        """Apply a field's JSON, poll, or time representation before templating."""
         format_string = field_config[cls.KEY_FORMAT]
+        if format_string == "poll":
+            return _format_poll_metadata(value)
         if format_string == "json":
             return (
                 json.dumps(value, ensure_ascii=False, sort_keys=True)

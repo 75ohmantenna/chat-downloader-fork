@@ -316,6 +316,12 @@ use the normal template. A field definition with `format: "json"` renders its
 value as compact JSON with sorted keys and readable Unicode characters.
 JSON formatting bypasses separators and escapes lone Unicode surrogates so
 the result can be written as UTF-8.
+A field definition with `format: "poll"` renders a poll metadata object as
+` | Option: 17 votes (25.4%) | Other: 50 votes (74.6%) | Total: 67 | Remaining: 3s`.
+It derives the total from complete nonnegative integer option counts, omits
+percentages for a zero total, and uses `votes unknown` with no total or
+percentages for incomplete counts. Remaining seconds are optional. The built-in
+Kick format applies this conversion to `metadata` for poll updates.
 Conditional fields suppress their complete rendered
 fragment for false, zero, empty, or null values. The final formatted string,
 including custom-template text, renders carriage returns, newlines, and Unicode
