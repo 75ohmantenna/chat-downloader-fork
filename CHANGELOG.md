@@ -6,6 +6,45 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
+## 2.5.0 — 2026-10-04
+
+### Features
+
+- Inspect verified YouTube video, clip, and channel captures automatically,
+  including mobile timing observations, parser loss, and resumed-record
+  accounting. Add an offline YouTube capture inspector and retain bounded
+  bootstrap, request-profile, and chat-view diagnostics in run reports.
+- Render Kick poll results, leaderboard entries, and goal progress in TXT
+  output. Simplify channel metadata summaries to title and UTC start time.
+- Add optional Twitch event labels through the built-in `twitch_events` text
+  format.
+
+### Fixes
+
+- Recognize mobile premiere replay chat when player metadata omits broadcast
+  timestamps, and use the replay continuation endpoint. Preserve explicit
+  live/top chat selection and refresh replay bootstrap during bounded recovery.
+- Parse modern YouTube Shorts and playlist discovery, normalize channel request
+  dictionaries, skip non-video or invalid-ID lockups, and tolerate malformed
+  thumbnail badges.
+- Enforce replay end bounds even for messages excluded by output filters.
+- Hash the actual output filenames after lazy channel discovery and preserve
+  captures when a resolved filename collides with the run manifest.
+- Finish an in-progress record's writes and accounting on the first CLI
+  interrupt, and cancel provider polling waits promptly during shutdown.
+- Retain Twitch transport diagnostics in run manifests.
+
+### Documentation / tooling
+
+- Reconcile project-wide guides with the implemented API, capture inspection,
+  formatting, interruption, receive polling, and validation commands.
+
+### Compatibility
+
+- Replay checkpoints remain bound to the package version and built-in formats.
+  Finish a resumable capture with its original version or start a new capture
+  after upgrading to 2.5.0; checkpoints from older versions cannot be appended.
+
 ## 2.4.0 — 2026-10-04
 
 ### Features
