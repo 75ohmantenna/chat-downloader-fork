@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.errors import ParsingError
 from chat_downloader.sites.models import Chat
+from chat_downloader.utils.json_types import get_dict
 from chat_downloader.utils.time_utils import ensure_seconds
 
 from .continuation import _ContinuationLoop
@@ -71,7 +72,9 @@ class YouTubeChatStreamsMixin:
             end_time=ensure_seconds(request.end_time, max_duration) + clip_start_time,
         )
 
-        diagnostics: dict[str, object] = {}
+        diagnostics: dict[str, object] = dict(
+            get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
+        )
         return Chat(
             self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
             id=clip_id,
@@ -87,7 +90,9 @@ class YouTubeChatStreamsMixin:
         request = proto._coerce_chat_request(params)
         initial_info, ytcfg = proto._get_initial_video_info(video_id, request)
 
-        diagnostics: dict[str, object] = {}
+        diagnostics: dict[str, object] = dict(
+            get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
+        )
         return Chat(
             self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
             id=video_id,

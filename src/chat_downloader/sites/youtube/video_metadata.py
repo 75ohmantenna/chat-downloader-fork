@@ -4,12 +4,13 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import CaptchaChallengeRequired, ParsingError
 
-from .client_requests_bootstrap import get_innertube_video_bootstrap
+from .client_requests_bootstrap import BootstrapRequests, get_innertube_video_bootstrap
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _YT_CFG_RE,
@@ -42,10 +43,11 @@ class YouTubeVideoMetadataCoreMixin:
             original_url = f"{_YT_HOME}/watch?v={video_id}"
 
         proto = cast("YouTubeDownloaderProto", self)
+        bootstrap = BootstrapRequests()
         try:
             yt_initial_data, ytcfg, player_response_info = _get_initial_info(
                 original_url,
-                proto._session_get,
+                partial(bootstrap.request, proto._session_get),
                 params,
                 _YT_INITIAL_DATA_RE,
                 _YT_CFG_RE,
@@ -59,10 +61,11 @@ class YouTubeVideoMetadataCoreMixin:
                 "Falling back to YouTube InnerTube bootstrap after the "
                 "watch-page bootstrap failed.",
             )
+            bootstrap.diagnostics["bootstrap_fallback_count"] = 1
             yt_initial_data, ytcfg, player_response_info = (
                 get_innertube_video_bootstrap(
                     video_id,
-                    proto._session_post,
+                    partial(bootstrap.request, proto._session_post),
                     getattr(self, "_request_profile", None),
                 )
             )
@@ -81,6 +84,12 @@ class YouTubeVideoMetadataCoreMixin:
             video_type,
         )
         details = video_details_to_dict(video_details_obj)
+        ytcfg = {
+            **ytcfg,
+            "_chat_downloader_bootstrap_diagnostics": cast(
+                "JSONDict", bootstrap.diagnostics
+            ),
+        }
 
         return details, player_response_info, yt_initial_data, ytcfg
 

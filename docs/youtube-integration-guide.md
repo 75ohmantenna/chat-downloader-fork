@@ -37,7 +37,7 @@ The normal YouTube flow is:
    ID so video-specific playability errors remain visible.
 3. Load the watch page and parse initial JSON state.
 4. If the watch page is challenged or cannot be parsed, fall back to the
-   InnerTube `player` and `next` endpoints for live-video bootstrap metadata.
+   InnerTube `player` and `next` endpoints for video bootstrap metadata.
 5. Extract video details, playability information, client config, and initial
    chat continuation hints.
 6. Load the chat page once to recover the active `Top chat` and `Live chat`
@@ -92,6 +92,7 @@ The normal YouTube flow is:
 - `continuations.py`: continuation parsing models and utilities
 - `message_pipeline.py`: filtering and action-to-message pipeline boundary
 - `paid_events.py`: bounded per-run paid-event cache for sparse tickers
+- `capture_inspection.py`: offline JSONL timing and manifest diagnostics
 
 ### Parsing
 
@@ -125,10 +126,23 @@ unavailable.
 When the watch page is blocked by a YouTube/Google challenge or the page no
 longer exposes parseable initial JSON, regular video targets can fall back to
 InnerTube `player` and `next` requests. That fallback preserves the active
-request profile, builds a minimal `ytcfg`, and seeds live chat with the primary
-`liveChatRenderer` continuation from the `next` response. The fallback is
-intended for live-video bootstrap; clips remain on the normal page bootstrap
-because clip time ranges are page-specific.
+request profile and builds a minimal `ytcfg`. Desktop bootstrap uses the primary
+`liveChatRenderer` token when present. Mobile bootstrap preserves explicit
+Top/Live filter tokens: its primary renderer can select Top chat, so it cannot
+replace an explicit Live token or supply a missing view. This fallback supports
+live and replay video targets; clips remain on the normal page bootstrap because
+clip time ranges are page-specific.
+
+Channel and user chat methods accept either `ChatRequest` or a parameter
+dictionary, normalized before lazy retrieval starts. Channel Shorts discovery
+accepts `shortsLockupViewModel`, using its reel endpoint for the video ID and
+overlay metadata for title and view count. Playlist discovery reads the selected
+tab's list sections and supports both `playlistVideoRenderer` and video
+`lockupViewModel` items, including modern continuation items. Playlist links and
+items nested in menus or sidebars are excluded from video enumeration.
+Populated unknown discovery renderers produce an aggregate debug diagnostic and
+bounded `youtube-unsupported-discovery-items` samples when capture is enabled,
+so parser drift can be distinguished from an empty list.
 
 ### Chat-page continuation recovery
 
@@ -213,6 +227,19 @@ decoding errors. These exclude bootstrap requests and profile switches; a
 new request after a profile switch begins a fresh retry budget. Terminal
 failures remain counted even when the retry budget is exhausted.
 
+Separate `bootstrap_request_count`, `bootstrap_http_error_count`,
+`bootstrap_network_error_count`, `bootstrap_fallback_count`, and
+`bootstrap_profile_switch_count` counters cover watch/player/next/chat-page
+bootstrap calls preceding a returned chat, including actual page retries.
+`continuation_profile_switch_count` covers polling profile changes. Diagnostics
+also retain `initial_request_profile`, `active_request_profile`, and the chosen
+`chat_view` label. Bootstrap failures that prevent creation of a chat still
+require debug logs; there is no chat diagnostic object to attach to that run.
+
+The offline [YouTube capture inspector](development-workflow-guide.md#youtube-capture-inspection)
+reports these counters alongside missing source timestamps, zero-offset mobile
+records, and record/type-count reconciliation without printing chat content.
+
 ### Replays and completed streams
 
 For replay content, the loop uses replay offsets and a `TimeRangeFilter` to
@@ -221,6 +248,11 @@ across continuation-page boundaries because dense chats can require more than
 one response to reach the requested offset. Those pages must still advance the
 continuation token or their greatest replay offset; repeated stale responses
 eventually trigger the bounded no-progress guard.
+
+The end boundary applies to valid timed messages even when their message type
+is excluded. An empty paid-only window therefore stops at `end_time` rather
+than scanning until a paid event appears. Paid-cache enrichment still precedes
+both filters.
 
 Replay-wrapper offsets are used only when they are finite and nonnegative.
 Positive offsets provide authoritative millisecond precision. At the zero
@@ -262,13 +294,15 @@ such as authorization and visitor identifiers.
 The initial InnerTube fallback uses the same request-profile context fields
 when constructing its `player` and `next` payloads. Continuation-loop profile
 fallback remains separate and still handles incomplete chat-poll responses
-after bootstrap has succeeded. A first replay response with HTTP 400
-`INVALID_ARGUMENT` also permits bounded profile fallback while preserving the
-continuation token and seek bounds. Once any response is accepted, this error
+after bootstrap has succeeded. Generic unplayability in an InnerTube bootstrap
+is checked even when `next` exposes tokens, so unusable Web replay tokens do not
+bypass profile recovery. A first replay response with HTTP 400
+`INVALID_ARGUMENT` also permits bounded profile fallback, refreshing bootstrap
+tokens and config for the new profile while preserving seek and clip bounds.
+Once any response is accepted, this error
 is terminal; retrieval does not restart and duplicate earlier messages. A
 generic HTTP 400 reports request rejection rather than claiming the video has
-no replay. Fresh retrieval with an explicit mobile profile can still help when
-all retries of the existing token fail.
+no replay.
 
 Android and iOS `next` responses use mobile-specific `playerOverlays` and
 `engagementPanels` layouts rather than the desktop conversation bar. The
@@ -286,6 +320,15 @@ logging identifier; replay offsets remain available in `time_in_seconds` and
 `time_text`. Classic renderer timestamps are unchanged. A live mobile message
 without an original timestamp also has no derived timing; callers must not
 interpret an absent timestamp as the current time.
+
+Mobile replay models can also place preroll messages at offset zero without
+providing the signed Web display time. Zero-time windows can consequently differ
+across profiles. Mobile bootstrap metadata can omit broadcast start/end times.
+Welcome notices may carry retrieval-time timestamps, so use `time_in_seconds`
+for replay positioning rather than subtracting broadcast start from every
+timestamp. Media duration, broadcast span, and last chat offset can differ;
+full replay retrieval follows continuation exhaustion and does not clamp chat
+to media duration.
 
 Sparse paid tickers inherit missing content from a preceding paid event with
 the same ID and type. The per-run cache keeps at most 10,000 paid IDs, runs

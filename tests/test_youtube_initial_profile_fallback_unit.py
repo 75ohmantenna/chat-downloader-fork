@@ -123,6 +123,12 @@ def test_initial_profile_fallback_can_recover_chat_continuation() -> None:
 
     assert details["continuation_info"] == {"Live chat": "token"}
     assert ytcfg["profile"] == ""
+    assert (
+        ytcfg["_chat_downloader_bootstrap_diagnostics"][
+            "bootstrap_profile_switch_count"
+        ]
+        == 1
+    )
     assert downloader.applied_profiles == ["youtube_android"]
 
 

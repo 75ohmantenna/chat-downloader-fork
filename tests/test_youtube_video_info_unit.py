@@ -61,7 +61,11 @@ def test_video_data_selects_url_and_serializes_details(monkeypatch, clip):
     route = "clip/abc" if clip else "watch?v=abc"
     assert fetch.call_args.args[0] == f"https://www.youtube.com/{route}"
     assert details["title"] == (None if clip else "Example")
-    assert (response, data, config) == (player, initial, {"cfg": True})
+    assert (response, data) == (player, initial)
+    assert config["cfg"] is True
+    assert (
+        config["_chat_downloader_bootstrap_diagnostics"]["bootstrap_request_count"] == 0
+    )
     if clip:
         assert [c.args[0] for c in logs.call_args_list] == ["debug", "warning"]
 
@@ -138,7 +142,10 @@ def test_initial_info_enriches_chat_submenus(monkeypatch, status, items, expecte
         f"https://www.youtube.com/{route}?continuation={token}"
     )
     assert details["continuation_info"] == expected
-    assert ytcfg == config
+    assert all(ytcfg[key] == value for key, value in config.items())
+    assert (
+        ytcfg["_chat_downloader_bootstrap_diagnostics"]["bootstrap_request_count"] == 1
+    )
 
 
 @pytest.mark.parametrize(
@@ -168,7 +175,10 @@ def test_initial_info_without_bootstrap(
     returned, config = owner._get_initial_video_info("abc", None)
     assert returned is details
     assert returned["continuation_info"] == continuations
-    assert config == {"cfg": True}
+    assert config["cfg"] is True
+    assert (
+        config["_chat_downloader_bootstrap_diagnostics"]["bootstrap_request_count"] == 0
+    )
     owner._session_get.assert_not_called()
     if warn:
         assert logs.call_args_list[0].args[0] == "warning"

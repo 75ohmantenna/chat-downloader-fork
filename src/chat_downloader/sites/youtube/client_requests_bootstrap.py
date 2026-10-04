@@ -6,8 +6,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
+from requests.exceptions import RequestException
+
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator, Mapping, MutableMapping
+
+    import requests
 
     from chat_downloader.utils.json_types import JSONAny, JSONDict
 
@@ -16,7 +20,7 @@ from chat_downloader.request_profiles import (
     get_request_profile_innertube_client_id,
 )
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import dig, get_dict, get_list, get_str
+from chat_downloader.utils.json_types import dig, get_dict, get_int, get_list, get_str
 
 from .client_context import apply_request_profile_to_innertube_context
 from .constants_patterns import _YT_HOME
@@ -29,6 +33,50 @@ _MOBILE_FILTER_LABELS = {
     "LIVE_CHAT_FILTER_MODE_DEFAULT": "Top chat",
     "LIVE_CHAT_FILTER_MODE_UNFILTERED": "Live chat",
 }
+
+_BOOTSTRAP_COUNTERS = (
+    "bootstrap_request_count",
+    "bootstrap_http_error_count",
+    "bootstrap_network_error_count",
+    "bootstrap_fallback_count",
+    "bootstrap_profile_switch_count",
+)
+
+
+def merge_bootstrap_diagnostics(
+    target: MutableMapping[str, object], source: Mapping[str, object]
+) -> None:
+    """Accumulate fixed bootstrap counters without copying credentials."""
+    for key in _BOOTSTRAP_COUNTERS:
+        target[key] = get_int(target, key) + get_int(source, key)
+
+
+class BootstrapRequests:
+    """Count actual bootstrap HTTP calls across retries without retaining bodies."""
+
+    def __init__(self) -> None:
+        self.diagnostics: dict[str, object] = dict.fromkeys(_BOOTSTRAP_COUNTERS, 0)
+
+    def request(
+        self,
+        method: Callable[..., requests.Response],
+        url: str,
+        **kwargs: object,
+    ) -> requests.Response:
+        self.diagnostics["bootstrap_request_count"] = (
+            get_int(self.diagnostics, "bootstrap_request_count") + 1
+        )
+        try:
+            response = method(url, **kwargs)
+        except (RequestException, OSError):
+            self.diagnostics["bootstrap_network_error_count"] = (
+                get_int(self.diagnostics, "bootstrap_network_error_count") + 1
+            )
+            raise
+        self.diagnostics["bootstrap_http_error_count"] = get_int(
+            self.diagnostics, "bootstrap_http_error_count"
+        ) + int(getattr(response, "status_code", 200) >= 400)
+        return response
 
 
 def _fallback_profile(profile_name: object) -> str:

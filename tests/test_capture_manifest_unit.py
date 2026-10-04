@@ -378,3 +378,39 @@ def test_manifest_hash_rejects_replaced_fifo_without_blocking(tmp_path):
     assert not result.success
     assert "regular files" in result.error_message
     assert not manifest.exists()
+
+
+@pytest.mark.parametrize(
+    "provenance",
+    [
+        {
+            "initial_request_profile": "youtube_web",
+            "active_request_profile": "youtube_android",
+            "chat_view": "Live chat",
+        },
+        {
+            "initial_request_profile": "PRIVATE",
+            "active_request_profile": ["PRIVATE"],
+            "chat_view": {"PRIVATE": True},
+        },
+    ],
+)
+def test_manifest_preserves_safe_bootstrap_metrics_and_provenance(
+    manifest, chat_state, params, provenance
+):
+    counters = {
+        "bootstrap_request_count": 6,
+        "bootstrap_http_error_count": 2,
+        "bootstrap_network_error_count": 1,
+        "bootstrap_fallback_count": 2,
+        "bootstrap_profile_switch_count": 1,
+        "continuation_profile_switch_count": 1,
+    }
+    chat_state.update(counters | provenance)
+    result, report = manifest(**params)
+    assert result.success
+    expected = counters | (
+        provenance if provenance["initial_request_profile"] == "youtube_web" else {}
+    )
+    assert report["provider_diagnostics"] == expected
+    assert "PRIVATE" not in json.dumps(report)

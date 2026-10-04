@@ -236,6 +236,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `_protocols.py` | YouTube-specific Protocol definitions |
+| `capture_inspection.py` | Content-free offline YouTube record inspection, mobile timing observations, and single-run manifest reconciliation |
 | `chat_users_retrieval.py`, `chat_users_router.py` | Chat participant retrieval and routing |
 | `discovery.py` | `YouTubeDiscoveryMixin`: cohesive channel discovery, pagination, rendered-content traversal, and test URL generation |
 | `discovery_playlists.py` | Playlist discovery and pagination |

@@ -13,6 +13,7 @@ from chat_downloader.utils.json_types import get_dict, get_str
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.string_utils import regex_search
 
+from .client_requests_bootstrap import BootstrapRequests, merge_bootstrap_diagnostics
 from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_LIVE_CHAT_REPLAY_URL,
@@ -55,11 +56,28 @@ class YouTubeVideoInitializationMixin:
         """Get initial YouTube video information and continuation metadata."""
         proto = cast("YouTubeDownloaderProto", self)
         attempted_profiles: set[str] = set()
+        bootstrap = BootstrapRequests()
+        bootstrap.diagnostics["initial_request_profile"] = (
+            getattr(proto, "_request_profile", None) or "youtube_web"
+        )
 
         while True:
             details, player_response_info, yt_initial_data, ytcfg = (
                 proto._parse_video_data(video_id, params, video_type)
             )
+            merge_bootstrap_diagnostics(
+                bootstrap.diagnostics,
+                get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics"),
+            )
+            bootstrap.diagnostics["active_request_profile"] = (
+                getattr(proto, "_request_profile", None) or "youtube_web"
+            )
+            ytcfg = {
+                **ytcfg,
+                "_chat_downloader_bootstrap_diagnostics": cast(
+                    "JSONDict", bootstrap.diagnostics
+                ),
+            }
 
             if not yt_initial_data.get("_chat_downloader_continuation_info"):
                 # Refresh submenu tokens through the chat-page bootstrap.
@@ -82,7 +100,8 @@ class YouTubeVideoInitializationMixin:
                     chat_url = (
                         _YT_LIVE_CHAT_REPLAY_URL if is_replay else _YT_LIVE_CHAT_URL
                     )
-                    response = proto._session_get(
+                    response = bootstrap.request(
+                        proto._session_get,
                         f"{chat_url}?continuation={client_continuation}",
                     )
                     dict_live_chats = try_parse_json(
@@ -131,6 +150,9 @@ class YouTubeVideoInitializationMixin:
                 return details, ytcfg
 
             attempted_profiles.add(next_profile)
+            bootstrap.diagnostics["bootstrap_profile_switch_count"] = len(
+                attempted_profiles
+            )
             log(
                 "warning",
                 "Switching YouTube request profile after a generic initial "

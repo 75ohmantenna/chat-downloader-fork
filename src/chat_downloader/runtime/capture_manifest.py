@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from chat_downloader.metadata import __version__
 from chat_downloader.redaction import sanitize_for_log
+from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.sites.output_dispatch import _expand_output_file_name
 
 if TYPE_CHECKING:
@@ -74,6 +75,12 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
             "http_error_count",
             "network_error_count",
             "json_error_count",
+            "bootstrap_request_count",
+            "bootstrap_http_error_count",
+            "bootstrap_network_error_count",
+            "bootstrap_fallback_count",
+            "bootstrap_profile_switch_count",
+            "continuation_profile_switch_count",
             "websocket_frame_count",
             "control_frame_count",
             "parsed_event_count",
@@ -98,6 +105,18 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
         )
         if type(state.get(key)) is int
     }
+    for key in ("initial_request_profile", "active_request_profile"):
+        value = state.get(key)
+        if isinstance(value, str) and value in REQUEST_PROFILES:
+            counters[key] = value
+    view = state.get("chat_view")
+    if isinstance(view, str) and view in {
+        "Top chat",
+        "Live chat",
+        "Top chat replay",
+        "Live chat replay",
+    }:
+        counters["chat_view"] = view
     reasons = state.get("non_emission_counts")
     if isinstance(reasons, dict):
         counters["non_emission_counts"] = {

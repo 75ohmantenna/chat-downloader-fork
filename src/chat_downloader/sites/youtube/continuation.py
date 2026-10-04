@@ -25,7 +25,7 @@ from chat_downloader.redaction import BoundedSampleCapture, capture_debug_sample
 from chat_downloader.request_profiles import get_next_request_profile
 from chat_downloader.sites.common import check_for_invalid_types
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import get_dict, get_str
+from chat_downloader.utils.json_types import get_dict, get_int, get_str
 from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import polling_sleep
 
@@ -37,6 +37,7 @@ from .client_context import (
     apply_request_profile_to_innertube_context,
     apply_request_profile_to_ytcfg,
 )
+from .client_requests_bootstrap import merge_bootstrap_diagnostics
 from .client_requests_continuation import _get_continuation_info
 from .constants_message import _MESSAGE_TYPES
 from .constants_patterns import (
@@ -343,6 +344,10 @@ class _ContinuationLoop:
             is_replay=is_replay,
         )
         log("debug", f"Getting {chat_type.title()} chat ({continuation_label}).")
+        self.diagnostics["chat_view"] = continuation_label
+        self.diagnostics["active_request_profile"] = (
+            getattr(self.downloader, "_request_profile", None) or "youtube_web"
+        )
 
         api_key = require_innertube_api_key(ytcfg)
         init_page, continuation_url = _build_continuation_urls(
@@ -449,6 +454,10 @@ class _ContinuationLoop:
         )
         if next_profile is None or not downloader.apply_request_profile(next_profile):
             return False
+        self.diagnostics["continuation_profile_switch_count"] = (
+            get_int(self.diagnostics, "continuation_profile_switch_count") + 1
+        )
+        self.diagnostics["active_request_profile"] = next_profile
         log(
             "warning",
             f"Switching YouTube request profile after {reason}: {next_profile}",
@@ -516,6 +525,9 @@ class _ContinuationLoop:
             return False
         details, ytcfg = self.downloader._get_initial_video_info(
             get_str(self.initial_info, "original_video_id"), self.params
+        )
+        merge_bootstrap_diagnostics(
+            self.diagnostics, get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
         )
         self.initial_info = {
             **self.initial_info,

@@ -126,6 +126,30 @@ UTF-8, malformed or blank JSONL lines, non-object JSON, formatting failures,
 line-count differences, mixed/missing/mismatched physical newlines, and invalid
 dedup reset boundaries are audit failures.
 
+### YouTube capture inspection
+
+Inspect a closed YouTube JSONL capture without printing messages or identifiers:
+
+```bash
+uv run python scripts/inspect_youtube_capture.py capture.jsonl \
+  --manifest capture.manifest.json
+```
+
+The optional manifest adds profile/view provenance, bootstrap and continuation
+connection counters, parser-loss counts, and record/type-count reconciliation.
+Use the matching manifest from one retrieval run. A resumed file can contain
+prior records: total counts include `prior_message_count`, while current-run
+type counts are explicitly marked incomparable with the whole file.
+
+The fixed report includes unknown message types, duplicate text-message IDs,
+invalid source timestamps or replay offsets, and strict JSONL findings. Missing
+source timestamps, zero-offset records without timestamps, signed preroll, and
+offset backsteps are observations rather than automatic failures. Paid events
+and their tickers may share IDs. Manifest input is limited to one MiB and must
+contain an object with unique keys. Exit codes are `0` for clean inspection, `1`
+for review, and `2` for usage or input errors. This offline inspector supplements
+output parity; it does not establish provider delivery completeness.
+
 ### Twitch capture inspection
 
 Live Twitch captures using `--verify_output` automatically include these

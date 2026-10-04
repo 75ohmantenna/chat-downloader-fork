@@ -154,6 +154,8 @@ def test_real_request_and_action_loop_share_capture_diagnostics():
     assert loop.diagnostics == {
         "poll_count": 1,
         "continuation_request_count": 1,
+        "active_request_profile": "youtube_web",
+        "chat_view": "Live chat",
         "continuation_retry_count": 0,
         "http_error_count": 0,
         "network_error_count": 0,
