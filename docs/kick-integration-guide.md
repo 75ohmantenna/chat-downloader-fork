@@ -705,6 +705,13 @@ network access. Fixtures live under `tests/fixtures/kick/`; shared fakes live in
 `@pytest.mark.network` in `tests/test_kick_network.py` and run only with
 `--run-network`.
 
+`kicks_gifted_event_recorded.json` retains an observed gift payload from a live
+JSONL capture. Its provenance records the source line and hash, replaced user
+identity and chat text, and the event envelope reconstructed from JSONL
+metadata; the original wire encoding was not retained. The formatting suite
+dispatches this fixture as both decoded and JSON-encoded event data before
+checking gift details and the plain receive timestamp in TXT.
+
 To add coverage for a new event type:
 
 1. Add a raw fixture under `tests/fixtures/kick/`.

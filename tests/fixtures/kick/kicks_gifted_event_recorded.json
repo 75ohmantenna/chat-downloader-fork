@@ -1,0 +1,37 @@
+{
+  "provenance": {
+    "source_file": "mikeynohmore_20261003T223733Z_2242231.jsonl",
+    "source_line": 70,
+    "source_line_sha256": "542f935f27a8c6ae9cd0d06c30f6d8b3e70e9ed17d5b64b9c590fb0350c2bd7b",
+    "source_hash_format": "SHA-256 of the original JSONL line including its trailing newline.",
+    "source": "Observed live KicksGifted payload retained in JSONL metadata.data.",
+    "curation": "Reconstructed event envelope from metadata.event_name, channel, data, and source; original wire encoding was not retained. Replaced channel ID, sender ID and username, gift transaction ID, and attached chat text. Preserved payload keys, value types, gift details, timestamps, and receive time. JSON formatting is normalized."
+  },
+  "received_timestamp": 1791067182588500,
+  "frame": {
+    "event": "KicksGifted",
+    "channel": "channel_123",
+    "data": {
+      "created_at": "2026-10-03T22:39:42.484939359Z",
+      "expires_at": "2026-10-03T22:49:42.484939359Z",
+      "gift": {
+        "amount": 500,
+        "character_limit": 150,
+        "gift_id": "rage_quit",
+        "name": "Rage Quit",
+        "pinned_time": 600000000000,
+        "tier": "MID",
+        "type": "LEVEL_UP"
+      },
+      "gift_transaction_id": "00000000-0000-4000-8000-000000000001",
+      "message": "Great stream!",
+      "sender": {
+        "id": 42,
+        "profile_picture": "https://kick.com/img/default-profile-pictures/default-avatar-2.webp",
+        "username": "GiftUser",
+        "username_color": "#FFFFFF"
+      }
+    },
+    "source": "websocket"
+  }
+}

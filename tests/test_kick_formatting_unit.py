@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from chat_downloader.formatting.format import ItemFormatter
+from chat_downloader.sites.kick.parsing.events import dispatch_event
 from chat_downloader.sites.kick.parsing.messages import parse_chat_message
 from chat_downloader.sites.kick.parsing.moderation import parse_message_deleted_event
 from chat_downloader.sites.kick.parsing.pins import parse_pinned_message_created_event
@@ -218,6 +221,33 @@ def test_kicks_gifted_details_and_plain_receive_timestamp(formatter, data, suffi
     item["timestamp"] = 1_577_923_200_000_000
     assert formatter.format(item, format_name="kick") == (
         f"2020-01-02 00:00:00 | [Kicks gifted]{suffix}"
+    )
+
+
+@pytest.mark.parametrize("encoded", [False, True])
+def test_recorded_kicks_gifted_dispatch_and_formatting(formatter, encoded):
+    fixture = load_fixture("kicks_gifted_event_recorded.json")
+    frame = fixture["frame"]
+    payload = frame["data"]
+    if encoded:
+        frame = {**frame, "data": json.dumps(payload)}
+
+    item = dispatch_event(frame, received_timestamp=fixture["received_timestamp"])
+
+    assert item is not None
+    assert item["message_type"] == "kicks_gifted"
+    assert item["message_id"] == "kick-kicks_gifted:1791067182588500"
+    assert item["received_timestamp"] == 1_791_067_182_588_500
+    assert "timestamp" not in item
+    assert item["metadata"] == {
+        "event_name": "KicksGifted",
+        "channel": "channel_123",
+        "data": payload,
+        "source": "websocket",
+    }
+    assert formatter.format(item, format_name="kick") == (
+        "2026-10-03 22:39:42 | [Kicks gifted] GiftUser"
+        " — 500 Kicks (Rage Quit): Great stream!"
     )
 
 
