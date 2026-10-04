@@ -189,6 +189,10 @@ replays may explicitly override that delay with `youtube_replay_poll_interval`;
 the bounded override is opt-in because faster polling can be rate-limited. This
 polling delay is separate from HTTP connect/read timeout settings.
 
+When retrieval runs inside a timed worker, polling waits wake on shutdown and
+unwind the provider before another poll. An HTTP request already in progress
+still uses its connect/read bounds, so deadline accounting can remain incomplete.
+
 Actions then pass through the message pipeline, which:
 
 - filters by requested message groups and message types

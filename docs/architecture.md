@@ -182,7 +182,7 @@ module names.
 | `retry_utils.py` | Immutable retry policy model |
 | `string_utils.py` | Regex, wrapping, prefix/suffix, and name-normalization helpers |
 | `time_utils.py` | Timestamp, duration, timezone, and ISO-8601 conversion |
-| `timed_generator.py` | Close-propagating timeout and inactivity wrapper |
+| `timed_generator.py` | Close-propagating timeout and inactivity wrapper with cancellable provider polling waits |
 | `timed_input.py` | Interruptible console input with timeout support |
 
 ### `sites/` (shared)

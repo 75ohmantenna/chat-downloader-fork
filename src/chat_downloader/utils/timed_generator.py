@@ -8,13 +8,20 @@ import queue as _queue
 import threading
 import time
 from contextlib import suppress
-from contextvars import copy_context
+from contextvars import ContextVar, copy_context
 from typing import TYPE_CHECKING, Any, NoReturn, Self
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
 
 POLLING_TIME = 0.1
+_POLLING_STOP_EVENT: ContextVar[threading.Event | None] = ContextVar(
+    "polling_stop_event", default=None
+)
+
+
+class _PollingCancelled(BaseException):
+    """Unwind a provider wait after its timed worker is stopped."""
 
 
 class TimedGenerator:
@@ -73,6 +80,7 @@ class TimedGenerator:
             maxsize=1
         )
         worker_context = copy_context()
+        worker_context.run(_POLLING_STOP_EVENT.set, self._stop_requested)
         self._worker = threading.Thread(
             target=worker_context.run,
             args=(self._worker_loop,),
@@ -226,6 +234,8 @@ class TimedGenerator:
                 except StopIteration:
                     self._publish_result(("stop", None, time.monotonic()))
                     return
+                except _PollingCancelled:
+                    return
                 except BaseException as error:
                     if isinstance(error, (SystemExit, GeneratorExit)):
                         raise
@@ -357,8 +367,14 @@ class TimedGenerator:
 
 
 def polling_sleep(secs: float, poll_time: float = POLLING_TIME) -> None:
-    """Sleep for secs seconds in polling intervals of poll_time seconds."""
+    """Sleep in polling intervals, or until the owning timed worker stops."""
     if secs <= 0:
+        return
+
+    stop_event = _POLLING_STOP_EVENT.get()
+    if stop_event is not None:
+        if stop_event.wait(secs):
+            raise _PollingCancelled
         return
 
     start_time = time.monotonic()
