@@ -152,12 +152,14 @@ def _accounting(
         counters[key] = value
     count = summary.get("message_count")
     prior = summary.get("prior_message_count", 0)
+    prior_loss = diagnostics.get("prior_record_loss", False)
     types = get_dict(summary, "message_type_counts")
     if (
         type(count) is not int
         or count < 0
         or type(prior) is not int
         or prior < 0
+        or type(prior_loss) is not bool
         or type(summary.get("success")) is not bool
         or not isinstance(summary.get("message_type_counts"), dict)
         or any(type(v) is not int or v < 0 for v in types.values())
@@ -178,6 +180,7 @@ def _accounting(
         "chat_view": _choice(diagnostics.get("chat_view"), _VIEWS),
         "summary_minus_records": count + prior - inspection.records,
         "type_counts_comparable": prior == 0,
+        "prior_record_loss": prior_loss,
         "message_type_count_mismatches": mismatches if prior == 0 else None,
         "run_failed": summary.get("success") is not True,
         "parity_failed": summary.get("parity_status") == "failed",
@@ -217,6 +220,7 @@ def inspect_capture(
                     accounting["summary_minus_records"]
                     or accounting["message_type_count_mismatches"]
                     or accounting["run_failed"]
+                    or accounting["prior_record_loss"]
                     or accounting["parity_failed"]
                     or get_dict(accounting, "counters")["parse_error"]
                 )

@@ -103,6 +103,7 @@ def test_invalid_offsets_do_not_crash_inspection(tmp_path, offset):
         _summary(message_type_counts={"private": True}),
         _summary(message_type_counts=[]),
         _summary(provider_diagnostics={"bootstrap_request_count": -1}),
+        _summary(provider_diagnostics={"prior_record_loss": 1}),
     ],
 )
 def test_invalid_summary_is_rejected(summary):
@@ -135,6 +136,7 @@ def test_resume_manifest_does_not_compare_current_type_counts_with_prior_records
         _summary(success=False),
         _summary(parity_status="failed"),
         _summary(provider_diagnostics={"parse_error": 1}),
+        _summary(provider_diagnostics={"prior_record_loss": True}),
     ],
 )
 def test_run_accounting_gaps_and_parser_loss_need_review(summary):

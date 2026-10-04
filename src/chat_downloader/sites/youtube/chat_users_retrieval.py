@@ -13,6 +13,8 @@ from chat_downloader.models import coerce_chat_request
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.dict_utils import try_get_first_value
 
+from .capture_inspection import inspect_capture
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -40,6 +42,9 @@ class YouTubeChatUsersRetrievalMixin:
         request = coerce_chat_request(params)
         title = try_get_first_value(user_video_args)
         chat_item = Chat(title=title, id=title)
+        chat_item._capture_inspector = lambda path, summary: inspect_capture(
+            path, run_summary=summary
+        )
         chat_item.chat = self._get_chat_messages_by_user_args(
             user_video_args,
             chat_item,

@@ -11,6 +11,7 @@ from chat_downloader.sites.models import Chat
 from chat_downloader.utils.json_types import get_dict
 from chat_downloader.utils.time_utils import ensure_seconds
 
+from .capture_inspection import inspect_capture
 from .continuation import _ContinuationLoop
 
 if TYPE_CHECKING:
@@ -75,12 +76,16 @@ class YouTubeChatStreamsMixin:
         diagnostics: dict[str, object] = dict(
             get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
         )
-        return Chat(
+        chat = Chat(
             self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
             id=clip_id,
             diagnostics=diagnostics,
             **initial_info,
         )
+        chat._capture_inspector = lambda path, summary: inspect_capture(
+            path, run_summary=summary
+        )
+        return chat
 
     def get_chat_by_video_id(
         self, video_id: str, params: ChatRequest | dict[str, Any]
@@ -93,12 +98,16 @@ class YouTubeChatStreamsMixin:
         diagnostics: dict[str, object] = dict(
             get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
         )
-        return Chat(
+        chat = Chat(
             self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
             id=video_id,
             diagnostics=diagnostics,
             **initial_info,
         )
+        chat._capture_inspector = lambda path, summary: inspect_capture(
+            path, run_summary=summary
+        )
+        return chat
 
     def _get_chat_by_video_id(self, match: re.Match[str], params: ChatRequest) -> Chat:
         """Get chat by video ID from regex match."""

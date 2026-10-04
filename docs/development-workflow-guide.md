@@ -128,6 +128,13 @@ dedup reset boundaries are audit failures.
 
 ### YouTube capture inspection
 
+YouTube captures using `--verify_output` run this inspector after outputs close.
+The run result, debug summary, and manifest retain the content-free report in
+`provider_inspection`. Findings or inspection errors fail the verified run even
+when output parity passes. Missing mobile timestamps remain observations.
+Resumed files include checkpoint-verified prior records; known prior parser
+loss remains a finding. Empty lazy captures are inspected without creating files.
+
 Inspect a closed YouTube JSONL capture without printing messages or identifiers:
 
 ```bash

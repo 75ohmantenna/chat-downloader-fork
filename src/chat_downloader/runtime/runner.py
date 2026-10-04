@@ -241,7 +241,11 @@ def _verify_capture_outputs(
     """Run provider inspection, parity verification, and checkpoint save."""
     try:
         if verification_bound and chat is not None:
-            result.provider_inspection = inspect_provider_capture(chat, result)
+            result.provider_inspection = inspect_provider_capture(
+                chat,
+                result,
+                allow_existing=checkpoint is not None and checkpoint.loaded,
+            )
         if run_config.verify_output and result.success and chat is not None:
             result.parity_status = "failed"
             verify_capture(

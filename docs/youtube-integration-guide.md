@@ -92,7 +92,7 @@ The normal YouTube flow is:
 - `continuations.py`: continuation parsing models and utilities
 - `message_pipeline.py`: filtering and action-to-message pipeline boundary
 - `paid_events.py`: bounded per-run paid-event cache for sparse tickers
-- `capture_inspection.py`: offline JSONL timing and manifest diagnostics
+- `capture_inspection.py`: automatic and offline JSONL timing and manifest diagnostics
 
 ### Parsing
 
@@ -239,6 +239,11 @@ require debug logs; there is no chat diagnostic object to attach to that run.
 The offline [YouTube capture inspector](development-workflow-guide.md#youtube-capture-inspection)
 reports these counters alongside missing source timestamps, zero-offset mobile
 records, and record/type-count reconciliation without printing chat content.
+YouTube `--verify_output` runs the same inspector after output closes, including
+video, clip, and channel/handle retrieval. Its report is retained in
+`provider_inspection`; findings or inspection errors fail the verified run even
+when JSONL/TXT parity passes. Resume accounting includes verified prior records
+and retains known prior parser loss. Missing mobile timestamps remain observations.
 
 ### Replays and completed streams
 
