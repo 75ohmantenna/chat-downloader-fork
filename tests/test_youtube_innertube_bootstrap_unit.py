@@ -10,7 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from chat_downloader.errors import CaptchaChallengeRequired, NoContinuation
+from chat_downloader.errors import (
+    CaptchaChallengeRequired,
+    NoContinuation,
+    ParsingError,
+)
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.client_requests_bootstrap import (
     _build_fallback_initial_data,
@@ -128,6 +132,23 @@ def test_parse_video_data_falls_back_after_watch_challenge(monkeypatch) -> None:
     assert player_response["videoDetails"]["isLive"] is True
     assert yt_initial_data["_chat_downloader_continuation_info"]
     assert ytcfg["INNERTUBE_CONTEXT"]["client"]["visitorData"]
+    assert len(dummy.post_urls) == 2
+
+
+@pytest.mark.parametrize("error_type", [CaptchaChallengeRequired, ParsingError])
+def test_bootstrap_warning_names_failure_without_exposing_exception_text(
+    monkeypatch, caplog, error_type
+):
+    caplog.set_level("DEBUG", logger="chat_downloader")
+    dummy = _FallbackDummy()
+
+    def fail(_url):
+        raise error_type("PRIVATE_SENTINEL")
+
+    monkeypatch.setattr(dummy, "_session_get", fail)
+    dummy._parse_video_data("IzopCEgh2G8")
+    assert f"watch-page bootstrap failed ({error_type.__name__})" in caplog.text
+    assert "PRIVATE_SENTINEL" not in caplog.text
     assert len(dummy.post_urls) == 2
 
 

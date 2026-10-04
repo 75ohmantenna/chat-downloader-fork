@@ -53,13 +53,13 @@ class YouTubeVideoMetadataCoreMixin:
                 _YT_CFG_RE,
                 _YT_INITIAL_PLAYER_RESPONSE_RE,
             )
-        except (CaptchaChallengeRequired, ParsingError):
+        except (CaptchaChallengeRequired, ParsingError) as error:
             if video_type == "clip":
                 raise
             log(
                 "warning",
                 "Falling back to YouTube InnerTube bootstrap after the "
-                "watch-page bootstrap failed.",
+                f"watch-page bootstrap failed ({type(error).__name__}).",
             )
             bootstrap.diagnostics["bootstrap_fallback_count"] = 1
             yt_initial_data, ytcfg, player_response_info = (

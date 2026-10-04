@@ -125,9 +125,11 @@ unavailable.
 
 When the watch page is blocked by a YouTube/Google challenge or the page no
 longer exposes parseable initial JSON, regular video targets can fall back to
-InnerTube `player` and `next` requests. That fallback preserves the active
-request profile and builds a minimal `ytcfg`. Desktop bootstrap uses the primary
-`liveChatRenderer` token when present. Mobile bootstrap preserves explicit
+InnerTube `player` and `next` requests. Debug logs identify the final page host
+using a fixed safe vocabulary, and the fallback warning names the exception
+class without printing its text or redirect URL. The fallback preserves the
+active request profile and builds a minimal `ytcfg`. Desktop bootstrap uses the
+primary `liveChatRenderer` token when present. Mobile bootstrap preserves explicit
 Top/Live filter tokens: its primary renderer can select Top chat, so it cannot
 replace an explicit Live token or supply a missing view. This fallback supports
 live and replay video targets; clips remain on the normal page bootstrap because
