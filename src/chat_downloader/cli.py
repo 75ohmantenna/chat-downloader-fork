@@ -23,6 +23,7 @@ from .cli_args import (
 )
 from .debugging import disable_logger, install_cli_log_handler, log, set_log_level
 from .metadata import __program__, __summary__, __version__
+from .utils.interrupts import raise_or_defer_interrupt
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -30,10 +31,10 @@ if TYPE_CHECKING:
 
 
 def _install_cli_signal_handlers() -> None:
-    """Translate SIGTERM to KeyboardInterrupt so the runner's finally flushes writers.
+    """Finish the active record before interrupting and flushing CLI output.
 
-    SIGINT already raises KeyboardInterrupt. Wrap both to restore the default
-    handler on a second signal, allowing stuck shutdowns to be force-killed.
+    Provider reads stay immediately interruptible. A second signal restores its
+    default handler and raises immediately, allowing cleanup to be force-killed.
     """
     state = {"triggered": False}
 
@@ -47,7 +48,7 @@ def _install_cli_signal_handlers() -> None:
             "info",
             f"Signal {signum} received; finalizing output (send again to force exit).",
         )
-        raise KeyboardInterrupt
+        raise_or_defer_interrupt()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         # The signal may be unavailable (e.g. SIGTERM on some Windows

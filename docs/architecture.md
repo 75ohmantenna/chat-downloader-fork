@@ -85,6 +85,14 @@ Provider diagnostics remain available on the returned `Chat` and appear in
 debug summaries, including failed runs; normal message output and file formats
 are unchanged.
 
+The first CLI interrupt is deferred across output dispatch and run/checkpoint
+accounting so a signal cannot split successful writes from their counters.
+`Chat` temporarily enables immediate interruption around provider reads; nested
+record boundaries share one pending interrupt. Other failures retain priority,
+and a second signal can still interrupt the protected record. Closed interrupted
+captures run parity independently of their unsuccessful interruption status;
+cleanup failures prevent verification.
+
 JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing
 record (or adds a missing newline to a valid record) before writing new data;
@@ -177,6 +185,7 @@ module names.
 | `conversion_utils.py` | Scalar conversion, retry-attempt, and back-off helpers |
 | `dict_utils.py` | Nested dictionary lookup, mutation, and first-item helpers |
 | `filename_utils.py` | Safe single-component filename sanitization |
+| `interrupts.py` | Cooperative CLI interrupt deferral across record persistence and accounting, with immediately interruptible provider reads |
 | `json_types.py` | JSON aliases plus typed accessors (`get_str`, `get_int`, `get_dict`, `get_list`, `dig`) |
 | `json_utils.py` | JSON parsing, flattening, and nested update helpers |
 | `retry_utils.py` | Immutable retry policy model |

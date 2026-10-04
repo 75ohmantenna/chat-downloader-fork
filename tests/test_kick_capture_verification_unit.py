@@ -174,7 +174,9 @@ def test_closed_partial_capture_inspection_preserves_primary_failure(tmp_path, e
     assert result.error_message == (
         "Keyboard Interrupt" if isinstance(error, KeyboardInterrupt) else "primary"
     )
-    assert result.parity_status == "not_run"
+    assert result.parity_status == (
+        "passed" if isinstance(error, KeyboardInterrupt) else "not_run"
+    )
     assert result.provider_inspection["records"] == 1
     assert result.provider_inspection["frame_accounting"]["run_failed"] == 1
 
@@ -216,6 +218,43 @@ def test_provider_findings_survive_parity_failure(tmp_path):
     assert not result.success
     assert result.parity_status == "failed"
     assert result.provider_inspection["status"] == "ok"
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_interrupted_parity_retains_original_status_and_inspection(tmp_path, broken):
+    class Interrupted(LiveDownloader):
+        failure = KeyboardInterrupt()
+
+        def close(self):
+            super().close()
+            if broken:
+                (tmp_path / "chat.txt").write_text("wrong\n")
+
+    result = execute_run(Interrupted, **_params(tmp_path))
+    assert result.interrupted
+    assert not result.success
+    assert result.termination_reason == "interrupted"
+    assert result.error_message == "Keyboard Interrupt"
+    assert result.parity_status == ("failed" if broken else "passed")
+    assert result.provider_inspection["records"] == 1
+    assert result.provider_inspection["status"] == "review"
+    manifest = json.loads((tmp_path / "run.json").read_text())
+    assert manifest["parity_status"] == result.parity_status
+    assert manifest["termination_reason"] == "interrupted"
+
+
+def test_interrupted_capture_with_cleanup_failure_does_not_verify(tmp_path):
+    class FailedCleanup(LiveDownloader):
+        failure = KeyboardInterrupt()
+
+        def close(self):
+            super().close()
+            raise OSError("close failed")
+
+    result = execute_run(FailedCleanup, **_params(tmp_path))
+    assert result.interrupted
+    assert result.error_message == "Keyboard Interrupt"
+    assert result.parity_status == "not_run"
 
 
 @pytest.mark.parametrize("complete", [True, False])

@@ -26,6 +26,7 @@ from chat_downloader.errors import (
 from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
 from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
+from chat_downloader.utils.interrupts import defer_interrupts
 
 from .capture_checkpoint import CaptureCheckpoint, checkpoint_lock
 from .capture_manifest import RunManifest, replay_complete, validate_complete_request
@@ -246,7 +247,12 @@ def _verify_capture_outputs(
                 result,
                 allow_existing=checkpoint is not None and checkpoint.loaded,
             )
-        if run_config.verify_output and result.success and chat is not None:
+        if (
+            run_config.verify_output
+            and verification_bound
+            and (result.success or result.interrupted)
+            and chat is not None
+        ):
             result.parity_status = "failed"
             verify_capture(
                 chat,
@@ -259,7 +265,8 @@ def _verify_capture_outputs(
             )
             result.parity_status = "passed"
             if (
-                result.provider_inspection is not None
+                result.success
+                and result.provider_inspection is not None
                 and result.provider_inspection["status"] != "ok"
             ):
                 msg = "Provider capture inspection requires review."
@@ -270,7 +277,8 @@ def _verify_capture_outputs(
             checkpoint.save(chat, result.message_count)
     except (ChatDownloaderError, OSError, ValueError) as error:
         result.success = False
-        result.termination_reason = "error"
+        if result.error_message is None:
+            result.termination_reason = "error"
         result.error_message = result.error_message or str(error)
         log("error", str(error))
 
@@ -369,18 +377,21 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         source = iter(chat)
         while True:
             try:
-                if checkpoint is not None:
-                    message = checkpoint.advance(chat, result)
-                else:
-                    message = next(source)
-                    result.message_count += 1
+                with defer_interrupts():
+                    if checkpoint is not None:
+                        message = checkpoint.advance(chat, result)
+                    else:
+                        message = next(source)
+                        result.message_count += 1
+                    message_type = message.get("message_type")
+                    counter_key = (
+                        message_type if isinstance(message_type, str) else "<missing>"
+                    )
+                    result.message_type_counts[counter_key] = (
+                        result.message_type_counts.get(counter_key, 0) + 1
+                    )
             except StopIteration:
                 break
-            message_type = message.get("message_type")
-            counter_key = message_type if isinstance(message_type, str) else "<missing>"
-            result.message_type_counts[counter_key] = (
-                result.message_type_counts.get(counter_key, 0) + 1
-            )
             callback(message)
 
         result.success = True
@@ -418,7 +429,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 suppressed_close_error = _finalize_run(
                     chat, downloader, primary_error=primary_error
                 )
-                if suppressed_close_error is not None and checkpoint_bound:
+                if suppressed_close_error is not None:
                     checkpoint_bound = False
                     verification_bound = False
                     if not primary_error:

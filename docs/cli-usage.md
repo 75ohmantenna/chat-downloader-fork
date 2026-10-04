@@ -311,9 +311,11 @@ Debug and automation:
 - The CLI exits with a nonzero status on failure or when interrupted
   (`KeyboardInterrupt` / `SIGTERM`); exit status `0` means a clean run.
 - On `SIGTERM` (e.g. `systemd` stopping the service, or `kill <pid>`) the CLI
-  shuts down gracefully: the signal is translated into a `KeyboardInterrupt` so
-  output writers flush before exit. Sending a second signal restores the
-  default handler and exits immediately.
+  shuts down gracefully. The first SIGINT or SIGTERM finishes any record already
+  being written, including writer, run, and checkpoint counts, before raising
+  `KeyboardInterrupt`. Provider reads remain immediately interruptible. Sending
+  a second signal interrupts cleanup and restores the default handler for that
+  signal, allowing a subsequent signal to force termination.
 - For deeper platform behavior, see
   [`youtube-integration-guide.md`](youtube-integration-guide.md),
   [`twitch-integration-guide.md`](twitch-integration-guide.md), and
@@ -447,8 +449,10 @@ inspection fails, and its independent status remains available. Twitch/Kick
 replays retain parity-only verification. YouTube resume inspection includes
 checkpoint-verified prior records and flags known prior parser loss. Closed
 partial captures are also inspected after retrieval failures when the output
-pair was validated; the original error remains authoritative and
-parity stays `not_run`.
+pair was validated; the original error remains authoritative. Interrupted
+captures also run parity when outputs closed successfully, retaining the
+interrupted exit status and termination reason whether parity passes or fails.
+Other retrieval failures and cleanup failures leave parity `not_run`.
 
 The report also records `prefetched_after_deadline_count` and
 `deadline_prefetch_count_complete`. Parsed provider messages need not equal output

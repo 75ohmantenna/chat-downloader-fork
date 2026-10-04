@@ -11,6 +11,7 @@ from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
 from chat_downloader.models import SiteDefault
 from chat_downloader.utils.console_utils import safe_print
+from chat_downloader.utils.interrupts import defer_interrupts, interruptible
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
@@ -164,9 +165,11 @@ class Chat:
             raise StopIteration(msg)
 
         try:
-            item: dict[str, Any] = next(self.chat)
-            if self._output_dispatcher is not None:
-                self._output_dispatcher.emit(item)
+            with interruptible():
+                item: dict[str, Any] = next(self.chat)
+            with defer_interrupts():
+                if self._output_dispatcher is not None:
+                    self._output_dispatcher.emit(item)
         except BaseException:
             # Close writers while unwinding any generator termination,
             # including KeyboardInterrupt/SystemExit. Runner-level cleanup may

@@ -208,6 +208,11 @@ run independently of TXT parity. Closed partial captures retain findings
 without replacing their original retrieval error. Empty lazy captures are
 inspected without creating output files.
 
+Interrupted captures also receive automatic TXT parity checks when cleanup
+succeeds. A passing parity result certifies the captured prefix's formatting,
+while the run remains interrupted and unsuccessful. The inspector can still
+require review for an interrupted run or incomplete deadline accounting.
+
 To inspect an existing live capture or replay archive offline:
 
 ```bash
