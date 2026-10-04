@@ -507,6 +507,9 @@ needed. `all` is the shared unfiltered selector rather than an entry in the
 site-specific group map. Kick `celebration` chat payloads remain in `messages`
 because they carry user-authored chat text; their subscription-renewal details
 remain available as structured JSONL metadata.
+TXT shows the total-month count before the badges and author's name, for example
+`[Subscribed for 9 months]`, with `month` for one. Celebrations without a
+total-month count keep the ordinary chat rendering.
 
 Kick TXT replies include `[replying to NAME]`, preferring the parent author's
 display name and falling back to their name. When only a parent message or

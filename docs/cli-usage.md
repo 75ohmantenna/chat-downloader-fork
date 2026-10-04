@@ -129,8 +129,10 @@ of a blank line; JSONL retains their structured identifiers and metadata. When
 a user sends a Kick subscription-renewal celebration, it remains an ordinary
 `text_message` so message-only captures preserve the chat text. JSONL also
 retains its provider ID, renewal type, total-month count, and normalized event
-time under `metadata.celebration`; TXT keeps the ordinary chat rendering. When
-a Kick live poll is active, the opt-in `polls` message group emits each poll
+time under `metadata.celebration`. TXT adds `[Subscribed for 9 months]` before
+the badges and author's name when a total-month count is available, using
+`month` for one.
+When a Kick live poll is active, the opt-in `polls` message group emits each poll
 state update with its title, countdown, options, and vote counts, followed by a
 `poll_deleted` state event when Kick removes it. TXT labels both event types;
 JSONL is the lossless representation for changing poll state. When

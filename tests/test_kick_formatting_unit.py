@@ -144,6 +144,52 @@ def test_provider_events_render_end_to_end(formatter, parser, fixture, expected)
     )
 
 
+@pytest.mark.parametrize("encoded", [False, True])
+@pytest.mark.parametrize("badged", [False, True])
+@pytest.mark.parametrize(
+    ("months", "label"),
+    [
+        (20, "[Subscribed for 20 months] "),
+        (1, "[Subscribed for 1 month] "),
+        (0, ""),
+        (None, ""),
+        (-1, ""),
+        (True, ""),
+        ("invalid", ""),
+    ],
+)
+def test_subscription_celebration_months_render_end_to_end(
+    formatter, encoded, badged, months, label
+):
+    payload = load_fixture("celebration_message_event_data.json")
+    if not badged:
+        payload["sender"]["identity"]["badges"] = []
+    celebration = payload["metadata"]["celebration"]
+    if months is None:
+        celebration.pop("total_months")
+    else:
+        celebration["total_months"] = months
+    if encoded:
+        payload["metadata"] = json.dumps(payload["metadata"])
+    item = parse_chat_message(payload)
+    badges = "(Subscriber) " if badged else ""
+    assert formatter.format(item, format_name="kick") == (
+        f"2026-08-29 01:47:39 | {label}{badges}RenewalUser: Celebrating 20 months!"
+    )
+    assert formatter.format(item, format_name="default") == (
+        f"2026-08-29 01:47:39 | {badges}RenewalUser: Celebrating 20 months!"
+    )
+
+
+def test_subscription_celebration_without_timestamp_has_no_leading_space(formatter):
+    payload = load_fixture("celebration_message_event_data.json")
+    payload.pop("created_at")
+    item = parse_chat_message(payload)
+    assert formatter.format(item, format_name="kick") == (
+        "[Subscribed for 20 months] (Subscriber) RenewalUser: Celebrating 20 months!"
+    )
+
+
 def test_modern_badge_without_title_does_not_render_empty_marker(formatter):
     item = parse_chat_message(
         raw_message(
