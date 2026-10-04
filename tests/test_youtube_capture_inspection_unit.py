@@ -6,7 +6,10 @@ import json
 
 import pytest
 
+from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 from chat_downloader.sites.youtube.capture_inspection import inspect_capture
+from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
+from chat_downloader.sites.youtube.message_pipeline import process_pipeline_action
 from scripts.inspect_youtube_capture import main
 
 
@@ -189,3 +192,42 @@ def test_replaced_text_and_paid_tickers_may_reuse_ids(tmp_path):
         {"message_type": "ticker_paid_message_item", "message_id": "paid"},
     ]
     assert inspect_capture(_write(tmp_path / "capture.jsonl", rows))["status"] == "ok"
+
+
+@pytest.mark.parametrize(
+    "filter_kwargs", [{"types_to_add": ["all"]}, {"groups_to_add": ["all"]}]
+)
+def test_all_types_control_actions_are_known_to_capture_inspector(
+    tmp_path, filter_kwargs
+):
+    actions = [
+        {"removeBannerForLiveChatCommand": {"targetActionId": "banner"}},
+        {
+            "showLiveChatTooltipCommand": {
+                "tooltip": {
+                    "tooltipRenderer": {
+                        "detailsText": {"runs": [{"text": "Chat help"}]}
+                    }
+                }
+            }
+        },
+    ]
+    rows = []
+    for action in actions:
+        result = process_pipeline_action(
+            action,
+            0,
+            MessageFilter(_MESSAGE_GROUPS, **filter_kwargs),
+            TimeRangeFilter(),
+        )
+        assert result.disposition == "yield"
+        rows.append(result.message)
+    counts = {"remove_banner": 1, "tooltip": 1}
+    report = inspect_capture(
+        _write(tmp_path / "capture.jsonl", rows),
+        run_summary=_summary(message_count=2, message_type_counts=counts),
+    )
+    assert report["status"] == "ok"
+    assert report["issues"] == {}
+    assert report["message_types"] == counts
+    assert report["run_accounting"]["message_type_count_mismatches"] == 0

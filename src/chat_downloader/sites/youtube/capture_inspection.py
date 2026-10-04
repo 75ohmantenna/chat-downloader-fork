@@ -19,7 +19,9 @@ from .constants_message import _MESSAGE_TYPES
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-_KNOWN_TYPES = frozenset(_MESSAGE_TYPES) - {"all"} | {"chat_ended"}
+# Known UI controls are emitted by the all-types filter but are deliberately
+# excluded from selectable message groups.
+_KNOWN_TYPES = frozenset(_MESSAGE_TYPES) - {"all"} | {"tooltip", "remove_banner"}
 _PROFILES = {"youtube_web", "youtube_android", "youtube_ios", "twitch_web"}
 _VIEWS = {"Top chat", "Live chat", "Top chat replay", "Live chat replay"}
 _INVALID_SUMMARY = "invalid_run_summary"
