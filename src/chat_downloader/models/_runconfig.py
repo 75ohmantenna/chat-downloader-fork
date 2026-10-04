@@ -35,7 +35,8 @@ class RunConfig:
     verify_output: bool = field(
         default=False,
         metadata=_cli_metadata(
-            "Verify JSONL/TXT parity and supported provider diagnostics",
+            "Verify JSONL/TXT parity and supported provider diagnostics;"
+            " requires both .jsonl and .txt outputs",
             group="output",
         ),
     )

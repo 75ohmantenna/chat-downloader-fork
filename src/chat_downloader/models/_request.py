@@ -177,7 +177,8 @@ class ChatRequest:
             "Output file path (None = print to stdout). Extension "
             "determines"
             " format (.jsonl/.txt). Other extensions are not supported;"
-            " use .jsonl for structured output.",
+            " use .jsonl for structured output. Repeat --output to write"
+            " multiple files.",
             group="output",
             flags=["-o"],
         ),
