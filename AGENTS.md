@@ -1,11 +1,17 @@
 # Repository Guide
 
-The checked-in source code and configuration define the implemented behavior.
-Tests verify that behavior and protect intended contracts; documentation and
-fixtures describe it rather than override it. Keep this guide and the other
-documents aligned with the implementation; when prose and implementation
-differ, verify the code and correct the prose. This guide sets repository
-workflow and review rules, not runtime behavior.
+The actual checked-in codebase is the single source of truth for all
+documentation of implemented behavior, public interfaces, defaults, project
+structure, and executable tooling. This includes source code, bundled data,
+and configuration. Tests verify behavior and protect intended contracts;
+documentation and fixtures describe it rather than override it. Verify claims
+against the relevant implementation before adding or updating prose, including
+this guide and nested agent guides. When they differ, correct the prose; change
+code only for a separately established bug or requested behavior change.
+Historical release notes describe their release, and plans must be clearly
+identified as unimplemented. This guide sets repository workflow and review
+rules, not runtime behavior. See the documentation source map in
+[`docs/development-workflow-guide.md`](docs/development-workflow-guide.md#documentation-ownership).
 
 ## Project facts
 

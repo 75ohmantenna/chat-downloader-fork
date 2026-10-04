@@ -317,16 +317,40 @@ remaining assertions that preserve its behavior and failure modes.
 
 ## Documentation ownership
 
-Update one authoritative document instead of copying the same explanation into
-several places.
+The actual checked-in codebase is the single source of truth for all
+documentation of implemented behavior, public interfaces, defaults, project
+structure, and executable tooling. Derive claims from source code, bundled
+data, and configuration. Give each explanation one owning document and link to
+it elsewhere; ownership identifies where prose is maintained, not a second
+source of truth.
 
-Checked-in source code and configuration define implemented behavior; tests
-verify it and protect intended contracts. When prose and implementation
-disagree, inspect the code and configuration, then correct the prose or fix a
-demonstrated code bug. Documentation contract tests keep module
+Before adding or changing a claim, inspect its implementation using the source
+map below. When prose and implementation disagree, correct the prose. Change
+code only for a separately established bug or requested behavior change, with
+the relevant regression test. Tests verify behavior and protect intended
+contracts; fixtures and upstream documentation provide evidence to investigate,
+not definitions of this fork's behavior. Historical changelog entries describe
+the code at their release; backlog proposals must be clearly identified as
+unimplemented. Workflow policies and design rationale record decisions rather
+than establish runtime behavior.
+
+| Claim | Codebase source to inspect |
+| --- | --- |
+| Public API and typed fields/defaults | `src/chat_downloader/__init__.py`, `src/chat_downloader/chat_downloader.py`, `src/chat_downloader/models/`, `src/chat_downloader/runtime/` |
+| CLI flags, help, and argument handling | `src/chat_downloader/cli.py`, `src/chat_downloader/cli_args.py`, `src/chat_downloader/models/` |
+| Provider URLs, message groups, parsing, and transport | The matching package under `src/chat_downloader/sites/` |
+| Output extensions, writing, and text rendering | `src/chat_downloader/output/`, `src/chat_downloader/formatting/`, `src/chat_downloader/sites/output_dispatch.py` |
+| Module layout and import boundaries | The source tree and `[tool.importlinter]` in `pyproject.toml` |
+| Package metadata, Python requirements, and dependencies | `pyproject.toml`, `src/chat_downloader/metadata.py`, `uv.lock` |
+| Development commands, hooks, checks, and hosted CI | `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, and the relevant tool configuration and check implementation |
+
+Documentation contract tests keep module
 inventories, literal repository paths, typed field/default tables, CLI flags
 and retrieval examples, request profiles, output formats, public exports, and
 provider message-group and live-diagnostic tables aligned with those sources.
+Run the documentation and release contracts listed under Commands, plus
+`make spell`, after documentation changes. Passing these checks covers their
+specific assertions; review narrative claims against code as well.
 
 | Document | Owns |
 | --- | --- |

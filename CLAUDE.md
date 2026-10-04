@@ -1,9 +1,10 @@
 # CLAUDE.md
 
 Follow [`AGENTS.md`](AGENTS.md) for project structure, commands, testing,
-style, and commit conventions. The checked-in code and configuration define
-implemented behavior; tests verify it. Update prose when it differs from the
-implementation.
+style, and commit conventions. The actual checked-in codebase is the single
+source of truth for documentation of implemented behavior, including this
+file. Verify prose against source code, bundled data, and configuration; tests
+check their contracts. Correct prose when it differs from the implementation.
 
 ## Python tooling
 

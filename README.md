@@ -84,9 +84,12 @@ Full CLI examples, output-format details, options, and troubleshooting are in
 
 ## Documentation
 
-Checked-in source code and configuration define implemented behavior. The
-guides describe that implementation, and tests check their contracts. When a
-guide disagrees with the code, verify the implementation and correct the guide.
+The actual checked-in codebase is the single source of truth for all
+documentation of implemented behavior. The guides describe the source code,
+bundled data, and configuration; tests check their contracts. When a guide
+disagrees with the code, verify the implementation and correct the guide.
+The [documentation source map](docs/development-workflow-guide.md#documentation-ownership)
+identifies where to verify each kind of claim.
 
 - [`docs/cli-usage.md`](docs/cli-usage.md) — CLI recipes, flags, output
   formats, troubleshooting
