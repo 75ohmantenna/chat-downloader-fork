@@ -12,6 +12,7 @@ import pytest
 from chat_downloader.runtime.capture_manifest import RunManifest, is_completed_replay
 from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.models import Chat
+from chat_downloader.sites.twitch.irc_diagnostics import _TwitchLiveDiagnostics
 from tests.test_capture_checkpoint_unit import (
     Downloader,
     capture_params,  # noqa: F401 - pytest discovers this imported fixture
@@ -109,6 +110,52 @@ def test_manifest_preserves_incomplete_deadline_accounting(tmp_path):
     report = load_json(path)
     assert report["prefetched_after_deadline_count"] == 2
     assert report["deadline_prefetch_count_complete"] is False
+
+
+@pytest.mark.parametrize("failure", [None, KeyboardInterrupt(), ValueError("failed")])
+def test_manifest_retains_full_twitch_counter_schema_on_shutdown(
+    monkeypatch, manifest, chat_state, params, failure
+):
+    expected = {
+        key: index for index, key in enumerate(_TwitchLiveDiagnostics().summary)
+    }
+    chat_state.update(expected)
+    chat_state.update(private_message="PRIVATE", unknown_counter=42)
+    monkeypatch.setattr(Downloader, "failure", failure)
+    result, report = manifest(**params)
+    assert result.success is (failure is None)
+    assert report["provider_diagnostics"] == expected
+    assert "PRIVATE" not in json.dumps(report)
+
+
+@pytest.mark.parametrize("invalid", [True, False, -1, 1.5, "PRIVATE", None])
+def test_manifest_rejects_invalid_twitch_counters(manifest, chat_state, invalid):
+    chat_state.update(dict.fromkeys(_TwitchLiveDiagnostics().summary, invalid))
+    result, report = manifest(quiet=True)
+    assert result.success
+    assert report["provider_diagnostics"] == {}
+
+
+def test_manifest_retains_zero_twitch_counters(manifest, chat_state):
+    expected = _TwitchLiveDiagnostics().summary
+    chat_state.update(expected)
+    result, report = manifest(quiet=True)
+    assert result.success
+    assert report["provider_diagnostics"] == expected
+
+
+@pytest.mark.parametrize("invalid", [-1, True, "PRIVATE", None])
+def test_manifest_rejects_invalid_skipped_action_counts(manifest, chat_state, invalid):
+    chat_state["non_emission_counts"] = {
+        "invalid messages": invalid,
+        "time-range filtered": 0,
+        "PRIVATE": 3,
+    }
+    result, report = manifest(quiet=True)
+    assert result.success
+    assert report["provider_diagnostics"] == {
+        "non_emission_counts": {"time-range filtered": 0}
+    }
 
 
 @pytest.mark.parametrize("primary_failure", [False, True])

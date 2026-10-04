@@ -149,6 +149,9 @@ avoid idle CPU churn.
 Each live `Chat` exposes fixed-schema connection counters through
 `chat.diagnostics`. The same mapping appears under `provider_diagnostics` in a
 debug run summary, including failed runs.
+`--run_manifest` also retains the complete counter set under
+`provider_diagnostics`, without requiring debug logging or output verification.
+Only known nonnegative integer counters are retained.
 
 | Field | Meaning |
 | --- | --- |

@@ -413,7 +413,10 @@ current/prior run message counts, and output writer counts and SHA-256 hashes.
 monotonic clock; output verification and manifest writing are excluded.
 `provider_diagnostics` retains supported bounded YouTube action and
 continuation counters, including skipped-action reasons and parsing loss, plus
-Kick live transport, public-feed, snapshot, and backfill counters. Automatic
+Kick live transport, public-feed, snapshot, and backfill counters, and the full
+fixed set of Twitch live metadata, connection, frame, keepalive, filtering,
+deduplication, and emission counters. Only nonnegative integer counters are
+retained; booleans, other value types, and unknown fields are excluded. Automatic
 YouTube, Twitch live, and Kick live inspection reports remain in
 `provider_inspection` when requested.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report

@@ -99,11 +99,29 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
             "synthetic_frame_count",
             "preloaded_emitted_count",
             "live_emitted_count",
+            "optional_metadata_degradation_count",
+            "connection_attempt_count",
+            "connection_success_count",
+            "connection_setup_failure_count",
+            "reconnect_count",
+            "server_reconnect_requested_count",
+            "received_irc_chunk_count",
+            "received_irc_frame_count",
+            "benign_irc_control_frame_count",
+            "parsed_irc_message_count",
+            "receive_timeout_count",
+            "idle_watchdog_expiration_count",
+            "keepalive_ping_sent_count",
+            "keepalive_ping_received_count",
+            "keepalive_pong_sent_count",
+            "keepalive_pong_received_count",
+            "duplicate_message_suppressed_count",
+            "filtered_message_count",
             "reconnect_backfill_emitted_count",
             "reconnect_backfill_truncated_count",
             "reconnect_backfill_truncated_microseconds",
         )
-        if type(state.get(key)) is int
+        if type(value := state.get(key)) is int and value >= 0
     }
     for key in ("initial_request_profile", "active_request_profile"):
         value = state.get(key)
@@ -130,7 +148,7 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
                 "time-range filtered",
                 "time-range stop",
             )
-            if type(reasons.get(key)) is int
+            if type(value := reasons.get(key)) is int and value >= 0
         }
     return counters
 
