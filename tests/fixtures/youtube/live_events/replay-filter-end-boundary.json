@@ -1,0 +1,62 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "item": {
+                    "liveChatTextMessageRenderer": {
+                      "id": "fixture-0",
+                      "timestampUsec": "1791056933262699",
+                      "timestampText": {
+                        "simpleText": "-2:09"
+                      },
+                      "message": {
+                        "runs": [
+                          {
+                            "text": "Fixture text"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "0"
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "item": {
+                    "liveChatTextMessageRenderer": {
+                      "id": "fixture-1",
+                      "timestampUsec": "1791057128490108",
+                      "timestampText": {
+                        "simpleText": "1:01"
+                      },
+                      "message": {
+                        "runs": [
+                          {
+                            "text": "Fixture text"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "videoOffsetTimeMsec": "61285"
+          }
+        }
+      ]
+    }
+  }
+}

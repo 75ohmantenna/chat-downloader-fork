@@ -157,8 +157,9 @@ def process_pipeline_action(
 
     process_action ignores unknown/ignored actions;
     validate_and_finalize_message checks required fields and post-processes,
-    rejecting malformed messages. MessageFilter.should_add excludes false results;
-    TimeRangeFilter.check skips on "skip" and ends the stream on "stop".
+    rejecting malformed messages. Paid-cache enrichment precedes both filters.
+    TimeRangeFilter.check ends the stream on "stop" even for excluded types;
+    type/group exclusions otherwise retain their diagnostic category.
 
     Args:
         action: Raw YouTube API action to parse and filter.
@@ -189,22 +190,24 @@ def process_pipeline_action(
     if paid_events is not None:
         paid_events.enrich(validated_data)
 
-    if not msg_filter.should_add(validated_data):
+    accepted = msg_filter.should_add(validated_data)
+    time_result = _check_time_filter(validated_data, time_filter)
+    if time_result == "stop":
+        return PipelineResult(
+            disposition="stop",
+            non_emission_reason=NonEmissionReason.TIME_RANGE_STOPPED,
+        )
+
+    if not accepted:
         return PipelineResult(
             disposition="skip",
             non_emission_reason=NonEmissionReason.MESSAGE_FILTERED,
         )
 
-    time_result = _check_time_filter(validated_data, time_filter)
     if time_result == "skip":
         return PipelineResult(
             disposition="skip",
             non_emission_reason=NonEmissionReason.TIME_RANGE_FILTERED,
-        )
-    if time_result == "stop":
-        return PipelineResult(
-            disposition="stop",
-            non_emission_reason=NonEmissionReason.TIME_RANGE_STOPPED,
         )
 
     return PipelineResult(disposition="yield", message=validated_data)

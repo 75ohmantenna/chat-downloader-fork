@@ -210,7 +210,7 @@ def test_process_pipeline_action_non_emission(
     assert result.message is None
     assert result.non_emission_reason is reason
     assert msg_filter.seen_messages == ([message] if valid else [])
-    assert time_filter.seen_messages == ([message] if valid and accepted else [])
+    assert time_filter.seen_messages == ([message] if valid else [])
 
 
 def test_process_pipeline_action_yields_valid_message(monkeypatch) -> None:
