@@ -10,6 +10,8 @@ from copy import deepcopy
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from chat_downloader.errors import CaptchaChallengeRequired
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
@@ -20,6 +22,45 @@ _FIXTURES = Path(__file__).parent / "fixtures" / "youtube"
 
 def _fixture(path):
     return json.loads((_FIXTURES / path).read_text())
+
+
+@pytest.mark.parametrize("profile", ["youtube_android", "youtube_ios"])
+@pytest.mark.parametrize("chat_type", ["live", "top"])
+def test_mobile_premiere_uses_replay_endpoint_and_preserves_seek(
+    monkeypatch, profile, chat_type
+):
+    calls = []
+    with closing(YouTubeChatDownloader(request_profile=profile)) as site:
+
+        def post(url, **kwargs):
+            payload = deepcopy(kwargs["json"])
+            calls.append((url, payload))
+            if "/player?" in url:
+                return http_response(
+                    payload=_fixture("innertube_bootstrap/premiere-player-mobile.json")
+                )
+            if "/next?" in url:
+                return http_response(
+                    payload=_fixture("innertube_bootstrap/replay-next-mobile.json")
+                )
+            assert "/get_live_chat_replay?" in url
+            assert payload["continuation"] == f"fixture-mobile-{chat_type}"
+            assert payload["currentPlayerState"]["playerOffsetMs"] == 8295000
+            return http_response(
+                payload=_fixture("live_events/mobile-replay-elements.json")
+            )
+
+        monkeypatch.setattr(site, "_session_post", post)
+        chat = site.get_chat_by_video_id(
+            "fixture-premiere",
+            ChatRequest(start_time=8300, end_time=8400, chat_type=chat_type),
+        )
+        messages = list(chat)
+        assert any(message["message_type"] == "text_message" for message in messages)
+        assert chat.status == "was_live"
+        assert site.is_completed_replay_status(chat.status)
+        assert chat.diagnostics["chat_view"] == f"{chat_type.title()} chat replay"
+    assert len(calls) == 3
 
 
 def test_generic_web_failure_with_tokens_bootstraps_mobile_before_poll(monkeypatch):

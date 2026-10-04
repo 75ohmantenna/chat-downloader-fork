@@ -9,6 +9,7 @@ from typing import Any
 
 from chat_downloader.errors import ParsingError
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_bool
 from chat_downloader.utils.time_utils import parse_iso8601
 
 from .video_status_helpers import (
@@ -73,6 +74,9 @@ def parse_video_details(
     )
     continuation_info = _extract_continuation_info(yt_initial_data)
     status = _determine_status(video_details, live_details)
+    if status == "not_live" and get_bool(yt_initial_data, "_chat_downloader_is_replay"):
+        # Mobile premieres omit broadcast metadata but explicitly expose replay chat.
+        status = "was_live"
 
     return VideoDetails(
         title=title,

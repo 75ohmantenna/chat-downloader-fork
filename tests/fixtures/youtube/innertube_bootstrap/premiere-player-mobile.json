@@ -1,0 +1,10 @@
+{
+  "playabilityStatus": {
+    "status": "OK"
+  },
+  "videoDetails": {
+    "videoId": "fixture-premiere",
+    "lengthSeconds": "863",
+    "isLiveContent": false
+  }
+}

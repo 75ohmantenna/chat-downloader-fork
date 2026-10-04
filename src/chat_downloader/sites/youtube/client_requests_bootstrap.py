@@ -20,7 +20,14 @@ from chat_downloader.request_profiles import (
     get_request_profile_innertube_client_id,
 )
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import dig, get_dict, get_int, get_list, get_str
+from chat_downloader.utils.json_types import (
+    dig,
+    get_bool,
+    get_dict,
+    get_int,
+    get_list,
+    get_str,
+)
 
 from .client_context import apply_request_profile_to_innertube_context
 from .constants_patterns import _YT_HOME
@@ -204,6 +211,11 @@ def _build_fallback_initial_data(
     yt_next_data: JSONDict,
 ) -> JSONDict:
     initial_data = dict(yt_next_data)
+    if any(
+        get_bool(get_dict(node, "liveChatRenderer"), "isReplay")
+        for node in _walk_json_dicts(yt_next_data)
+    ):
+        initial_data["_chat_downloader_is_replay"] = True
     continuation_info = extract_chat_submenu_continuations(initial_data)
     mobile_filters = _extract_mobile_filter_continuations(initial_data)
     continuation_info.update(mobile_filters)

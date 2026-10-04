@@ -128,3 +128,27 @@ def test_mobile_bootstrap_rejects_a_mismatched_video():
     with pytest.raises(ParsingError, match="wrong video"):
         site._parse_video_data("wrong-id")
     assert [call[0] for call in site.calls] == ["POST", "POST"]
+
+
+@pytest.mark.parametrize("replay", [False, None, "true", 1])
+def test_premiere_requires_an_explicit_boolean_replay_signal(replay):
+    site = _MobileMetadata()
+    site.player = _fixture("premiere-player-mobile.json")
+    site.next = {
+        "contents": {"liveChatRenderer": {"isReplay": replay}},
+    }
+    details, _, _, _ = site._parse_video_data("fixture-premiere")
+    assert details["status"] == "not_live"
+
+
+@pytest.mark.parametrize(
+    ("field", "status"),
+    [("isLive", "live"), ("isUpcoming", "upcoming"), ("isPostLiveDvr", "post_live")],
+)
+def test_replay_signal_preserves_explicit_live_and_processing_status(field, status):
+    site = _MobileMetadata()
+    site.player = _fixture("premiere-player-mobile.json")
+    site.player["videoDetails"][field] = True
+    site.next = _fixture("replay-next-mobile.json")
+    details, _, _, _ = site._parse_video_data("fixture-premiere")
+    assert details["status"] == status
