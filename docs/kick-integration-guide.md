@@ -352,9 +352,10 @@ leases renew before expiry through anonymous `realtime/auth/connection`; tokens
 are never logged or persisted. Temporary command errors reconnect; permanent
 rejections terminate. See the [Centrifugo JSON protocol](https://centrifugal.dev/docs/transports/client_protocol).
 
-Both providers use short receive polls, bounded subscription waits, and idle
-watchdogs. Invalid shapes and unsupported event names remain visible in bounded
-diagnostics and opt-in sanitized samples. Counters include provider connections,
+Both providers use socket and queue receive polls capped at one second, bounded
+subscription waits, and idle watchdogs. Invalid shapes and unsupported event
+names remain visible in bounded diagnostics and opt-in sanitized samples.
+Counters include provider connections,
 confirmed public subscriptions, snapshot polls/failures, WebSocket frames, and
 synthetic REST frames separately. These fixed counters are retained in manifests.
 
@@ -741,7 +742,7 @@ JSONL capture. Its provenance records the source line and hash, replaced user
 identity and chat text, and the event envelope reconstructed from JSONL
 metadata; the original wire encoding was not retained. The formatting suite
 dispatches this fixture as both decoded and JSON-encoded event data before
-checking gift details and the plain receive timestamp in TXT.
+checking gift details and the `[received]` timestamp marker in TXT.
 
 To add coverage for a new event type:
 

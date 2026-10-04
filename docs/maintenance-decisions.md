@@ -155,8 +155,8 @@ production consumer with a contract that removes shared alignment state.
 
 **Decision:** `utils/capture_reader.py` owns regular-file opening, physical
 JSONL line traversal, duplicate-key rejection, recursive finite-number and
-Unicode validation, and content-free findings. Kick and Twitch have two real
-consumers with the same contract; their inspectors retain provider record
+Unicode validation, and content-free findings. YouTube, Kick, and Twitch
+inspectors share this contract; they retain provider record
 validation, exact ID membership, and ledger accounting. Debug-summary parsers
 share regular-file opening but retain their distinct literal parsing rules.
 

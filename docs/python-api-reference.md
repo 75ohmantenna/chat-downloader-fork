@@ -101,7 +101,7 @@ these fields:
 | `message_type_counts` | Per-type counts for processed messages; partial counts remain available after an error, and messages without a string type use the `<missing>` key |
 | `parity_status` | `not_requested`, `not_run`, `passed`, or `failed`; parity verifies artifacts, not provider completeness |
 | `termination_reason` | Completion, message limit, timeout, interruption, or error; successful retrieval may be intentionally bounded |
-| `provider_inspection` | Content-free Twitch or Kick live inspection report when output verification runs, including closed partial captures after retrieval failures; otherwise `None` |
+| `provider_inspection` | Content-free YouTube, Twitch live, or Kick live inspection report when output verification runs, including closed partial captures after retrieval failures; otherwise `None` |
 | `elapsed_seconds` | Monotonic duration from initialization through capture shutdown, excluding output verification and manifest writing |
 | `prefetched_after_deadline_count` | One observation after bounded capture shutdown; an incomplete count is a lower bound |
 | `deadline_prefetch_count_complete` | Whether deadline accounting had finished when observed; inspection, manifest, and debug summary use the same observation |
@@ -124,7 +124,7 @@ these fields:
 | `connect_timeout` | `10.0` | TCP connect timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `read_timeout` | `30.0` | HTTP read timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `request_profile` | `None` | Optional request-header preset (`youtube_web`, `youtube_android`, `youtube_ios`, `twitch_web`); any other value raises `ValueError` during configuration |
-| `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after generic initial playability or repeated incomplete continuation responses |
+| `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after generic initial playability, repeated incomplete continuation responses, or an initial replay `INVALID_ARGUMENT` rejection |
 | `twitch_client_id` | `None` | Optional Twitch Client-ID override for GraphQL and VOD comment requests |
 
 Helper:
@@ -179,7 +179,7 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `chat_type` | `"live"` | YouTube chat mode: `"live"` or `"top"` |
 | `ignore` | `None` | YouTube video IDs to skip during discovery |
 | `youtube_replay_poll_interval` | `None` | Optional completed-replay polling override in seconds from `0.5` through `8`; `None` respects YouTube's delay hint |
-| `message_receive_timeout` | `1.0` | Live socket receive-poll timeout; Twitch and Kick enforce a one-second minimum |
+| `message_receive_timeout` | `1.0` | Live receive-poll timeout; Twitch and legacy standalone Kick enforce a one-second minimum, while Kick's negotiated public transport caps polls at one second |
 | `buffer_size` | `4096` | Twitch IRC receive-buffer size in bytes |
 
 URL dispatch matches the complete input. Normal query strings and fragments are
@@ -204,8 +204,8 @@ absolute timestamp window. Kick live channel URLs reject `start_time` and
 `end_time` because the public live feed cannot seek. A Kick live WebSocket event
 that lacks a valid provider `timestamp` receives a distinct
 UTC-microsecond `received_timestamp`; provider timestamps retain priority, TXT
-labels the fallback `[received]` except for `kicks_gifted` notices, which use a
-plain timestamp. Replay/preloaded records are unchanged.
+labels the fallback `[received]`, including `kicks_gifted` notices.
+Replay/preloaded records are unchanged.
 
 Validation raises `ValueError` for non-positive or non-integer message, retry,
 or buffer counts; malformed or non-finite start/end times; a non-finite
@@ -250,7 +250,7 @@ chat = downloader.get_chat_request(request)
 | --- | --- | --- |
 | `quiet` | `False` | Suppress formatted chat output to stdout |
 | `resume` | `None` | Create or resume a validated replay shutdown checkpoint |
-| `verify_output` | `False` | Verify one JSONL/TXT output pair and supported provider diagnostics after successful retrieval |
+| `verify_output` | `False` | Verify one JSONL/TXT pair after successful or interrupted retrieval with safe cleanup; inspect supported provider captures even after retrieval errors |
 | `require_complete` | `False` | Fail unless the selected completed replay is exhausted without known record loss |
 | `run_manifest` | `None` | New filename for a JSON outcome, recording, and output-hash report |
 | `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |
@@ -322,6 +322,11 @@ It derives the total from complete nonnegative integer option counts, omits
 percentages for a zero total, and uses `votes unknown` with no total or
 percentages for incomplete counts. Remaining seconds are optional. The built-in
 Kick format applies this conversion to `metadata` for poll updates.
+A field definition with `format: "leaderboard"` summarizes the first three
+supplied entries in each enabled weekly, monthly, and lifetime list, using its
+`unit` setting for quantities. `format: "goal"` summarizes available integer
+current/target values and string status. These conversions preserve the
+structured records; the built-in Kick formats apply them to `metadata.data`.
 A field definition with `format: "iso8601"` renders a date string as UTC
 `YYYY-MM-DD HH:MM:SS`, treating dates without a timezone as UTC. Invalid dates
 render as an empty value; use `omit_if_false: true` to omit their template too.
@@ -559,6 +564,13 @@ and run manifests. Review findings or inspection errors fail the run even when
 TXT parity passes; an original retrieval error retains priority. Kick replay
 verification remains parity-only; use the offline inspector with the debug
 logs from each replay run to reconcile an appended archive.
+
+YouTube video, clip, and channel/handle captures also run provider inspection
+with `verify_output=True`. Missing mobile source timestamps remain observations;
+unknown types, invalid records, count mismatches, and known parser loss require
+review. Resumed captures include checkpoint-verified prior records. Twitch live
+inspection retains its IRC frame and record diagnostics. These reports share
+the run's single deadline-accounting observation.
 
 Kick VOD and clip messages now include `time_in_seconds` and `time_text`,
 relative to the recording or clip origin even when selecting a later start.

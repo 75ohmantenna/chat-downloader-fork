@@ -102,7 +102,7 @@ identifies where to verify each kind of claim.
 - [`docs/twitch-integration-guide.md`](docs/twitch-integration-guide.md) —
   Twitch capture flow and transport map
 - [`docs/kick-integration-guide.md`](docs/kick-integration-guide.md) —
-  Kick Pusher live capture plus VOD and clip replay flow
+  Kick negotiated public live capture plus VOD and clip replay flow
 - [`docs/development-workflow-guide.md`](docs/development-workflow-guide.md) —
   development workflow and validation commands
 - [`docs/architecture.md`](docs/architecture.md) — package ownership,

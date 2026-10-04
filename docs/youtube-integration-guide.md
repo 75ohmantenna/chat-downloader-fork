@@ -131,6 +131,11 @@ or incomplete-response failure recovers through the watch page. A returned
 video identity must match the request. Authenticated requests and clips retain
 page bootstrap so authentication and clip bounds remain available.
 
+Mobile premieres can omit broadcast timestamps and report `isLiveContent=false`.
+When the chat renderer explicitly sets `isReplay=true`, a non-live premiere is
+classified as a finished replay and uses the replay continuation endpoint.
+Explicit live, upcoming, and post-live processing states keep their own status.
+
 When the watch page is blocked by a YouTube/Google challenge or the page no
 longer exposes parseable initial JSON, regular video targets can fall back to
 InnerTube `player` and `next` requests. Debug logs identify the final page host
@@ -153,6 +158,9 @@ items nested in menus or sidebars are excluded from video enumeration.
 Populated unknown discovery renderers produce an aggregate debug diagnostic and
 bounded `youtube-unsupported-discovery-items` samples when capture is enabled,
 so parser drift can be distinguished from an empty list.
+Channel discovery skips non-video lockups and lockups without a usable video ID.
+Malformed thumbnail badges are ignored while valid live/upcoming badges remain
+available for classification.
 
 ### Chat-page continuation recovery
 

@@ -187,11 +187,11 @@ substitution. Duplicate targets are removed after expansion,
 path resolution, and existing-file identity checks, so aliases and hard links
 do not receive the same message twice.
 
-File output is crash-resilient: every record is flushed to the OS as it is
-written, and the file is synchronized to disk periodically (about every 60
-seconds), so captures survive process crashes and power loss with minimal data
-loss. Writers also perform a final `fsync` during normal shutdown; a flush or
-sync failure is reported as an output error instead of allowing the capture to
+Every record is flushed to the OS as it is written. A write also synchronizes
+the file to disk when at least 60 seconds have elapsed since the previous sync;
+writers perform a final `fsync` during normal shutdown. A power loss can lose
+records written since the last sync. A flush or sync failure is reported as an
+output error instead of allowing the capture to
 appear successful. When appending to JSONL, a crash-truncated final record is
 removed before new records are written; a complete final record missing only
 its newline is kept and terminated. Text append mode similarly terminates an
@@ -220,9 +220,10 @@ Filtering and output:
 Request control:
 
 - `--connect_timeout`, `--read_timeout` — HTTP timeouts.
-- `--message_receive_timeout` — live socket receive polling timeout; Twitch and
-  Kick enforce a one-second minimum to avoid idle CPU churn (messages are still
-  delivered immediately when data arrives).
+- `--message_receive_timeout` — live receive polling timeout. Twitch and the
+  legacy standalone Kick transport enforce a one-second minimum. Kick's
+  negotiated public transport caps socket and queue polls at one second.
+  Messages are delivered immediately when data arrives.
 - `--proxy`, `--cookies` — proxy and cookie jar. When `--proxy` is omitted,
   standard proxy environment variables apply. Cookie authentication rejects an
   effective remote proxy and warns for a loopback proxy; pass `--proxy ""` to
@@ -231,8 +232,9 @@ Request control:
   `youtube_android`, `youtube_ios`, or `twitch_web`. Unknown names fail during
   configuration.
 - `--auto_profile_fallback` — rotate YouTube request profiles when initial
-  playability is generically unavailable or continuation payloads are
-  repeatedly incomplete. Explicit `--user-agent` and `--header` values remain
+  playability is generically unavailable, continuation payloads are
+  repeatedly incomplete, or an initial replay request receives
+  `INVALID_ARGUMENT`. Explicit `--user-agent` and `--header` values remain
   authoritative during rotation.
 - `--youtube_replay_poll_interval` — explicitly override completed YouTube
   replay polling with an interval from 0.5 through 8 seconds. The default
@@ -367,10 +369,12 @@ message-limited, or interrupted shutdown. A one-second overlap preserves
 messages at the saved timestamp while suppressing IDs already written. The
 checkpoint writer places opening zero-offset replay notices after any negative
 preroll messages so their saved offsets remain chronological. The
-capture discards a record interrupted during writing, checkpoint observation,
-or accepted-record counting
-before saving, including a partial write to one of two outputs. The next run
-retrieves that record again. The record limit counts newly written messages.
+first CLI signal finishes an in-progress record's writes, checkpoint observation,
+and run counts before stopping. An immediate `KeyboardInterrupt` raised by an
+embedding application, a second CLI signal, or another record failure rolls
+back partial output and prevents acceptance of that record. The next run
+retrieves a rolled-back record again. The record limit counts newly written
+messages.
 Formatted TXT may write fewer lines
 than JSONL when paid chat and ticker events share an ID; this does not prevent
 checkpoint saving. Keep the URL, filters, selected
@@ -394,7 +398,8 @@ lock only after confirming the previous process has stopped. Checkpoints are
 shutdown recovery points, not continuous crash journals.
 
 `--verify_output` checks exact formatting, semantic deduplication, UTF-8, and
-physical line endings after a successful run. It requires one JSONL and one TXT
+physical line endings after a successful or interrupted run with safe cleanup.
+It requires one JSONL and one TXT
 output; append verification requires a resume checkpoint so run boundaries are
 known. A verification error makes the command fail. A zero-message success can
 have no files because writers initialize lazily. The run summary separately
@@ -444,6 +449,9 @@ a new path distinct from outputs, checkpoint, and checkpoint lock. Use a new
 manifest filename on every resume. Create its parent directory before running;
 the CLI reports a missing directory before starting capture. Failure to write
 the manifest fails the run.
+For lazy channel discovery, hashes use the filenames resolved when writers
+open, after video metadata becomes available. A late manifest/output collision
+fails manifest writing and preserves the captured output.
 
 ```bash
 chat_downloader "https://kick.com/examplechannel/videos/<uuid>" \

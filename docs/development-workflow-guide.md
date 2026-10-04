@@ -312,7 +312,7 @@ uv run pytest -v -m network --run-network
 | `make coverage` | Run the offline suite with 100% line coverage enforced |
 | `make build` | Build the wheel and source distribution |
 | `make smoke` | Build and install the wheel in an isolated environment |
-| `make check` | Run the fast local lint, format, type, and test path |
+| `make check` | Run local lint, spelling, format, type, and offline test checks |
 | `make ci` | Run the complete canonical validation path |
 | `make clean` | Remove caches, coverage data, build output, and package metadata |
 

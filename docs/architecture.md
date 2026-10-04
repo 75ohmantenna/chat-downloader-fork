@@ -65,10 +65,10 @@ same interfaces as production callers.
 
 | Transport | Open/read path | Retry/reconnect owner | Close path |
 |-----------|----------------|-----------------------|------------|
-| Base HTTP session | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; YouTube and Twitch use it for provider requests, while Kick uses it for proxy resolution and rejected-key discovery; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures; Kick API retries stay in its dedicated client and services | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
+| Base HTTP session | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; YouTube and Twitch use it for provider requests, while Kick uses it for proxy resolution and legacy rejected-key discovery; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures; Kick API retries stay in its dedicated client and services | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
 | Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, a 180-second idle watchdog, and fixed-schema transport counters | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
 | Kick API HTTP | `kick/http_session.py` creates the Cloudflare-capable transports owned by `KickApiClient`, preserves explicit/environment proxy policy, lazily converts an applicable main-origin `session_token` cookie into bearer authentication, and origin-isolates the anonymous mobile host from credentials | Kick channel metadata plus reconnect/VOD/clip history and metadata retry transient network, malformed-response, 429, and 5xx failures; provider-specific HTTP 423 is a terminal country/region block; clip replay can fail over from unavailable web/source-VOD metadata to the anonymous mobile v1 contract while preserving terminal access policy and reconciling known channel and duration evidence; startup/reconnect preload state remains one-shot best-effort | `KickChatDownloader.close()` closes the client sessions and base session exactly once |
-| Kick live WebSocket | `kick/public_transport.py` negotiates anonymous chat and channel connections independently; Pusher and Centrifugo readers confirm public feeds, answer heartbeats, and bound acknowledgement waits; Centrifugo renews anonymous connection tokens | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits, and permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Cooperative deadline cancellation wakes socket and queue readers; owned transports and sessions close on setup failure, reconnect, and exit |
+| Kick live WebSocket | `kick/public_transport.py` negotiates anonymous chat and channel connections independently; Pusher and Centrifugo readers confirm public feeds, answer heartbeats, and bound acknowledgement waits; Centrifugo renews anonymous connection tokens | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, and recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits; public transports renegotiate descriptors, while the legacy Pusher seam permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Cooperative deadline cancellation wakes socket and queue readers; owned transports and sessions close on setup failure, reconnect, and exit |
 
 `Chat.close()` requests closure through message-limit and timeout wrappers before
 output writers are finalized. When the timeout worker is actively advancing the
@@ -79,8 +79,9 @@ advance returns or raises. Successful debug summaries expose
 reconciled with records that crossed an overall or inactivity deadline and were
 intentionally excluded from output. `deadline_prefetch_count_complete` is false
 when bounded shutdown returns while the provider worker is still advancing; in
-that case the count is explicitly a lower bound and may finish updating after
-the summary. This is the common Ctrl-C/SIGTERM and early-stop cleanup path.
+that case the recorded count is a frozen lower bound, even if the worker finishes
+later. The run result, inspection, manifest, and debug summary share that one
+observation. This is the common Ctrl-C/SIGTERM and early-stop cleanup path.
 Provider diagnostics remain available on the returned `Chat` and appear in
 debug summaries, including failed runs; normal message output and file formats
 are unchanged.
@@ -246,8 +247,8 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `_protocols.py` | YouTube-specific Protocol definitions |
-| `capture_inspection.py` | Content-free offline YouTube record inspection, mobile timing observations, and single-run manifest reconciliation |
-| `chat_users_retrieval.py`, `chat_users_router.py` | Chat participant retrieval and routing |
+| `capture_inspection.py` | Content-free automatic/offline YouTube record inspection, mobile timing observations, and single-run manifest reconciliation |
+| `chat_users_retrieval.py`, `chat_users_router.py` | User/channel route resolution and live-video chat discovery |
 | `discovery.py` | `YouTubeDiscoveryMixin`: cohesive channel discovery, pagination, rendered-content traversal, and test URL generation |
 | `discovery_playlists.py` | Playlist discovery and pagination |
 | `extractor.py` | YouTube site extractor class wiring mixins together |
