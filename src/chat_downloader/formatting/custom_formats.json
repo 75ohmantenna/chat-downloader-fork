@@ -413,6 +413,17 @@
             "inherit": "default"
         },
         {
+            "matching": "delete_message",
+            "template": "{time_text|timestamp}[DELETED]{author.display_name|author.name}{message}{target_message_id}",
+            "inherit": "default",
+            "keys": {
+                "author.display_name": " {}",
+                "author.name": " {}",
+                "message": " — {}",
+                "target_message_id": " [message {}]"
+            }
+        },
+        {
             "matching": [
                 "ban_user"
             ],

@@ -1,0 +1,3 @@
+{
+  "raw": "@login=deleteduser;room-id=123;target-msg-id=deleted-message-1;tmi-sent-ts=1700000000000 :tmi.twitch.tv CLEARMSG #channel :Removed chat text\r\n"
+}

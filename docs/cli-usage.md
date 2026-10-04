@@ -112,8 +112,11 @@ The final info log names each uncreated lazy output, and the debug run summary
 reports `file_created: False` with `records_written: 0`.
 
 Twitch text output preserves system-event descriptions for subscription,
-raid, and unraid messages. JSONL remains the lossless structured format when
-downstream processing needs provider-specific metadata.
+raid, and unraid messages. Deleted messages carry a `[DELETED]` label, followed
+by the author and removed text when available, and `[message ID]` for the target
+message ID. Even when these optional fields are absent, the deletion label
+remains visible. JSONL remains the lossless structured format when downstream
+processing needs provider-specific metadata.
 
 Custom format field definitions accept a `template`, optional
 `singular_template`, and optional `omit_if_false`. The singular form is selected

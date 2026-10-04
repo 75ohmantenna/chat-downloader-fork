@@ -219,6 +219,14 @@ breakpoint/gift/streak notices use `bits`, and moderator anniversaries use
 `mods`. One-tap streak contributor fields are explicitly bounded to the three
 positions supported by the client protocol.
 
+### Deleted-message formatting
+
+`CLEARMSG` events are emitted as `delete_message` records with the removed text
+and `target_message_id`. The default Twitch stdout and TXT format marks them
+with `[DELETED]`, includes the available author and removed text, and appends
+`[message ID]` to identify the removed message. The label remains visible when
+the event lacks text, author, or target ID. JSONL retains the structured record.
+
 ### Shared Chat attribution
 
 The IRC parser preserves raw Shared Chat tags and emits derived attribution
