@@ -197,9 +197,14 @@
     "kick": [
         {
             "matching": "channel_metadata",
-            "template": "{timestamp|received_timestamp|time_text}[channel metadata]{metadata.data.livestream.session_title}{metadata.data.livestream.start_time}",
+            "template": "{timestamp|received_timestamp|time_text}[channel metadata]{metadata.data.followers_count}{metadata.data.livestream.session_title}{metadata.data.livestream.start_time}",
             "inherit": "default",
             "keys": {
+                "metadata.data.followers_count": {
+                    "template": " Followers: {}",
+                    "format": "count",
+                    "omit_if_false": true
+                },
                 "metadata.data.livestream.session_title": " Title: {}",
                 "metadata.data.livestream.start_time": {
                     "template": " Start_time: {}",

@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
-from chat_downloader.formatting.summaries import format_goal, format_leaderboard
+from chat_downloader.formatting.summaries import (
+    format_count,
+    format_goal,
+    format_leaderboard,
+)
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_int, get_list, get_str
 from chat_downloader.utils.json_utils import nested_update
@@ -254,7 +258,7 @@ class ItemFormatter:
             return _SAFE_FORMATTER.format(template, value)
 
         omit_if_false = field_config.get(self.KEY_OMIT_IF_FALSE) is True
-        if omit_if_false and not value:
+        if omit_if_false and not value and field_config.get(self.KEY_FORMAT) != "count":
             return ""
 
         template = field_config.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
@@ -293,6 +297,8 @@ class ItemFormatter:
     ) -> Any:
         """Apply a field's JSON, poll, or time representation before templating."""
         format_string = field_config[cls.KEY_FORMAT]
+        if format_string == "count":
+            return format_count(value)
         if format_string == "poll":
             return _format_poll_metadata(value)
         if format_string == "leaderboard":

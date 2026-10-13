@@ -11,6 +11,31 @@ from chat_downloader.sites.kick.parsing.events import dispatch_event
 from tests.kick_helpers import load_fixture
 
 
+@pytest.mark.parametrize(
+    ("source", "offline", "payload", "expected"),
+    [
+        ("public_rest", True, [], "viewer count: offline"),
+        ("public_rest", False, [], "viewer count"),
+        ("public_rest", "true", [], "viewer count"),
+        ("websocket", True, [], "viewer count"),
+        ("public_rest", True, [{"viewers": 0}], "viewer count: 0"),
+    ],
+)
+def test_offline_viewer_count_requires_explicit_public_snapshot(
+    source, offline, payload, expected
+):
+    frame = load_fixture("public_rest_viewers_offline.json")
+    frame.update(source=source, offline=offline, data=payload)
+    item = dispatch_event(frame, received_timestamp=1_577_836_800_000_000)
+    assert ItemFormatter().format(item, "kick") == (
+        f"2020-01-01 00:00:00 [received] | [{expected}]"
+    )
+    assert item["metadata"]["data"] == payload
+    assert item["metadata"].get("offline") is (
+        True if expected == "viewer count: offline" else None
+    )
+
+
 def test_viewer_count_snapshot_renders_count_and_preserves_payload():
     payload = load_fixture("public_rest_viewers.json")
     item = dispatch_event(

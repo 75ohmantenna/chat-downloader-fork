@@ -364,7 +364,11 @@ count, and chat settings. `kick.com/current-viewers` supplies viewer counts for
 the current livestream. These are polled observations with receive timestamps,
 not private push events. Viewer-count text summaries include the count when the
 snapshot contains a single nonnegative integer count, including zero (for
-example, `[viewer count: 42]`). Empty or unrecognized snapshots retain the
+example, `[viewer count: 42]`). An empty public REST viewer snapshot displays
+`[viewer count: offline]` when the channel metadata explicitly has no livestream.
+JSONL preserves the empty payload and records `metadata.offline: true` for these
+snapshots. Changes between offline and live status emit a viewer snapshot even
+if both counts are empty. Other empty or unrecognized snapshots retain the
 `[viewer count]` label without assuming a count. Public lifecycle events retain
 their complete payload under `metadata.data`, plus event name, channel, and
 source. A provider entity ID is not used for deduplication because successive
@@ -700,8 +704,12 @@ viewer count, and any optional message. Existing wrapped host payloads keep
 their provider IDs and timestamps. Blank IDs are rejected rather than repaired.
 
 The default Kick TXT format displays `channel_metadata` snapshots as
-`[channel metadata] Title: <session_title> Start_time: <start_time>`, using the
-current livestream fields and omitting missing or empty fields. Start times
+`[channel metadata] Followers: <followers_count> Title: <session_title> Start_time: <start_time>`,
+using the current follower count and livestream fields and omitting missing or
+empty fields. Follower counts appear even while the channel is offline, including
+zero counts; they are snapshot totals rather than changes since the previous
+snapshot. Only nonnegative integers and ASCII decimal strings are displayed as
+follower counts; malformed values are omitted. Start times
 use UTC `YYYY-MM-DD HH:MM:SS`; invalid start times are omitted. Each snapshot
 stays on one physical line and retains the `[received]` timestamp marker when
 no provider timestamp is available. JSONL preserves the full metadata object,

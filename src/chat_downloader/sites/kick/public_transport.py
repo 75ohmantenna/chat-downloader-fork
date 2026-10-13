@@ -102,7 +102,7 @@ class KickPublicTransport:
         self._state: KickPublicState | None = None
         self._channel: JSONDict = {}
         self._last_metadata: JSONDict | None = None
-        self._last_viewers: JSONList | None = None
+        self._last_viewers: tuple[JSONList, bool] | None = None
         self._next_poll = 0.0
         self._receive_timeout = 1.0
         self._pending: deque[JSONDict | Exception] = deque()
@@ -264,15 +264,20 @@ class KickPublicTransport:
             logger.debug("Kick public metadata poll failed (%s).", type(error).__name__)
         try:
             viewers = self._state.viewers(self._channel)
-            if viewers != self._last_viewers:
+            offline = (
+                "livestream" in self._channel and self._channel["livestream"] is None
+            )
+            viewer_state = (viewers, offline)
+            if viewer_state != self._last_viewers:
                 self._pending.append(
                     {
                         "event": "kick:viewer_count",
                         "data": viewers,
                         "source": "public_rest",
+                        "offline": offline,
                     }
                 )
-                self._last_viewers = viewers
+                self._last_viewers = viewer_state
         except (RequestException, OSError, KickError, ValueError, TypeError) as error:
             self._record_diagnostic("public_state_poll_failure_count")
             logger.debug("Kick public viewer poll failed (%s).", type(error).__name__)

@@ -1,0 +1,8 @@
+{
+  "event": "kick:public_state",
+  "source": "public_rest",
+  "data": {
+    "followers_count": "447259",
+    "livestream": null
+  }
+}

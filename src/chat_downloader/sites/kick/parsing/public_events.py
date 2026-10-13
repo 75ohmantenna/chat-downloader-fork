@@ -57,17 +57,30 @@ def parse_public_event(
     ):
         msg = "Kick public event requires its receive timestamp."
         raise ParsingError(msg)
+    offline = (
+        message_type == "viewer_count"
+        and frame.get("source") == "public_rest"
+        and frame.get("offline") is True
+        and payload == []
+    )
+    metadata = {
+        "event_name": frame.get("event"),
+        "channel": frame.get("channel"),
+        "data": payload,
+        "source": frame.get("source", "websocket"),
+    }
+    if offline:
+        metadata["offline"] = True
     return {
         "message_type": message_type,
         "message_id": f"kick-{message_type}:{received_timestamp}",
         "received_timestamp": received_timestamp,
-        "message": _public_event_message(payload, message_type),
-        "metadata": {
-            "event_name": frame.get("event"),
-            "channel": frame.get("channel"),
-            "data": payload,
-            "source": frame.get("source", "websocket"),
-        },
+        "message": (
+            "viewer count: offline"
+            if offline
+            else _public_event_message(payload, message_type)
+        ),
+        "metadata": metadata,
     }
 
 

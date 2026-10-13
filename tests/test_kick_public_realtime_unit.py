@@ -634,6 +634,29 @@ def test_public_snapshots_only_emit_changed_values_and_restart_changed_categorie
         transport.recv()
 
 
+def test_public_viewer_snapshots_track_offline_transitions_with_empty_counts():
+    from chat_downloader.formatting.format import ItemFormatter
+
+    transport = public_state_transport()
+    for channel, expected in [
+        ({"livestream": {"id": 123}}, "viewer count"),
+        ({"livestream": None}, "viewer count: offline"),
+        ({"livestream": {"id": 123}}, "viewer count"),
+    ]:
+        transport._state.metadata.return_value = channel
+        transport._next_poll = 0
+        assert transport.recv()["event"] == "kick:public_state"
+        frame = transport.recv()
+        assert frame["event"] == "kick:viewer_count"
+        item = dispatch_event(frame, received_timestamp=1_577_836_800_000_000)
+        assert ItemFormatter().format(item, "kick") == (
+            f"2020-01-01 00:00:00 [received] | [{expected}]"
+        )
+        transport._next_poll = 0
+        assert transport.recv() is None
+    transport.close()
+
+
 def test_public_poll_failure_is_visible_and_does_not_drop_chat():
     transport = public_state_transport()
     transport._state.metadata.side_effect = RequestException("offline")

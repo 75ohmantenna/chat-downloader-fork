@@ -1,0 +1,6 @@
+{
+  "event": "kick:viewer_count",
+  "source": "public_rest",
+  "data": [],
+  "offline": true
+}

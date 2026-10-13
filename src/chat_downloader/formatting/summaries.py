@@ -7,6 +7,15 @@ from __future__ import annotations
 from chat_downloader.utils.json_types import get_bool, get_int, get_str
 
 
+def format_count(value: object) -> str:
+    """Render nonnegative integer counts, including decimal strings and zero."""
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return str(value)
+    if isinstance(value, str) and value.isascii() and value.isdecimal():
+        return value
+    return ""
+
+
 def format_leaderboard(value: object, unit: str) -> str:
     """Show the first three supplied entries of each explicitly enabled period."""
     if not isinstance(value, dict):
