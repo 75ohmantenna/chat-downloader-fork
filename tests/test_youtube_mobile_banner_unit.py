@@ -61,6 +61,32 @@ def test_mobile_banner_preserves_content_without_ui_drift() -> None:
     assert "time_in_seconds" not in message
 
 
+@pytest.mark.parametrize("wrapper_offset", ["0", "500"])
+@pytest.mark.parametrize("clip_offset", [0, 10])
+def test_mobile_replay_banner_preserves_offset_without_inventing_timestamp(
+    wrapper_offset, clip_offset
+):
+    action = {
+        "replayChatItemAction": {
+            "videoOffsetTimeMsec": wrapper_offset,
+            "actions": [_action()],
+        }
+    }
+    result = process_pipeline_action(
+        action,
+        clip_offset,
+        MessageFilter(_MESSAGE_GROUPS, groups_to_add=["all"]),
+        None,
+    )
+    assert result.disposition == "yield"
+    assert (
+        result.message["time_in_seconds"] == float(wrapper_offset) / 1000 - clip_offset
+    )
+    assert result.message["message_id"] == "fixture-mobile-banner"
+    assert result.message["message"] == "Pinned chat message 🙏"
+    assert "timestamp" not in result.message
+
+
 @pytest.mark.parametrize("case", ["unknown", "empty", "author-only"])
 def test_unsupported_mobile_banner_does_not_emit_empty_success(
     monkeypatch, case

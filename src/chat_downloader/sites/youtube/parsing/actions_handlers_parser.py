@@ -22,6 +22,7 @@ from chat_downloader.utils.json_types import (
     get_list,
     get_str,
 )
+from chat_downloader.utils.time_utils import seconds_to_time
 
 from .message_content_text_parser import _parse_runs
 from .message_items_content_parser import _parse_item
@@ -188,7 +189,17 @@ def _handle_add_banner_action(
             )
             debug_log("Unsupported banner content")
             return (data, original_item, None, original_action_type)
-        parsed_contents = _parse_item(contents, offset=offset)
+        parsed_contents = _parse_item(
+            contents,
+            data.copy(),
+            offset=offset,
+            preserve_wrapper_time="time_in_seconds" in data,
+        )
+        wrapper_time = data.get("time_in_seconds")
+        if isinstance(wrapper_time, (int, float)) and wrapper_time > 0:
+            parsed_contents["time_text"] = seconds_to_time(
+                parsed_contents["time_in_seconds"]
+            )
         data.update(parsed_contents)
         if content_message_type == _RENDERER_BANNER_CHAT_SUMMARY:
             original_item = contents
