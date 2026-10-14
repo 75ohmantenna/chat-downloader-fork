@@ -14,7 +14,12 @@ from chat_downloader.runtime.capture_manifest import replay_complete
 from chat_downloader.runtime.runner import RunResult
 from chat_downloader.sites.kick import clip_service
 from chat_downloader.sites.kick.api_client import KickApiClient
-from chat_downloader.sites.kick.errors import KickCountryBlocked, KickError
+from chat_downloader.sites.kick.errors import (
+    KickCountryBlocked,
+    KickError,
+    KickVideoRestricted,
+)
+from chat_downloader.sites.kick.replay_service import get_vod_chat
 from tests.kick_helpers import (
     FakeKickSession,
     FakeResponse,
@@ -88,6 +93,98 @@ def _get_chat(client, *, request=None, clip_id=CLIP_ID):
         request or ChatRequest(max_attempts=1, interruptible_retry=False),
         api_client=client,
     )
+
+
+def test_subscriber_only_source_vod_uses_public_mobile_clip_replay():
+    recorded = load_fixture("video_subscriber_only_recorded.json")
+    primary = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("clip_metadata.json")),
+            FakeResponse(recorded["http_status"], recorded["response"]),
+            FakeResponse(
+                200,
+                message_page(
+                    [
+                        raw_message("end", "2026-08-18T22:55:21Z"),
+                        raw_message("start", "2026-08-18T22:54:21Z"),
+                        raw_message("before", "2026-08-18T22:54:20Z"),
+                    ],
+                    cursor=None,
+                ),
+            ),
+        ]
+    )
+    mobile = FakeKickSession(
+        [FakeResponse(200, load_fixture("clip_metadata_mobile.json"))]
+    )
+    chat = _get_chat(KickApiClient(session=primary, mobile_session=mobile))
+    messages = list(chat)
+    assert [item["message_id"] for item in messages] == ["start", "end"]
+    assert [item["time_in_seconds"] for item in messages] == [0, 60]
+    assert chat.diagnostics["transport"]["http_status_counts"] == {"200": 3, "403": 1}
+    assert replay_complete(
+        chat, RunResult(success=True, termination_reason="completed")
+    )
+    assert mobile.requested_urls == [f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}"]
+
+
+def test_subscriber_only_vod_replay_remains_unavailable():
+    recorded = load_fixture("video_subscriber_only_recorded.json")
+    primary = FakeKickSession(
+        [FakeResponse(recorded["http_status"], recorded["response"])]
+    )
+    mobile = FakeKickSession([])
+    with pytest.raises(KickVideoRestricted, match="requires a channel subscription"):
+        get_vod_chat(
+            "n3on",
+            VIDEO_ID,
+            ChatRequest(),
+            api_client=KickApiClient(session=primary, mobile_session=mobile),
+        )
+    assert mobile.calls == []
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"channel": {"id": 999}}, "different channel ids"),
+        ({"duration": 30}, "different durations"),
+    ],
+)
+def test_restricted_vod_fallback_rejects_conflicting_mobile_evidence(changes, message):
+    recorded = load_fixture("video_subscriber_only_recorded.json")
+    primary = FakeKickSession(
+        [
+            FakeResponse(200, load_fixture("clip_metadata.json")),
+            FakeResponse(recorded["http_status"], recorded["response"]),
+        ]
+    )
+    payload = load_fixture("clip_metadata_mobile.json")
+    payload["data"].update(changes)
+    mobile = FakeKickSession([FakeResponse(200, payload)])
+    with pytest.raises(KickError, match=message):
+        _get_chat(KickApiClient(session=primary, mobile_session=mobile))
+    assert len(primary.calls) == 2
+
+
+@pytest.mark.parametrize("denial", ["challenge", "wrong_uuid", "country"])
+def test_source_vod_denials_do_not_activate_mobile_fallback(denial):
+    payload = load_fixture("video_subscriber_only_recorded.json")["response"]
+    if denial == "wrong_uuid":
+        payload["uuid"] = "00000000-0000-4000-8000-000000000001"
+    response = (
+        FakeResponse(403, payload, text="<html>challenge</html>")
+        if denial == "challenge"
+        else FakeResponse(423 if denial == "country" else 403, payload)
+    )
+    primary = FakeKickSession(
+        [FakeResponse(200, load_fixture("clip_metadata.json")), response]
+    )
+    mobile = FakeKickSession([])
+    error = KickCountryBlocked if denial == "country" else CaptchaChallengeRequired
+    with pytest.raises(error):
+        _get_chat(KickApiClient(session=primary, mobile_session=mobile))
+    assert mobile.calls == []
 
 
 @pytest.mark.parametrize(

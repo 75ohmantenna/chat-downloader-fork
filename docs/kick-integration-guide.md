@@ -138,7 +138,11 @@ The Kick flow depends on the target type.
    its `data.id`, `data.channel.id`, timezone-qualified `data.started_at`, and a
    positive duration no greater than the provider's 180-second clip limit.
    Known invalid start-time sentinels are rejected. Challenge responses remain
-   terminal and do not activate the alternate endpoint.
+   terminal and do not activate the alternate endpoint. A source-VOD HTTP 403
+   JSON response with the matching UUID, `is_private: true`, and
+   `status: subscriber_only` is a subscription restriction rather than a
+   challenge; it activates the public mobile clip metadata fallback. The
+   restricted source VOD itself remains unavailable.
 4. On the web path, fetch the source VOD metadata and require its channel to
    agree with the clip. On the mobile path, use the returned absolute
    `started_at` and channel directly, without treating the mobile `video.id` as
@@ -607,16 +611,21 @@ environments diagnosable:
 
 When a response body looks like a challenge page (Cloudflare markers, or an HTML
 body where JSON was expected) or returns HTTP 403, the client raises
-`CaptchaChallengeRequired` — neither curl-cffi nor cloudscraper could bypass the
-challenge (modern Cloudflare challenges may require tooling updates or an
-endpoint with better IP reputation).
+`CaptchaChallengeRequired` unless the response matches the validated
+subscriber-only video contract below. The configured HTTP transport could not
+retrieve that resource; backend selection does not retry every installed
+backend. Check endpoint availability and access restrictions as well as
+Cloudflare protection before attributing a denial to IP reputation.
 
 Status mapping in `api_client.py::_check_status`:
 
 - channel `404` → `UserNotFound`; video `404` → the internal
   `KickVideoNotFound` signal used by the current website fallback; clip and
   history `404` → `KickError` (the clip service may then try mobile metadata)
-- `403` / challenge body → `CaptchaChallengeRequired`
+- video `403` with a matching canonical UUID, `is_private: true`, and
+  `status: subscriber_only` → `KickVideoRestricted` (terminal for VOD replay;
+  eligible for public mobile metadata fallback during clip replay)
+- other `403` / challenge body → `CaptchaChallengeRequired`
 - provider-specific `423` → `KickCountryBlocked` (terminal; no fallback/retry)
 - `429` / `5xx` → `KickServerError` (transient, retried)
 - other non-`200` → `KickError`
