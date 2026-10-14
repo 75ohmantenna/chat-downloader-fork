@@ -1,0 +1,235 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "clickTrackingParams": "CAEQl98BIhMI1qO5gdK4lwMVwNktAB2ZYx9WygEEtufJKA==",
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addChatItemAction": {
+                  "clientId": "CO64t-e6t5cDFRUU1gAd3SsRlw",
+                  "item": {
+                    "liveChatTextMessageRenderer": {
+                      "authorBadges": [
+                        {
+                          "liveChatAuthorBadgeRenderer": {
+                            "accessibility": {
+                              "accessibilityData": {
+                                "label": "Member (6 months)"
+                              }
+                            },
+                            "customThumbnail": {
+                              "thumbnails": [
+                                {
+                                  "height": 16,
+                                  "url": "https://yt3.ggpht.com/gAq7jDekvG5e_Az-VnKhS-Sy-rZDgyHIdGQAhks2iWlN7rMkiTlxnW5ztMW96ynyEIG1hMe67LLLCP6q=s16-c-k",
+                                  "width": 16
+                                },
+                                {
+                                  "height": 32,
+                                  "url": "https://yt3.ggpht.com/gAq7jDekvG5e_Az-VnKhS-Sy-rZDgyHIdGQAhks2iWlN7rMkiTlxnW5ztMW96ynyEIG1hMe67LLLCP6q=s32-c-k",
+                                  "width": 32
+                                }
+                              ]
+                            },
+                            "tooltip": "Member (6 months)"
+                          }
+                        }
+                      ],
+                      "authorExternalChannelId": "UCVQH-IlqR5qHBzVMR8Wadpg",
+                      "authorName": {
+                        "simpleText": "@DeniseAnne-y5p"
+                      },
+                      "authorPhoto": {
+                        "thumbnails": [
+                          {
+                            "height": 32,
+                            "url": "https://yt4.ggpht.com/EcNlK-6AeafdFrntgSmDU_ZkbD95Ctvo3SrnynrfQZ36KvwFlqoJcO-GoEEDoH-07tJSGhD23A=s32-c-k-c0x00ffffff-no-rj",
+                            "width": 32
+                          },
+                          {
+                            "height": 64,
+                            "url": "https://yt4.ggpht.com/EcNlK-6AeafdFrntgSmDU_ZkbD95Ctvo3SrnynrfQZ36KvwFlqoJcO-GoEEDoH-07tJSGhD23A=s64-c-k-c0x00ffffff-no-rj",
+                            "width": 64
+                          }
+                        ]
+                      },
+                      "contextMenuAccessibility": {
+                        "accessibilityData": {
+                          "label": "Chat actions"
+                        }
+                      },
+                      "contextMenuEndpoint": {
+                        "clickTrackingParams": "CAEQl98BIhMI1qO5gdK4lwMVwNktAB2ZYx9WygEEtufJKA==",
+                        "commandMetadata": {
+                          "webCommandMetadata": {
+                            "ignoreNavigation": true
+                          }
+                        },
+                        "liveChatItemContextMenuEndpoint": {
+                          "params": "Q2g0S0hBb2FRMDgyTkhRdFpUWjBOV05FUmxKVlZURm5RV1F6VTNOU2JIY2FLU29uQ2hoVlEybFFlVGRaUWxGTFNrWXhXVGN3WW01RVRHdzVRVUVTQzI1b2NWTmtNR3RtWlRGSklBRW9BVElhQ2hoVlExWlJTQzFKYkhGU05YRklRbnBXVFZJNFYyRmtjR2M0QWtnQlVBRSUzRA=="
+                        }
+                      },
+                      "id": "ChwKGkNPNjR0LWU2dDVjREZSVVUxZ0FkM1NzUmx3",
+                      "message": {
+                        "runs": [
+                          {
+                            "text": "Crazy how Pikes never worked "
+                          }
+                        ]
+                      },
+                      "timestampText": {
+                        "simpleText": "4:48:50"
+                      },
+                      "timestampUsec": "1791910501811218",
+                      "trackingParams": "CAEQl98BIhMI1qO5gdK4lwMVwNktAB2ZYx9W"
+                    }
+                  }
+                },
+                "clickTrackingParams": "CAEQl98BIhMI1qO5gdK4lwMVwNktAB2ZYx9WygEEtufJKA=="
+              }
+            ],
+            "videoOffsetTimeMsec": "17330356"
+          }
+        },
+        {
+          "clickTrackingParams": "CAEQl98BIhMI1qO5gdK4lwMVwNktAB2ZYx9WygEEtufJKA==",
+          "replayChatItemAction": {
+            "actions": [
+              {
+                "addBannerToLiveChatCommand": {
+                  "bannerRenderer": {
+                    "liveChatBannerRenderer": {
+                      "actionId": "ChwKGkNKT2t6ZWU2dDVjREZXTTZzd0FkYmJnMU9B",
+                      "backgroundType": "LIVE_CHAT_BANNER_BACKGROUND_TYPE_STATIC",
+                      "bannerProperties": {
+                        "autoCollapseDelay": {
+                          "seconds": "7"
+                        },
+                        "bannerCollapsedStateEntityKey": "EihDaHdLR2tOS1QydDZaV1UyZERWalJFWlhUVFp6ZDBGa1ltSm5NVTlCIIsBKAE%3D"
+                      },
+                      "bannerType": "LIVE_CHAT_BANNER_TYPE_PINNED_MESSAGE",
+                      "contents": {
+                        "liveChatTextMessageRenderer": {
+                          "authorBadges": [
+                            {
+                              "liveChatAuthorBadgeRenderer": {
+                                "accessibility": {
+                                  "accessibilityData": {
+                                    "label": "Verified"
+                                  }
+                                },
+                                "icon": {
+                                  "iconType": "VERIFIED"
+                                },
+                                "tooltip": "Verified"
+                              }
+                            },
+                            {
+                              "liveChatAuthorBadgeRenderer": {
+                                "accessibility": {
+                                  "accessibilityData": {
+                                    "label": "Owner"
+                                  }
+                                },
+                                "icon": {
+                                  "iconType": "OWNER"
+                                },
+                                "tooltip": "Owner"
+                              }
+                            }
+                          ],
+                          "authorExternalChannelId": "UCiPy7YBQKJF1Y70bnDLl9AA",
+                          "authorName": {
+                            "simpleText": "@jonathanleerichesinvestigates"
+                          },
+                          "authorPhoto": {
+                            "thumbnails": [
+                              {
+                                "height": 32,
+                                "url": "https://yt4.ggpht.com/MWpInUJMegJwGSw7NzA5TsM8Mr1lpDXdQF21c6-Rh5PYqABeov3p8s9dRJPphX3hzjFtwa6D=s32-c-k-c0x00ffffff-no-rj",
+                                "width": 32
+                              },
+                              {
+                                "height": 64,
+                                "url": "https://yt4.ggpht.com/MWpInUJMegJwGSw7NzA5TsM8Mr1lpDXdQF21c6-Rh5PYqABeov3p8s9dRJPphX3hzjFtwa6D=s64-c-k-c0x00ffffff-no-rj",
+                                "width": 64
+                              }
+                            ]
+                          },
+                          "id": "ChwKGkNLRzh1T1c2dDVjREZUY0lzd0FkNl9RYXFR",
+                          "message": {
+                            "runs": [
+                              {
+                                "text": "BREAKING! JAMES ROBERTSON EXECUTED!!"
+                              }
+                            ]
+                          },
+                          "timestampText": {
+                            "simpleText": "4:48:46"
+                          },
+                          "timestampUsec": "1791910497630202",
+                          "trackingParams": "CAEQl98BIhMI1qO5gdK4lwMVwNktAB2ZYx9W"
+                        }
+                      },
+                      "header": {
+                        "liveChatBannerHeaderRenderer": {
+                          "contextMenuButton": {
+                            "buttonRenderer": {
+                              "accessibility": {
+                                "label": "Chat actions"
+                              },
+                              "accessibilityData": {
+                                "accessibilityData": {
+                                  "label": "Chat actions"
+                                }
+                              },
+                              "command": {
+                                "clickTrackingParams": "CB4Q8FsiEwjWo7mB0riXAxXA2S0AHZljH1bKAQS258ko",
+                                "commandMetadata": {
+                                  "webCommandMetadata": {
+                                    "ignoreNavigation": true
+                                  }
+                                },
+                                "liveChatItemContextMenuEndpoint": {
+                                  "params": "Q2g0S0hBb2FRMHRIT0hWUFZ6WjBOV05FUmxSalNYTjNRV1EyWDFGaGNWRWFLU29uQ2hoVlEybFFlVGRaUWxGTFNrWXhXVGN3WW01RVRHdzVRVUVTQzI1b2NWTmtNR3RtWlRGSklBRW9BVElhQ2hoVlEybFFlVGRaUWxGTFNrWXhXVGN3WW01RVRHdzVRVUU0QVVnQlVBRSUzRA=="
+                                }
+                              },
+                              "icon": {
+                                "iconType": "MORE_VERT"
+                              },
+                              "trackingParams": "CB4Q8FsiEwjWo7mB0riXAxXA2S0AHZljH1Y="
+                            }
+                          },
+                          "icon": {
+                            "iconType": "KEEP"
+                          },
+                          "text": {
+                            "runs": [
+                              {
+                                "text": "Pinned by "
+                              },
+                              {
+                                "text": "@jonathanleerichesinvestigates"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "isStackable": false,
+                      "targetId": "live-chat-banner",
+                      "viewerIsCreator": false
+                    }
+                  }
+                },
+                "clickTrackingParams": "CAEQl98BIhMI1qO5gdK4lwMVwNktAB2ZYx9WygEEtufJKA=="
+              }
+            ],
+            "videoOffsetTimeMsec": "17330715"
+          }
+        }
+      ]
+    }
+  }
+}

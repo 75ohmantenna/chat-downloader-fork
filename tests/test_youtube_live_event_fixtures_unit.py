@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from chat_downloader.sites.filters import MessageFilter
+from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
 from chat_downloader.sites.youtube.continuations import (
     parse_continuation_response,
@@ -50,6 +50,91 @@ def _assert_paid_ticker_timing(parsed, seconds, text):
     ]
     assert [item["time_in_seconds"] for item in parsed] == [seconds, seconds]
     assert [item["time_text"] for item in parsed] == [text, text]
+
+
+@pytest.mark.parametrize(
+    ("clip_offset", "expected_text"),
+    [(0, "4:48:50"), (17300, "0:30"), (17331, "-0:00")],
+)
+def test_replay_pinned_banner_preserves_wrapper_time(clip_offset, expected_text):
+    payload = _load_payload("youtube-replay-pinned-banner-timing.json")
+    parsed = _parse_actions(parse_continuation_response(payload), clip_offset)
+    assert [item["message_type"] for item in parsed] == ["text_message", "banner"]
+    assert [item["time_in_seconds"] for item in parsed] == pytest.approx(
+        [17330.356 - clip_offset, 17330.715 - clip_offset]
+    )
+    assert parsed[1]["timestamp"] == 1791910497630202
+    assert parsed[1]["time_text"] == expected_text
+
+
+@pytest.mark.parametrize("clip_offset", [0, 10])
+def test_replay_pinned_banner_zero_floor_retains_signed_display_time(clip_offset):
+    payload = _load_payload("youtube-replay-pinned-banner-timing.json")
+    action = payload["continuationContents"]["liveChatContinuation"]["actions"][1]
+    wrapper = action["replayChatItemAction"]
+    wrapper["videoOffsetTimeMsec"] = "0"
+    banner = wrapper["actions"][0]["addBannerToLiveChatCommand"]["bannerRenderer"][
+        "liveChatBannerRenderer"
+    ]
+    banner["contents"]["liveChatTextMessageRenderer"]["timestampText"] = {
+        "simpleText": "-0:15"
+    }
+    parsed = _parse_actions(parse_continuation_response(payload), clip_offset)
+    assert parsed[1]["time_in_seconds"] == -15 - clip_offset
+    assert parsed[1]["time_text"] == ("-0:15" if clip_offset == 0 else "-0:25")
+
+
+@pytest.mark.parametrize("wrapper_offset", [None, "bad", "-1", "nan", "inf", True])
+def test_replay_pinned_banner_invalid_wrapper_uses_display_time(wrapper_offset):
+    payload = _load_payload("youtube-replay-pinned-banner-timing.json")
+    action = payload["continuationContents"]["liveChatContinuation"]["actions"][1]
+    action["replayChatItemAction"]["videoOffsetTimeMsec"] = wrapper_offset
+    parsed = _parse_actions(parse_continuation_response(payload), 17300)
+    assert parsed[1]["time_in_seconds"] == 26
+    assert parsed[1]["time_text"] == "0:26"
+    assert parsed[1]["timestamp"] == 1791910497630202
+
+
+def test_live_pinned_banner_keeps_original_display_time():
+    payload = _load_payload("youtube-replay-pinned-banner-timing.json")
+    actions = payload["continuationContents"]["liveChatContinuation"]["actions"]
+    actions[:] = actions[1]["replayChatItemAction"]["actions"]
+    parsed = _parse_actions(parse_continuation_response(payload))
+    assert parsed[0]["message_type"] == "banner"
+    assert parsed[0]["time_in_seconds"] == 17326
+    assert parsed[0]["time_text"] == "4:48:46"
+    assert parsed[0]["timestamp"] == 1791910497630202
+
+
+def test_replay_pinned_banner_without_display_time_keeps_wrapper():
+    payload = _load_payload("youtube-replay-pinned-banner-timing.json")
+    action = payload["continuationContents"]["liveChatContinuation"]["actions"][1]
+    banner = action["replayChatItemAction"]["actions"][0]["addBannerToLiveChatCommand"][
+        "bannerRenderer"
+    ]["liveChatBannerRenderer"]
+    content = banner["contents"]["liveChatTextMessageRenderer"]
+    del content["timestampText"]
+    del content["timestampUsec"]
+    parsed = _parse_actions(parse_continuation_response(payload))
+    assert parsed[1]["time_in_seconds"] == 17330.715
+    assert parsed[1]["time_text"] == "4:48:50"
+    assert "timestamp" not in parsed[1]
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "expected"),
+    [(17330.5, 17331, "yield"), (0, 17330.5, "stop")],
+)
+def test_replay_pinned_banner_filters_on_wrapper_time(start, end, expected):
+    payload = _load_payload("youtube-replay-pinned-banner-timing.json")
+    action = payload["continuationContents"]["liveChatContinuation"]["actions"][1]
+    result = process_pipeline_action(
+        action,
+        17300,
+        MessageFilter(_MESSAGE_GROUPS, groups_to_add=["all"]),
+        TimeRangeFilter(start, end, offset=17300, skip_mode="always"),
+    )
+    assert result.disposition == expected
 
 
 def test_shu_live_event_fixture_covers_paid_membership_and_ticker_paths() -> None:

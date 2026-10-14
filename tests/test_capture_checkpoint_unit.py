@@ -144,6 +144,48 @@ def test_resume_orders_initial_zero_notice_after_negative_preroll(
     assert [item["time_in_seconds"] for item in rows] == [-13, -12, 0, 0, 1]
 
 
+def test_replay_pinned_banner_resumes_with_verified_outputs(tmp_path):
+    from chat_downloader.sites.filters import MessageFilter
+    from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
+    from chat_downloader.sites.youtube.continuations import parse_continuation_response
+    from chat_downloader.sites.youtube.message_pipeline import process_pipeline_action
+
+    fixture = (
+        Path(__file__).parent
+        / "fixtures/youtube/live_events/youtube-replay-pinned-banner-timing.json"
+    )
+    response = parse_continuation_response(load_json(fixture))
+    message_filter = MessageFilter(_MESSAGE_GROUPS, groups_to_add=["all"])
+
+    class BannerReplay(Downloader):
+        records: ClassVar[list] = [
+            process_pipeline_action(action, 0, message_filter, None).message
+            for action in response.actions
+        ]
+
+    params = parameters(tmp_path)
+    params["format"] = "youtube"
+    first = execute_run(BannerReplay, **params, max_messages=1)
+    assert first.success
+    assert first.parity_status == "passed"
+    second = execute_run(BannerReplay, **params, require_complete=True)
+    assert second.success
+    assert second.message_count == 1
+    assert second.parity_status == "passed"
+    state = load_json(tmp_path / "checkpoint.json")
+    assert state["completed"]
+    assert state["offset"] == 17330.715
+    assert state["total"] == 2
+    rows = [
+        json.loads(line) for line in (tmp_path / "chat.jsonl").read_text().splitlines()
+    ]
+    assert [item["message_type"] for item in rows] == ["text_message", "banner"]
+    assert rows[1]["timestamp"] == 1791910497630202
+    assert rows[1]["time_text"] == "4:48:50"
+    assert rows[1]["author"]["is_owner"]
+    assert execute_run(BannerReplay, **params, require_complete=True).message_count == 0
+
+
 def test_initial_zero_notice_buffer_respects_checkpoint_boundary() -> None:
     notices = [message(1, 0), message(2, 0)]
     with pytest.raises(ValueError, match="too many message IDs"):
