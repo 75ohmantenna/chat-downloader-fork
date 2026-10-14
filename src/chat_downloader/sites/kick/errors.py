@@ -39,3 +39,7 @@ class KickForwardHistoryRejected(KickError):
 
 class KickVideoNotFound(KickError):
     """The requested video ID was absent from a metadata endpoint."""
+
+
+class KickVideoRestricted(KickError):
+    """The requested source VOD requires a channel subscription."""

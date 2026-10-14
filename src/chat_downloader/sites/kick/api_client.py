@@ -19,6 +19,7 @@ from chat_downloader.utils.json_types import (
     JSONList,
     get_dict,
     get_list,
+    get_str,
 )
 
 from .constants import (
@@ -38,6 +39,7 @@ from .errors import (
     KickForwardHistoryRejected,
     KickServerError,
     KickVideoNotFound,
+    KickVideoRestricted,
 )
 from .http_session import _KickSession, create_kick_session
 
@@ -340,9 +342,10 @@ def _raise_for_challenge(response: requests.Response, context: str) -> NoReturn:
         response.headers.get("Content-Type", ""),
     )
     msg = (
-        "Kick blocked automated access with a Cloudflare challenge. The"
-        " bundled curl-cffi and cloudscraper fallbacks could not bypass it."
-        " Changing IP or proxy endpoints can help diagnose reputation issues."
+        "Kick denied automated access or returned a Cloudflare challenge. The"
+        " configured HTTP transport could not retrieve this resource."
+        " Check endpoint availability and access restrictions before changing"
+        " IP or proxy settings."
     )
     raise CaptchaChallengeRequired(msg)
 
@@ -371,6 +374,9 @@ def _check_status(
         msg = f"Kick {resource} not found: {context}"
         raise KickError(msg)
     if status == HTTPStatus.FORBIDDEN:
+        if resource == "video" and _is_restricted_video(response, context):
+            msg = f"Kick video {context!r} requires a channel subscription (HTTP 403)."
+            raise KickVideoRestricted(msg)
         _raise_for_challenge(response, context)
     if (
         status == HTTPStatus.TOO_MANY_REQUESTS
@@ -381,6 +387,21 @@ def _check_status(
     if status != HTTPStatus.OK:
         msg = f"Kick {resource} API returned unexpected HTTP {status} for {context!r}."
         raise KickError(msg)
+
+
+def _is_restricted_video(response: requests.Response, video_id: str) -> bool:
+    """Recognize only the observed identity-matched subscriber-only contract."""
+    try:
+        payload = cast("JSONAny", response.json())
+    except (JSONDecodeError, ValueError):
+        return False
+    return (
+        isinstance(payload, dict)
+        and is_video_id(video_id.casefold())
+        and get_str(payload, "uuid").casefold() == video_id.casefold()
+        and payload.get("is_private") is True
+        and payload.get("status") == "subscriber_only"
+    )
 
 
 def _decode_json(

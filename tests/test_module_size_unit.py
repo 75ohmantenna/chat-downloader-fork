@@ -41,6 +41,11 @@ ALLOWLIST: frozenset[str] = frozenset(
         # security boundary. Splitting the lookup phases would obscure when
         # cross-endpoint identity and bounds must fail closed.
         "sites/kick/clip_service.py",
+        # Cohesive HTTP response policy: origin-isolated requests and resource
+        # classification share the client's trust and diagnostic boundaries.
+        # The observed subscriber-only 403 needs identity validation alongside
+        # challenge classification; moving just that check hides precedence.
+        "sites/kick/api_client.py",
         # Cohesive Twitch replay service: metadata, bounded cursor pagination,
         # edge validation, and badge-channel identity form one replay contract.
         # Splitting request phases would obscure cursor and creator-ID state.
