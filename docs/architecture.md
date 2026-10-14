@@ -174,7 +174,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `format.py` | `ItemFormatter`: safe template resolution, matching list-parent inheritance with cycle detection, time/JSON/poll field formatting, singular/conditional fragments, and output sanitization |
-| `summaries.py` | Pure, bounded leaderboard and goal field rendering, composed through `ItemFormatter` without changing structured payloads |
+| `summaries.py` | Pure, bounded count, viewer, leaderboard, and goal field rendering, composed through `ItemFormatter` without changing structured payloads |
 | `custom_formats.json` | Built-in default, provider-specific, live, and time-display format definitions |
 
 ### `utils/`

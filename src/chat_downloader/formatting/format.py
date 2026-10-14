@@ -16,6 +16,7 @@ from chat_downloader.formatting.summaries import (
     format_count,
     format_goal,
     format_leaderboard,
+    format_viewer_count,
 )
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_int, get_list, get_str
@@ -31,6 +32,11 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
 
 BUILTIN_FORMAT_FILE = Path(__file__).parent / "custom_formats.json"
+_SUMMARY_FORMATTERS = {
+    "count": format_count,
+    "goal": format_goal,
+    "viewer_count": format_viewer_count,
+}
 
 
 class _SafeFormatter(string.Formatter):
@@ -297,14 +303,14 @@ class ItemFormatter:
     ) -> Any:
         """Apply a field's JSON, poll, or time representation before templating."""
         format_string = field_config[cls.KEY_FORMAT]
-        if format_string == "count":
-            return format_count(value)
+        if isinstance(format_string, str) and (
+            renderer := _SUMMARY_FORMATTERS.get(format_string)
+        ):
+            return renderer(value)
         if format_string == "poll":
             return _format_poll_metadata(value)
         if format_string == "leaderboard":
             return format_leaderboard(value, get_str(field_config, "unit"))
-        if format_string == "goal":
-            return format_goal(value)
         if format_string == "iso8601":
             try:
                 return microseconds_to_timestamp(parse_iso8601(value))

@@ -6,12 +6,14 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
+from time import monotonic
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 from uuid import uuid4
 
 from requests.exceptions import RequestException
 
+from chat_downloader.debugging import logger
 from chat_downloader.utils.json_types import get_dict, get_list, get_str
 
 from .api_client import (
@@ -120,13 +122,26 @@ class KickRealtimeClient:
         if self._closed:
             msg = "KickRealtimeClient is closed."
             raise RuntimeError(msg)
+        started = monotonic()
+        status = "transport_error"
+        resource = (
+            "realtime_auth" if path == "/auth/connection" else "realtime_connection"
+        )
         try:
             response = self._session.post(
                 _BASE + path, json=body, timeout=self._timeout, allow_redirects=False
             )
+            status = str(response.status_code)
         except (RequestException, OSError) as error:
             msg = "Kick anonymous realtime request failed."
             raise ConnectionError(msg) from error
+        finally:
+            logger.debug(
+                "Kick HTTP resource=%s origin=web status=%s elapsed=%.3fs",
+                resource,
+                status,
+                monotonic() - started,
+            )
         if response.status_code != 423 and _body_looks_like_challenge(response):
             _raise_for_challenge(response, "realtime")
         _check_status(response, context="realtime", resource="realtime")

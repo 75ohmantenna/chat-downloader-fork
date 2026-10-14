@@ -650,7 +650,8 @@ def test_public_viewer_snapshots_track_offline_transitions_with_empty_counts():
         assert frame["event"] == "kick:viewer_count"
         item = dispatch_event(frame, received_timestamp=1_577_836_800_000_000)
         assert ItemFormatter().format(item, "kick") == (
-            f"2020-01-01 00:00:00 [received] | [{expected}]"
+            "2020-01-01 00:00:00 [received] | [channel metadata] "
+            f"{expected.capitalize()}"
         )
         transport._next_poll = 0
         assert transport.recv() is None

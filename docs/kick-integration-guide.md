@@ -80,6 +80,10 @@ The Kick flow depends on the target type.
    transient failures).
 3. Resolve the channel ID, chatroom ID, and title. Offline channels are *not*
    rejected — the chatroom is still active.
+   For live streams, `Chat.start_time` and manifest `recording.start_time` retain
+   the initial livestream start time as UTC Unix-epoch microseconds. Missing or
+   invalid or partial timestamps remain `None`; offline channels have no stream
+   start time. Full timestamps without a timezone are treated as UTC.
 4. Fetch preloaded recent messages and the current pin state (best-effort;
    non-fatal on failure). The API returns messages newest-first; they are
    reversed into chronological order before the current pin is emitted.
@@ -364,13 +368,16 @@ count, and chat settings. `kick.com/current-viewers` supplies viewer counts for
 the current livestream. These are polled observations with receive timestamps,
 not private push events. Viewer-count text summaries include the count when the
 snapshot contains a single nonnegative integer count, including zero (for
-example, `[viewer count: 42]`). An empty public REST viewer snapshot displays
-`[viewer count: offline]` when the channel metadata explicitly has no livestream.
+example, `[channel metadata] Viewer count: 42`). An empty public REST viewer
+snapshot displays `[channel metadata] Viewer count: offline` when the channel
+metadata explicitly has no livestream.
 JSONL preserves the empty payload and records `metadata.offline: true` for these
 snapshots. Changes between offline and live status emit a viewer snapshot even
 if both counts are empty. Other empty or unrecognized snapshots retain the
-`[viewer count]` label without assuming a count. Public lifecycle events retain
-their complete payload under `metadata.data`, plus event name, channel, and
+`[channel metadata] Viewer count` label without assuming a count. JSONL retains
+the `viewer_count` message type and its original summary and payload.
+Public lifecycle events retain their complete payload under `metadata.data`,
+plus event name, channel, and
 source. A provider entity ID is not used for deduplication because successive
 state updates may share it.
 Compact gifts preserve `gifted_total`, `gifter_total`, and `chunk_details` under
@@ -394,6 +401,12 @@ emissions against persisted records. The default filter remains `messages`.
 Live URLs cannot seek with `start_time` or `end_time`; use a VOD or clip URL.
 
 ### Live diagnostics
+
+Debug HTTP records include resource, origin, response status (or
+`transport_error`), and monotonic request duration for channel/history API
+requests, public channel/viewer polls, realtime negotiation, and anonymous token
+requests, including renewal. They omit URLs, headers, request/response bodies,
+client identities, and tokens.
 
 Each live `Chat` exposes this schema in `chat.diagnostics`. Debug run summaries
 retain it on success and failure. Run manifests select bounded integer counters

@@ -196,6 +196,18 @@
     ],
     "kick": [
         {
+            "matching": "viewer_count",
+            "template": "{timestamp|received_timestamp|time_text}[channel metadata] {metadata|message_type}",
+            "inherit": "default",
+            "keys": {
+                "metadata": {
+                    "format": "viewer_count",
+                    "template": "{}"
+                },
+                "message_type": "Viewer count"
+            }
+        },
+        {
             "matching": "channel_metadata",
             "template": "{timestamp|received_timestamp|time_text}[channel metadata]{metadata.data.followers_count}{metadata.data.livestream.session_title}{metadata.data.livestream.start_time}",
             "inherit": "default",
@@ -269,7 +281,6 @@
                 "event_participant_joined",
                 "event_participant_left",
                 "drops_campaign_started",
-                "viewer_count",
                 "prediction_created",
                 "prediction_updated"
             ],

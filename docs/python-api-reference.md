@@ -279,8 +279,11 @@ the same class.
 
 `get_chat()` returns a `Chat` object from `chat_downloader.sites.models`. It
 wraps the underlying generator and carries metadata such as `title`, `id`,
-`status`, `video_type`, `start_time`, and `duration`. Provider-specific live
-diagnostics, when available, are exposed through `chat.diagnostics` and included
+`status`, `video_type`, `start_time`, and `duration`. For Kick live channels,
+`start_time` is the initial livestream start time in UTC Unix-epoch microseconds,
+or `None` when offline, missing, or invalid; Kick replay start times remain
+offsets in seconds. Provider-specific live diagnostics, when available, are
+exposed through `chat.diagnostics` and included
 in debug run summaries, including failed runs. Twitch live diagnostics use
 fixed-schema counters for recognized optional metadata degradations, connection
 setup and reconnects, IRC frames, recognized benign control frames, parsed

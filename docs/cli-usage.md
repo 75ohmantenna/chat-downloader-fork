@@ -427,6 +427,8 @@ prevent a capture from qualifying as complete.
 `--run_manifest run.json` writes a JSON report after shutdown with program
 version, recording identity/window, success, completion, termination, parity,
 current/prior run message counts, and output writer counts and SHA-256 hashes.
+For Kick live channels, `recording.start_time` contains the initial livestream
+start time in UTC Unix-epoch microseconds, or `null` when unavailable.
 `elapsed_seconds` measures initialization through capture shutdown using a
 monotonic clock; output verification and manifest writing are excluded.
 `provider_diagnostics` retains supported bounded YouTube action and

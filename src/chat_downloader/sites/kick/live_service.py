@@ -74,6 +74,20 @@ _RECONNECT_BACKFILL_PAGE_LIMIT = 100
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
+def _stream_start_time(value: object) -> int | None:
+    """Return exact epoch microseconds only for a full, usable UTC timestamp."""
+    if not isinstance(value, str) or len(value) < 19 or value[10] not in {"T", " "}:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        delta = parsed.astimezone(UTC) - _EPOCH
+    except (ValueError, OverflowError):
+        return None
+    return (delta.days * 86_400 + delta.seconds) * 1_000_000 + delta.microseconds
+
+
 def _successful_frame_labels(message: JSONDict) -> list[str]:
     """Return bounded capture categories without provider text in labels."""
     message_type = message.get("message_type")
@@ -268,6 +282,7 @@ def get_chat_by_channel(
         control,
         title=title,
         status=status,
+        start_time=_stream_start_time(get_dict(data, "livestream").get("start_time")),
         video_type="video",
         id=username,
         diagnostics=diagnostics.summary,
