@@ -218,6 +218,11 @@ class TwitchChatIRC:
             with suppress(OSError):
                 self.socket.close()
 
+    def request_stop(self) -> None:
+        """Interrupt a blocked receive without writing or racing final close."""
+        with suppress(OSError):
+            self.socket.shutdown(socket.SHUT_RDWR)
+
 
 def _drain_readbuffer(readbuffer: str) -> str:
     """Trim an oversized buffer to the last complete line."""

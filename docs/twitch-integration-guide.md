@@ -56,7 +56,8 @@ The Twitch flow depends on the target type.
    Clips starting at VOD offset zero still stop at the clip duration.
 
 Required GraphQL field service errors retry during replay pagination. Missing
-comments after an earlier page also retry. If empty pages or an unchanged cursor
+video/comments or malformed comment edges retry even on the first page; only a
+valid empty edges list establishes an empty replay. If empty pages or an unchanged cursor
 stop pagination, replay diagnostics mark the traversal incomplete. Unexpected
 edge or node shapes count as known record loss for `--require_complete` and
 run manifests.
@@ -143,6 +144,11 @@ service constructs it and passes parsed IRC frames through
 Debug logging reports both the requested socket receive timeout and the
 effective timeout. Twitch clamps values below one second to one second to
 avoid idle CPU churn.
+
+Overall and inactivity deadlines signal the live iterator independently of its
+generator lock and shut down the active IRC socket. The receive wakes, cleanup
+closes the connection, and cancellation does not trigger a reconnect. Setup
+checks cancellation after connection and channel join as well.
 
 ### Live diagnostics
 

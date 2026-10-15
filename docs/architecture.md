@@ -74,7 +74,11 @@ same interfaces as production callers.
 output writers are finalized. When the timeout worker is actively advancing the
 provider iterator, its join is intentionally bounded; writer finalization may
 finish first, and the worker closes the provider iterator as soon as that active
-advance returns or raises. Successful debug summaries expose
+advance returns or raises. Kick replay signals its pagination cancellation flag
+immediately, and Twitch live cancellation shuts down the active IRC socket to
+wake its receive without reconnecting. Chat configuration validates formatting
+and output paths before starting a timed worker; failed setup closes the
+partially configured chat. Successful debug summaries expose
 `prefetched_after_deadline_count` so provider source-emission counters can be
 reconciled with records that crossed an overall or inactivity deadline and were
 intentionally excluded from output. `deadline_prefetch_count_complete` is false

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from typing import Any, ClassVar
+from unittest.mock import Mock
 
 import pytest
 
 from chat_downloader.errors import (
     ChatGeneratorError,
+    FormatFileNotFound,
     InvalidURL,
     SiteNotSupported,
     URLNotProvided,
@@ -169,3 +171,44 @@ def test_dispatch_chat_preserves_site_on_configured_chat(monkeypatch) -> None:
     chat = dispatch_chat(owner, ChatRequest(url="https://example.invalid/watch/abc"))
     assert chat.site is owner.sessions["_GoodSite"]
     assert isinstance(chat.site, BaseChatDownloader)
+
+
+@pytest.mark.parametrize("failure", ["format", "output"])
+def test_failed_configuration_closes_source_without_starting_worker(
+    monkeypatch, tmp_path, failure
+):
+    source = Mock()
+    chat = Chat(source)
+    _install_sites(monkeypatch, _GoodSite)
+    monkeypatch.setattr(_GoodSite, "get_chat_by_id", lambda *_: chat)
+    options = (
+        {"format_file": str(tmp_path / "missing.json")}
+        if failure == "format"
+        else {"output": [str(tmp_path / "ok.jsonl"), str(tmp_path / "bad.csv")]}
+    )
+    with pytest.raises(FormatFileNotFound if failure == "format" else ValueError):
+        dispatch_chat(
+            _Owner(),
+            ChatRequest(
+                url="https://example.invalid/watch/test", timeout=60, **options
+            ),
+        )
+    source.close.assert_called_once()
+    assert chat.chat is source
+    assert not list(tmp_path.iterdir())
+    if chat._output_dispatcher is not None:
+        assert chat._output_dispatcher.closed
+
+
+def test_configuration_failure_preserves_error_when_cleanup_fails(monkeypatch):
+    chat = Chat(iter(()))
+    chat.close = Mock(side_effect=RuntimeError("cleanup failed"))
+    _install_sites(monkeypatch, _GoodSite)
+    monkeypatch.setattr(_GoodSite, "get_chat_by_id", lambda *_: chat)
+    monkeypatch.setattr(
+        "chat_downloader.runtime.site_dispatch.configure_chat",
+        Mock(side_effect=KeyboardInterrupt),
+    )
+    with pytest.raises(KeyboardInterrupt):
+        dispatch_chat(_Owner(), ChatRequest(url="https://example.invalid/watch/test"))
+    chat.close.assert_called_once()
