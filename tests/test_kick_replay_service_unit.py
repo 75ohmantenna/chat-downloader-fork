@@ -6,12 +6,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from threading import Event, Thread
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from chat_downloader.models import ChatRequest
+from chat_downloader.runtime.chat_pipeline import configure_chat
 from chat_downloader.sites.kick import KickError, replay_service, vod_metadata
+from chat_downloader.sites.models import Chat
 from tests.kick_helpers import message_page, raw_message
 
 START = datetime(2026, 1, 1, tzinfo=UTC)
@@ -435,6 +438,46 @@ def test_replay_close_during_request_cancels_without_fetching_another_page():
         worker.join(5)
     assert not worker.is_alive()
     assert results == []
+    assert client.fetch_message_page.call_count == 1
+
+
+@pytest.mark.parametrize("option", ["timeout", "inactivity_timeout", "close"])
+@pytest.mark.parametrize("limit", [None, 1])
+@pytest.mark.parametrize("fails", [False, True])
+def test_timed_replay_cancels_inflight_pagination(option, limit, fails):
+    entered, release = Event(), Event()
+    client = Mock()
+
+    def fetch(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        if fails:
+            raise OSError("request failed after cancellation")
+        return message_page([_at("message", 1)], cursor="another-page")
+
+    client.fetch_message_page.side_effect = fetch
+    source = _source(client)
+    chat = Chat(source)
+    request = ChatRequest(
+        format="kick",
+        max_messages=limit,
+        **({"timeout": 60} if option == "close" else {option: 0.05}),
+    )
+    configure_chat(chat, request, SimpleNamespace(is_live_status=lambda _: False))
+    try:
+        assert entered.wait(2)
+        if option == "close":
+            chat.close()
+        else:
+            assert list(chat) == []
+        assert source.cancelled.is_set()
+    finally:
+        # Always unblock the worker, including on a regression failure.
+        source.request_stop()
+        release.set()
+        chat.chat._worker.join(2)
+        chat.close()
+    assert not chat.chat._worker.is_alive()
     assert client.fetch_message_page.call_count == 1
 
 

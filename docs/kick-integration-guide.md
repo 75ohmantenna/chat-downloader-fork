@@ -482,7 +482,8 @@ bounded-memory spool. Repeated pages or cursors fail as incomplete retrieval,
 instead of reporting a successful truncated capture. The final debug summary
 includes the protocol, page and record counts, selected/observed timestamps,
 HTTP status totals and latency, and an explicit termination reason. Deadline
-cancellation stops buffered pagination between page fetches. An in-flight
+cancellation signals the replay iterator even during an active page request and
+stops buffered pagination before another page is fetched. An in-flight
 fetch remains subject to the configured HTTP timeouts and retry policy.
 
 Forward `start_time` queries describe five-second windows. The returned cursor

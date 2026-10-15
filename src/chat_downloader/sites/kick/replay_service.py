@@ -82,9 +82,13 @@ class ReplaySource:
         """Retrieve the next chronological replay record."""
         return next(self.source)
 
+    def request_stop(self) -> None:
+        """Cancel pagination even while a timed worker owns generator advancement."""
+        self.cancelled.set()
+
     def close(self) -> None:
         """Cancel pending pagination and close an idle generator immediately."""
-        self.cancelled.set()
+        self.request_stop()
         try:
             self.source.close()
         except ValueError as error:
@@ -235,6 +239,7 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
                     cursor=cursor,
                 ),
                 request,
+                cancelled=cancelled,
             )
             if cancelled is not None and cancelled.is_set():
                 return

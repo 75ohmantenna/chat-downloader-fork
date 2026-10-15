@@ -9,6 +9,7 @@ import json
 import math
 import os
 import tempfile
+from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypeGuard, cast
@@ -28,6 +29,12 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
 
 _BOUNDARY_LIMIT = 10_000
+
+
+def _event_identity(item: JSONDict) -> str:
+    """Identify a provider event without mutable presentation/enrichment fields."""
+    identity = [item.get(key) for key in ("message_id", "message_type", "action_type")]
+    return hashlib.sha256(json.dumps(identity).encode()).hexdigest()
 
 
 class _RecordCounter(Protocol):
@@ -173,7 +180,7 @@ class CaptureCheckpoint:
             json.dumps(identity, default=str, sort_keys=True).encode()
         ).hexdigest()
         self.offset: float | None = None
-        self.ids: set[str] = set()
+        self.events: Counter[str] = Counter()
         self.total = 0
         self.resets: list[int] = []
         self.chat_id: str | None = None
@@ -182,14 +189,14 @@ class CaptureCheckpoint:
         self.record_loss = False
         self.limit = request.max_messages
         self._prior_offset: float | None = None
-        self._prior_ids: set[str] = set()
+        self._prior_events: Counter[str] = Counter()
         self._initial_signatures = [_file_signature(path) for path in self.outputs]
         if self.path.exists():
             self._load()
         elif any(value is not None for value in self._initial_signatures):
             msg = "A new checkpoint requires absent output files."
             raise ValueError(msg)
-        self._prior_offset, self._prior_ids = self.offset, set(self.ids)
+        self._prior_offset, self._prior_events = self.offset, self.events.copy()
         parameters["overwrite"] = False
         parameters["max_messages"] = None  # Count after overlap suppression.
         resume_offset = cast("float | None", self.offset)
@@ -201,31 +208,35 @@ class CaptureCheckpoint:
             state = json.load(stream)
         if (
             not isinstance(state, dict)
-            or state.get("version") != 1
+            or state.get("version") != 2
             or state.get("request") != self.fingerprint
         ):
             msg = (
-                "Checkpoint does not match this replay request, program version, "
-                "or built-in formats."
+                "Checkpoint does not match this schema, replay request, "
+                "program version, or built-in formats."
             )
             raise ValueError(msg)
         if state.get("artifacts") != self._initial_signatures:
             msg = "Capture files changed since the checkpoint; refusing to append."
             raise ValueError(msg)
         self.record_loss = state.get("record_loss", False)
-        offset, ids, total = state.get("offset"), state.get("ids"), state.get("total")
+        offset, events, total = (
+            state.get("offset"),
+            state.get("events"),
+            state.get("total"),
+        )
         if (
             (offset is not None and not _valid_offset(offset))
             or type(self.record_loss) is not bool
-            or not isinstance(ids, list)
-            or len(ids) > _BOUNDARY_LIMIT
-            or any(not isinstance(item, str) for item in ids)
+            or not isinstance(events, dict)
+            or len(events) > _BOUNDARY_LIMIT
+            or any(type(count) is not int or count < 1 for count in events.values())
             or type(total) is not int
             or total < 0
         ):
             msg = "Invalid checkpoint boundary."
             raise ValueError(msg)
-        self.offset, self.ids, self.total = offset, set(ids), total
+        self.offset, self.events, self.total = offset, Counter(events), total
         self.chat_id = state.get("chat_id")
         self.resets = state.get("resets", [])
         if (
@@ -258,6 +269,7 @@ class CaptureCheckpoint:
         def remaining() -> Generator[JSONDict, None, None]:
             emitted = 0
             last_offset = self._prior_offset
+            overlap = self._prior_events.copy()
             try:
                 for item in ordered_initial_preroll(source, _BOUNDARY_LIMIT):
                     # Provider-generated end markers carry no replay position
@@ -280,13 +292,13 @@ class CaptureCheckpoint:
                     ):
                         msg = "Resume requires message IDs and finite replay offsets."
                         raise ValueError(msg)
+                    identity = _event_identity(item)
                     if self._prior_offset is not None and (
                         offset < self._prior_offset
-                        or (
-                            offset == self._prior_offset
-                            and message_id in self._prior_ids
-                        )
+                        or (offset == self._prior_offset and overlap[identity] > 0)
                     ):
+                        if offset == self._prior_offset:
+                            overlap[identity] -= 1
                         chat.diagnostics["checkpoint_overlap_suppressed"] = (
                             cast(
                                 "int", chat.diagnostics["checkpoint_overlap_suppressed"]
@@ -299,8 +311,8 @@ class CaptureCheckpoint:
                         raise ValueError(msg)
                     if (
                         offset == self.offset
-                        and message_id not in self.ids
-                        and len(self.ids) >= _BOUNDARY_LIMIT
+                        and identity not in self.events
+                        and len(self.events) >= _BOUNDARY_LIMIT
                     ):
                         msg = "Checkpoint timestamp has too many message IDs."
                         raise ValueError(msg)
@@ -325,8 +337,8 @@ class CaptureCheckpoint:
         """Advance state only after all attached writers accepted a record."""
         offset = float(cast("float", item["time_in_seconds"]))
         if offset != self.offset:
-            self.offset, self.ids = offset, set()
-        self.ids.add(cast("str", item["message_id"]))
+            self.offset, self.events = offset, Counter()
+        self.events[_event_identity(item)] += 1
 
     def advance(self, chat: Chat, counter: _RecordCounter) -> JSONDict:
         """Consume one fully emitted record or restore its pre-emission state."""
@@ -334,7 +346,7 @@ class CaptureCheckpoint:
         if dispatcher is None:
             msg = "Resume requires attached output writers."
             raise ChatDownloaderError(msg)
-        offset, ids = self.offset, self.ids.copy()
+        offset, events = self.offset, self.events.copy()
         count = counter.message_count
         with dispatcher.record_transaction(self.outputs):
             try:
@@ -342,7 +354,7 @@ class CaptureCheckpoint:
                 self.observe(item)
                 counter.message_count += 1
             except BaseException:
-                self.offset, self.ids = offset, ids
+                self.offset, self.events = offset, events
                 counter.message_count = count
                 raise
         return item
@@ -371,11 +383,11 @@ class CaptureCheckpoint:
         _atomic_json(
             self.path,
             {
-                "version": 1,
+                "version": 2,
                 "request": self.fingerprint,
                 "chat_id": self.chat_id,
                 "offset": self.offset,
-                "ids": sorted(self.ids),
+                "events": dict(sorted(self.events.items())),
                 "total": self.total,
                 "resets": self.resets,
                 "completed": self.completed and not record_loss,

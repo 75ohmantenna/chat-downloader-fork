@@ -366,7 +366,9 @@ markers without replay offsets are omitted from checkpointed captures.
 
 Checkpoints advance after output writers close and synchronize on normal,
 message-limited, or interrupted shutdown. A one-second overlap preserves
-messages at the saved timestamp while suppressing IDs already written. The
+messages at the saved timestamp while suppressing already-written occurrences
+of each message ID, message type, and action type. Paid chat and ticker events
+sharing an ID remain separate raw records across a resume boundary. The
 checkpoint writer places opening zero-offset replay notices after any negative
 preroll messages so their saved offsets remain chronological. The
 first CLI signal finishes an in-progress record's writes, checkpoint observation,
@@ -382,6 +384,9 @@ start/end, format, and filenames unchanged; message limits and timeouts may
 change. Request settings, the package version, built-in format definitions,
 and file hashes are checked before append. Checkpoints created before these
 version and format checks were added cannot be resumed; start a new capture.
+Current checkpoints use schema version 2. Version 1 checkpoints stored only
+message IDs and cannot distinguish raw event kinds or repeated occurrences;
+they are rejected before append. Start a new capture with new output paths.
 The version check applies to releases; avoid resuming across unreleased source
 changes that affect output. If chat or downloader shutdown fails, the
 checkpoint does not advance. A writer close failure also withholds the

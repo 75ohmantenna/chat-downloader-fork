@@ -20,7 +20,10 @@ from chat_downloader.runtime.capture_replay_order import ordered_initial_preroll
 from chat_downloader.runtime.capture_verification import capture_paths, verify_capture
 from chat_downloader.runtime.chat_pipeline import configure_chat
 from chat_downloader.runtime.runner import execute_run
+from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
+from chat_downloader.sites.youtube.continuations import parse_continuation_response
+from chat_downloader.sites.youtube.message_pipeline import process_pipeline_action
 
 
 def message(number, offset):
@@ -221,6 +224,38 @@ def test_resume_saves_checkpoint_when_formatted_writer_deduplicates_paid_item(
     assert execute_run(PaidReplay, **params).success
 
 
+@pytest.mark.parametrize("limit", [1, 2, 3])
+def test_resume_preserves_paid_ticker_events_and_repeated_occurrences(tmp_path, limit):
+    fixture = Path(__file__).parent / "fixtures/youtube/live_events"
+    payload = load_json(fixture / "youtube-replay-paid-ticker-shared-offset.json")
+    parsed_records = [
+        process_pipeline_action(action, 0, MessageFilter({}), None).message
+        for action in parse_continuation_response(payload).actions
+    ]
+    assert all(parsed_records)
+
+    class PaidReplay(Downloader):
+        # Include repeated events and different actions sharing the same ID/type.
+        records: ClassVar[list] = [
+            parsed_records[0],
+            parsed_records[1],
+            parsed_records[1],
+            {**parsed_records[1], "action_type": "replace_chat_item"},
+        ]
+
+    params = parameters(tmp_path)
+    assert execute_run(PaidReplay, **params, max_messages=limit).success
+    resumed = execute_run(PaidReplay, **params, require_complete=True)
+    assert resumed.success
+    assert resumed.parity_status == "passed"
+    assert resumed.message_count == 4 - limit
+    rows = [
+        json.loads(line) for line in (tmp_path / "chat.jsonl").read_text().splitlines()
+    ]
+    assert rows == PaidReplay.records
+    assert execute_run(PaidReplay, **params).message_count == 0
+
+
 def test_resume_ignores_synthetic_chat_end_after_last_record(tmp_path) -> None:
     class EndedReplay(Downloader):
         records: ClassVar[list] = [
@@ -249,7 +284,10 @@ def test_resume_ignores_synthetic_chat_end_after_last_record(tmp_path) -> None:
             ("checkpoint", patch)
             for patch in [
                 {"offset": float("nan")},
-                {"ids": [1]},
+                {"version": 1},
+                {"events": [1]},
+                {"events": {"bad": 0}},
+                {"events": {"bad": True}},
                 {"total": -1},
                 {"chat_id": None},
                 {"chat_id": "different"},

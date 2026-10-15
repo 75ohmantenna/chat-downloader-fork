@@ -17,6 +17,20 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONList
 
 
+def _validated_comments(result: list[JSONDict]) -> tuple[JSONDict, JSONDict]:
+    """Distinguish an explicit empty page from missing replay data on every page."""
+    data = get_dict(result[0], "data") if result else {}
+    info = get_dict(data, "video")
+    if not info:
+        msg = "Twitch replay video disappeared from the response"
+        raise ParsingError(msg)
+    comments = info.get("comments")
+    if not isinstance(comments, dict) or not isinstance(comments.get("edges"), list):
+        msg = "Twitch replay comments disappeared or were malformed"
+        raise ParsingError(msg)
+    return comments, info
+
+
 def get_chat_messages_by_vod_id(
     session_post: object,  # noqa: ARG001 — uniform transport callable signature; live transport uses this
     download_gql_func: Callable[[JSONList], list[JSONDict]],
@@ -58,14 +72,7 @@ def get_chat_messages_by_vod_id(
                 }
             ]
         )
-        data = get_dict(result[0], "data") if result else {}
-        info = get_dict(data, "video")
-        fallback_comments = get_dict(info, "comments")
-        if not fallback_comments:
-            if cursor:
-                msg = "Twitch replay comments disappeared during pagination"
-                raise ParsingError(msg) from None
-            return None, None
+        fallback_comments, info = _validated_comments(result)
         edges = get_list(fallback_comments, "edges")
         final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
         final_cursor = get_str(final_edge, "cursor")
@@ -75,19 +82,4 @@ def get_chat_messages_by_vod_id(
         }
         return normalized_comments, info
 
-    data = get_dict(result[0], "data") if result else {}
-    info = get_dict(data, "video")
-    if not info:
-        if cursor:
-            msg = "Twitch replay video disappeared during pagination"
-            raise ParsingError(msg)
-        return None, None
-
-    comments = info.get("comments")
-    if not isinstance(comments, dict):
-        if cursor:
-            msg = "Twitch replay comments disappeared during pagination"
-            raise ParsingError(msg)
-        return None, None
-
-    return comments, info
+    return _validated_comments(result)
