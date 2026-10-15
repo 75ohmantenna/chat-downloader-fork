@@ -7,6 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.sites.twitch.graphql_client import (
     _download_gql,
     _PersistedQueryUnavailable,
@@ -95,14 +96,17 @@ def test_replay_request_position(
         [{"data": {}}],
         [{"data": {"video": None}}],
         _video_payload(None),
+        _video_payload({}),
+        _video_payload({"edges": None}),
+        _video_payload({"edges": {}}),
     ],
-    ids=["empty", "missing-data", "missing-video", "null-video", "null-comments"],
 )
-def test_replay_returns_none_for_malformed_or_empty_payloads(payload, mobile):
+def test_replay_rejects_missing_or_malformed_initial_page(payload, mobile):
     responses = (
         [_PersistedQueryUnavailable("rotated"), payload] if mobile else [payload]
     )
-    assert _replay(Mock(side_effect=responses), offset=1.5) == (None, None)
+    with pytest.raises(ParsingError):
+        _replay(Mock(side_effect=responses), offset=1.5)
 
 
 def test_replay_fallback_composes_persisted_and_full_document_requests() -> None:
