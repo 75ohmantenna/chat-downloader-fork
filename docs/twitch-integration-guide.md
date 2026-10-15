@@ -149,6 +149,9 @@ Overall and inactivity deadlines signal the live iterator independently of its
 generator lock and shut down the active IRC socket. The receive wakes, cleanup
 closes the connection, and cancellation does not trigger a reconnect. Setup
 checks cancellation after connection and channel join as well.
+IRC registration retains the configured connect timeout until receive polling
+is configured, so a stalled registration cannot wait indefinitely before
+cancellation ownership is established.
 
 ### Live diagnostics
 

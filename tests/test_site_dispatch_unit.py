@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from threading import Event
 from typing import Any, ClassVar
 from unittest.mock import Mock
 
@@ -18,6 +19,7 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.site_dispatch import _chat_debug_snapshot, dispatch_chat
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.models import Chat
+from chat_downloader.utils.timed_generator import polling_sleep
 
 
 class _Owner:
@@ -212,3 +214,36 @@ def test_configuration_failure_preserves_error_when_cleanup_fails(monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         dispatch_chat(_Owner(), ChatRequest(url="https://example.invalid/watch/test"))
     chat.close.assert_called_once()
+
+
+def test_failure_after_worker_start_closes_the_running_source(monkeypatch):
+    entered, closed = Event(), Event()
+
+    def messages():
+        try:
+            entered.set()
+            polling_sleep(60)
+            yield {}
+        finally:
+            closed.set()
+
+    chat = Chat(messages())
+    _install_sites(monkeypatch, _GoodSite)
+    monkeypatch.setattr(_GoodSite, "get_chat_by_id", lambda *_: chat)
+
+    def log(_level, message):
+        if str(message).startswith("Chat information:"):
+            assert entered.wait(2)
+            raise RuntimeError("failed after configuration")
+
+    monkeypatch.setattr("chat_downloader.runtime.site_dispatch.log", log)
+    try:
+        with pytest.raises(RuntimeError, match="failed after configuration"):
+            dispatch_chat(
+                _Owner(),
+                ChatRequest(url="https://example.invalid/watch/test", timeout=60),
+            )
+        assert closed.wait(2)
+        assert not chat.chat._worker.is_alive()
+    finally:
+        chat.close()

@@ -167,11 +167,12 @@ class TwitchChatIRC:
         """Open a socket and perform anonymous Twitch IRC setup."""
         self.socket = _create_irc_socket(connect_timeout, proxy_url)
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
-        self.socket.settimeout(None)
         self.current_channel: str | None = None
         self._closed = False
 
         try:
+            # Registration precedes live cancellation ownership; keep it bounded.
+            self.socket.settimeout(connect_timeout)
             self.send_raw(IRC_CAP_REQUEST)
             self.send_raw(f"PASS {IRC_ANONYMOUS_PASSWORD}")
             self.send_raw(f"NICK {IRC_ANONYMOUS_NICK}")
