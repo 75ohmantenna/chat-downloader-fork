@@ -1,0 +1,225 @@
+{
+  "provenance": {
+    "source_file": "capture.jsonl",
+    "captured_date": "2026-10-15",
+    "source": "Observed live subscription gifts and leaderboard metadata from a channel capture.",
+    "source_hash_format": "SHA-256 of the original JSONL line including its trailing newline.",
+    "curation": "Reconstructed decoded event envelopes; original wire encoding is not retained. Replaced user names, user IDs, channel and chatroom IDs, and correlation ID with synthetic values. Preserved payload keys, value types, counts, timestamps, ordering, all thirty leaderboard entries, and all twenty-five recipients."
+  },
+  "events": [
+    {
+      "source_line": 93,
+      "source_line_sha256": "cd5d39cae024c115b54ffac5a67c88547e6d4481655e12eb59597b3fd2962186",
+      "received_timestamp": 1792027941015053,
+      "frame": {
+        "event": "GiftsLeaderboardUpdated",
+        "channel": "channel_123",
+        "data": {
+          "gifted_quantity": 25,
+          "gifter_id": 3,
+          "gifter_username": "User3",
+          "leaderboard": [
+            {
+              "quantity": 5330,
+              "user_id": 1,
+              "username": "User1"
+            },
+            {
+              "quantity": 5148,
+              "user_id": 2,
+              "username": "User2"
+            },
+            {
+              "quantity": 5134,
+              "user_id": 3,
+              "username": "User3"
+            },
+            {
+              "quantity": 4675,
+              "user_id": 4,
+              "username": "User4"
+            },
+            {
+              "quantity": 3774,
+              "user_id": 5,
+              "username": "User5"
+            },
+            {
+              "quantity": 3255,
+              "user_id": 6,
+              "username": "User6"
+            },
+            {
+              "quantity": 2651,
+              "user_id": 7,
+              "username": "User7"
+            },
+            {
+              "quantity": 2065,
+              "user_id": 8,
+              "username": "User8"
+            },
+            {
+              "quantity": 2048,
+              "user_id": 9,
+              "username": "User9"
+            },
+            {
+              "quantity": 1953,
+              "user_id": 10,
+              "username": "User10"
+            }
+          ],
+          "monthly_leaderboard": [
+            {
+              "quantity": 281,
+              "user_id": 11,
+              "username": "User11"
+            },
+            {
+              "quantity": 150,
+              "user_id": 12,
+              "username": "User12"
+            },
+            {
+              "quantity": 150,
+              "user_id": 13,
+              "username": "User13"
+            },
+            {
+              "quantity": 145,
+              "user_id": 14,
+              "username": "User14"
+            },
+            {
+              "quantity": 105,
+              "user_id": 15,
+              "username": "User15"
+            },
+            {
+              "quantity": 101,
+              "user_id": 16,
+              "username": "User16"
+            },
+            {
+              "quantity": 100,
+              "user_id": 17,
+              "username": "User17"
+            },
+            {
+              "quantity": 90,
+              "user_id": 18,
+              "username": "User18"
+            },
+            {
+              "quantity": 90,
+              "user_id": 19,
+              "username": "User19"
+            },
+            {
+              "quantity": 80,
+              "user_id": 20,
+              "username": "User20"
+            }
+          ],
+          "weekly_leaderboard": [
+            {
+              "quantity": 30,
+              "user_id": 7,
+              "username": "User7"
+            },
+            {
+              "quantity": 26,
+              "user_id": 21,
+              "username": "User21"
+            },
+            {
+              "quantity": 25,
+              "user_id": 20,
+              "username": "User20"
+            },
+            {
+              "quantity": 25,
+              "user_id": 14,
+              "username": "User14"
+            },
+            {
+              "quantity": 25,
+              "user_id": 3,
+              "username": "User3"
+            },
+            {
+              "quantity": 25,
+              "user_id": 22,
+              "username": "User22"
+            },
+            {
+              "quantity": 25,
+              "user_id": 23,
+              "username": "User23"
+            },
+            {
+              "quantity": 13,
+              "user_id": 24,
+              "username": "User24"
+            },
+            {
+              "quantity": 11,
+              "user_id": 25,
+              "username": "User25"
+            },
+            {
+              "quantity": 11,
+              "user_id": 26,
+              "username": "User26"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "source_line": 94,
+      "source_line_sha256": "de7eaad04a132ae9d159a66e67fd5c72cea814444302e2510716fc2a7e01a409",
+      "received_timestamp": 1792027941028252,
+      "frame": {
+        "event": "GiftedSubscriptionsEvent",
+        "channel": "chatroom_456",
+        "data": {
+          "chatroom_id": 456,
+          "chunk_details": null,
+          "correlation_id": "gift-batch-example",
+          "gifted_total": 25,
+          "gifted_usernames": [
+            "User27",
+            "User28",
+            "User29",
+            "User30",
+            "User31",
+            "User32",
+            "User33",
+            "User34",
+            "User35",
+            "User36",
+            "User37",
+            "User38",
+            "User39",
+            "User40",
+            "User41",
+            "User42",
+            "User43",
+            "User44",
+            "User45",
+            "User46",
+            "User47",
+            "User48",
+            "User49",
+            "User50",
+            "User51"
+          ],
+          "gifter_total": 5134,
+          "gifter_username": "User3"
+        }
+      }
+    }
+  ]
+}

@@ -245,7 +245,7 @@
             "keys": {
                 "message": "[{}]",
                 "metadata.data": {
-                    "format": "leaderboard",
+                    "format": "subscription_leaderboard",
                     "unit": "gifts",
                     "template": "{}"
                 }
@@ -400,7 +400,7 @@
         },
         {
             "matching": "gifted_subscriptions",
-            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{message}",
+            "template": "{timestamp|received_timestamp|time_text}{message_type}{author.badges}{author.display_name|author.name}{metadata.quantity}{message}",
             "inherit": "default",
             "keys": {
                 "message_type": "[Gifted subscriptions]",
@@ -410,6 +410,11 @@
                 },
                 "author.display_name": " {}",
                 "author.name": " {}",
+                "metadata.quantity": {
+                    "template": " — Gifted subs: {}",
+                    "format": "count",
+                    "omit_if_false": true
+                },
                 "message": " — {}"
             }
         },

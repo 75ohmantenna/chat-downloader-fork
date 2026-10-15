@@ -309,8 +309,12 @@ class ItemFormatter:
             return renderer(value)
         if format_string == "poll":
             return _format_poll_metadata(value)
-        if format_string == "leaderboard":
-            return format_leaderboard(value, get_str(field_config, "unit"))
+        if format_string in ("leaderboard", "subscription_leaderboard"):
+            return format_leaderboard(
+                value,
+                get_str(field_config, "unit"),
+                subscription_gifts=format_string == "subscription_leaderboard",
+            )
         if format_string == "iso8601":
             try:
                 return microseconds_to_timestamp(parse_iso8601(value))
