@@ -547,13 +547,22 @@ For captured `kicks_gifted` records, TXT shows `[Kicks gifted]`, the sender,
 amount in Kicks, gift name, and attached message when present. This notice uses
 the same `[received]` fallback marker; JSONL keeps the separate receive time
 and original gift metadata.
+Gifted-subscription TXT notices include `Gifted subs: N` when
+`metadata.quantity` is a nonnegative integer or an ASCII decimal string.
+Missing or invalid counts are omitted; zero remains visible. For compact gift
+events, this is the number of recipients in the current delivery chunk, not the
+overall batch total or the gifter's cumulative total. Any message is retained.
 
-Leaderboard TXT notices show at most the first three supplied entries for each
-weekly, monthly, and lifetime `gifts_*` list whose matching `*_enabled` flag is
-boolean `true`. Quantities use comma grouping and are labeled `Kicks` for
+Leaderboard TXT notices show at most the first three supplied entries per period.
+Kicks rankings use the weekly, monthly, and lifetime `gifts_*` lists whose
+matching `*_enabled` flag is boolean `true`. Subscription-gift rankings use
+`weekly_leaderboard`, `monthly_leaderboard`, and `leaderboard`, labeled Weekly,
+Monthly, and Overall. These lists do not require enable flags. For each absent
+subscription ranking field, the formatter also accepts the corresponding enabled
+`gifts_*` list. Quantities use comma grouping and are labeled `Kicks` for
 `kicks_leaderboard_updated` and `gifts` for `gifts_leaderboard_updated`. Entries
 retain provider order; missing names, invalid or negative integer quantities,
-and disabled or unusable periods are omitted. A valid enabled empty list displays
+and disabled or unusable periods are omitted. A valid empty list displays
 `empty`. JSONL keeps every original entry and flag. Goal TXT notices show
 nonnegative integer `current_value` and `target_value`, the goal `type` label,
 and a string `status` when available. A missing current value with a valid target

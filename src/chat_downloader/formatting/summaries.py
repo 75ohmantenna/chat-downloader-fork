@@ -34,27 +34,46 @@ def format_viewer_count(value: object) -> str:
     return "Viewer count"
 
 
-def format_leaderboard(value: object, unit: str) -> str:
-    """Show the first three supplied entries of each explicitly enabled period."""
+def _leaderboard_entries(entries: list[object], unit: str) -> str:
+    """Render valid leaders within the first three supplied ranking slots."""
+    leaders = []
+    for entry in entries[:3]:
+        if not isinstance(entry, dict):
+            continue
+        name = get_str(entry, "username").strip()
+        quantity = get_int(entry, "quantity", -1)
+        if name and quantity >= 0:
+            leaders.append(f"{name} ({quantity:,} {unit})")
+    return ", ".join(leaders)
+
+
+def format_leaderboard(
+    value: object, unit: str, *, subscription_gifts: bool = False
+) -> str:
+    """Show supplied subscription rankings or explicitly enabled gift periods."""
     if not isinstance(value, dict):
         return ""
-    periods = (("week", "Weekly"), ("month", "Monthly"), ("lifetime", "Lifetime"))
+    periods = (
+        ("week", "Weekly", "weekly_leaderboard"),
+        ("month", "Monthly", "monthly_leaderboard"),
+        ("lifetime", "Lifetime", "leaderboard"),
+    )
     fragments = []
-    for period, label in periods:
+    for period, period_label, subscription_key in periods:
+        label = period_label
         key = f"gifts_{period}"
-        entries = value.get(key)
-        if not get_bool(value, f"{key}_enabled") or not isinstance(entries, list):
+        if subscription_gifts and subscription_key in value:
+            key = subscription_key
+            if period == "lifetime":
+                label = "Overall"
+        elif not get_bool(value, f"{key}_enabled"):
             continue
-        leaders = []
-        for entry in entries[:3]:
-            if not isinstance(entry, dict):
-                continue
-            name = get_str(entry, "username").strip()
-            quantity = get_int(entry, "quantity", -1)
-            if name and quantity >= 0:
-                leaders.append(f"{name} ({quantity:,} {unit})")
+        entries = value.get(key)
+        if not isinstance(entries, list):
+            continue
+        leaders = _leaderboard_entries(entries, unit)
         if leaders or not entries:
-            fragments.append(f"{label}: {', '.join(leaders) if leaders else 'empty'}")
+            fragments.append(f"{label}: {leaders or 'empty'}")
     return "".join(f" | {fragment}" for fragment in fragments)
 
 

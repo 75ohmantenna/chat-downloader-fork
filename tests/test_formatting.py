@@ -485,8 +485,9 @@ def test_singular_template_selection(formatter, value, singular_template, expect
     assert format_field(formatter, "count", value, config) == expected
 
 
-def test_format_unknown_field_ignores_type_format(formatter):
-    config = {"format": "%s", "template": "{}"}
+@pytest.mark.parametrize("format_spec", ["%s", ["unknown"], {"unknown": True}])
+def test_format_unknown_field_ignores_type_format(formatter, format_spec):
+    config = {"format": format_spec, "template": "{}"}
     assert format_field(formatter, "custom", "some_value", config) == "some_value"
 
 
