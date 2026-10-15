@@ -325,16 +325,27 @@ It derives the total from complete nonnegative integer option counts, omits
 percentages for a zero total, and uses `votes unknown` with no total or
 percentages for incomplete counts. Remaining seconds are optional. The built-in
 Kick format applies this conversion to `metadata` for poll updates.
-A field definition with `format: "leaderboard"` summarizes the first three
-supplied entries in each enabled weekly, monthly, and lifetime list, using its
-`unit` setting for quantities. `format: "goal"` summarizes available integer
+A field definition with `format: "count"` renders nonnegative integers and
+ASCII decimal strings, preserving zero even with `omit_if_false: true`;
+booleans and invalid counts render empty. `format: "viewer_count"` renders a
+single valid viewer count, an explicitly offline public REST snapshot, or the
+generic `Viewer count` label when no count is known.
+A field definition with `format: "leaderboard"` summarizes valid entries in
+the first three supplied ranking slots of each enabled weekly, monthly, and
+lifetime list, using its `unit` setting for quantities.
+`format: "subscription_leaderboard"` instead accepts `weekly_leaderboard`,
+`monthly_leaderboard`, and `leaderboard` without enable flags, labeling the
+last list Overall. Each absent subscription field permits the corresponding
+enabled legacy `gifts_*` list as a fallback. Valid empty lists display `empty`.
+`format: "goal"` summarizes available integer
 current/target values and string status. These conversions preserve the
 structured records; the built-in Kick formats apply them to `metadata.data`.
 A field definition with `format: "iso8601"` renders a date string as UTC
 `YYYY-MM-DD HH:MM:SS`, treating dates without a timezone as UTC. Invalid dates
 render as an empty value; use `omit_if_false: true` to omit their template too.
 Conditional fields suppress their complete rendered
-fragment for false, zero, empty, or null values. The final formatted string,
+fragment for false, zero, empty, or null values, with the `count` exception
+described above. The final formatted string,
 including custom-template text, renders carriage returns, newlines, and Unicode
 line separators visibly as `\r`, `\n`, `\u0085`, `\u2028`, or `\u2029` and
 preserves horizontal tabs while removing other terminal controls. This keeps

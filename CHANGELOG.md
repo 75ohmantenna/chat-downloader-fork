@@ -6,6 +6,40 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
+## 2.5.1 — 2026-10-15
+
+### Fixes
+
+- Preserve distinct replay events and repeated occurrences at checkpoint
+  boundaries, including events sharing a message ID and timestamp.
+- Reject missing or malformed Twitch replay data on the initial page as well
+  as later pages instead of reporting an empty, successful capture.
+- Propagate cancellation through Kick replay pagination and Twitch live IRC,
+  bound IRC registration waits, and close resources after chat setup failures.
+- Preserve YouTube pinned-banner replay timing and chronological output.
+- Retrieve Kick clip chat when source-VOD metadata is subscriber-only, while
+  distinguishing recognized subscription restrictions from access challenges.
+- Show Kick follower counts, offline viewer snapshots, subscription gift counts,
+  and subscription gift rankings correctly in TXT output.
+- Retain Kick live stream start times and complete HTTP and public-connection
+  diagnostics in capture reports.
+
+### Dependencies
+
+- Refresh locked runtime and development dependencies.
+
+### Documentation
+
+- Align CLI and API formatting, access-denial troubleshooting, manifest
+  diagnostics, and architecture guidance with the implemented behavior.
+
+### Compatibility
+
+- Replay checkpoints now use schema version 2 to preserve event multiplicity.
+  Checkpoints remain bound to the package version and built-in formats. Finish
+  a resumable capture with its original version or start a new capture after
+  upgrading to 2.5.1; checkpoints from older versions cannot be appended.
+
 ## 2.5.0 — 2026-10-04
 
 ### Features

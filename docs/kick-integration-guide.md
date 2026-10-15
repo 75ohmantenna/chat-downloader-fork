@@ -245,8 +245,9 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   message-type-to-group maps, emote patterns, and Cloudflare markers.
 - `pusher_discovery.py`: default-first Pusher application-key selection,
   best-effort refresh, cache ownership, and WebSocket URL construction.
-- `errors.py`: `KickError`, the terminal `KickCountryBlocked` subtype, and the
-  retryable `KickServerError` subclass.
+- `errors.py`: `KickError` and resource/protocol classification signals,
+  including terminal `KickCountryBlocked`, `KickRealtimeRejected`, and
+  `KickVideoRestricted`, plus retryable `KickServerError`.
 
 There is no `client.py` facade in the Kick package. Import focused modules
 directly for patch points: `api_client.py` for REST, `public_transport.py`

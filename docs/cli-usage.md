@@ -132,7 +132,8 @@ Custom format field definitions accept a `template`, optional
 `singular_template`, and optional `omit_if_false`. The singular form is selected
 only for an exact numeric value of one; zero, other numbers, booleans, and
 numeric strings use the normal template. `omit_if_false: true` suppresses the
-field's complete rendered fragment for false, zero, empty, or null values.
+field's complete rendered fragment for false, zero, empty, or null values,
+except that `format: "count"` preserves valid zero counts as `0`.
 Format inheritance follows named parents, selecting a parent's matching event
 rule when it is a list. Child fields override parent fields; inheritance cycles
 raise an error rather than hanging. Missing parents contribute no fields.
@@ -161,10 +162,16 @@ a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
 display fallback. `kicks_gifted` notices use the same marker alongside the sender,
 amount in Kicks, gift name, and attached message when present.
-Kick leaderboard notices show the first three supplied entries for each
-explicitly enabled weekly, monthly, and lifetime period, preserving provider
-order and labeling quantities in Kicks or gifts. Empty enabled lists show
-`empty`; invalid entries and missing or disabled periods are omitted.
+Kick leaderboard notices summarize the first three supplied ranking slots per
+period, preserving provider order. Kicks rankings use explicitly enabled weekly,
+monthly, and lifetime lists; subscription-gift rankings use Weekly, Monthly,
+and Overall lists without enable flags, with enabled legacy lists accepted
+when the corresponding ranking field is absent. Valid empty lists show `empty`.
+See the [Kick formatting details](kick-integration-guide.md#message-groups-and-types)
+for ranking fields and gift counts. Gifted-subscription notices include the
+current delivery chunk's recipient count when available. Channel snapshots
+show follower totals, including zero, and viewer snapshots distinguish a known
+offline channel from an unknown count.
 Goal notices show available nonnegative integer current/target values and status,
 for example `[goal progress updated] | Followers: 188,912 / 200,000 | Status: active`.
 Each event stays on one physical line. JSONL retains the complete payload,
@@ -323,11 +330,13 @@ Debug and automation:
 - A cookie/proxy safety error can come from `HTTP_PROXY`, `HTTPS_PROXY`, or
   `ALL_PROXY` even when `--proxy` was not supplied. Remove the remote proxy or
   pass `--proxy ""` if direct connections are intended.
-- `CaptchaChallengeRequired` means a platform returned an explicit challenge
-  response that the library cannot solve automatically. On Kick this is a
-  Cloudflare bot-protection page. The bundled `curl-cffi` and `cloudscraper`
-  fallbacks can clear some challenges, but endpoint or VPN reputation can still
-  trigger one.
+- `CaptchaChallengeRequired` means a platform denied access or returned a
+  challenge response. Kick raises it for unclassified HTTP 403 responses and
+  challenge or unexpected HTML bodies. Kick selects an available HTTP backend
+  during session construction; it does not retry a denial through every
+  installed backend. A validated subscriber-only source VOD can instead
+  activate public mobile metadata fallback for clip chat; the VOD itself
+  remains restricted.
 - Use `.jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `src/chat_downloader/sites/`.
@@ -440,8 +449,10 @@ monotonic clock; output verification and manifest writing are excluded.
 continuation counters, including skipped-action reasons and parsing loss, plus
 Kick live transport, public-feed, snapshot, and backfill counters, and the full
 fixed set of Twitch live metadata, connection, frame, keepalive, filtering,
-deduplication, and emission counters. Only nonnegative integer counters are
-retained; booleans, other value types, and unknown fields are excluded. Automatic
+deduplication, and emission counters. Counter values must be nonnegative
+integers; booleans and unknown counter names are excluded. YouTube's initial
+and active request-profile names and chat-view label are also retained from
+fixed vocabularies. Automatic
 YouTube, Twitch live, and Kick live inspection reports remain in
 `provider_inspection` when requested.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
