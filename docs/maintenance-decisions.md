@@ -231,8 +231,9 @@ that cannot be expressed by the current internal adapter factory.
 ## Use reverse history for Kick replay completeness
 
 **Decision:** VODs and clips use reverse cursors and a temporary spool before
-chronological emission. Short reconnect recovery uses five-second forward
-windows. The cursor returned beside a forward window is not used to advance it.
+chronological emission. Startup and short reconnect recovery also use reverse
+cursors, with bounded in-memory collection. The cursor returned beside a
+forward response is not a forward continuation token.
 
 **Evidence:** A public recording's current website ID returned 404 from the
 legacy video endpoint while the web gateway returned valid public metadata.
@@ -248,3 +249,13 @@ replay. Message limits apply after history collection and filtering. Keep
 source/clip identity checks, bounded-memory spooling, and explicit failure on
 pagination loops. Do not restore cursor-derived forward traversal from
 synthetic fixtures alone.
+
+**2026-10-17 live evidence:** A ten-minute adinross capture omitted 193 retained
+messages between its stale preload snapshot and first live delivery, including
+39 sent after capture startup. Initial subscription now triggers history
+recovery. A separate twenty-second audit retrieved 373 messages with reverse
+cursors; five-second forward requests omitted 257 of those IDs because each
+response held only 25 messages spanning about one or two seconds. Reverse
+pagination now covers both recovery paths; budget exhaustion and retrieval
+failures are recorded for inspection. A curated dense-page fixture preserves
+page order, timestamps and cursors with replaced identities and text.

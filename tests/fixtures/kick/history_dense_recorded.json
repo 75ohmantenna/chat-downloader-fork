@@ -1,0 +1,1564 @@
+{
+  "provenance": {
+    "source": "Anonymous Kick channel message API, adinross, 2026-10-17 UTC",
+    "capture_interval": [
+      "2026-10-17T02:27:16Z",
+      "2026-10-17T02:27:20Z"
+    ],
+    "original_sha256": {
+      "history-mid-reverse-00.json": "3ec481688f4d1d0393b878aabec13eb407af79b441d6ecd0d85265c61fe6e932",
+      "history-mid-reverse-01.json": "b730eb17a24b1b46dd985171314a09ec303abe0010153c5bc761fcfc28da7b63",
+      "history-mid-reverse-02.json": "d4d7e28b02f669ca218ac35b26bd0858ee1332d5da730c7482a769daaf8be948",
+      "history-mid-reverse-03.json": "03ccb942be79ea0ed6969a3f3ff6b3a663c825e0d72501d85722f211b7df8217",
+      "history-forward-audit-2026-10-17T022715-000000Z.json": "8b994e3fb309b8edd4c7a89332b66093981e240bca11e1432940a81cdfeaa5bf",
+      "history-forward-audit-2026-10-17T022720-000000Z.json": "447eb941d70267a7a41fe68bcceae08442bc0da3c67db6d4e22536ae1bed7a96"
+    },
+    "curation": "Retained page order, timestamps, cursors and message types. Replaced IDs consistently, replaced content and sender identities, and omitted unrelated envelope and sender fields."
+  },
+  "reverse_pages": [
+    {
+      "data": {
+        "messages": [
+          {
+            "id": "recorded-001",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-002",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-003",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-004",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-005",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-006",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-007",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-008",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-009",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-010",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-011",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-012",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-013",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-014",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-015",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-016",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-017",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-018",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-019",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-020",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-021",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-022",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-023",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-024",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-025",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          }
+        ],
+        "cursor": "1792204039684204"
+      }
+    },
+    {
+      "data": {
+        "messages": [
+          {
+            "id": "recorded-026",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-027",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-028",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-029",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-030",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-031",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-032",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-033",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-034",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-035",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "reply",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-036",
+            "created_at": "2026-10-17T02:27:19Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-037",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-038",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-039",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-040",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-041",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-042",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-043",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-044",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-045",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-046",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-047",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-048",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-049",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-050",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          }
+        ],
+        "cursor": "1792204038206763"
+      }
+    },
+    {
+      "data": {
+        "messages": [
+          {
+            "id": "recorded-051",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-052",
+            "created_at": "2026-10-17T02:27:18Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-053",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-054",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-055",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-056",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-057",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-058",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-059",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-060",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-061",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-062",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-063",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-064",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-065",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-066",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-067",
+            "created_at": "2026-10-17T02:27:17Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-068",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-069",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-070",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-071",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-072",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-073",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-074",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-075",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          }
+        ],
+        "cursor": "1792204036712021"
+      }
+    },
+    {
+      "data": {
+        "messages": [
+          {
+            "id": "recorded-076",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-077",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-078",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-079",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-080",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-081",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-082",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-083",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-084",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-085",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-086",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-087",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-088",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-089",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-090",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-091",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-092",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-093",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-094",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-095",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-096",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-097",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-098",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-099",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-100",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          }
+        ],
+        "cursor": "1792204035307018"
+      }
+    }
+  ],
+  "capped_forward_pages": [
+    {
+      "data": {
+        "messages": [
+          {
+            "id": "recorded-101",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-102",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-103",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-104",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-105",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-106",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-100",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-099",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-098",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-097",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-096",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-095",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-094",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-093",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-092",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-091",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-090",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-089",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-088",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-087",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-086",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-085",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-084",
+            "created_at": "2026-10-17T02:27:15Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-083",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-082",
+            "created_at": "2026-10-17T02:27:16Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          }
+        ],
+        "cursor": "1792204036136770"
+      }
+    },
+    {
+      "data": {
+        "messages": [
+          {
+            "id": "recorded-016",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-015",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-014",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-013",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-012",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-011",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-010",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-009",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-008",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-007",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-006",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-005",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-004",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-003",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-002",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-001",
+            "created_at": "2026-10-17T02:27:20Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-107",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-108",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-109",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-110",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-111",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-112",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-113",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-114",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          },
+          {
+            "id": "recorded-115",
+            "created_at": "2026-10-17T02:27:21Z",
+            "content": "Recorded fixture message",
+            "type": "message",
+            "sender": {
+              "id": 1,
+              "username": "FixtureUser"
+            }
+          }
+        ],
+        "cursor": "1792204041341527"
+      }
+    }
+  ]
+}

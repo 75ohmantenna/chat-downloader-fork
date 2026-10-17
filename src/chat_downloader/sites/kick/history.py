@@ -1,22 +1,24 @@
 # SPDX-License-Identifier: MIT
 
-"""Chronological pagination for Kick's timestamp-addressable chat history."""
+"""Bounded reverse pagination and validation of Kick chat history."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+import hashlib
+import json
+from datetime import UTC, datetime
 from functools import partial
 from typing import TYPE_CHECKING
 
-from chat_downloader.debugging import log
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.utils.json_types import JSONDict, JSONList, get_dict, get_list
 
-from .errors import KickServerError
+from .errors import KickError, KickServerError
 from .request_retry import fetch_with_retry
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from threading import Event
 
     from chat_downloader.models import ChatRequest
 
@@ -32,9 +34,15 @@ def _as_utc(timestamp: datetime) -> datetime:
     return timestamp.astimezone(UTC)
 
 
-def format_history_start(timestamp: datetime) -> str:
-    """Format a timestamp for Kick's inclusive ``start_time`` parameter."""
-    return _as_utc(timestamp).isoformat(timespec="microseconds").replace("+00:00", "Z")
+def _cursor_after(timestamp: datetime) -> str:
+    """Return a reverse cursor after the inclusive, second-granular end."""
+    delta = _as_utc(timestamp) - datetime(1970, 1, 1, tzinfo=UTC)
+    microseconds = (
+        (delta.days * 86_400 + delta.seconds) * 1_000_000
+        + delta.microseconds
+        + 1_000_000
+    )
+    return str(microseconds)
 
 
 def _message_timestamp(raw: JSONDict) -> datetime | None:
@@ -93,67 +101,90 @@ def fetch_validated_page(
     return raw_messages, cursor_value
 
 
-def iter_forward_history(  # noqa: C901 — bounded history window traversal
+def iter_reverse_history(  # noqa: C901 — bounded pagination, cancellation and coverage guards
     api_client: KickApiClient,
     channel_id: str,
     start_dt: datetime,
     end_dt: datetime,
     request: ChatRequest,
     *,
-    max_pages: int | None = None,
-    max_records: int | None = None,
+    max_pages: int = 100,
+    max_records: int = _HISTORY_SEEN_MESSAGE_LIMIT,
+    cancelled: Event | None = None,
 ) -> Generator[JSONDict, None, None]:
-    """Read website-style five-second windows for bounded reconnect recovery.
+    """Yield newest pages first; the owner buffers and sorts before emission.
 
-    Cursors belong to reverse history, not forward continuation; empty windows
-    do not imply exhaustion. Whole recordings use reverse pagination/spooling.
+    Forward responses are capped and cannot establish five-second coverage.
+    Empty reverse pages with continuation are followed. Exhausted budgets and
+    broken pagination raise rather than silently certifying partial recovery.
     """
     start_dt, end_dt = _as_utc(start_dt), _as_utc(end_dt)
-    if end_dt <= start_dt:
+    if end_dt < start_dt:
         return
-    current = start_dt.replace(microsecond=0)
+    cursor: str | None = _cursor_after(end_dt)
+    requested_cursors: set[str] = set()
+    page_digests: set[bytes] = set()
     seen_messages = _SeenMessageCache(limit=_HISTORY_SEEN_MESSAGE_LIMIT)
     page_count = raw_record_count = 0
-    last_yielded_timestamp: datetime | None = None
-    while current <= end_dt:
-        if max_pages is not None and page_count >= max_pages:
-            log(
-                "warning",
-                "Kick forward history reached its bounded page limit; stopping.",
-            )
+    while cursor:
+        if cancelled is not None and cancelled.is_set():
             return
-        if max_records is not None and raw_record_count >= max_records:
-            log(
-                "warning",
-                "Kick forward history reached its raw-record limit; stopping.",
-            )
-            return
+        if page_count >= max_pages or raw_record_count >= max_records:
+            msg = "Kick live history reached its bounded limit; recovery is incomplete."
+            raise KickError(msg)
+        if cursor in requested_cursors:
+            msg = "Kick live history cursor repeated; recovery is incomplete."
+            raise KickError(msg)
+        requested_cursors.add(cursor)
+        requested_cursor = cursor
         page_count += 1
-        raw_messages, _cursor = fetch_with_retry(
+        raw_messages, cursor = fetch_with_retry(
             partial(
                 fetch_validated_page,
                 api_client,
                 channel_id,
-                start_time=format_history_start(current),
+                cursor=cursor,
             ),
             request,
         )
-        if max_records is not None:
-            raw_messages = raw_messages[: max_records - raw_record_count]
-        raw_record_count += len(raw_messages)
-        for timestamp, _index, raw in _ordered_page_messages(raw_messages):
-            if timestamp < start_dt or timestamp > end_dt:
-                continue
+        if cancelled is not None and cancelled.is_set():
+            return
+        if cursor is not None and cursor.isascii() and cursor.isdigit():
+            # Compare decimal strings without accepting arbitrarily large ints.
+            current_value, next_value = (
+                value.lstrip("0") for value in (requested_cursor, cursor)
+            )
             if (
-                last_yielded_timestamp is not None
-                and timestamp < last_yielded_timestamp
+                requested_cursor.isascii()
+                and requested_cursor.isdigit()
+                and (len(next_value), next_value) >= (len(current_value), current_value)
             ):
+                msg = "Kick live history cursor did not move backwards."
+                raise KickError(msg)
+        if raw_messages:
+            digest = hashlib.sha256(
+                json.dumps(raw_messages, sort_keys=True).encode("utf-8")
+            ).digest()
+            if digest in page_digests:
+                msg = "Kick live history returned a duplicate page."
+                raise KickError(msg)
+            page_digests.add(digest)
+        truncated = len(raw_messages) > max_records - raw_record_count
+        raw_messages = raw_messages[: max_records - raw_record_count]
+        raw_record_count += len(raw_messages)
+        before_start = False
+        for timestamp, _index, raw in _ordered_page_messages(raw_messages):
+            if timestamp < start_dt:
+                before_start = True
+                continue
+            if timestamp > end_dt:
                 continue
             message_id = _message_identity(raw)
             if message_id is not None and not seen_messages.register(message_id)[0]:
                 continue
             yield raw
-            last_yielded_timestamp = timestamp
-        if end_dt - current < timedelta(seconds=5):
+        if truncated:
+            msg = "Kick live history hit its raw-record limit; recovery is incomplete."
+            raise KickError(msg)
+        if before_start:
             return
-        current += timedelta(seconds=5)

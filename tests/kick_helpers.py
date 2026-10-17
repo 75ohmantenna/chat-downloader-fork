@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
@@ -311,8 +311,30 @@ def fake_live_chat(downloader, batches, *, transport_factory=FakeTransport, **kw
 
 
 @contextmanager
-def live_chat(batches, *responses, session=None, **kwargs):
-    with session_patch(session if session is not None else live_session(*responses)):
+def stub_startup_history():
+    """Isolate event/reconnect unit tests from initial HTTP history recovery.
+
+    Startup composition tests opt into the real path with startup_history=True.
+    """
+    recover = live_service._iter_reconnect_backfill
+
+    def recovery(*args, **kwargs):
+        return (
+            iter(())
+            if kwargs.get("start_timestamp") is not None
+            else recover(*args, **kwargs)
+        )
+
+    with patch.object(live_service, "_iter_reconnect_backfill", side_effect=recovery):
+        yield
+
+
+@contextmanager
+def live_chat(batches, *responses, session=None, startup_history=False, **kwargs):
+    with (
+        session_patch(session if session is not None else live_session(*responses)),
+        nullcontext() if startup_history else stub_startup_history(),
+    ):
         yield fake_live_chat(FakeDownloader(), batches, **kwargs)
 
 
@@ -321,8 +343,13 @@ def collect_live_chat(batches, *responses, **request_kwargs):
         return chat, list(chat.chat)
 
 
+@contextmanager
 def live_clock(**kwargs):
-    return patch.object(live_service, "time_ns", **kwargs)
+    with (
+        patch.object(live_service, "time", return_value=1_767_225_600),
+        patch.object(live_service, "time_ns", **kwargs) as clock,
+    ):
+        yield clock
 
 
 def fixture_frame(event, name):

@@ -72,7 +72,10 @@ def test_live_deletion_uses_original_text_from_all_sources(source, groups):
         ]
     elif source == "backfill":
         session = recovery_session([original])
-        batches = [[ConnectionError("drop")], [subscription_frame, deletion_frame]]
+        batches = [
+            [subscription_frame, ConnectionError("drop")],
+            [subscription_frame, deletion_frame],
+        ]
     else:
         batches = [[text_frame, deletion_frame]]
 

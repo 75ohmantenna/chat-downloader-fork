@@ -98,6 +98,8 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
             "public_subscription_count",
             "synthetic_frame_count",
             "preloaded_emitted_count",
+            "startup_backfill_emitted_count",
+            "history_recovery_failure_count",
             "live_emitted_count",
             "optional_metadata_degradation_count",
             "connection_attempt_count",

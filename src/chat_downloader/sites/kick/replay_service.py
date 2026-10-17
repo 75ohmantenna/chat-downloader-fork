@@ -26,12 +26,11 @@ from chat_downloader.utils.time_utils import seconds_to_time
 
 from .constants import MESSAGE_GROUPS
 from .errors import KickError
-from .history import _message_timestamp, fetch_validated_page
+from .history import _cursor_after, _message_timestamp, fetch_validated_page
 from .replay_window import (
     _apply_request_window,
     _bump,
     _classify_message,
-    _cursor_after,
 )
 from .request_retry import fetch_with_retry
 from .vod_metadata import _resolve_vod_window, fetch_vod_metadata

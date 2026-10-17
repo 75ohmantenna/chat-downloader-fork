@@ -75,18 +75,3 @@ def _classify_message(
         _bump(state, "parse_error")
         return None, False
     return parsed, False
-
-
-def _cursor_after(timestamp: datetime) -> str:
-    """Return a reverse cursor after the inclusive, second-granular end."""
-    if timestamp.tzinfo is None:
-        timestamp = timestamp.replace(tzinfo=UTC)
-    timestamp = timestamp.astimezone(UTC)
-    epoch = datetime(1970, 1, 1, tzinfo=UTC)
-    delta = timestamp - epoch
-    microseconds = (
-        (delta.days * 86_400 + delta.seconds) * 1_000_000
-        + delta.microseconds
-        + 1_000_000
-    )
-    return str(microseconds)

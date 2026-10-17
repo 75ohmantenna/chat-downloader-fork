@@ -103,9 +103,10 @@ are compared after `{title}`/`{id}` expansion; existing hard links are compared
 by device and inode.
 
 Kick VOD and clip replay traverses reverse cursors and buffers the selected
-history in a temporary spool before chronological output. Five-second forward
-windows are reserved for reconnect backfill; their cursor is not a forward
-continuation. Progress reporting exposes collection before emission, and skip
+history in a temporary spool before chronological output. Startup and reconnect
+backfill also traverse reverse cursors, with bounded in-memory collection;
+capped forward responses cannot establish interval coverage. Progress reporting
+exposes collection before emission, and skip
 reasons distinguish replay boundaries from malformed records. Optional replay
 completion enforcement remains independent of file parity; known record loss
 persists across shutdown checkpoints.
@@ -292,7 +293,7 @@ module names.
 | `replay_service.py` | VOD metadata, reverse history spooling, replay-relative timestamps, filtering, and completion diagnostics |
 | `vod_metadata.py` | Legacy video lookup and validated, origin-isolated current website metadata fallback |
 | `clip_service.py` | Web/mobile clip metadata validation, clip-relative bounds, and source-VOD or absolute-time replay assembly |
-| `history.py` | Five-second reconnect history windows, bounded ID deduplication, and page validation |
+| `history.py` | Bounded reverse startup/reconnect history, cursor construction, ID deduplication, and page validation |
 | `request_retry.py` | Shared transient-request retry policy for Kick services |
 | `api_client.py` | Downloader-owned, origin-scoped sessions and unified status/challenge/JSON policy for Kick channel, history, VOD, and web/mobile clip endpoints |
 | `http_session.py` | Dedicated curl-cffi/cloudscraper/requests session construction and narrow transport Protocol |

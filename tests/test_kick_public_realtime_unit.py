@@ -885,6 +885,9 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
     downloader._kick_api_client = MagicMock()
     downloader._kick_api_client.fetch_channel.return_value = channel
     downloader._kick_api_client.fetch_preloaded_chat_state.return_value = None
+    downloader._kick_api_client.fetch_message_page.return_value = {
+        "data": {"messages": []}
+    }
     chat = live_service.get_chat_by_channel(
         downloader, "slug", ChatRequest(message_groups=["all"])
     )

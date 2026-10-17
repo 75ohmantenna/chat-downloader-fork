@@ -14,7 +14,7 @@ from chat_downloader.errors import (
     RetriesExceeded,
 )
 from chat_downloader.formatting import ItemFormatter
-from chat_downloader.sites.kick import live_service
+from chat_downloader.sites.kick import history, live_service
 from chat_downloader.sites.kick.api_client import PreloadedChatState
 from chat_downloader.sites.kick.constants import (
     CHAT_MESSAGE_EVENT,
@@ -493,37 +493,21 @@ def test_reconnect_backfill_keeps_earlier_pages_after_later_failure() -> None:
     assert client.fetch_message_page.call_count == 2
 
 
-def test_reconnect_backfill_closes_history_at_record_limit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    generator_closed = False
-
-    def iter_history(*_args: Any, **_kwargs: Any) -> Any:
-        nonlocal generator_closed
-        try:
-            for index in range(5):
-                yield raw_message(
-                    f"message-{index}", f"2026-01-01T00:00:1{index}Z", "bounded"
-                )
-        finally:
-            generator_closed = True
-
+def test_reconnect_backfill_preserves_prefix_at_record_limit(monkeypatch):
     monkeypatch.setattr(live_service, "_RECONNECT_BACKFILL_RECORD_LIMIT", 3)
-    monkeypatch.setattr(live_service, "iter_forward_history", iter_history)
     client = MagicMock()
-    client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
-        messages=[],
-        pinned_message=None,
+    client.fetch_message_page.return_value = message_page(
+        [
+            raw_message(f"message-{index}", f"2026-01-01T00:00:1{index}Z", "bounded")
+            for index in range(5)
+        ]
     )
-
-    messages = _backfill(client)
-
-    assert [message["message_id"] for message in messages] == [
+    client.fetch_preloaded_chat_state.return_value = PreloadedChatState([], None)
+    assert [message["message_id"] for message in _backfill(client)] == [
         "message-0",
         "message-1",
         "message-2",
     ]
-    assert generator_closed is True
 
 
 @pytest.mark.parametrize(
@@ -541,12 +525,10 @@ def test_reconnect_backfill_caps_unusable_history(
     client.fetch_message_page.side_effect = [
         message_page(
             [
-                raw_message(
-                    f"old-{page}-{index}", f"2000-01-01T00:00:0{index}Z", "ignored"
-                )
+                raw_message(f"old-{page}-{index}", "bad", "ignored")
                 for index in range(size)
             ],
-            cursor=str(1767225611000000 + page * 1000000),
+            cursor=str(1767225619000000 - page * 1000000),
         )
         for page, size in enumerate(page_sizes)
     ] + [AssertionError("reconnect history limit was not enforced")]
@@ -603,7 +585,7 @@ def test_get_chat_by_channel_preserves_live_celebration() -> None:
 
 
 def test_get_chat_by_channel_default_transport_binds_diagnostics() -> None:
-    session = _live_session()
+    session = _live_session(*[_empty_response() for _ in range(3)])
     transports: list[FakeTransport] = []
     callbacks: list[Any] = []
 
@@ -832,6 +814,8 @@ def test_get_chat_by_channel_reconnects_on_disconnect(transports, diagnostics) -
         "public_subscription_count": 0,
         "synthetic_frame_count": 0,
         "preloaded_emitted_count": 0,
+        "startup_backfill_emitted_count": 0,
+        "history_recovery_failure_count": 0,
         "live_emitted_count": 2,
         "reconnect_backfill_emitted_count": 0,
         "reconnect_backfill_truncated_count": 0,
@@ -984,9 +968,15 @@ def test_get_chat_by_channel_rediscovers_key_after_pusher_error(transports) -> N
         {"id": "after-refresh", "content": "restored"},
     )
     with (
-        recovery_clock(),
+        recovery_clock([5.5, 5.5, 12, 13.5]),
         _live_chat(
-            [[pusher_frame(PUSHER_ERROR, {"message": "stale key"})], [live_frame]],
+            [
+                [
+                    pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {}),
+                    pusher_frame(PUSHER_ERROR, {"message": "stale key"}),
+                ],
+                [live_frame],
+            ],
             session=session,
             transport_factory=factory,
         ) as chat,
@@ -1031,7 +1021,7 @@ def test_reconnect_backfill_waits_for_subscription_confirmation(
         yield {"event": "pusher:connection_established", "data": "{}"}
         assert len(session.calls) == 2
         yield pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {})
-        assert len(session.calls) >= 5
+        assert len(session.calls) == 4
 
     with (
         _session_patch(session),
@@ -1080,9 +1070,7 @@ def test_get_chat_by_channel_backfills_messages_missed_during_reconnect() -> Non
             "kick-pin:startup-pinned-message",
         ]
 
-    assert session.calls[2][1]["params"] == {
-        "start_time": "2026-01-01T00:00:05.000000Z"
-    }
+    assert session.calls[2][1]["params"] == {"cursor": "1767225614000000"}
     assert session.calls[-1][1]["params"] is None
     assert chat.diagnostics["preloaded_emitted_count"] == 0
     assert chat.diagnostics["live_emitted_count"] == 1
@@ -1135,10 +1123,16 @@ def test_reconnect_provider_clock_windows(
 
     session = _recovery_session([message(*item) for item in recovered])
     with (
-        recovery_clock(times),
+        recovery_clock([times[0], *times]),
+        patch.object(
+            live_service,
+            "iter_reverse_history",
+            wraps=live_service.iter_reverse_history,
+        ) as history_reader,
         _live_chat(
             [
                 [
+                    pusher_frame(PUSHER_SUBSCRIPTION_SUCCEEDED, {}),
                     *(
                         pusher_frame(CHAT_MESSAGE_EVENT, message(*item))
                         for item in frames
@@ -1152,8 +1146,9 @@ def test_reconnect_provider_clock_windows(
         ) as chat,
     ):
         assert [message["message_id"] for message in chat.chat] == expected
+    assert history_reader.call_args.args[2].strftime("%S") == f"{start:02d}"
     assert session.calls[2][1]["params"] == {
-        "start_time": f"2026-01-01T00:00:{start:02d}.000000Z"
+        "cursor": history._cursor_after(history_reader.call_args.args[3])
     }
 
 

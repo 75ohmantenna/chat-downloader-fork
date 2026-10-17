@@ -37,6 +37,7 @@ class LiveDownloader:
         self._kick_client.fetch_preloaded_chat_state.return_value = PreloadedChatState(
             [], None
         )
+        self._kick_client.fetch_message_page.return_value = {"data": {"messages": []}}
         self._kick_client.close = Mock()
 
     def get_chat(self, **kwargs):
@@ -306,7 +307,11 @@ def test_invalid_live_counter_is_an_inspection_error(tmp_path):
 
 @pytest.mark.parametrize(
     "key",
-    ["reconnect_backfill_truncated_count", "reconnect_backfill_truncated_microseconds"],
+    [
+        "reconnect_backfill_truncated_count",
+        "reconnect_backfill_truncated_microseconds",
+        "history_recovery_failure_count",
+    ],
 )
 def test_known_reconnect_history_gap_requires_review_even_when_parity_passes(
     tmp_path, key

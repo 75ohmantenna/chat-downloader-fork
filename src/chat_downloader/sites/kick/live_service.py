@@ -13,7 +13,7 @@ from datetime import UTC, datetime, timedelta
 from functools import partial
 from itertools import islice
 from threading import Lock
-from time import time_ns
+from time import time, time_ns
 from typing import TYPE_CHECKING, Any
 
 from requests.exceptions import RequestException
@@ -41,7 +41,7 @@ from .constants import (
 )
 from .deleted_message_cache import _DeletedMessageCache
 from .errors import KickError, KickRealtimeRejected, KickServerError
-from .history import iter_forward_history
+from .history import iter_reverse_history
 from .live_iterator import KickLiveIterator
 from .parsing.events import (
     MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX,
@@ -57,6 +57,7 @@ from .websocket_transport import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+    from threading import Event
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict
@@ -116,6 +117,8 @@ class _KickLiveDiagnostics:
             "public_subscription_count": 0,
             "synthetic_frame_count": 0,
             "preloaded_emitted_count": 0,
+            "startup_backfill_emitted_count": 0,
+            "history_recovery_failure_count": 0,
             "live_emitted_count": 0,
             "reconnect_backfill_emitted_count": 0,
             "reconnect_backfill_truncated_count": 0,
@@ -465,19 +468,25 @@ def _iter_reconnect_backfill(
     request: ChatRequest,
     *,
     provider_clock_offset: int = 0,
+    start_timestamp: int | None = None,
+    record_diagnostic: Callable[[str], None] | None = None,
+    cancelled: Event | None = None,
 ) -> Generator[JSONDict, None, None]:
     """Yield a bounded, latency-safe backfill followed by refreshed pin state."""
     provider_timestamp = reconnected_timestamp + provider_clock_offset
     recovery_window_end = min(reconnected_timestamp, provider_timestamp)
     history_query_end = max(reconnected_timestamp, provider_timestamp)
-    start_timestamp = _bounded_reconnect_start(
-        checkpoint_timestamp,
-        recovery_window_end,
-    )
+    if start_timestamp is None:
+        start_timestamp = _bounded_reconnect_start(
+            checkpoint_timestamp,
+            recovery_window_end,
+        )
+    # Provider timestamps have second precision; retain the boundary second.
+    start_timestamp -= start_timestamp % 1_000_000
     start_dt = _datetime_from_microseconds(start_timestamp)
     end_dt = _datetime_from_microseconds(history_query_end)
-    forward_messages: list[JSONDict] = []
-    raw_history = iter_forward_history(
+    recovered_messages: list[JSONDict] = []
+    raw_history = iter_reverse_history(
         downloader._kick_client,
         channel_id,
         start_dt,
@@ -485,18 +494,12 @@ def _iter_reconnect_backfill(
         request,
         max_pages=_RECONNECT_BACKFILL_PAGE_LIMIT,
         max_records=_RECONNECT_BACKFILL_RECORD_LIMIT,
+        cancelled=cancelled,
     )
     try:
         try:
-            for record_count, raw_message in enumerate(raw_history, start=1):
-                forward_messages.extend(iter_preloaded_messages((raw_message,)))
-                if record_count >= _RECONNECT_BACKFILL_RECORD_LIMIT:
-                    log(
-                        "warning",
-                        "Kick reconnect history reached its bounded record limit; "
-                        "stopping the HTTP backfill.",
-                    )
-                    break
+            for raw_message in raw_history:
+                recovered_messages.extend(iter_preloaded_messages((raw_message,)))
         finally:
             raw_history.close()
     except (
@@ -506,13 +509,20 @@ def _iter_reconnect_backfill(
         OSError,
         RetriesExceeded,
     ) as error:
-        logger.debug("Kick reconnect history fetch failed (non-fatal): %s", error)
+        if record_diagnostic is not None:
+            record_diagnostic("history_recovery_failure_count")
+        logger.warning("Kick history recovery is incomplete: %s", error)
+
+    if cancelled is not None and cancelled.is_set():
+        return
 
     preloaded = _fetch_preloaded_state(downloader, channel_id, username)
+    if cancelled is not None and cancelled.is_set():
+        return
     if preloaded is not None:
-        forward_ids = {
+        recovered_ids = {
             message_id
-            for message in forward_messages
+            for message in recovered_messages
             if isinstance((message_id := message.get("message_id")), str) and message_id
         }
         fallback_messages = (
@@ -523,15 +533,15 @@ def _iter_reconnect_backfill(
                 start_timestamp,
                 history_query_end,
             )
-            and message.get("message_id") not in forward_ids
+            and message.get("message_id") not in recovered_ids
         )
         remaining_capacity = max(
             0,
-            _RECONNECT_BACKFILL_RECORD_LIMIT - len(forward_messages),
+            _RECONNECT_BACKFILL_RECORD_LIMIT - len(recovered_messages),
         )
-        forward_messages.extend(islice(fallback_messages, remaining_capacity))
-        forward_messages.sort(key=_timestamp_sort_key)
-    yield from forward_messages
+        recovered_messages.extend(islice(fallback_messages, remaining_capacity))
+    recovered_messages.sort(key=_timestamp_sort_key)
+    yield from recovered_messages
 
     pinned_message = (
         _parse_current_pin(preloaded.pinned_message) if preloaded is not None else None
@@ -575,8 +585,14 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     successful_frame_capture = BoundedSampleCapture(
         _SUCCESSFUL_FRAME_CAPTURE_ENV, _SUCCESSFUL_FRAME_CAPTURE_LIMIT
     )
+    started_timestamp = int(time() * 1_000_000)
+    last_provider_timestamp: int | None = None
 
     def emit(message: dict[str, Any]) -> bool:
+        nonlocal last_provider_timestamp
+        last_provider_timestamp = _newest_provider_timestamp(
+            last_provider_timestamp, message
+        )
         message_id = message.get("message_id")
         if isinstance(message_id, str) and message_id:
             is_new, _evicted = seen_message_cache.register(message_id)
@@ -597,6 +613,17 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     if control is not None and control.stopped.is_set():
         return
 
+    # Preserve capture startup plus a bounded tail of a stale preload snapshot.
+    startup_checkpoint = max(
+        min(
+            last_provider_timestamp
+            if last_provider_timestamp is not None
+            else started_timestamp,
+            started_timestamp,
+        ),
+        started_timestamp - _RECONNECT_BACKFILL_MICROSECONDS,
+    )
+
     # 2. Live WebSocket feed with reconnect.
     open_transport = partial(
         _open_subscribed_transport,
@@ -611,10 +638,10 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         control.transport = transport
     consecutive_connection_failures = 0
     pusher_error_recoveries = 0
-    last_provider_timestamp: int | None = None
     last_message_received_timestamp: int | None = None
     provider_clock_offset = 0
     pending_reconnect_backfill = False
+    pending_startup_backfill = True
     try:
         while True:
             if control is not None and control.stopped.is_set():
@@ -660,14 +687,22 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                         live_message is not None
                         and live_message.get("message_type") == "text_message"
                     )
-                    if pending_reconnect_backfill and subscription_confirmed:
+                    if (
+                        pending_startup_backfill or pending_reconnect_backfill
+                    ) and subscription_confirmed:
+                        startup_backfill = pending_startup_backfill
                         checkpoint_timestamp = (
-                            last_provider_timestamp
-                            if last_provider_timestamp is not None
-                            else last_message_received_timestamp
+                            startup_checkpoint
+                            if startup_backfill
+                            else (
+                                last_provider_timestamp
+                                if last_provider_timestamp is not None
+                                else last_message_received_timestamp
+                            )
                         )
                         if (
-                            checkpoint_timestamp is not None
+                            not startup_backfill
+                            and checkpoint_timestamp is not None
                             and checkpoint_timestamp >= received_timestamp
                         ):
                             # A provider clock ahead of the client makes its
@@ -675,6 +710,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                             # time. Use the full bounded provider-time window.
                             checkpoint_timestamp = None
                         pending_reconnect_backfill = False
+                        pending_startup_backfill = False
                         recovery_floor = (
                             min(
                                 received_timestamp,
@@ -682,8 +718,12 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                             )
                             - _RECONNECT_BACKFILL_MICROSECONDS
                         )
-                        gap = diagnostics.record_backfill_gap(
-                            checkpoint_timestamp, recovery_floor
+                        gap = (
+                            diagnostics.record_backfill_gap(
+                                checkpoint_timestamp, recovery_floor
+                            )
+                            if not startup_backfill
+                            else 0
                         )
                         if gap:
                             log(
@@ -694,8 +734,8 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                         log(
                             "debug",
                             "Kick WebSocket subscription confirmed; checking a "
-                            "ten-second timestamp baseline widened for bounded "
-                            "clock or delivery skew.",
+                            "startup interval or ten-second reconnect baseline "
+                            "widened for bounded clock or delivery skew.",
                         )
                         for backfilled_message in _iter_reconnect_backfill(
                             downloader,
@@ -705,6 +745,11 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                             received_timestamp,
                             request,
                             provider_clock_offset=provider_clock_offset,
+                            start_timestamp=(
+                                checkpoint_timestamp if startup_backfill else None
+                            ),
+                            record_diagnostic=diagnostics.increment,
+                            cancelled=control.stopped if control is not None else None,
                         ):
                             last_provider_timestamp = _newest_provider_timestamp(
                                 last_provider_timestamp,
@@ -712,7 +757,9 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                             )
                             if emit(backfilled_message):
                                 diagnostics.increment(
-                                    "reconnect_backfill_emitted_count"
+                                    "startup_backfill_emitted_count"
+                                    if startup_backfill
+                                    else "reconnect_backfill_emitted_count"
                                 )
                                 yield backfilled_message
                     if live_message is not None:

@@ -46,12 +46,15 @@ _FRAME_KEYS = (
     "public_subscription_count",
     "synthetic_frame_count",
     "preloaded_emitted_count",
+    "startup_backfill_emitted_count",
+    "history_recovery_failure_count",
     "live_emitted_count",
     "reconnect_backfill_emitted_count",
     "reconnect_backfill_truncated_count",
     "reconnect_backfill_truncated_microseconds",
 )
 _ANOMALIES = (
+    "history_recovery_failure_count",
     "unsupported_event_count",
     "unknown_message_type_count",
     "malformed_event_count",
@@ -164,6 +167,8 @@ def _frame_accounting(
         **dict.fromkeys(
             (
                 "pusher_connection_count",
+                "startup_backfill_emitted_count",
+                "history_recovery_failure_count",
                 "centrifugo_connection_count",
                 "public_state_poll_count",
                 "public_state_poll_failure_count",
@@ -202,6 +207,7 @@ def _frame_accounting(
             result[key]
             for key in (
                 "preloaded_emitted_count",
+                "startup_backfill_emitted_count",
                 "live_emitted_count",
                 "reconnect_backfill_emitted_count",
             )

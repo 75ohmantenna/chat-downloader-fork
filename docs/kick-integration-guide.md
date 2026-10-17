@@ -32,9 +32,9 @@ The Kick implementation is responsible for:
   the chatroom stays active when the stream is down)
 - emitting preloaded recent history and current pin state on connect, then
   deduplicating them against the live feed
-- backfilling a ten-second timestamp baseline, widened conservatively for
-  bounded clock or delivery skew, after reconnects and Pusher-key recovery so
-  short outage gaps are not silently lost
+- recovering initial connection setup gaps and backfilling a ten-second
+  timestamp baseline, widened conservatively for bounded clock or delivery
+  skew, after reconnects and Pusher-key recovery
 - reading historical chat for VODs and clips by paginating the channel message
   API and filtering to the selected replay window
 - parsing Kick-specific message, badge, emote, subscription, moderation, pin,
@@ -96,10 +96,11 @@ The Kick flow depends on the target type.
    dispatch typed events. Deduplicate recent chat IDs and gift chunk identities,
    filter by message groups/types, and yield. Poll anonymous channel metadata and
    current viewer counts every 60 seconds; emit only changed snapshots.
-7. On a temporary failure, reconnect and renegotiate both connections. After
-   the primary chat subscription is confirmed, fetch a ten-second timestamp
-   baseline through the bounded clock/latency-safe envelope, emit unseen records,
-   and refresh the current pin. Reconnect when the polled category changes so
+7. After the initial primary chat subscription is confirmed, recover setup
+   history with bounded reverse pagination, deduplicate it against the preload
+   and queued live messages, and refresh the current pin. On temporary failures,
+   reconnect and renegotiate both connections, then recover a ten-second
+   timestamp baseline through the bounded clock/latency-safe envelope. Reconnect when the polled category changes so
    drop feeds follow current categories. Permanent Centrifugo command rejections
    terminate the run. Deadline cancellation wakes socket and queue readers.
 
@@ -158,12 +159,12 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `extractor.py`: `KickChatDownloader`, URL matching, public site methods
 - `live_service.py`: live chat orchestration (metadata, chatroom resolution,
   preloaded history, WebSocket loop, deduplication, reconnect)
-- `replay_window.py`: pure replay bounds, cursor construction, and record classification
+- `replay_window.py`: pure replay bounds and record classification
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
 - `clip_service.py`: web/mobile clip metadata validation and source-VOD or
   absolute-time replay assembly
-- `history.py`: five-second forward windows and bounded ID deduplication for
-  reconnect recovery, plus shared history-page validation
+- `history.py`: bounded reverse pagination, ID deduplication, cursor construction,
+  and shared history-page validation for startup/reconnect recovery and replay
 - `vod_metadata.py`: legacy/current video identity reconciliation and validated
   current website metadata normalization
 - `request_retry.py`: shared retry policy for transient Kick service requests
@@ -416,6 +417,8 @@ the offline inspector uses the debug summary for reconciliation.
 | `public_subscription_count` | Confirmed public feed subscriptions |
 | `synthetic_frame_count` | Event envelopes generated from REST snapshots |
 | `preloaded_emitted_count` | Emitted startup history and current pin records |
+| `startup_backfill_emitted_count` | Emitted initial connection history and refreshed pin records |
+| `history_recovery_failure_count` | Incomplete startup or reconnect history retrievals |
 | `live_emitted_count` | Emitted socket and REST snapshot records |
 | `reconnect_backfill_emitted_count` | Emitted reconnect history and current pin records |
 | `reconnect_backfill_truncated_count` | Outages extending beyond the bounded recovery window |
@@ -430,6 +433,19 @@ Before yielding, the live service:
   (`_KICK_LIVE_SEEN_MESSAGE_LIMIT = 10_000`) keyed on `message_id`
 - filters through configured message groups and types via `MessageFilter`
 
+### Startup recovery
+
+The initial primary chat acknowledgement, or first text message, triggers
+reverse history retrieval before that live message is emitted. The checkpoint
+is observed before filtering, so excluded preload messages still establish the
+latest provider time. Recovery starts at the earlier of capture startup and the
+latest preload timestamp, with at most ten seconds of pre-start history. The
+setup interval itself is covered even when connection negotiation takes longer
+than ten seconds. Empty or failed preloads use capture startup as the baseline.
+Global feed acknowledgements and REST snapshots do not trigger this recovery.
+Recovery starts are rounded down to the provider's whole-second precision so
+the first second is retained.
+
 ### Reconnect
 
 The receive loop runs under a reconnect wrapper: a `ConnectionError` closes the
@@ -438,8 +454,9 @@ policy. The legacy Pusher seam retains its one-shot key-discovery recovery;
 production transports renegotiate both descriptors. Recovery waits for the
 primary chat feed acknowledgement or a text chat message before history
 backfill. A lifecycle feed acknowledgement or REST snapshot cannot confirm
-that primary chat has resubscribed. They then query forward timestamp history from the newest provider
-timestamp already observed, or from the last parsed message's receive timestamp
+that primary chat has resubscribed. They then traverse reverse history from
+the inclusive query end back to the newest provider timestamp already observed,
+or to the last parsed message's receive timestamp
 when no provider time exists. When the latest provider/client clock delta is
 within the ten-second recovery window, the envelope uses the earlier of local
 confirmation and the provider-time estimate for its ten-second floor, and the
@@ -449,9 +466,16 @@ malformed offsets are ignored. A future or absent checkpoint uses the full
 baseline window. The reconnect fetch is additionally capped at 100 pages and
 10,000 raw records so a degraded endpoint cannot indefinitely block the
 confirmed socket. A fresh call to the preload endpoint is always reconciled as
-a best-effort, time-filtered secondary source, with forward history preferred
+a best-effort, time-filtered secondary source, with reverse history preferred
 for overlapping message IDs. Its current pin state is emitted after recovered
-messages. The loop carries `# noqa: C901` for its intrinsic branchiness.
+messages. Both startup and reconnect recovery sort the bounded result before
+emission, including partial pages retained after a failure. Empty continuation
+pages are followed; repeated pages, repeated or non-decreasing cursors, and
+exhausted page/record budgets mark recovery incomplete. HTTP failures also
+increment `history_recovery_failure_count`; automatic and offline inspection
+require review even if output parity passes. Cancellation stops pagination
+between fetches and skips a late pin refresh. The loop carries `# noqa: C901`
+for its intrinsic branchiness.
 
 ## Replay Capture Details
 
@@ -464,12 +488,12 @@ HTTP status totals and latency, and an explicit termination reason. Deadline
 cancellation stops buffered pagination between page fetches. An in-flight
 fetch remains subject to the configured HTTP timeouts and retry policy.
 
-Forward `start_time` queries describe five-second windows. The returned cursor
+Forward `start_time` queries are capped and can omit messages within a
+five-second interval on busy channels. The returned cursor
 is not a forward continuation token: converting it into the next query start
-skipped most messages in an observed recording. Reconnect recovery follows the
-website's five-second increments, including empty windows, within its existing
-page and record limits. Curated sparse-window fixtures and real-client
-composition tests document that distinction.
+skipped most messages in an observed recording. All history recovery now uses
+reverse cursors within its page and record limits. Curated dense-page fixtures
+and real-client composition tests document the capped-response failure.
 
 Replay messages include `time_in_seconds` and `time_text` relative to the VOD
 or clip origin. Request-relative bounds do not reset that origin. Absolute

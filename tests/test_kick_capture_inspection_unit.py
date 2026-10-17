@@ -380,6 +380,7 @@ def test_exact_duplicate_detection_includes_distant_ids_and_sql_characters(tmp_p
                     {key: 1}
                     for key in (
                         "unsupported_event_count",
+                        "history_recovery_failure_count",
                         "unknown_message_type_count",
                         "invalid_websocket_frame_count",
                         "pusher_error_count",

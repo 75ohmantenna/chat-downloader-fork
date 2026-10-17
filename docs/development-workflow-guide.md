@@ -229,9 +229,11 @@ Receive timestamps, when present, must be nonnegative integers.
 
 With a log, it reconciles decoded frames against control, parsed, unsupported,
 malformed, and Pusher-error counts. Unknown chat subtypes overlap parsed events
-and are not subtracted twice. It compares preloaded/live/backfill source totals,
+and are not subtracted twice. It compares preloaded/startup/live/reconnect
+source totals,
 the run message count, and per-type counts with JSONL. Recorded parser drops,
-unknown types, invalid frames, failed runs, and inconsistent totals require
+unknown types, invalid frames, incomplete history recovery, failed runs, and
+inconsistent totals require
 review even when frame accounting balances and TXT parity passes. Truncated
 backfill windows and their uncovered time require review; reconnects and fully
 recovered backfill alone are informational. Older logs lacking the truncation
