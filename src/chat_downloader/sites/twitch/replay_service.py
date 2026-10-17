@@ -247,7 +247,8 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 )
 
         if not comments:
-            state["termination_reason"] = "pagination_stalled"
+            if not first_iteration:
+                state["termination_reason"] = "pagination_stalled"
             break
         first_iteration = False
 

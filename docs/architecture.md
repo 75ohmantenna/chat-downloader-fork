@@ -66,7 +66,7 @@ same interfaces as production callers.
 | Transport | Open/read path | Retry/reconnect owner | Close path |
 |-----------|----------------|-----------------------|------------|
 | Base HTTP session | `ChatDownloaderSession` owns the requests adapter, headers, cookies, effective proxy state, and configured connect/read timeouts; YouTube and Twitch use it for provider requests, while Kick uses it for proxy resolution and legacy rejected-key discovery; `runtime/config_guards.py` rejects cookie authentication through remote explicit or environment proxies | YouTube request modules and Twitch live/replay services classify retryable request/status failures; Kick API retries stay in its dedicated client and services | `BaseChatDownloader.close()`; `_SiteSessionPool` replaces closed cached site sessions rather than reusing them |
-| Twitch live IRC | `twitch/irc_transport.py` opens TLS and bounds registration with the configured connect timeout, then uses a one-second minimum receive poll, keepalive probes, a 180-second idle watchdog, and fixed-schema transport counters | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | Cancellation wakes the active socket; setup failures and generator exit close the connection |
+| Twitch live IRC | `twitch/irc_transport.py` opens TLS with the configured connect timeout, a one-second minimum receive poll, keepalive probes, a 180-second idle watchdog, and fixed-schema transport counters | `twitch/live_service.py` reconnects with capped backoff and a consecutive-failure budget, reset after useful traffic | IRC `QUIT`/shutdown/close in the generator `finally` path |
 | Kick API HTTP | `kick/http_session.py` creates the Cloudflare-capable transports owned by `KickApiClient`, preserves explicit/environment proxy policy, lazily converts an applicable main-origin `session_token` cookie into bearer authentication, and origin-isolates the anonymous mobile host from credentials | Kick channel metadata plus reconnect/VOD/clip history and metadata retry transient network, malformed-response, 429, and 5xx failures; provider-specific HTTP 423 is a terminal country/region block; clip replay can fail over from unavailable web/source-VOD metadata to the anonymous mobile v1 contract while preserving terminal access policy and reconciling known channel and duration evidence; startup/reconnect preload state remains one-shot best-effort | `KickChatDownloader.close()` closes the client sessions and base session exactly once |
 | Kick live WebSocket | `kick/public_transport.py` negotiates anonymous chat and channel connections independently; Pusher and Centrifugo readers confirm public feeds, answer heartbeats, and bound acknowledgement waits; Centrifugo renews anonymous connection tokens | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, and recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits; public transports renegotiate descriptors, while the legacy Pusher seam permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Cooperative deadline cancellation wakes socket and queue readers; owned transports and sessions close on setup failure, reconnect, and exit |
 
@@ -74,11 +74,7 @@ same interfaces as production callers.
 output writers are finalized. When the timeout worker is actively advancing the
 provider iterator, its join is intentionally bounded; writer finalization may
 finish first, and the worker closes the provider iterator as soon as that active
-advance returns or raises. Kick replay signals its pagination cancellation flag
-immediately, and Twitch live cancellation shuts down the active IRC socket to
-wake its receive without reconnecting. Chat configuration validates formatting
-and output paths before starting a timed worker; failed setup closes the
-partially configured chat. Successful debug summaries expose
+advance returns or raises. Successful debug summaries expose
 `prefetched_after_deadline_count` so provider source-emission counters can be
 reconciled with records that crossed an overall or inactivity deadline and were
 intentionally excluded from output. `deadline_prefetch_count_complete` is false
@@ -178,7 +174,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `format.py` | `ItemFormatter`: safe template resolution, matching list-parent inheritance with cycle detection, time/JSON/poll field formatting, singular/conditional fragments, and output sanitization |
-| `summaries.py` | Pure, bounded count, viewer, leaderboard, and goal field rendering, composed through `ItemFormatter` without changing structured payloads |
+| `summaries.py` | Pure, bounded leaderboard and goal field rendering, composed through `ItemFormatter` without changing structured payloads |
 | `custom_formats.json` | Built-in default, provider-specific, live, and time-display format definitions |
 
 ### `utils/`

@@ -80,10 +80,6 @@ The Kick flow depends on the target type.
    transient failures).
 3. Resolve the channel ID, chatroom ID, and title. Offline channels are *not*
    rejected — the chatroom is still active.
-   For live streams, `Chat.start_time` and manifest `recording.start_time` retain
-   the initial livestream start time as UTC Unix-epoch microseconds. Missing or
-   invalid or partial timestamps remain `None`; offline channels have no stream
-   start time. Full timestamps without a timezone are treated as UTC.
 4. Fetch preloaded recent messages and the current pin state (best-effort;
    non-fatal on failure). The API returns messages newest-first; they are
    reversed into chronological order before the current pin is emitted.
@@ -138,11 +134,7 @@ The Kick flow depends on the target type.
    its `data.id`, `data.channel.id`, timezone-qualified `data.started_at`, and a
    positive duration no greater than the provider's 180-second clip limit.
    Known invalid start-time sentinels are rejected. Challenge responses remain
-   terminal and do not activate the alternate endpoint. A source-VOD HTTP 403
-   JSON response with the matching UUID, `is_private: true`, and
-   `status: subscriber_only` is a subscription restriction rather than a
-   challenge; it activates the public mobile clip metadata fallback. The
-   restricted source VOD itself remains unavailable.
+   terminal and do not activate the alternate endpoint.
 4. On the web path, fetch the source VOD metadata and require its channel to
    agree with the clip. On the mobile path, use the returned absolute
    `started_at` and channel directly, without treating the mobile `video.id` as
@@ -245,9 +237,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   message-type-to-group maps, emote patterns, and Cloudflare markers.
 - `pusher_discovery.py`: default-first Pusher application-key selection,
   best-effort refresh, cache ownership, and WebSocket URL construction.
-- `errors.py`: `KickError` and resource/protocol classification signals,
-  including terminal `KickCountryBlocked`, `KickRealtimeRejected`, and
-  `KickVideoRestricted`, plus retryable `KickServerError`.
+- `errors.py`: `KickError`, the terminal `KickCountryBlocked` subtype, and the
+  retryable `KickServerError` subclass.
 
 There is no `client.py` facade in the Kick package. Import focused modules
 directly for patch points: `api_client.py` for REST, `public_transport.py`
@@ -373,16 +364,9 @@ count, and chat settings. `kick.com/current-viewers` supplies viewer counts for
 the current livestream. These are polled observations with receive timestamps,
 not private push events. Viewer-count text summaries include the count when the
 snapshot contains a single nonnegative integer count, including zero (for
-example, `[channel metadata] Viewer count: 42`). An empty public REST viewer
-snapshot displays `[channel metadata] Viewer count: offline` when the channel
-metadata explicitly has no livestream.
-JSONL preserves the empty payload and records `metadata.offline: true` for these
-snapshots. Changes between offline and live status emit a viewer snapshot even
-if both counts are empty. Other empty or unrecognized snapshots retain the
-`[channel metadata] Viewer count` label without assuming a count. JSONL retains
-the `viewer_count` message type and its original summary and payload.
-Public lifecycle events retain their complete payload under `metadata.data`,
-plus event name, channel, and
+example, `[viewer count: 42]`). Empty or unrecognized snapshots retain the
+`[viewer count]` label without assuming a count. Public lifecycle events retain
+their complete payload under `metadata.data`, plus event name, channel, and
 source. A provider entity ID is not used for deduplication because successive
 state updates may share it.
 Compact gifts preserve `gifted_total`, `gifter_total`, and `chunk_details` under
@@ -406,12 +390,6 @@ emissions against persisted records. The default filter remains `messages`.
 Live URLs cannot seek with `start_time` or `end_time`; use a VOD or clip URL.
 
 ### Live diagnostics
-
-Debug HTTP records include resource, origin, response status (or
-`transport_error`), and monotonic request duration for channel/history API
-requests, public channel/viewer polls, realtime negotiation, and anonymous token
-requests, including renewal. They omit URLs, headers, request/response bodies,
-client identities, and tokens.
 
 Each live `Chat` exposes this schema in `chat.diagnostics`. Debug run summaries
 retain it on success and failure. Run manifests select bounded integer counters
@@ -483,8 +461,7 @@ bounded-memory spool. Repeated pages or cursors fail as incomplete retrieval,
 instead of reporting a successful truncated capture. The final debug summary
 includes the protocol, page and record counts, selected/observed timestamps,
 HTTP status totals and latency, and an explicit termination reason. Deadline
-cancellation signals the replay iterator even during an active page request and
-stops buffered pagination before another page is fetched. An in-flight
+cancellation stops buffered pagination between page fetches. An in-flight
 fetch remains subject to the configured HTTP timeouts and retry policy.
 
 Forward `start_time` queries describe five-second windows. The returned cursor
@@ -549,22 +526,13 @@ For captured `kicks_gifted` records, TXT shows `[Kicks gifted]`, the sender,
 amount in Kicks, gift name, and attached message when present. This notice uses
 the same `[received]` fallback marker; JSONL keeps the separate receive time
 and original gift metadata.
-Gifted-subscription TXT notices include `Gifted subs: N` when
-`metadata.quantity` is a nonnegative integer or an ASCII decimal string.
-Missing or invalid counts are omitted; zero remains visible. For compact gift
-events, this is the number of recipients in the current delivery chunk, not the
-overall batch total or the gifter's cumulative total. Any message is retained.
 
-Leaderboard TXT notices show at most the first three supplied entries per period.
-Kicks rankings use the weekly, monthly, and lifetime `gifts_*` lists whose
-matching `*_enabled` flag is boolean `true`. Subscription-gift rankings use
-`weekly_leaderboard`, `monthly_leaderboard`, and `leaderboard`, labeled Weekly,
-Monthly, and Overall. These lists do not require enable flags. For each absent
-subscription ranking field, the formatter also accepts the corresponding enabled
-`gifts_*` list. Quantities use comma grouping and are labeled `Kicks` for
+Leaderboard TXT notices show at most the first three supplied entries for each
+weekly, monthly, and lifetime `gifts_*` list whose matching `*_enabled` flag is
+boolean `true`. Quantities use comma grouping and are labeled `Kicks` for
 `kicks_leaderboard_updated` and `gifts` for `gifts_leaderboard_updated`. Entries
 retain provider order; missing names, invalid or negative integer quantities,
-and disabled or unusable periods are omitted. A valid empty list displays
+and disabled or unusable periods are omitted. A valid enabled empty list displays
 `empty`. JSONL keeps every original entry and flag. Goal TXT notices show
 nonnegative integer `current_value` and `target_value`, the goal `type` label,
 and a string `status` when available. A missing current value with a valid target
@@ -622,21 +590,16 @@ environments diagnosable:
 
 When a response body looks like a challenge page (Cloudflare markers, or an HTML
 body where JSON was expected) or returns HTTP 403, the client raises
-`CaptchaChallengeRequired` unless the response matches the validated
-subscriber-only video contract below. The configured HTTP transport could not
-retrieve that resource; backend selection does not retry every installed
-backend. Check endpoint availability and access restrictions as well as
-Cloudflare protection before attributing a denial to IP reputation.
+`CaptchaChallengeRequired` — neither curl-cffi nor cloudscraper could bypass the
+challenge (modern Cloudflare challenges may require tooling updates or an
+endpoint with better IP reputation).
 
 Status mapping in `api_client.py::_check_status`:
 
 - channel `404` → `UserNotFound`; video `404` → the internal
   `KickVideoNotFound` signal used by the current website fallback; clip and
   history `404` → `KickError` (the clip service may then try mobile metadata)
-- video `403` with a matching canonical UUID, `is_private: true`, and
-  `status: subscriber_only` → `KickVideoRestricted` (terminal for VOD replay;
-  eligible for public mobile metadata fallback during clip replay)
-- other `403` / challenge body → `CaptchaChallengeRequired`
+- `403` / challenge body → `CaptchaChallengeRequired`
 - provider-specific `423` → `KickCountryBlocked` (terminal; no fallback/retry)
 - `429` / `5xx` → `KickServerError` (transient, retried)
 - other non-`200` → `KickError`
@@ -737,12 +700,8 @@ viewer count, and any optional message. Existing wrapped host payloads keep
 their provider IDs and timestamps. Blank IDs are rejected rather than repaired.
 
 The default Kick TXT format displays `channel_metadata` snapshots as
-`[channel metadata] Followers: <followers_count> Title: <session_title> Start_time: <start_time>`,
-using the current follower count and livestream fields and omitting missing or
-empty fields. Follower counts appear even while the channel is offline, including
-zero counts; they are snapshot totals rather than changes since the previous
-snapshot. Only nonnegative integers and ASCII decimal strings are displayed as
-follower counts; malformed values are omitted. Start times
+`[channel metadata] Title: <session_title> Start_time: <start_time>`, using the
+current livestream fields and omitting missing or empty fields. Start times
 use UTC `YYYY-MM-DD HH:MM:SS`; invalid start times are omitted. Each snapshot
 stays on one physical line and retains the `[received]` timestamp marker when
 no provider timestamp is available. JSONL preserves the full metadata object,
