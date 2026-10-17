@@ -36,6 +36,10 @@ PUBLIC_MESSAGE_TYPES = frozenset(
         "viewer_count",
         "prediction_created",
         "prediction_updated",
+        "chat_message_sent",
+        "channel_subscription",
+        "subscriber_count_updated",
+        "activity_feed",
     }
 )
 

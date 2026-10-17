@@ -12,7 +12,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
-from chat_downloader.formatting.summaries import format_goal, format_leaderboard
+from chat_downloader.formatting.summaries import (
+    format_goal,
+    format_leaderboard,
+    format_nonnegative_integer,
+)
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_int, get_list, get_str
 from chat_downloader.utils.json_utils import nested_update
@@ -270,6 +274,8 @@ class ItemFormatter:
         format_string = field_config.get(self.KEY_FORMAT)
         if format_string:
             value = self._convert_field_value(field_path, value, field_config)
+            if value is None:
+                return ""
 
         separator = (
             None if format_string == "json" else field_config.get(self.KEY_SEPARATOR)
@@ -291,7 +297,7 @@ class ItemFormatter:
     def _convert_field_value(
         cls, field_path: str, value: Any, field_config: dict[str, Any]
     ) -> Any:
-        """Apply a field's JSON, poll, or time representation before templating."""
+        """Apply a field's configured representation before templating."""
         format_string = field_config[cls.KEY_FORMAT]
         if format_string == "poll":
             return _format_poll_metadata(value)
@@ -299,6 +305,8 @@ class ItemFormatter:
             return format_leaderboard(value, get_str(field_config, "unit"))
         if format_string == "goal":
             return format_goal(value)
+        if format_string == "nonnegative_integer":
+            return format_nonnegative_integer(value)
         if format_string == "iso8601":
             try:
                 return microseconds_to_timestamp(parse_iso8601(value))

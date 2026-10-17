@@ -487,11 +487,12 @@ message types:
 | --- | --- |
 | `messages` | `text_message` |
 | `subscriptions` | `subscription`, `gifted_subscriptions` |
+| `activity` | `chat_message_sent`, `channel_subscription`, `activity_feed` |
 | `moderation` | `user_banned`, `user_unbanned`, `message_deleted`, `chat_clear` |
 | `pins` | `pinned_message`, `pinned_message_deleted` |
 | `hosts` | `stream_host` |
 | `polls` | `poll_update`, `poll_deleted` |
-| `channel` | `stream_started`, `stream_stopped`, `chat_moved`, `chat_settings_changed`, `chatroom_updated`, `channel_metadata` |
+| `channel` | `stream_started`, `stream_stopped`, `chat_moved`, `chat_settings_changed`, `chatroom_updated`, `channel_metadata`, `subscriber_count_updated` |
 | `rewards` | `reward_redeemed` |
 | `kicks` | `kicks_gifted`, `kicks_gifted_deleted` |
 | `leaderboards` | `gifts_leaderboard_updated`, `kicks_leaderboard_updated` |
@@ -511,6 +512,33 @@ remain available as structured JSONL metadata.
 TXT shows the total-month count before the badges and author's name, for example
 `[Subscribed for 9 months]`, with `month` for one. Celebrations without a
 total-month count keep the ordinary chat rendering.
+
+Supplemental public feeds preserve `App\Events\ChatMessageSentEvent`,
+`App\Events\ChannelSubscriptionEvent`, and `App\Events\NewActivityFeedEvent`
+as `chat_message_sent`, `channel_subscription`, and `activity_feed` in the
+opt-in `activity` group. `App\Events\NewSubscriberUpdatedEvent` becomes
+`subscriber_count_updated` in `channel`. Select `activity,channel,subscriptions`
+or `all` to retain these alongside canonical subscription events.
+
+An observed subscription produced all four supplemental frames as well as a
+canonical `SubscriptionEvent`. Supplemental frames keep their own message
+types and receive-time IDs, preserving each feed occurrence without emitting
+additional `subscription` records or guessing identity from usernames and time
+proximity. JSONL retains the entire decoded payload in `metadata.data`, with
+the original event name, channel, and source alongside it. Nested provider
+timestamps stay in that payload; top-level `received_timestamp` records arrival.
+TXT labels each feed and shows the available username, action, subscription
+months, activity type, or subscriber count. Counts are snapshot totals, not
+increments. Missing optional details leave a labeled notice.
+Subscriber counts and month counts render only for nonnegative integers,
+including zero; malformed values stay in JSONL but are omitted from TXT.
+
+`tests/fixtures/kick/subscription_activity_recorded.json` retains curated raw
+event envelopes from the eight-minute live capture on 2026-10-17. Its provenance
+records source sample hashes, synthetic identity replacements, and the separately
+reconstructed matching canonical subscription frame. Composition tests cover
+both data encodings, both canonical/supplemental arrival orders, group filtering,
+exact TXT/JSONL parity, and clean live-inspection accounting.
 
 Kick TXT replies include `[replying to NAME]`, preferring the parent author's
 display name and falling back to their name. When only a parent message or

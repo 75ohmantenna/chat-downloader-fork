@@ -161,6 +161,10 @@ EVENT_NAME_MAP: dict[str, str] = {
     "kick:viewer_count": "viewer_count",
     "PredictionCreated": "prediction_created",
     "PredictionUpdated": "prediction_updated",
+    "App\\Events\\ChatMessageSentEvent": "chat_message_sent",
+    "App\\Events\\ChannelSubscriptionEvent": "channel_subscription",
+    "App\\Events\\NewSubscriberUpdatedEvent": "subscriber_count_updated",
+    "App\\Events\\NewActivityFeedEvent": "activity_feed",
 }
 
 # ── Message types and groups ──────────────────────────────────────────────────
@@ -188,6 +192,7 @@ DEFAULT_MESSAGE_TYPE = "text_message"
 MESSAGE_GROUPS = {
     "messages": ["text_message"],
     "subscriptions": ["subscription", "gifted_subscriptions"],
+    "activity": ["chat_message_sent", "channel_subscription", "activity_feed"],
     "moderation": ["user_banned", "user_unbanned", "message_deleted", "chat_clear"],
     "pins": ["pinned_message", "pinned_message_deleted"],
     "hosts": ["stream_host"],
@@ -199,6 +204,7 @@ MESSAGE_GROUPS = {
         "chat_settings_changed",
         "chatroom_updated",
         "channel_metadata",
+        "subscriber_count_updated",
     ],
     "rewards": ["reward_redeemed"],
     "kicks": ["kicks_gifted", "kicks_gifted_deleted"],

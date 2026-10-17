@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: MIT
 
-"""Pure, bounded text summaries for structured ranking and progress fields."""
+"""Pure, bounded text summaries for counts, ranking, and progress fields."""
 
 from __future__ import annotations
 
 from chat_downloader.utils.json_types import get_bool, get_int, get_str
+
+
+def format_nonnegative_integer(value: object) -> str | None:
+    """Render integer counts, retaining zero and rejecting malformed values."""
+    return str(value) if type(value) is int and value >= 0 else None
 
 
 def format_leaderboard(value: object, unit: str) -> str:

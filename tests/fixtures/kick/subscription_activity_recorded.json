@@ -1,0 +1,56 @@
+{
+  "provenance": {
+    "source_url": "https://kick.com/adinross",
+    "captured_at": "2026-10-17T01:47:07Z",
+    "source": "Four sanitized debug samples from the eight-minute live capture.",
+    "curation": "Preserved event envelopes and JSON-string data encoding, payload keys, value types, timestamps, counts, flags, nulls, and empty containers. Replaced channel, chatroom, user, and message identifiers, username, and avatar URL with consistent synthetic values. Data strings were reserialized; original bytes are not retained.",
+    "canonical_subscription": "Reconstructed compact SubscriptionEvent from the matching normalized JSONL record and the separately sampled compact wire schema; username, months, and chatroom only. Its receive time was within one second of the info-message timestamp."
+  },
+  "canonical_subscription": {
+    "event": "App\\Events\\SubscriptionEvent",
+    "channel": "chatrooms.456.v2",
+    "data": {
+      "username": "SampleSubscriber",
+      "months": 1,
+      "chatroom_id": 456
+    }
+  },
+  "events": [
+    {
+      "source_sample": "kick-unknown-event-chatmessagesentevent-3da0e7d59b69.json",
+      "source_sample_sha256": "f9f106431fefcaf91399330119933add29ac7ac1ef2306493a0aff9184d7d8fd",
+      "frame": {
+        "channel": "chatroom_456",
+        "data": "{\"message\":{\"id\":\"00000000-0000-4000-8000-000000000001\",\"message\":\"\",\"type\":\"info\",\"replied_to\":null,\"is_info\":false,\"link_preview\":null,\"chatroom_id\":456,\"role\":\"user\",\"created_at\":1792201627,\"action\":\"subscribe\",\"optional_message\":null,\"months_subscribed\":1,\"subscriptions_count\":0,\"giftedUsers\":[]},\"user\":{\"id\":789,\"username\":\"SampleSubscriber\",\"role\":\"user\",\"isSuperAdmin\":null,\"profile_thumb\":\"https://example.invalid/avatar.jpg\",\"verified\":false,\"follower_badges\":[],\"is_subscribed\":false,\"is_founder\":false,\"months_subscribed\":null,\"quantity_gifted\":0}}",
+        "event": "App\\Events\\ChatMessageSentEvent"
+      }
+    },
+    {
+      "source_sample": "kick-unknown-event-channelsubscriptionevent-cf2ea5aa87da.json",
+      "source_sample_sha256": "c2e0dbdb22b510a5ec07f3edd50f82f32604608a6bc82dc6def983d194a66b66",
+      "frame": {
+        "channel": "channel_123",
+        "data": "{\"user_ids\":[789],\"username\":\"SampleSubscriber\",\"channel_id\":123}",
+        "event": "App\\Events\\ChannelSubscriptionEvent"
+      }
+    },
+    {
+      "source_sample": "kick-unknown-event-newsubscriberupdatedevent-a4269a78048f.json",
+      "source_sample_sha256": "c8391907d373bd25026c91c09f2e4360c8c9954c712f164728f570776c8c51ee",
+      "frame": {
+        "channel": "channel_123",
+        "data": "{\"channel_id\":123,\"last_subscriber\":\"SampleSubscriber\",\"count\":2251}",
+        "event": "App\\Events\\NewSubscriberUpdatedEvent"
+      }
+    },
+    {
+      "source_sample": "kick-unknown-event-newactivityfeedevent-69090adbc02f.json",
+      "source_sample_sha256": "c7734ec0304a045136668887a5e49036399ff964a553cc561be43107b60dae1d",
+      "frame": {
+        "channel": "channel_123",
+        "data": "{\"channel_id\":123,\"type\":\"new_subscriber\",\"username\":\"SampleSubscriber\",\"metadata\":{},\"created_at\":1792201627527}",
+        "event": "App\\Events\\NewActivityFeedEvent"
+      }
+    }
+  ]
+}

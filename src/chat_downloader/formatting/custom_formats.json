@@ -196,6 +196,52 @@
     ],
     "kick": [
         {
+            "matching": "chat_message_sent",
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data.user.username}{metadata.data.message.action}{metadata.data.message.months_subscribed}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data.user.username": " User: {}",
+                "metadata.data.message.action": " Action: {}",
+                "metadata.data.message.months_subscribed": {
+                    "format": "nonnegative_integer",
+                    "template": " Months: {}"
+                }
+            }
+        },
+        {
+            "matching": "channel_subscription",
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data.username}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data.username": " User: {}"
+            }
+        },
+        {
+            "matching": "subscriber_count_updated",
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data.count}{metadata.data.last_subscriber}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data.count": {
+                    "format": "nonnegative_integer",
+                    "template": " Count: {}"
+                },
+                "metadata.data.last_subscriber": " Last subscriber: {}"
+            }
+        },
+        {
+            "matching": "activity_feed",
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data.type}{metadata.data.username}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data.type": " Type: {}",
+                "metadata.data.username": " User: {}"
+            }
+        },
+        {
             "matching": "channel_metadata",
             "template": "{timestamp|received_timestamp|time_text}[channel metadata]{metadata.data.livestream.session_title}{metadata.data.livestream.start_time}",
             "inherit": "default",

@@ -327,6 +327,10 @@ supplied entries in each enabled weekly, monthly, and lifetime list, using its
 `unit` setting for quantities. `format: "goal"` summarizes available integer
 current/target values and string status. These conversions preserve the
 structured records; the built-in Kick formats apply them to `metadata.data`.
+A field definition with `format: "nonnegative_integer"` renders nonnegative
+integer counts, including zero. Booleans, negative numbers, numeric strings,
+and other malformed values suppress the entire field template. The built-in
+Kick activity formats use this conversion for subscriber counts and months.
 A field definition with `format: "iso8601"` renders a date string as UTC
 `YYYY-MM-DD HH:MM:SS`, treating dates without a timezone as UTC. Invalid dates
 render as an empty value; use `omit_if_false: true` to omit their template too.
