@@ -1,0 +1,197 @@
+{
+  "provenance": {
+    "source": "Observed public prediction events from the 2026-10-17 ten-minute adinross capture.",
+    "source_file": "chat.jsonl",
+    "source_hash_format": "SHA-256 of the original JSONL line including its newline.",
+    "curation": "Reconstructed decoded event envelopes from JSONL; original wire encoding is not retained. Replaced channel, prediction, outcome and user identifiers consistently, plus question, outcome titles and usernames. Preserved payload keys, types, counts, order, states, winner association and timestamps."
+  },
+  "events": [
+    {
+      "source_line": 260,
+      "source_line_sha256": "3cad5666776f9d20c40b4ca33062f441ef2bd288ca099edd9ebc87f77b45b673",
+      "received_timestamp": 1792205359774263,
+      "frame": {
+        "event": "PredictionUpdated",
+        "channel": "predictions-channel-123",
+        "data": {
+          "prediction": {
+            "channel_id": 123,
+            "created_at": "2026-10-17T02:38:23Z",
+            "duration": 1800,
+            "id": "prediction-1",
+            "outcomes": [
+              {
+                "id": "prediction-1-outcome-1",
+                "return_rate": 3.6336637,
+                "title": "Option A",
+                "top_users": [],
+                "total_vote_amount": 2804499,
+                "vote_count": 3586
+              },
+              {
+                "id": "prediction-1-outcome-2",
+                "return_rate": 1.3796992,
+                "title": "Option B",
+                "top_users": [],
+                "total_vote_amount": 7386107,
+                "vote_count": 6224
+              }
+            ],
+            "state": "ACTIVE",
+            "title": "Who wins?",
+            "updated_at": "2026-10-17T02:38:23Z"
+          }
+        }
+      }
+    },
+    {
+      "source_line": 4155,
+      "source_line_sha256": "63ba69279a21ac71106d24354d6dd2feccc916e8038ca2255b5d719d360043e8",
+      "received_timestamp": 1792205435027605,
+      "frame": {
+        "event": "PredictionUpdated",
+        "channel": "predictions-channel-123",
+        "data": {
+          "prediction": {
+            "channel_id": 123,
+            "created_at": "2026-10-17T02:38:23Z",
+            "duration": 1800,
+            "id": "prediction-1",
+            "locked_at": "2026-10-17T02:50:34Z",
+            "outcomes": [
+              {
+                "id": "prediction-1-outcome-1",
+                "return_rate": 3.6365676,
+                "title": "Option A",
+                "top_users": [],
+                "total_vote_amount": 3009706,
+                "vote_count": 3913
+              },
+              {
+                "id": "prediction-1-outcome-2",
+                "return_rate": 1.379281,
+                "title": "Option B",
+                "top_users": [],
+                "total_vote_amount": 7935293,
+                "vote_count": 6708
+              }
+            ],
+            "state": "LOCKED",
+            "title": "Who wins?",
+            "updated_at": "2026-10-17T02:50:34Z"
+          }
+        }
+      }
+    },
+    {
+      "source_line": 13822,
+      "source_line_sha256": "7be7338d4261311ce48687d7fa10913b71a99f85b8823336babfbea5de249f37",
+      "received_timestamp": 1792205631828661,
+      "frame": {
+        "event": "PredictionUpdated",
+        "channel": "predictions-channel-123",
+        "data": {
+          "prediction": {
+            "channel_id": 123,
+            "created_at": "2026-10-17T02:38:23Z",
+            "duration": 1800,
+            "id": "prediction-1",
+            "locked_at": "2026-10-17T02:50:34Z",
+            "outcomes": [
+              {
+                "id": "prediction-1-outcome-1",
+                "return_rate": 3.6314874,
+                "title": "Option A",
+                "top_users": [
+                  {
+                    "amount": 235929,
+                    "user_id": 1,
+                    "username": "User1"
+                  },
+                  {
+                    "amount": 200000,
+                    "user_id": 2,
+                    "username": "User2"
+                  },
+                  {
+                    "amount": 100000,
+                    "user_id": 3,
+                    "username": "User3"
+                  }
+                ],
+                "total_vote_amount": 3015539,
+                "vote_count": 3915
+              },
+              {
+                "id": "prediction-1-outcome-2",
+                "return_rate": 1.3800132,
+                "title": "Option B",
+                "top_users": [
+                  {
+                    "amount": 250000,
+                    "user_id": 4,
+                    "username": "User4"
+                  },
+                  {
+                    "amount": 250000,
+                    "user_id": 5,
+                    "username": "User5"
+                  },
+                  {
+                    "amount": 250000,
+                    "user_id": 6,
+                    "username": "User6"
+                  }
+                ],
+                "total_vote_amount": 7935353,
+                "vote_count": 6709
+              }
+            ],
+            "state": "RESOLVED",
+            "title": "Who wins?",
+            "updated_at": "2026-10-17T02:53:51Z",
+            "winning_outcome_id": "prediction-1-outcome-2"
+          }
+        }
+      }
+    },
+    {
+      "source_line": 22620,
+      "source_line_sha256": "6f572d94b57d596bd2278e3859f17a0f2557561fdf7415f039bbcb09b1c3aab2",
+      "received_timestamp": 1792205774959401,
+      "frame": {
+        "event": "PredictionCreated",
+        "channel": "predictions-channel-123",
+        "data": {
+          "prediction": {
+            "channel_id": 123,
+            "created_at": "2026-10-17T02:56:14Z",
+            "duration": 1800,
+            "id": "prediction-2",
+            "outcomes": [
+              {
+                "id": "prediction-2-outcome-1",
+                "return_rate": 0,
+                "title": "Option A",
+                "top_users": [],
+                "total_vote_amount": 0,
+                "vote_count": 0
+              },
+              {
+                "id": "prediction-2-outcome-2",
+                "return_rate": 0,
+                "title": "Option B",
+                "top_users": [],
+                "total_vote_amount": 0,
+                "vote_count": 0
+              }
+            ],
+            "state": "ACTIVE",
+            "title": "Who wins?",
+            "updated_at": "2026-10-17T02:56:14Z"
+          }
+        }
+      }
+    }
+  ]
+}

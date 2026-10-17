@@ -6,6 +6,11 @@ Scope: `src/chat_downloader/sites/kick/`.
   public snapshots, VOD/clip replay, and event-parser behavior inside this package.
 - Before parser reshaping, add or promote a raw fixture under
   `tests/fixtures/kick/`.
+- Keep compact-console eligibility in the extractor's `get_console_state`
+  capability. Identified prediction snapshots update the display cache;
+  creation notices and incomplete snapshots always display. Only unchanged
+  complete updates may be compacted. Capture files retain every event. Text summaries are
+  selected by the bundled format definitions and preserve raw JSONL data.
 - Use `utils/json_types` accessors for incoming Kick JSON; keep `Any` only for
   opaque transport objects and assembled heterogeneous output.
 - Preserve offline-channel chat, preloaded-history/current-pin ordering,

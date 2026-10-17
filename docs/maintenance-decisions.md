@@ -259,3 +259,22 @@ response held only 25 messages spanning about one or two seconds. Reverse
 pagination now covers both recovery paths; budget exhaustion and retrieval
 failures are recorded for inspection. A curated dense-page fixture preserves
 page order, timestamps and cursors with replaced identities and text.
+
+## Keep optional console compaction separate from capture output
+
+**Decision:** `RunConfig.compact_console` defaults to false and applies only to
+stdout. Providers select eligible state updates through `get_console_state`;
+the shared runtime stores the latest complete payload fingerprint for each
+selected identity in a per-run LRU cache capped at 128 entries. Kick selects
+identified prediction snapshots. Creation notices and incomplete snapshots
+always display and refresh the cache. Changed payloads remain visible, including
+a return to a previously observed state. Uncomparable
+payloads remain visible and reset the cache. File writers, accepted-message
+counts, limits, and JSONL/TXT verification do not use this state cache.
+
+**Evidence:** The 2026-10-17 ten-minute Kick capture included 8,939 prediction
+updates, 22% of records and 34% of JSONL bytes. Of these, 1,332 repeated an
+identical payload somewhere in the capture. This is evidence for an optional
+console view, not permission to discard provider events from an archive.
+Prediction text summaries expose observed question, state and vote fields;
+resolved winner labels require an explicit, unique outcome identity.

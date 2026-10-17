@@ -300,6 +300,21 @@
         },
         {
             "matching": [
+                "prediction_created",
+                "prediction_updated"
+            ],
+            "template": "{timestamp|received_timestamp|time_text}{message}{metadata.data.prediction}",
+            "inherit": "default",
+            "keys": {
+                "message": "[{}]",
+                "metadata.data.prediction": {
+                    "format": "prediction",
+                    "template": "{}"
+                }
+            }
+        },
+        {
+            "matching": [
                 "stream_started",
                 "stream_stopped",
                 "chat_moved",
@@ -310,9 +325,7 @@
                 "event_participant_joined",
                 "event_participant_left",
                 "drops_campaign_started",
-                "viewer_count",
-                "prediction_created",
-                "prediction_updated"
+                "viewer_count"
             ],
             "template": "{timestamp|received_timestamp|time_text}{message}",
             "inherit": "default",

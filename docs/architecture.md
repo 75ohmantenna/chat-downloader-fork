@@ -45,7 +45,7 @@ For behavior-preservation coverage see
 | `youtube` ⊥ `twitch` ⊥ `kick` | Independence — no site package imports another |
 | `utils` is a leaf | No imports from `sites`, `runtime`, `output`, `formatting`, or `models` |
 | `models` isolation | No imports from `runtime`, `output`, `cli`, `cli_args`, or `sites` |
-| Generic layers stay provider-neutral | `runtime`, `output`, and `formatting` must not import a concrete site package (`sites.youtube`/`twitch`/`kick`). The lone exception is the site registry `runtime.site_dispatch`, which imports the `sites` aggregate to enumerate downloaders. Provider-specific behavior (e.g. live and completed-replay status classification, live-format overrides) lives behind capability methods on `BaseChatDownloader` (`is_live_status`, `is_completed_replay_status`, `resolve_live_format`) that sites override. |
+| Generic layers stay provider-neutral | `runtime`, `output`, and `formatting` must not import a concrete site package (`sites.youtube`/`twitch`/`kick`). The lone exception is the site registry `runtime.site_dispatch`, which imports the `sites` aggregate to enumerate downloaders. Provider-specific behavior (e.g. live and completed-replay status classification, live-format overrides) lives behind capability methods on `BaseChatDownloader` (`is_live_status`, `is_completed_replay_status`, `resolve_live_format`, `get_console_state`) that sites override. |
 
 ### Core interfaces
 
@@ -159,7 +159,7 @@ module names.
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
 | `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
 | `config_guards.py` | Explicit/environment proxy and cookie-authentication safety validation |
-| `runner.py` | Top-level run loop, structured `RunResult`, one shutdown deadline observation for every report, final diagnostics, testing-mode selection, and cleanup |
+| `runner.py` | Top-level run loop, optional bounded console state compaction, structured `RunResult`, one shutdown deadline observation for every report, final diagnostics, testing-mode selection, and cleanup |
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
 
 ### `output/`
@@ -175,7 +175,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `format.py` | `ItemFormatter`: safe template resolution, matching list-parent inheritance with cycle detection, time/JSON/poll field formatting, singular/conditional fragments, and output sanitization |
-| `summaries.py` | Pure nonnegative count, bounded leaderboard, and goal field rendering, composed through `ItemFormatter` without changing structured payloads |
+| `summaries.py` | Pure nonnegative count, bounded leaderboard, goal, and prediction field rendering, composed through `ItemFormatter` without changing structured payloads |
 | `custom_formats.json` | Built-in default, provider-specific, live, and time-display format definitions |
 
 ### `utils/`
@@ -201,7 +201,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
-| `base.py` | `BaseChatDownloader` shared base class: URL matching, session setup, cookie handling |
+| `base.py` | `BaseChatDownloader` shared base class: URL matching, session setup, cookie handling, and optional provider-selected console state capability |
 | `common.py` | Stateless site utilities for key validation and mapped-key discovery |
 | `session.py` | `ChatDownloaderSession`: cohesive HTTP adapter, timeout, proxy, header/profile, cookie, and close ownership |
 | `proxy.py` | Shared proxy resolution and TLS tunneling for live transports |
@@ -210,7 +210,7 @@ module names.
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output and deduplication are delegated to `_ChatOutputDispatcher` |
 | `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted dispatch, record rollback with owned ledgers, completed-record and suppression counts, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
-| `_message_dedup.py` | Shared formatted-message policy: paid/ticker semantic deduplication for console and formatted files |
+| `_message_dedup.py` | Paid/ticker semantic deduplication for formatted sinks, plus bounded fingerprint-only latest-state compaction used exclusively by stdout |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO deduplication cache |
 
 ### `sites/youtube/`

@@ -14,11 +14,13 @@ from .retry import retry as perform_retry
 from .session import ChatDownloaderSession, CookieSpec
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterable, Iterator, Mapping
 
     import requests
 
     from chat_downloader.models import ChatRequest
+
+    from ._message_dedup import _ConsoleState
 
 
 class BaseChatDownloader:
@@ -207,6 +209,11 @@ class BaseChatDownloader:
         Generic runtime hook keeping site-specific live-format overrides with the site.
         """
         return format_name
+
+    def get_console_state(self, message: Mapping[str, object]) -> _ConsoleState | None:
+        """Identify optional state updates; the base never compacts messages."""
+        del message
+        return None
 
     @staticmethod
     def _coerce_chat_request(

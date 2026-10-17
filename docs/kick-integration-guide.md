@@ -564,6 +564,40 @@ reconstructed matching canonical subscription frame. Composition tests cover
 both data encodings, both canonical/supplemental arrival orders, group filtering,
 exact TXT/JSONL parity, and clean live-inspection accounting.
 
+### Prediction text and compact console display
+
+Prediction creation and update notices show `Question`, the provider's `State`,
+and each outcome's vote count in provider order. Counts use comma grouping and
+singular/plural vote labels. A total is shown only when all supplied outcomes
+are objects with nonnegative integer `vote_count` values, including zero.
+Malformed or missing counts show `votes unknown`; missing outcome titles use
+`Outcome N` based on their original list position. Non-object outcomes are
+skipped and prevent a total. A `RESOLVED` prediction shows a winner only when
+its nonblank `winning_outcome_id` exactly matches one outcome ID. Popularity
+never determines the winning outcome. Missing details retain the event label.
+
+`--compact_console` (or `run(..., compact_console=True)`) optionally suppresses
+unchanged `prediction_updated` displays on stdout. The extractor selects
+prediction snapshots with a nonblank string ID.
+Creation notices always display and refresh the cached state. Updates with
+missing question/state fields, empty/malformed outcomes, untitled outcomes or
+invalid counts also always display and refresh that state. Shared runtime code
+compares the
+entire decoded prediction payload with its latest value for that ID, using an
+LRU cache of at most 128 fixed-size fingerprints per run. It preserves creation
+notices, changed states, transitions back to earlier states, and other messages.
+Unserializable state remains visible and clears the compact cache. Eviction can cause an old state
+to display again. `--quiet` takes precedence. Capture files, per-type counts,
+message limits, and verification retain their normal behavior; the mode does
+not rate-limit changing updates or alter raw events.
+
+`tests/fixtures/kick/predictions_recorded.json` preserves observed active,
+locked, resolved, and creation payloads from the 2026-10-17 capture. It retains
+counts, timestamps, outcome order and the explicit winner association, with
+synthetic identifiers and titles. Formatting tests compose both wire-data
+encodings through dispatch, formatting, file writes and exact parity; compact
+console tests compose the runtime with both capture writers.
+
 Kick TXT replies include `[replying to NAME]`, preferring the parent author's
 display name and falling back to their name. When only a parent message or
 thread ID is available, TXT uses `[reply to message ID]`. Ordinary messages

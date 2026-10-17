@@ -76,11 +76,15 @@ behavior, finalizes attached writers, and closes resources.
 
 Use `run()` when embedding CLI-like behavior.
 
-`run()` also accepts runtime controls such as `quiet`, `exit_on_debug`,
+`run()` also accepts runtime controls such as `quiet`, `compact_console`,
+`exit_on_debug`,
 `pause_on_debug`, `resume`, `verify_output`, `require_complete`,
 `run_manifest`, and `max_seen_message_ids`. These fields are defined by
-`RunConfig` in `chat_downloader.models`; `quiet`, `exit_on_debug`, and
-`pause_on_debug` are exposed on the CLI.
+`RunConfig` in `chat_downloader.models`. Every field except
+`max_seen_message_ids` is exposed on the CLI. `compact_console=True` affects
+stdout only, currently suppressing identical Kick prediction updates; capture
+files and retrieval counts retain every accepted event. It is a runtime control
+for `run()`, rather than a `get_chat()` request parameter.
 
 Pass `propagate_interrupt=True` to re-raise `KeyboardInterrupt` instead of
 swallowing it — useful when `run()` is called from within a larger
@@ -249,6 +253,7 @@ chat = downloader.get_chat_request(request)
 | Field | Default | Description |
 | --- | --- | --- |
 | `quiet` | `False` | Suppress formatted chat output to stdout |
+| `compact_console` | `False` | Suppress unchanged provider-selected state updates on stdout; retain file records and capture counts |
 | `resume` | `None` | Create or resume a validated replay shutdown checkpoint |
 | `verify_output` | `False` | Verify one JSONL/TXT pair after successful or interrupted retrieval with safe cleanup; inspect supported provider captures even after retrieval errors |
 | `require_complete` | `False` | Fail unless the selected completed replay is exhausted without known record loss |
@@ -327,6 +332,14 @@ supplied entries in each enabled weekly, monthly, and lifetime list, using its
 `unit` setting for quantities. `format: "goal"` summarizes available integer
 current/target values and string status. These conversions preserve the
 structured records; the built-in Kick formats apply them to `metadata.data`.
+A field definition with `format: "prediction"` summarizes a prediction object:
+question, string state, outcome vote counts, and a complete total. Invalid or
+missing counts display as `votes unknown`; a total requires every supplied
+outcome to have a nonnegative integer count. Non-object outcomes are omitted
+from display and prevent a total. Untitled outcomes use `Outcome N` based on
+their original position. In `RESOLVED` state, a nonblank explicit winner ID must
+match exactly one outcome before a winner is shown. The built-in Kick formats
+apply this conversion to `metadata.data.prediction`; raw payloads are preserved.
 A field definition with `format: "nonnegative_integer"` renders nonnegative
 integer counts, including zero. Booleans, negative numbers, numeric strings,
 and other malformed values suppress the entire field template. The built-in

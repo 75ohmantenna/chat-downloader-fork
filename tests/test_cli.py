@@ -274,6 +274,7 @@ def test_cli_chat_fields_and_mapping_keys_match() -> None:
 def test_run_config_cli_flags_match_metadata() -> None:
     assert {f.name for f in dataclasses.fields(RunConfig) if f.metadata.get("cli")} == {
         "quiet",
+        "compact_console",
         "pause_on_debug",
         "exit_on_debug",
         "resume",

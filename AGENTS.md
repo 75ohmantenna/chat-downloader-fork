@@ -37,6 +37,11 @@ Important locations:
 - `docs/maintenance-backlog.md` and `docs/maintenance-decisions.md`: open work
   and durable design decisions.
 
+`--compact_console` is a runtime-only, opt-in stdout policy. Provider capability
+methods select eligible state updates; file writers, captured-message counts,
+and JSONL/TXT parity retain their existing behavior. Keep provider state
+selection in its site package and bounded generic compaction in shared code.
+
 Supported output extensions are `.jsonl` and `.txt`. `uv.lock` is generated and
 tracked; regenerate it with `uv lock` when dependency or version metadata
 changes require it. `dist/`, coverage files, and package metadata directories

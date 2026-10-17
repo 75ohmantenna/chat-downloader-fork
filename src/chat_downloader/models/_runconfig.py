@@ -26,6 +26,14 @@ class RunConfig:
             group="debug",
         ),
     )
+    compact_console: bool = field(
+        default=False,
+        metadata=_cli_metadata(
+            "Suppress unchanged supported state updates on stdout;"
+            " retain every captured file record",
+            group="output",
+        ),
+    )
     resume: str | None = field(
         default=None,
         metadata=_cli_metadata(

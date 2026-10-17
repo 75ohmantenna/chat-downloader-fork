@@ -214,6 +214,15 @@ Filtering and output:
   `message_groups`, including the `all` group.
 - `--format` or `--format_file` — change rendered text output.
 - `--output` — write one or more files (repeatable).
+- `--compact_console` — opt into suppressing unchanged supported state updates
+  on stdout. Currently this suppresses only complete Kick `prediction_updated`
+  payloads with a nonblank prediction ID. Creation notices and incomplete
+  snapshots always display and refresh the state cache. Each ID retains its
+  latest payload;
+  changed states, creation notices, ordinary chat, and unidentified updates
+  remain visible. The per-run LRU cache holds at most 128 state fingerprints,
+  so an evicted prediction can display again. JSONL/TXT files, capture counts,
+  limits, and output parity are unaffected. `--quiet` suppresses stdout entirely.
 - `--max_messages`, `--start_time`, `--end_time` — bound the capture.
 - `--timeout`, `--inactivity_timeout` — bound long-running captures.
 
@@ -313,6 +322,25 @@ Debug and automation:
   that were not created.
 - `--quiet`, `--testing`, `--pause_on_debug`, `--exit_on_debug` — automation
   and parser-debug workflows.
+
+### Kick prediction display
+
+Select `--message_groups predictions` or include `predictions` with other
+comma-separated groups. Both stdout and TXT show the question, provider state,
+outcome vote counts, and a total when every outcome count is a nonnegative
+integer. Missing counts display as `votes unknown` and suppress the total.
+Resolved predictions show a winner only when the explicit winner ID uniquely
+matches an outcome. JSONL retains the entire provider payload.
+
+```bash
+chat_downloader "https://kick.com/adinross" --message_groups messages,predictions \
+  --compact_console --output chat.jsonl --output chat.txt --verify_output
+```
+
+Compaction compares complete prediction payloads, including fields omitted
+from text summaries. It suppresses identical updates across intervening chat,
+but displays a state that changes away and then returns to an earlier value.
+It does not throttle changing updates or change either capture file.
 
 ## Troubleshooting
 

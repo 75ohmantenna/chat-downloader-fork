@@ -224,6 +224,7 @@ def test_retry_kwargs_contains_only_retry_fields():
 def test_run_config_filters_and_serializes(values):
     expected = {
         "quiet": False,
+        "compact_console": False,
         "resume": None,
         "verify_output": False,
         "require_complete": False,

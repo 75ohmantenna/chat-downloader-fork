@@ -254,7 +254,7 @@ def _add_format_site_output_args(
     for name in ("--overwrite", "--sort_keys"):
         reg.chat(output_group, name, type=str2bool)
     reg.run(output_group, "--resume")
-    for name in ("--verify_output", "--require_complete"):
+    for name in ("--verify_output", "--require_complete", "--compact_console"):
         reg.run(output_group, name, action="store_true")
     reg.run(output_group, "--run_manifest")
 

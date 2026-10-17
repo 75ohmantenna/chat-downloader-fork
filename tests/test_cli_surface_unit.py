@@ -17,6 +17,7 @@ EXPECTED_OPTION_STRINGS = frozenset(
         "--buffer_size",
         "--chat_type",
         "--connect_timeout",
+        "--compact_console",
         "--cookies",
         "--end_time",
         "--exit_on_debug",
@@ -92,6 +93,7 @@ EXPECTED_DEFAULTS = {
     ),
     **dict.fromkeys(
         [
+            "compact_console",
             "exit_on_debug",
             "pause_on_debug",
             "quiet",
@@ -142,6 +144,7 @@ EXPECTED_GROUP_MEMBERS = {
         "resume",
         "verify_output",
         "require_complete",
+        "compact_console",
         "run_manifest",
     ),
     "Debugging/Testing Arguments": (

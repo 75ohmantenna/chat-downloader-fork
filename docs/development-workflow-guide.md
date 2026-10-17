@@ -380,6 +380,7 @@ than establish runtime behavior.
 | CLI flags, help, and argument handling | `src/chat_downloader/cli.py`, `src/chat_downloader/cli_args.py`, `src/chat_downloader/models/` |
 | Provider URLs, message groups, parsing, and transport | The matching package under `src/chat_downloader/sites/` |
 | Output extensions, writing, and text rendering | `src/chat_downloader/output/`, `src/chat_downloader/formatting/`, `src/chat_downloader/sites/output_dispatch.py` |
+| Optional stdout compaction and provider state eligibility | `src/chat_downloader/models/_runconfig.py`, `src/chat_downloader/runtime/runner.py`, `src/chat_downloader/sites/_message_dedup.py`, `src/chat_downloader/sites/base.py`, and the matching provider implementation |
 | Module layout and import boundaries | The source tree and `[tool.importlinter]` in `pyproject.toml` |
 | Package metadata, Python requirements, and dependencies | `pyproject.toml`, `src/chat_downloader/metadata.py`, `uv.lock` |
 | Development commands, hooks, checks, and hosted CI | `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, and the relevant tool configuration and check implementation |

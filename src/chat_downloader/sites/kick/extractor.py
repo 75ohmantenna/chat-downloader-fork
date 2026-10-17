@@ -11,7 +11,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import unquote
 
+from chat_downloader.sites._message_dedup import _ConsoleState
 from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.utils.json_types import get_dict, get_int, get_list, get_str
 
 from .api_client import KickApiClient
 from .clip_service import get_clip_chat as build_clip_chat
@@ -22,6 +24,7 @@ from .replay_service import get_vod_chat as build_vod_chat
 
 if TYPE_CHECKING:
     import re
+    from collections.abc import Mapping
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
@@ -39,6 +42,35 @@ class KickChatDownloader(BaseChatDownloader):
     }
 
     _VALID_URLS: ClassVar[dict[str, str]] = VALID_URLS
+
+    def get_console_state(self, message: Mapping[str, object]) -> _ConsoleState | None:
+        """Compact identical prediction updates while preserving lifecycle events."""
+        message_type = message.get("message_type")
+        if message_type not in ("prediction_created", "prediction_updated"):
+            return None
+        prediction = get_dict(
+            get_dict(get_dict(message, "metadata"), "data"), "prediction"
+        )
+        identifier = get_str(prediction, "id")
+        if not identifier.strip():
+            return None
+        outcomes = get_list(prediction, "outcomes")
+        complete = bool(
+            get_str(prediction, "title").strip()
+            and get_str(prediction, "state").strip()
+            and outcomes
+            and all(
+                isinstance(outcome, dict)
+                and get_str(outcome, "title").strip()
+                and get_int(outcome, "vote_count", -1) >= 0
+                for outcome in outcomes
+            )
+        )
+        return _ConsoleState(
+            f"prediction:{identifier}",
+            prediction,
+            always_display=message_type == "prediction_created" or not complete,
+        )
 
     def __init__(self, **kwargs: object) -> None:
         """Initialize base HTTP state and an isolated Kick API session."""

@@ -79,6 +79,18 @@ which chat_downloader
 chat_downloader "https://www.youtube.com/watch?v=QBFiiEVBWvE"
 ```
 
+Kick prediction notices include the question, state, outcome vote counts,
+complete totals, and an explicit resolved winner when available. To suppress
+unchanged prediction updates on stdout while retaining every event in files:
+
+```bash
+chat_downloader "https://kick.com/adinross" --message_groups messages,predictions \
+  --compact_console --output chat.jsonl --output chat.txt --verify_output
+```
+
+Compact console display is opt-in and does not change capture counts or file
+verification. Other message types keep their normal display behavior.
+
 Full CLI examples, output-format details, options, and troubleshooting are in
 [`docs/cli-usage.md`](docs/cli-usage.md).
 

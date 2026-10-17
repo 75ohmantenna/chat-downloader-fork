@@ -25,7 +25,10 @@ from chat_downloader.errors import (
 )
 from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
 from chat_downloader.redaction import sanitize_for_log
-from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
+from chat_downloader.sites._message_dedup import (
+    _ConsoleStateDeduplicator,
+    _FormattedMessageDeduplicator,
+)
 from chat_downloader.utils.interrupts import defer_interrupts
 
 from .capture_checkpoint import CaptureCheckpoint, checkpoint_lock
@@ -171,15 +174,24 @@ def create_message_callback(
     quiet: bool,
     chat: Chat,
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
+    compact_console: bool = False,
 ) -> Callable[[dict[str, Any]], None]:
-    """Create a callback function for processing retrieved messages."""
+    """Render stdout after file dispatch; optional compaction affects no files."""
     if quiet:
         return lambda _: None
 
     deduplicator = _FormattedMessageDeduplicator(max_seen_message_ids)
+    console_states = _ConsoleStateDeduplicator() if compact_console else None
+    state_getter = getattr(getattr(chat, "site", None), "get_console_state", None)
 
     def deduplicating_callback(message: dict[str, Any]) -> None:
         if deduplicator.should_emit(message):
+            if (
+                console_states is not None
+                and callable(state_getter)
+                and not console_states.should_emit(state_getter(message))
+            ):
+                return
             chat.print_formatted(message)
 
     return deduplicating_callback
@@ -372,6 +384,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
             quiet=run_config.quiet,
             chat=chat,
             max_seen_message_ids=run_config.max_seen_message_ids,
+            compact_console=run_config.compact_console,
         )
 
         source = iter(chat)

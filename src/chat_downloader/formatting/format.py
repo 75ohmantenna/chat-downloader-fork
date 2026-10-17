@@ -16,6 +16,7 @@ from chat_downloader.formatting.summaries import (
     format_goal,
     format_leaderboard,
     format_nonnegative_integer,
+    format_prediction,
 )
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_int, get_list, get_str
@@ -28,6 +29,8 @@ from chat_downloader.utils.time_utils import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from chat_downloader.utils.json_types import JSONDict
 
 BUILTIN_FORMAT_FILE = Path(__file__).parent / "custom_formats.json"
@@ -87,6 +90,14 @@ def _format_poll_metadata(value: object) -> str:
     if remaining >= 0:
         fragments.append(f"Remaining: {remaining}s")
     return "".join(f" | {fragment}" for fragment in fragments)
+
+
+_SUMMARY_FORMATTERS: dict[str, Callable[[object], str | None]] = {
+    "poll": _format_poll_metadata,
+    "goal": format_goal,
+    "prediction": format_prediction,
+    "nonnegative_integer": format_nonnegative_integer,
+}
 
 
 class ItemFormatter:
@@ -299,14 +310,15 @@ class ItemFormatter:
     ) -> Any:
         """Apply a field's configured representation before templating."""
         format_string = field_config[cls.KEY_FORMAT]
-        if format_string == "poll":
-            return _format_poll_metadata(value)
+        summary = (
+            _SUMMARY_FORMATTERS.get(format_string)
+            if isinstance(format_string, str)
+            else None
+        )
+        if summary is not None:
+            return summary(value)
         if format_string == "leaderboard":
             return format_leaderboard(value, get_str(field_config, "unit"))
-        if format_string == "goal":
-            return format_goal(value)
-        if format_string == "nonnegative_integer":
-            return format_nonnegative_integer(value)
         if format_string == "iso8601":
             try:
                 return microseconds_to_timestamp(parse_iso8601(value))

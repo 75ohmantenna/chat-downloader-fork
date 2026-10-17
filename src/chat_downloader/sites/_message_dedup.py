@@ -1,9 +1,13 @@
 # SPDX-License-Identifier: MIT
 
-"""Formatted-message deduplication policy shared by output sinks."""
+"""Formatted-message deduplication and bounded optional console state policy."""
 
 from __future__ import annotations
 
+import hashlib
+import json
+from collections import OrderedDict
+from dataclasses import dataclass
 from typing import Any
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
@@ -56,3 +60,40 @@ class _FormattedMessageDeduplicator:
                 f"evicting message_id={evicted_message_id!r}.",
             )
         return is_new
+
+
+@dataclass(frozen=True, slots=True)
+class _ConsoleState:
+    """Provider-selected snapshot and optional lifecycle display requirement."""
+
+    key: str
+    payload: object
+    always_display: bool = False
+
+
+class _ConsoleStateDeduplicator:
+    """Remember only the latest payload for up to 128 provider-selected states."""
+
+    def __init__(self, max_states: int = 128) -> None:
+        self._max_states = max_states
+        self._states: OrderedDict[bytes, bytes] = OrderedDict()
+
+    def should_emit(self, state: _ConsoleState | None) -> bool:
+        """Suppress exact unchanged state; malformed data always remains visible."""
+        if state is None or self._max_states <= 0:
+            return True
+        try:
+            identity = hashlib.sha256(json.dumps(state.key).encode("utf-8")).digest()
+            fingerprint = hashlib.sha256(
+                json.dumps(state.payload, sort_keys=True, allow_nan=False).encode(
+                    "utf-8"
+                )
+            ).digest()
+        except (TypeError, ValueError, RecursionError):
+            self._states.clear()
+            return True
+        previous = self._states.pop(identity, None)
+        self._states[identity] = fingerprint
+        if len(self._states) > self._max_states:
+            self._states.popitem(last=False)
+        return state.always_display or previous != fingerprint
