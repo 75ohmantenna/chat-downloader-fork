@@ -391,6 +391,14 @@ It does not throttle changing updates or change either capture file.
   `KeyboardInterrupt`. Provider reads remain immediately interruptible. Sending
   a second signal interrupts cleanup and restores the default handler for that
   signal, allowing a subsequent signal to force termination.
+- When wrapping `uv run` with GNU `timeout`, use `timeout --foreground` so
+  the wrapper and `uv` do not both forward the same termination signal to
+  the downloader. For example, `timeout --foreground 60s uv run --locked
+  chat_downloader URL --resume checkpoint.json --output chat.jsonl`.
+  Invoking the installed command directly, such as
+  `timeout 60s .venv/bin/chat_downloader URL --resume checkpoint.json
+  --output chat.jsonl`, also preserves single-signal cleanup. A normal timeout
+  returns the wrapper's status `124` even when checkpoint finalization succeeds.
 - For deeper platform behavior, see
   [`youtube-integration-guide.md`](youtube-integration-guide.md),
   [`twitch-integration-guide.md`](twitch-integration-guide.md), and
