@@ -132,7 +132,8 @@ Custom format field definitions accept a `template`, optional
 `singular_template`, and optional `omit_if_false`. The singular form is selected
 only for an exact numeric value of one; zero, other numbers, booleans, and
 numeric strings use the normal template. `omit_if_false: true` suppresses the
-field's complete rendered fragment for false, zero, empty, or null values.
+field's complete rendered fragment for false, zero, empty, or null values,
+except that `format: "count"` preserves valid zero counts as `0`.
 Format inheritance follows named parents, selecting a parent's matching event
 rule when it is a list. Child fields override parent fields; inheritance cycles
 raise an error rather than hanging. Missing parents contribute no fields.
@@ -161,10 +162,16 @@ a Kick live event omits its provider timestamp, JSONL records a separate
 `received_timestamp` in UTC microseconds and TXT uses it as a `[received]`
 display fallback. `kicks_gifted` notices use the same marker alongside the sender,
 amount in Kicks, gift name, and attached message when present.
-Kick leaderboard notices show the first three supplied entries for each
-explicitly enabled weekly, monthly, and lifetime period, preserving provider
-order and labeling quantities in Kicks or gifts. Empty enabled lists show
-`empty`; invalid entries and missing or disabled periods are omitted.
+Kick leaderboard notices summarize the first three supplied ranking slots per
+period, preserving provider order. Kicks rankings use explicitly enabled weekly,
+monthly, and lifetime lists; subscription-gift rankings use Weekly, Monthly,
+and Overall lists without enable flags, with enabled legacy lists accepted
+when the corresponding ranking field is absent. Valid empty lists show `empty`.
+See the [Kick formatting details](kick-integration-guide.md#message-groups-and-types)
+for ranking fields and gift counts. Gifted-subscription notices include the
+current delivery chunk's recipient count when available. Channel snapshots
+show follower totals, including zero, and viewer snapshots distinguish a known
+offline channel from an unknown count.
 Goal notices show available nonnegative integer current/target values and status,
 for example `[goal progress updated] | Followers: 188,912 / 200,000 | Status: active`.
 Each event stays on one physical line. JSONL retains the complete payload,
@@ -210,6 +217,8 @@ Filtering and output:
 - `--message_groups` and `--message_types` are mutually exclusive CLI filters.
   Pass multiple names as one comma-separated argument.
   Use `--message_groups all` for a provider's complete supported event surface.
+  Unknown explicit types are rejected with the provider's valid type names;
+  ordinary chat uses `text_message`. The special type `all` accepts every type.
   In typed API requests, an explicit `ChatRequest.message_types` value overrides
   `message_groups`, including the `all` group.
 - `--format` or `--format_file` — change rendered text output.
@@ -224,6 +233,9 @@ Filtering and output:
   so an evicted prediction can display again. JSONL/TXT files, capture counts,
   limits, and output parity are unaffected. `--quiet` suppresses stdout entirely.
 - `--max_messages`, `--start_time`, `--end_time` — bound the capture.
+  Time bounds accept seconds or `hh:mm:ss`; an end before the start is rejected.
+  End bounds are inclusive. Kick treats a zero-duration window as an empty
+  selection and does not request history for it.
 - `--timeout`, `--inactivity_timeout` — bound long-running captures.
 
 Request control:
@@ -253,6 +265,8 @@ Request control:
 - `--user-agent`, `--header "Name: Value"` (repeatable) — request headers.
 
 Kick accepts `--start_time` and `--end_time` for VOD and clip replay URLs.
+In-progress VOD errors suggest using the live channel URL. Nondefault YouTube
+and Twitch options on Kick produce warnings naming the unused flags.
 VOD bounds are relative to the recording; clip bounds are relative to the clip
 and clamp to its duration. Kick live channel URLs reject these bounds because
 the public live feed cannot seek.
@@ -351,11 +365,13 @@ It does not throttle changing updates or change either capture file.
 - A cookie/proxy safety error can come from `HTTP_PROXY`, `HTTPS_PROXY`, or
   `ALL_PROXY` even when `--proxy` was not supplied. Remove the remote proxy or
   pass `--proxy ""` if direct connections are intended.
-- `CaptchaChallengeRequired` means a platform returned an explicit challenge
-  response that the library cannot solve automatically. On Kick this is a
-  Cloudflare bot-protection page. The bundled `curl-cffi` and `cloudscraper`
-  fallbacks can clear some challenges, but endpoint or VPN reputation can still
-  trigger one.
+- `CaptchaChallengeRequired` means a platform denied access or returned a
+  challenge response. Kick raises it for unclassified HTTP 403 responses and
+  challenge or unexpected HTML bodies. Kick selects an available HTTP backend
+  during session construction; it does not retry a denial through every
+  installed backend. A validated subscriber-only source VOD can instead
+  activate public mobile metadata fallback for clip chat; the VOD itself
+  remains restricted.
 - Use `.jsonl` for long or live captures.
 - If a platform changes its private APIs, rerun with `--logging debug` and
   inspect the site-specific code under `src/chat_downloader/sites/`.
@@ -394,7 +410,9 @@ markers without replay offsets are omitted from checkpointed captures.
 
 Checkpoints advance after output writers close and synchronize on normal,
 message-limited, or interrupted shutdown. A one-second overlap preserves
-messages at the saved timestamp while suppressing IDs already written. The
+messages at the saved timestamp while suppressing already-written occurrences
+of each message ID, message type, and action type. Paid chat and ticker events
+sharing an ID remain separate raw records across a resume boundary. The
 checkpoint writer places opening zero-offset replay notices after any negative
 preroll messages so their saved offsets remain chronological. The
 first CLI signal finishes an in-progress record's writes, checkpoint observation,
@@ -410,6 +428,9 @@ start/end, format, and filenames unchanged; message limits and timeouts may
 change. Request settings, the package version, built-in format definitions,
 and file hashes are checked before append. Checkpoints created before these
 version and format checks were added cannot be resumed; start a new capture.
+Current checkpoints use schema version 2. Version 1 checkpoints stored only
+message IDs and cannot distinguish raw event kinds or repeated occurrences;
+they are rejected before append. Start a new capture with new output paths.
 The version check applies to releases; avoid resuming across unreleased source
 changes that affect output. If chat or downloader shutdown fails, the
 checkpoint does not advance. A writer close failure also withholds the
@@ -455,14 +476,18 @@ prevent a capture from qualifying as complete.
 `--run_manifest run.json` writes a JSON report after shutdown with program
 version, recording identity/window, success, completion, termination, parity,
 current/prior run message counts, and output writer counts and SHA-256 hashes.
+For Kick live channels, `recording.start_time` contains the initial livestream
+start time in UTC Unix-epoch microseconds, or `null` when unavailable.
 `elapsed_seconds` measures initialization through capture shutdown using a
 monotonic clock; output verification and manifest writing are excluded.
 `provider_diagnostics` retains supported bounded YouTube action and
 continuation counters, including skipped-action reasons and parsing loss, plus
 Kick live transport, public-feed, snapshot, and backfill counters, and the full
 fixed set of Twitch live metadata, connection, frame, keepalive, filtering,
-deduplication, and emission counters. Only nonnegative integer counters are
-retained; booleans, other value types, and unknown fields are excluded. Automatic
+deduplication, and emission counters. Counter values must be nonnegative
+integers; booleans and unknown counter names are excluded. YouTube's initial
+and active request-profile names and chat-view label are also retained from
+fixed vocabularies. Automatic
 YouTube, Twitch live, and Kick live inspection reports remain in
 `provider_inspection` when requested.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
