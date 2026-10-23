@@ -89,6 +89,7 @@ class Chat:
         self.start_time = start_time
         self.id = id
         self.diagnostics = diagnostics if diagnostics is not None else {}
+        self._request_window: dict[str, object] | None = None
 
         self._capture_inspector: (
             Callable[[Path | None, dict[str, object]], dict[str, object]] | None

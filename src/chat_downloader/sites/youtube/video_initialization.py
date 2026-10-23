@@ -56,12 +56,10 @@ class YouTubeVideoInitializationMixin:
         """Get initial YouTube video information and continuation metadata."""
         proto = cast("YouTubeDownloaderProto", self)
         attempted_profiles: set[str] = set()
-        bootstrap = BootstrapRequests()
-        bootstrap.diagnostics["initial_request_profile"] = (
-            getattr(proto, "_request_profile", None) or "youtube_web"
-        )
+        bootstrap = BootstrapRequests(getattr(proto, "_request_diagnostics", None))
 
         while True:
+            bootstrap.profile(getattr(proto, "_request_profile", None) or "youtube_web")
             details, player_response_info, yt_initial_data, ytcfg = (
                 proto._parse_video_data(video_id, params, video_type)
             )
@@ -150,9 +148,7 @@ class YouTubeVideoInitializationMixin:
                 return details, ytcfg
 
             attempted_profiles.add(next_profile)
-            bootstrap.diagnostics["bootstrap_profile_switch_count"] = len(
-                attempted_profiles
-            )
+            bootstrap.increment("bootstrap_profile_switch_count")
             log(
                 "warning",
                 "Switching YouTube request profile after a generic initial "

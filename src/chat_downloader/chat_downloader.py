@@ -92,6 +92,7 @@ class ChatDownloader:
         )
 
         self._session_pool = _SiteSessionPool(self.config)
+        self._request_diagnostics: dict[str, object] = {}
 
     @property
     def sessions(self) -> dict[str, BaseChatDownloader]:

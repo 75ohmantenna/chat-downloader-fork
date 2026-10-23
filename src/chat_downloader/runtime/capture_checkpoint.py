@@ -19,6 +19,7 @@ from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.formatting import format as format_module
 from chat_downloader.metadata import __version__
 from chat_downloader.models import ChatRequest
+from chat_downloader.utils.filename_utils import output_path_identity
 
 from .capture_manifest import has_record_loss, is_completed_replay
 from .capture_replay_order import ordered_initial_preroll
@@ -151,8 +152,12 @@ class CaptureCheckpoint:
         if not names or any("{" in name or "}" in name for name in names):
             msg = "Resume requires explicit output paths without placeholders."
             raise ValueError(msg)
-        self.outputs = [Path(name).absolute() for name in names]
-        identities = [path.resolve() for path in [self.path, *self.outputs]]
+        unique: dict[tuple[object, ...], Path] = {}
+        for name in names:
+            path = Path(name).absolute()
+            unique.setdefault((output_path_identity(path), path.suffix.lower()), path)
+        self.outputs = list(unique.values())
+        identities = [output_path_identity(path) for path in [self.path, *self.outputs]]
         if len(set(identities)) != len(identities):
             msg = "Checkpoint and output paths must be distinct."
             raise ValueError(msg)

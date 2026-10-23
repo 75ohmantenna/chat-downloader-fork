@@ -391,6 +391,14 @@ It does not throttle changing updates or change either capture file.
   `KeyboardInterrupt`. Provider reads remain immediately interruptible. Sending
   a second signal interrupts cleanup and restores the default handler for that
   signal, allowing a subsequent signal to force termination.
+- When wrapping `uv run` with GNU `timeout`, use `timeout --foreground` so
+  the wrapper and `uv` do not both forward the same termination signal to
+  the downloader. For example, `timeout --foreground 60s uv run --locked
+  chat_downloader URL --resume checkpoint.json --output chat.jsonl`.
+  Invoking the installed command directly, such as
+  `timeout 60s .venv/bin/chat_downloader URL --resume checkpoint.json
+  --output chat.jsonl`, also preserves single-signal cleanup. A normal timeout
+  returns the wrapper's status `124` even when checkpoint finalization succeeds.
 - For deeper platform behavior, see
   [`youtube-integration-guide.md`](youtube-integration-guide.md),
   [`twitch-integration-guide.md`](twitch-integration-guide.md), and
@@ -457,8 +465,11 @@ shutdown recovery points, not continuous crash journals.
 `--verify_output` checks exact formatting, semantic deduplication, UTF-8, and
 physical line endings after a successful or interrupted run with safe cleanup.
 It requires one JSONL and one TXT
-output; append verification requires a resume checkpoint so run boundaries are
-known. A verification error makes the command fail. A zero-message success can
+output after duplicate destinations are removed, including aliases and expanded
+output templates. Different formats must use distinct files. Extra distinct
+destinations are rejected before writing. Append verification requires a resume
+checkpoint so run boundaries are known. A verification error makes the command
+fail. A zero-message success can
 have no files because writers initialize lazily. The run summary separately
 reports success, termination reason, parity status, and writer counts. A parity
 pass does not prove complete provider history.
@@ -484,6 +495,17 @@ prevent a capture from qualifying as complete.
 `--run_manifest run.json` writes a JSON report after shutdown with program
 version, recording identity/window, success, completion, termination, parity,
 current/prior run message counts, and output writer counts and SHA-256 hashes.
+`selected_window` retains the requested `start_time` and `end_time` as seconds;
+`null` means an unspecified bound. `effective_window` records the bounds passed
+to retrieval, including resume overlap, with `time_basis` of `recording` or
+`clip`. YouTube clip bounds are converted to recording-relative seconds.
+Kick replay windows include provider-side duration clamping. Twitch clips with
+a known source offset retain their clip-relative bounds and default duration.
+`effective_window` is `null` when retrieval setup did not return a chat.
+`recording.start_time` remains the absolute broadcast start and is separate
+from these relative seek bounds. `failure_stage` is `null` on success or names
+the failed phase: `initialization`, `bootstrap`, `capture`, `shutdown`,
+`verification`, `completion`, or `manifest`.
 For Kick live channels, `recording.start_time` contains the initial livestream
 start time in UTC Unix-epoch microseconds, or `null` when unavailable.
 `elapsed_seconds` measures initialization through capture shutdown using a
@@ -498,6 +520,10 @@ and active request-profile names and chat-view label are also retained from
 fixed vocabularies. Automatic
 YouTube, Twitch live, and Kick live inspection reports remain in
 `provider_inspection` when requested.
+YouTube bootstrap counters survive failures before a chat is created. Replay
+diagnostics also count records missing source timestamps, ambiguous zero
+offsets, and attempted/successful initial replay profile recovery. A recovered
+HTTP error remains counted even though the run succeeds.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
 one deadline observation after bounded shutdown, shared with provider inspection
 and the debug summary. An incomplete count is a lower bound even if a worker

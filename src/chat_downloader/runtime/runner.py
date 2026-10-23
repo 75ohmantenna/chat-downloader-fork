@@ -145,6 +145,20 @@ class RunResult:
     elapsed_seconds: float = 0.0
     prefetched_after_deadline_count: int = 0
     deadline_prefetch_count_complete: bool = True
+    provider_diagnostics: dict[str, object] = field(default_factory=dict)
+    failure_stage: str | None = None
+
+    def observe_provider(self, chat: Chat | None, downloader: object) -> None:
+        """Freeze finalized chat counters and the surviving request setup ledger."""
+        setup = getattr(downloader, "_request_diagnostics", {})
+        if not isinstance(setup, dict):
+            setup = {}
+        self.provider_diagnostics = {**setup, **getattr(chat, "diagnostics", {})}
+        # Request-scoped setup counters include unsuccessful fresh bootstraps
+        # after a Chat already exists. They supersede the older chat snapshot.
+        self.provider_diagnostics.update(
+            (key, value) for key, value in setup.items() if type(value) is int
+        )
 
     def observe_shutdown(self, chat: Chat | None) -> None:
         """Freeze one deadline observation after bounded capture cleanup.
@@ -165,6 +179,7 @@ class RunResult:
             self.deadline_prefetch_count_complete = False
             self.success = False
             self.termination_reason = "error"
+            self.failure_stage = "shutdown"
             message = f"Unable to observe deadline accounting: {error}"
             self.error_message = self.error_message or message
             log("error", message)
@@ -213,6 +228,7 @@ def _log_run_summary(
             "termination_reason": getattr(result, "termination_reason", "completed"),
             "parity_status": getattr(result, "parity_status", "not_requested"),
             "provider_inspection": getattr(result, "provider_inspection", None),
+            "failure_stage": getattr(result, "failure_stage", None),
             "elapsed_seconds": getattr(result, "elapsed_seconds", 0.0),
             "message_count": message_count,
             "message_type_counts": message_type_counts,
@@ -225,7 +241,11 @@ def _log_run_summary(
             "deadline_prefetch_count_complete": getattr(
                 result, "deadline_prefetch_count_complete", True
             ),
-            "provider_diagnostics": getattr(chat, "diagnostics", {}),
+            "provider_diagnostics": (
+                result.provider_diagnostics
+                if result is not None
+                else getattr(chat, "diagnostics", {})
+            ),
             "output_writers": writer_summaries,
         }
     )
@@ -294,6 +314,7 @@ def _verify_capture_outputs(
                 msg = "Provider capture inspection requires review."
                 result.success = False
                 result.error_message = msg
+                result.failure_stage = "verification"
                 log("error", msg)
         if checkpoint is not None and checkpoint_bound and chat is not None:
             checkpoint.save(chat, result.message_count)
@@ -302,6 +323,7 @@ def _verify_capture_outputs(
         if result.error_message is None:
             result.termination_reason = "error"
         result.error_message = result.error_message or str(error)
+        result.failure_stage = result.failure_stage or "verification"
         log("error", str(error))
 
 
@@ -323,6 +345,7 @@ def _complete_run_record(
     ):
         result.success = False
         result.error_message = "Selected replay did not complete without record loss."
+        result.failure_stage = "completion"
         log("error", result.error_message)
     try:
         if manifest is not None and manifest.valid:
@@ -335,6 +358,7 @@ def _complete_run_record(
             )
     except (OSError, ValueError) as error:
         result.success = False
+        result.failure_stage = result.failure_stage or "manifest"
         message = f"Unable to write run manifest: {error}"
         if result.error_message is None:
             result.error_message = message
@@ -367,12 +391,15 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     checkpoint_resources = ExitStack()
     checkpoint_bound = False
     verification_bound = False
+    phase = "initialization"
     if run_config.verify_output:
         result.parity_status = "not_run"
 
     try:
         if run_config.run_manifest:
-            manifest = RunManifest(run_config.run_manifest, run_config.resume)
+            manifest = RunManifest(
+                run_config.run_manifest, run_config.resume, parameters=chat_params
+            )
         if run_config.verify_output:
             validate_verification(chat_params, resume=bool(run_config.resume))
         if run_config.resume:
@@ -385,6 +412,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                     "after overlap suppression.",
                 )
         downloader = downloader_cls(**init_params)
+        phase = "bootstrap"
         chat = downloader.get_chat(**chat_params)
         if manifest is not None:
             manifest.bind(chat)
@@ -403,6 +431,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
             compact_console=run_config.compact_console,
         )
 
+        phase = "capture"
         source = iter(chat)
         while True:
             try:
@@ -437,10 +466,12 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         ValueError,
     ) as e:
         primary_error = True
+        result.failure_stage = phase
         result.error_message = _classify_run_error(e)
         log("error", result.error_message)
     except Exception as error:  # noqa: BLE001 — preserve manifest and checkpoint on unexpected failures
         primary_error = True
+        result.failure_stage = phase
         result.error_message = _classify_run_error(error)
         log("error", result.error_message)
     except KeyboardInterrupt:
@@ -448,6 +479,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         result.interrupted = True
         result.termination_reason = "interrupted"
         result.error_message = "Keyboard Interrupt"
+        result.failure_stage = phase
         if propagate_interrupt:
             raise
         log("info", "Capture interrupted by user; outputs finalized on shutdown.")
@@ -465,6 +497,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                         primary_error = True
                         result.success = False
                         result.termination_reason = "error"
+                        result.failure_stage = "shutdown"
                         result.error_message = _classify_run_error(
                             suppressed_close_error
                         )
@@ -473,10 +506,12 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 primary_error = True
                 result.success = False
                 result.termination_reason = "error"
+                result.failure_stage = "shutdown"
                 result.error_message = _classify_run_error(error)
                 log("error", result.error_message)
                 checkpoint_bound = False
                 verification_bound = False
+            result.observe_provider(chat, downloader)
             result.observe_shutdown(chat)
             result.elapsed_seconds = monotonic() - started
             _verify_capture_outputs(

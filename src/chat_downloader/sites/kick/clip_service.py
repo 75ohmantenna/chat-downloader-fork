@@ -405,7 +405,7 @@ def get_clip_chat(
         start_dt = metadata.started_at + timedelta(seconds=clip_start)
         end_dt = metadata.started_at + timedelta(seconds=clip_end)
         log("info", f"Clip time window: {start_dt} to {end_dt}")
-        return Chat(
+        chat = Chat(
             ReplaySource(
                 metadata.channel_id,
                 start_dt,
@@ -423,6 +423,12 @@ def get_clip_chat(
             start_time=clip_start,
             id=clip_id,
         )
+        chat._request_window = {
+            "start_time": clip_start,
+            "end_time": clip_end,
+            "time_basis": "clip",
+        }
+        return chat
 
     channel_id, _chatroom_id, source_title, vod_start, vod_end = cast(
         "tuple[str, str, str, datetime, datetime]",
@@ -446,7 +452,7 @@ def get_clip_chat(
     relative_start = max(0.0, (start_dt - clip_origin).total_seconds())
 
     log("info", f"Clip time window: {start_dt} to {end_dt}")
-    return Chat(
+    chat = Chat(
         ReplaySource(
             channel_id,
             start_dt,
@@ -464,3 +470,9 @@ def get_clip_chat(
         start_time=relative_start,
         id=clip_id,
     )
+    chat._request_window = {
+        "start_time": relative_start,
+        "end_time": max(0.0, (end_dt - clip_origin).total_seconds()),
+        "time_basis": "clip",
+    }
+    return chat

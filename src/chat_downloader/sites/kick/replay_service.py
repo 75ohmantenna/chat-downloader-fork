@@ -125,7 +125,7 @@ def get_vod_chat(
     transport = getattr(api_client, "diagnostics", {})
     if isinstance(transport, dict):
         diagnostics["transport"] = transport
-    return Chat(
+    chat = Chat(
         ReplaySource(
             channel_id,
             start_dt,
@@ -143,6 +143,12 @@ def get_vod_chat(
         duration=max(0.0, (end_dt - start_dt).total_seconds()),
         id=video_id,
     )
+    chat._request_window = {
+        "start_time": (start_dt - vod_start_dt).total_seconds(),
+        "end_time": (end_dt - vod_start_dt).total_seconds(),
+        "time_basis": "recording",
+    }
+    return chat
 
 
 def _iter_vod_messages(

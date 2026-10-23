@@ -61,8 +61,25 @@ def merge_bootstrap_diagnostics(
 class BootstrapRequests:
     """Count actual bootstrap HTTP calls across retries without retaining bodies."""
 
-    def __init__(self) -> None:
+    def __init__(self, sink: dict[str, object] | None = None) -> None:
         self.diagnostics: dict[str, object] = dict.fromkeys(_BOOTSTRAP_COUNTERS, 0)
+        self._sink = sink
+        if sink is not None:
+            for key in _BOOTSTRAP_COUNTERS:
+                sink.setdefault(key, 0)
+
+    def increment(self, key: str) -> None:
+        """Retain a counter locally and in the active retrieval's failure ledger."""
+        self.diagnostics[key] = get_int(self.diagnostics, key) + 1
+        if self._sink is not None:
+            self._sink[key] = get_int(self._sink, key) + 1
+
+    def profile(self, name: str) -> None:
+        """Keep initial and active profiles even when bootstrap raises."""
+        for target in (self.diagnostics, self._sink):
+            if target is not None:
+                target.setdefault("initial_request_profile", name)
+                target["active_request_profile"] = name
 
     def request(
         self,
@@ -70,19 +87,14 @@ class BootstrapRequests:
         url: str,
         **kwargs: object,
     ) -> requests.Response:
-        self.diagnostics["bootstrap_request_count"] = (
-            get_int(self.diagnostics, "bootstrap_request_count") + 1
-        )
+        self.increment("bootstrap_request_count")
         try:
             response = method(url, **kwargs)
         except (RequestException, OSError):
-            self.diagnostics["bootstrap_network_error_count"] = (
-                get_int(self.diagnostics, "bootstrap_network_error_count") + 1
-            )
+            self.increment("bootstrap_network_error_count")
             raise
-        self.diagnostics["bootstrap_http_error_count"] = get_int(
-            self.diagnostics, "bootstrap_http_error_count"
-        ) + int(getattr(response, "status_code", 200) >= 400)
+        if getattr(response, "status_code", 200) >= 400:
+            self.increment("bootstrap_http_error_count")
         return response
 
 

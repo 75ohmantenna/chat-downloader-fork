@@ -4,15 +4,15 @@
 
 from __future__ import annotations
 
-import os
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
 from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.output_dispatch import _expand_output_file_name
+from chat_downloader.utils.filename_utils import output_path_identity
+from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
@@ -154,27 +154,30 @@ def _configure_output_writer(
         return
 
     outputs = request.output if isinstance(request.output, list) else [request.output]
-    seen: set[tuple[object, ...]] = set()
+    seen: dict[tuple[object, ...], str] = {}
     for output_file in outputs:
         expanded_path = _expand_output_file_name(
             output_file,
             title=getattr(chat, "title", None),
             video_id=getattr(chat, "id", None),
         )
-        canonical_path = os.path.normcase(os.path.realpath(expanded_path))
-        try:
-            file_stat = Path(canonical_path).stat()
-        except OSError:
-            identity: tuple[object, ...] = ("path", canonical_path)
-        else:
-            identity = ("inode", file_stat.st_dev, file_stat.st_ino)
+        # Unknown lazy metadata cannot establish that different templates will
+        # identify one file. Keep them distinct until real metadata is known.
+        unresolved = ("{title}" in output_file and chat.title is None) or (
+            "{id}" in output_file and chat.id is None
+        )
+        identity = output_path_identity(output_file if unresolved else expanded_path)
+        suffix = expanded_path.rsplit(".", 1)[-1].lower()
         if identity in seen:
+            if seen[identity] != suffix:
+                msg = "Different output formats require distinct files."
+                raise ValueError(msg)
             log(
                 "warning",
                 f"Duplicate output path '{output_file}' — skipping.",
             )
             continue
-        seen.add(identity)
+        seen[identity] = suffix
         chat.attach_writer(
             writer_factory(
                 output_file,
@@ -190,6 +193,12 @@ def configure_chat(
 ) -> None:
     """Configure limits, timeouts, formatting, and output for a chat."""
     chat.site = site_object
+    if chat._request_window is None:
+        chat._request_window = {
+            "start_time": ensure_seconds(request.start_time),
+            "end_time": ensure_seconds(request.end_time),
+            "time_basis": "clip" if chat.video_type == "clip" else "recording",
+        }
     _configure_formatter(chat, request.format_file, request.format)
     _configure_output_writer(chat, request)
     # Start workers only after configuration succeeds; limit precedes timeout.

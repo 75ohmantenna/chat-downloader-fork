@@ -261,8 +261,10 @@ bootstrap calls preceding a returned chat, including actual page retries.
 also retain `initial_request_profile`, `active_request_profile`, and the chosen
 `chat_view` label. The view label uses `Top chat` or `Live chat` with a `replay`
 suffix when polling the replay endpoint, independent of the client profile's
-bootstrap token labels. Bootstrap failures that prevent creation of a chat still
-require debug logs; there is no chat diagnostic object to attach to that run.
+bootstrap token labels. A request-scoped setup ledger preserves these counters
+even if bootstrap fails before a chat is created. The run result, debug summary,
+and manifest retain that ledger after sessions close; a new retrieval resets
+it even when the provider session is reused.
 
 The offline [YouTube capture inspector](development-workflow-guide.md#youtube-capture-inspection)
 reports these counters alongside missing source timestamps, zero-offset mobile
@@ -296,6 +298,16 @@ negative paid and ticker items stay aligned. Malformed offsets fall back to
 the renderer's display timing instead of aborting the replay or replacing
 valid nested timing. Clip offsets are applied once after nested renderer timing
 is merged.
+
+Replay records without a source `timestamp` expose a `timing` object with
+`offset_source: "provider_replay"`, `absolute_timestamp_available: false`, and
+`zero_offset_ambiguous`. The last field is true at offset zero because mobile
+responses may collapse preroll timing to that floor. Supplied positive offsets
+retain their precision. The downloader preserves absent timestamps rather than
+deriving an absolute timestamp from the broadcast start. One warning per
+retrieval explains this degradation, and `replay_timestamp_missing_count` and
+`replay_zero_offset_without_timestamp_count` count emitted affected records.
+These observations do not establish record loss or fail completion checks.
 
 Resume checkpoints retain signed replay offsets. A negative resume boundary
 starts polling at the zero preroll floor while retaining the signed presentation
@@ -336,6 +348,12 @@ is checked even when `next` exposes tokens, so unusable Web replay tokens do not
 bypass profile recovery. A first replay response with HTTP 400
 `INVALID_ARGUMENT` also permits bounded profile fallback, refreshing bootstrap
 tokens and config for the new profile while preserving seek and clip bounds.
+Recovery logs identify the rejected and replacement profiles and announce a
+structurally accepted replacement response. The manifest and run diagnostics
+retain `initial_replay_recovery_attempt_count` and
+`initial_replay_recovery_success_count`; recovered HTTP errors remain in
+`http_error_count`. An intermediate rejection is logged at debug level, while
+an unrecovered terminal failure still produces an error and nonzero CLI status.
 Once any response is accepted, this error
 is terminal; retrieval does not restart and duplicate earlier messages. A
 generic HTTP 400 reports request rejection rather than claiming the video has

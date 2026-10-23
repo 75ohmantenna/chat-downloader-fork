@@ -37,6 +37,11 @@ def test_recorded_web_metadata_and_four_reverse_pages_preserve_replay_contract()
         assert chat.status == "completed"
         assert chat.start_time == 600
         assert chat.duration == 120
+        assert chat._request_window == {
+            "start_time": 600,
+            "end_time": 720,
+            "time_basis": "recording",
+        }
         assert primary.requested_urls[:2] == [
             f"https://kick.com/api/v1/video/{video_id}",
             "https://kick.com/api/v2/channels/sam",

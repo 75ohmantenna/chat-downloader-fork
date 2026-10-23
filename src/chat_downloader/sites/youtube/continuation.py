@@ -288,6 +288,7 @@ class _ContinuationLoop:
         self.diagnostics = diagnostics if diagnostics is not None else {}
         self.paid_events = PaidEventCache()
         self._accepted_response = False
+        self._initial_recovery_pending = False
         self.ctx: _ChatContext
         self.progress = _ContinuationProgress(
             _YT_MAX_NO_PROGRESS_POLLS, _YT_MAX_PROFILE_FALLBACKS
@@ -521,10 +522,21 @@ class _ContinuationLoop:
             or not get_str(self.initial_info, "original_video_id")
         ):
             return False
+        rejected_profile = self.downloader._request_profile or "youtube_web"
         if not self._recover_incomplete_continuation(
             "a rejected initial replay request"
         ):
             return False
+        self._initial_recovery_pending = True
+        self.diagnostics["initial_replay_recovery_attempt_count"] = (
+            get_int(self.diagnostics, "initial_replay_recovery_attempt_count") + 1
+        )
+        log(
+            "info",
+            f"Initial YouTube replay profile {rejected_profile} was rejected "
+            "(HTTP 400); refreshing with profile: "
+            f"{self.downloader._request_profile}",
+        )
         details, ytcfg = self.downloader._get_initial_video_info(
             get_str(self.initial_info, "original_video_id"), self.params
         )
@@ -538,6 +550,20 @@ class _ContinuationLoop:
         self.ytcfg = ytcfg
         self.ctx = self._build_context()
         return True
+
+    def _record_accepted_response(self) -> None:
+        """Mark recovery successful only after a structurally valid response."""
+        self._accepted_response = True
+        if self._initial_recovery_pending:
+            self._initial_recovery_pending = False
+            self.diagnostics["initial_replay_recovery_success_count"] = (
+                get_int(self.diagnostics, "initial_replay_recovery_success_count") + 1
+            )
+            log(
+                "info",
+                "YouTube initial replay recovery succeeded with profile: "
+                f"{self.downloader._request_profile}",
+            )
 
     # -- main loop ----------------------------------------------------------
 
@@ -571,10 +597,9 @@ class _ContinuationLoop:
             if self._retry_rejected_initial_replay(yt_info):
                 continue
             self._handle_continuation_response(yt_info, continuation_params)
-            self._accepted_response = True
 
             info = multi_get(yt_info, "continuationContents", "liveChatContinuation")
-            if not info:
+            if not isinstance(info, dict) or not info:
                 summary = summarize_continuation_payload(yt_info)
                 msg = (
                     "Missing continuationContents.liveChatContinuation in "
@@ -583,6 +608,7 @@ class _ContinuationLoop:
                 )
                 raise IncompleteContinuationError(msg)
 
+            self._record_accepted_response()
             self._capture.capture("youtube-continuation-response", yt_info)
 
             actions = info.get("actions") or []

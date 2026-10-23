@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.output.capture_parity import audit_capture
+from chat_downloader.utils.filename_utils import output_path_identity
 
 from .capture_manifest import _capture_outputs
 
@@ -82,12 +83,22 @@ def verify_capture(
 def validate_verification(parameters: dict[str, Any], *, resume: bool) -> None:
     """Reject invalid pairs before lazy outputs can open or truncate anything."""
     outputs = parameters.get("output")
-    paths = (
-        [Path(name) for name in outputs]
-        if isinstance(outputs, list) and len(outputs) == 2
-        else []
-    )
-    _verification_pair(paths)
+    names = outputs if isinstance(outputs, list) else [outputs] if outputs else []
+    unique = {
+        (output_path_identity(path), path.suffix.lower()): path
+        for name in names
+        for path in (Path(name),)
+    }
+    paths = list(unique.values())
+    # Different templates may expand to the same destination. Defer their
+    # cardinality check until metadata is available, before any writer opens.
+    templated = any("{" in name for name in names)
+    if not templated or {path.suffix.lower() for path in paths} != {".jsonl", ".txt"}:
+        _verification_pair(paths)
+    identities = [output_path_identity(path) for path in paths]
+    if len(set(identities)) != len(identities):
+        msg = "Output verification requires distinct files."
+        raise ValueError(msg)
     if parameters.get("overwrite") is False and not resume:
         msg = "Append verification requires a resume checkpoint."
         raise ValueError(msg)

@@ -11,7 +11,7 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import CaptchaChallengeRequired, ParsingError
-from chat_downloader.utils.json_types import get_dict, get_int, get_str
+from chat_downloader.utils.json_types import get_dict, get_str
 
 from .client_requests_bootstrap import BootstrapRequests, get_innertube_video_bootstrap
 from .client_requests_initial import _get_initial_info
@@ -46,7 +46,7 @@ class YouTubeVideoMetadataCoreMixin:
             original_url = f"{_YT_HOME}/watch?v={video_id}"
 
         proto = cast("YouTubeDownloaderProto", self)
-        bootstrap = BootstrapRequests()
+        bootstrap = BootstrapRequests(getattr(proto, "_request_diagnostics", None))
         initial: tuple[JSONDict, JSONDict, JSONDict] | None = None
         if (
             video_type != "clip"
@@ -70,7 +70,7 @@ class YouTubeVideoMetadataCoreMixin:
                     raise ParsingError(msg)  # noqa: TRY301 - recover through the page
             except (RequestException, OSError, ValueError, ParsingError) as error:
                 initial = None
-                bootstrap.diagnostics["bootstrap_fallback_count"] = 1
+                bootstrap.increment("bootstrap_fallback_count")
                 log(
                     "warning",
                     "Falling back to YouTube watch-page bootstrap after the "
@@ -95,9 +95,7 @@ class YouTubeVideoMetadataCoreMixin:
                     "Falling back to YouTube InnerTube bootstrap after the "
                     f"watch-page bootstrap failed ({type(error).__name__}).",
                 )
-                bootstrap.diagnostics["bootstrap_fallback_count"] = (
-                    get_int(bootstrap.diagnostics, "bootstrap_fallback_count") + 1
-                )
+                bootstrap.increment("bootstrap_fallback_count")
                 initial = get_innertube_video_bootstrap(
                     video_id,
                     partial(bootstrap.request, proto._session_post),

@@ -104,7 +104,7 @@ def test_youtube_clip_entry_updates_times_without_mutating_request() -> None:
     )
     downloader = _Streams(clip_start_time=10, clip_end_time=70)
 
-    downloader.get_chat_by_clip_id("abc", request)
+    chat = downloader.get_chat_by_clip_id("abc", request)
 
     assert downloader.initial_request is request
     assert request.start_time == 5
@@ -112,6 +112,11 @@ def test_youtube_clip_entry_updates_times_without_mutating_request() -> None:
     assert isinstance(downloader.message_params, ChatRequest)
     assert downloader.message_params.start_time == 15
     assert downloader.message_params.end_time == 70
+    assert chat._request_window == {
+        "start_time": 15,
+        "end_time": 70,
+        "time_basis": "recording",
+    }
 
 
 def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -> None:
