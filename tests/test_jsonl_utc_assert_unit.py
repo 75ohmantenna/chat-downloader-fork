@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 from typing import TYPE_CHECKING
 
@@ -20,7 +20,7 @@ def test_jsonl_rejects_naive_datetime(tmp_path: Path) -> None:
     writer = JsonLinesContinuousWriter(str(tmp_path / "out.jsonl"))
     try:
         with pytest.raises(ValueError, match="naive datetime"):
-            writer.write({"timestamp": datetime.datetime(2024, 1, 1, 12, 0, 0)})  # noqa: DTZ001 — intentional naive datetime to test rejection
+            writer.write({"timestamp": dt.datetime(2024, 1, 1, 12, 0, 0)})  # noqa: DTZ001 — intentional naive datetime to test rejection
     finally:
         writer.close()
 
@@ -29,7 +29,7 @@ def test_jsonl_writes_pre_serialized_utc_datetime(tmp_path: Path) -> None:
     path = tmp_path / "out.jsonl"
     writer = JsonLinesContinuousWriter(str(path))
     try:
-        aware = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
+        aware = dt.datetime(2024, 1, 1, 12, 0, 0, tzinfo=dt.UTC)
         writer.write({"ts_iso": aware.isoformat(), "ok": True})
     finally:
         writer.close()
@@ -43,7 +43,7 @@ def test_jsonl_writes_pre_serialized_utc_datetime(tmp_path: Path) -> None:
 def test_jsonl_rejects_raw_utc_aware_datetime(tmp_path: Path) -> None:
     writer = JsonLinesContinuousWriter(str(tmp_path / "out.jsonl"))
     try:
-        aware = datetime.datetime(2024, 1, 1, 12, 0, 0, tzinfo=datetime.UTC)
+        aware = dt.datetime(2024, 1, 1, 12, 0, 0, tzinfo=dt.UTC)
         with pytest.raises(TypeError, match="not JSON serializable"):
             writer.write({"timestamp": aware})
     finally:
@@ -66,7 +66,7 @@ def test_jsonl_assert_only_inspects_top_level(tmp_path: Path) -> None:
     """The JSON encoder rejects nested datetimes skipped by the top-level guard."""
     writer = JsonLinesContinuousWriter(str(tmp_path / "out.jsonl"))
     try:
-        nested = {"nested": {"ts": datetime.datetime(2024, 1, 1)}}  # noqa: DTZ001 — intentional nested naive datetime
+        nested = {"nested": {"ts": dt.datetime(2024, 1, 1)}}  # noqa: DTZ001 — intentional nested naive datetime
         with pytest.raises(TypeError, match="not JSON serializable"):
             writer.write(nested)
     finally:

@@ -634,6 +634,30 @@ def test_public_snapshots_only_emit_changed_values_and_restart_changed_categorie
         transport.recv()
 
 
+def test_public_viewer_snapshots_track_offline_transitions_with_empty_counts():
+    from chat_downloader.formatting.format import ItemFormatter
+
+    transport = public_state_transport()
+    for channel, expected in [
+        ({"livestream": {"id": 123}}, "viewer count"),
+        ({"livestream": None}, "viewer count: offline"),
+        ({"livestream": {"id": 123}}, "viewer count"),
+    ]:
+        transport._state.metadata.return_value = channel
+        transport._next_poll = 0
+        assert transport.recv()["event"] == "kick:public_state"
+        frame = transport.recv()
+        assert frame["event"] == "kick:viewer_count"
+        item = dispatch_event(frame, received_timestamp=1_577_836_800_000_000)
+        assert ItemFormatter().format(item, "kick") == (
+            "2020-01-01 00:00:00 [received] | [channel metadata] "
+            f"{expected.capitalize()}"
+        )
+        transport._next_poll = 0
+        assert transport.recv() is None
+    transport.close()
+
+
 def test_public_poll_failure_is_visible_and_does_not_drop_chat():
     transport = public_state_transport()
     transport._state.metadata.side_effect = RequestException("offline")
@@ -830,8 +854,10 @@ def test_public_subscription_cancellation_prevents_other_feed_and_readers():
     transport.close()
 
 
+@pytest.mark.parametrize("public_events", [False, True])
 def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
     monkeypatch,
+    public_events,
 ):
     channel = {"id": 123, "chatroom": {"id": 456}, "livestream": None}
     state_session = FakeKickSession([FakeResponse(payload=channel)] * 2)
@@ -889,7 +915,9 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
         "data": {"messages": []}
     }
     chat = live_service.get_chat_by_channel(
-        downloader, "slug", ChatRequest(message_groups=["all"])
+        downloader,
+        "slug",
+        ChatRequest(message_groups=["all" if public_events else "messages"]),
     )
     try:
         for message in chat:
@@ -899,13 +927,18 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
             pytest.fail("negotiated chat record was not emitted")
     finally:
         chat.close()
-    assert all(socket.closed for socket in sockets)
-    assert state_session.close_calls == 1
-    assert all(session.close_calls == 1 for session in sessions)
+    assert sockets[0].closed
+    assert sockets[1].closed is public_events
+    assert state_session.close_calls == int(public_events)
+    assert sessions[0].close_calls == 1
+    assert sessions[1].close_calls == int(public_events)
     assert chat.diagnostics["pusher_connection_count"] == 1
-    assert chat.diagnostics["centrifugo_connection_count"] == 1
-    assert [call.args[0].split("/")[2] for call in connector.call_args_list] == [
-        "ws-us2.pusher.com",
-        "realtime.us-east-1.platform.kick.com",
-    ]
+    assert chat.diagnostics["centrifugo_connection_count"] == int(public_events)
+    assert chat.diagnostics["public_state_poll_count"] == int(public_events)
+    expected_hosts = ["ws-us2.pusher.com"]
+    if public_events:
+        expected_hosts.append("realtime.us-east-1.platform.kick.com")
+    assert [
+        call.args[0].split("/")[2] for call in connector.call_args_list
+    ] == expected_hosts
     assert connector.call_args.kwargs["origin"] == "https://kick.com"

@@ -224,8 +224,43 @@ def test_moderation_receive_timestamp_is_only_a_fallback(formatter):
     )
 
 
+@pytest.mark.parametrize("followers_count", ["447259", 447259, "0", 0, None, ""])
+def test_channel_metadata_renders_followers_in_txt(
+    formatter, tmp_path, followers_count
+):
+    frame = load_fixture("public_state_followers.json")
+    frame["data"]["followers_count"] = followers_count
+    item = dispatch_event(frame, received_timestamp=1_791_928_567_696_701)
+    assert item is not None
+    path = tmp_path / "capture.txt"
+    writer = TextContinuousWriter(str(path))
+    try:
+        writer.write(formatter.format(item, "kick"))
+    finally:
+        writer.close()
+    suffix = "" if followers_count in (None, "") else f" Followers: {followers_count}"
+    assert path.read_text(encoding="utf-8") == (
+        f"2026-10-13 21:56:07 [received] | [channel metadata]{suffix}\n"
+    )
+    assert item["metadata"]["data"] == frame["data"]
+
+
+@pytest.mark.parametrize(
+    "value", [True, False, -1, 4.2, "-1", "4.2", "unknown", "٤٢", {}, []]
+)
+def test_channel_metadata_omits_invalid_follower_counts(formatter, value):
+    frame = load_fixture("public_state_followers.json")
+    frame["data"]["followers_count"] = value
+    item = dispatch_event(frame, received_timestamp=1_791_928_567_696_701)
+    assert formatter.format(item, "kick") == (
+        "2026-10-13 21:56:07 [received] | [channel metadata]"
+    )
+    assert item["metadata"]["data"] == frame["data"]
+
+
 def test_channel_metadata_renders_title_and_start_time(formatter):
     payload = load_fixture("channel_live.json")
+    payload["followers_count"] = 447259
     payload["livestream"].update(
         {
             "session_title": "Camp Looksmax 24/7 Marathon Day 3 | !apply !clipping",
@@ -241,7 +276,7 @@ def test_channel_metadata_renders_title_and_start_time(formatter):
     assert item is not None
     rendered = formatter.format(item, format_name="kick")
     details = (
-        "[channel metadata] Title: Camp Looksmax 24/7 Marathon Day 3"
+        "[channel metadata] Followers: 447259 Title: Camp Looksmax 24/7 Marathon Day 3"
         " | !apply !clipping Start_time: 2026-10-03 17:50:06"
     )
     assert rendered == f"2026-10-04 14:04:44 [received] | {details}"

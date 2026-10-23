@@ -13,10 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import FormatFileNotFound, FormatNotFound
 from chat_downloader.formatting.summaries import (
+    format_count,
     format_goal,
     format_leaderboard,
     format_nonnegative_integer,
     format_prediction,
+    format_viewer_count,
 )
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_int, get_list, get_str
@@ -94,6 +96,8 @@ def _format_poll_metadata(value: object) -> str:
 
 _SUMMARY_FORMATTERS: dict[str, Callable[[object], str | None]] = {
     "poll": _format_poll_metadata,
+    "count": format_count,
+    "viewer_count": format_viewer_count,
     "goal": format_goal,
     "prediction": format_prediction,
     "nonnegative_integer": format_nonnegative_integer,
@@ -269,7 +273,7 @@ class ItemFormatter:
             return _SAFE_FORMATTER.format(template, value)
 
         omit_if_false = field_config.get(self.KEY_OMIT_IF_FALSE) is True
-        if omit_if_false and not value:
+        if omit_if_false and not value and field_config.get(self.KEY_FORMAT) != "count":
             return ""
 
         template = field_config.get(self.KEY_TEMPLATE, self.DEFAULT_TEMPLATE)
@@ -317,8 +321,12 @@ class ItemFormatter:
         )
         if summary is not None:
             return summary(value)
-        if format_string == "leaderboard":
-            return format_leaderboard(value, get_str(field_config, "unit"))
+        if format_string in ("leaderboard", "subscription_leaderboard"):
+            return format_leaderboard(
+                value,
+                get_str(field_config, "unit"),
+                subscription_gifts=format_string == "subscription_leaderboard",
+            )
         if format_string == "iso8601":
             try:
                 return microseconds_to_timestamp(parse_iso8601(value))

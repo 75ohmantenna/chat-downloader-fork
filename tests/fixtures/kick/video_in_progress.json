@@ -1,0 +1,17 @@
+{
+  "provenance": {
+    "source": "Kick live debug report dated 2026-10-22, issue 8",
+    "curation": "Reconstructed metadata example from the reported is_live=true and duration=0 fields. Identity and unrelated fields are synthetic; this is not a captured response."
+  },
+  "response": {
+    "uuid": "01a09138-ec70-7c4c-a2b7-47a9ed4fc9b4",
+    "is_live": true,
+    "livestream": {
+      "is_live": true,
+      "session_title": "Ongoing broadcast",
+      "start_time": "2026-10-22T23:00:00Z",
+      "duration": 0,
+      "channel": {"id": 12345, "slug": "examplechannel"}
+    }
+  }
+}

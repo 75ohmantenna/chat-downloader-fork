@@ -162,3 +162,60 @@ def test_routes_identifiers_request_and_owned_client(monkeypatch, downloader, ki
         )
         assert builder.call_args.kwargs["api_client"] is downloader._kick_client
     assert args[2].start_time == 5
+
+
+def test_nondefault_foreign_options_warn_without_exposing_values(
+    monkeypatch, client_factory
+):
+    logs = []
+    monkeypatch.setattr(
+        extractor, "log", lambda level, text: logs.append((level, text))
+    )
+    builder = MagicMock(return_value="CHAT")
+    monkeypatch.setattr(extractor, "build_channel_chat", builder)
+    downloader = KickChatDownloader(
+        request_profile="youtube_web",
+        auto_profile_fallback=False,
+        twitch_client_id="private-client-value",
+    )
+    try:
+        assert (
+            downloader.get_chat_by_channel(
+                "creator",
+                {
+                    "chat_type": "top",
+                    "ignore": ["private-video-id"],
+                    "youtube_replay_poll_interval": 2,
+                    "buffer_size": 10,
+                },
+            )
+            == "CHAT"
+        )
+        assert len(logs) == 2
+        assert all(
+            level == "warning" and "not applicable to kick.com" in text
+            for level, text in logs
+        )
+        text = " ".join(text for _, text in logs)
+        for option in (
+            "request_profile",
+            "auto_profile_fallback",
+            "twitch_client_id",
+            "chat_type",
+            "ignore",
+            "youtube_replay_poll_interval",
+            "buffer_size",
+        ):
+            assert f"--{option}" in text
+        assert "private-client-value" not in text
+        assert "private-video-id" not in text
+    finally:
+        downloader.close()
+
+
+def test_default_foreign_options_do_not_warn(monkeypatch, downloader):
+    logs = []
+    monkeypatch.setattr(extractor, "log", lambda *args: logs.append(args))
+    monkeypatch.setattr(extractor, "build_channel_chat", MagicMock())
+    downloader.get_chat_by_channel("creator", {})
+    assert logs == []

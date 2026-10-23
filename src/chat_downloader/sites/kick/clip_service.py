@@ -29,7 +29,7 @@ from .errors import KickCountryBlocked, KickError
 from .replay_service import ReplaySource
 from .replay_window import _apply_request_window
 from .request_retry import fetch_with_retry
-from .vod_metadata import _resolve_vod_window, fetch_vod_metadata
+from .vod_metadata import _reject_live_vod, _resolve_vod_window, fetch_vod_metadata
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
@@ -349,6 +349,8 @@ def _resolve_clip_source_vod_window(
 ) -> tuple[str, str, str, datetime, datetime]:
     """Validate the source duration needed to bound clip fallback decisions."""
     livestream = get_dict(data, "livestream")
+    _reject_live_vod(data, username)
+    _reject_live_vod(livestream, username)
     if livestream:
         duration_ms = livestream.get("duration")
         if (

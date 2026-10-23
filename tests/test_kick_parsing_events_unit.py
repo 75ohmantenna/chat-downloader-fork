@@ -26,6 +26,21 @@ from chat_downloader.sites.kick.parsing.events import dispatch_event
 from tests.kick_helpers import load_fixture, pusher_frame, raw_message
 
 
+def test_realtime_keepalives_are_counted_without_repeated_debug_noise(monkeypatch):
+    logs = []
+    diagnostics = []
+    monkeypatch.setattr(events.logger, "debug", lambda *args: logs.append(args))
+    for name in [PUSHER_PING, "pusher:pong", PUSHER_CONNECTION_ESTABLISHED]:
+        assert (
+            dispatch_event({"event": name}, record_diagnostic=diagnostics.append)
+            is None
+        )
+    assert diagnostics == ["control_frame_count"] * 3
+    assert logs == [
+        ("Ignoring Kick realtime control event: %s", PUSHER_CONNECTION_ESTABLISHED)
+    ]
+
+
 @pytest.fixture
 def captured(monkeypatch):
     samples = []

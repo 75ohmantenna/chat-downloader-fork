@@ -81,9 +81,13 @@ class ReplaySource:
         """Retrieve the next chronological replay record."""
         return next(self.source)
 
+    def request_stop(self) -> None:
+        """Cancel pagination even while a timed worker owns generator advancement."""
+        self.cancelled.set()
+
     def close(self) -> None:
         """Cancel pending pagination and close an idle generator immediately."""
-        self.cancelled.set()
+        self.request_stop()
         try:
             self.source.close()
         except ValueError as error:
@@ -201,11 +205,11 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
 ) -> Generator[JSONDict, None, None]:
     """Yield replay through Kick's legacy newest-first cursor protocol."""
     state = diagnostics if diagnostics is not None else {}
+    if msg_filter is None:
+        msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     if end_dt <= start_dt:
         state["termination_reason"] = "empty_window"
         return
-    if msg_filter is None:
-        msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
 
     started = last_progress = monotonic()
     log("info", "Collecting Kick replay history before chronological output.")
@@ -234,6 +238,7 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
                     cursor=cursor,
                 ),
                 request,
+                cancelled=cancelled,
             )
             if cancelled is not None and cancelled.is_set():
                 return

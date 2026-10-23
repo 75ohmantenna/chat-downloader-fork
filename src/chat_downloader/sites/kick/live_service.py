@@ -75,6 +75,20 @@ _RECONNECT_BACKFILL_PAGE_LIMIT = 100
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
 
 
+def _stream_start_time(value: object) -> int | None:
+    """Return exact epoch microseconds only for a full, usable UTC timestamp."""
+    if not isinstance(value, str) or len(value) < 19 or value[10] not in {"T", " "}:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        delta = parsed.astimezone(UTC) - _EPOCH
+    except (ValueError, OverflowError):
+        return None
+    return (delta.days * 86_400 + delta.seconds) * 1_000_000 + delta.microseconds
+
+
 def _successful_frame_labels(message: JSONDict) -> list[str]:
     """Return bounded capture categories without provider text in labels."""
     message_type = message.get("message_type")
@@ -271,6 +285,7 @@ def get_chat_by_channel(
         control,
         title=title,
         status=status,
+        start_time=_stream_start_time(get_dict(data, "livestream").get("start_time")),
         video_type="video",
         id=username,
         diagnostics=diagnostics.summary,
@@ -485,6 +500,13 @@ def _iter_reconnect_backfill(
     start_timestamp -= start_timestamp % 1_000_000
     start_dt = _datetime_from_microseconds(start_timestamp)
     end_dt = _datetime_from_microseconds(history_query_end)
+    log(
+        "debug",
+        "Kick subscription confirmed; recovering missed messages from "
+        f"{start_dt.isoformat()} to {end_dt.isoformat()} "
+        f"(provider clock offset={provider_clock_offset / 1_000_000:.3f}s, "
+        f"at most {_RECONNECT_BACKFILL_PAGE_LIMIT} history pages).",
+    )
     recovered_messages: list[JSONDict] = []
     raw_history = iter_reverse_history(
         downloader._kick_client,
@@ -564,9 +586,16 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
     control: KickLiveIterator | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield normalized live chat messages for a channel."""
+    msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     if transport_factory is None:
+        public_events = any(
+            kind != "text_message" and msg_filter.should_add({"message_type": kind})
+            for kinds in MESSAGE_GROUPS.values()
+            for kind in kinds
+        )
         transport_factory = partial(
             KickPublicTransport,
+            public_events=public_events,
             username=username,
             channel_id=channel_id,
             trust_env=getattr(getattr(downloader, "session", None), "trust_env", True),
@@ -579,7 +608,6 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         )
     frame_iterator = frame_iterator or read_frames
 
-    msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     seen_message_cache = _SeenMessageCache(limit=_KICK_LIVE_SEEN_MESSAGE_LIMIT)
     deleted_message_cache = _DeletedMessageCache()
     successful_frame_capture = BoundedSampleCapture(
@@ -731,12 +759,6 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                                 "Kick reconnect backfill cannot cover the "
                                 f"earliest {gap / 1_000_000:.3f}s of the outage.",
                             )
-                        log(
-                            "debug",
-                            "Kick WebSocket subscription confirmed; checking a "
-                            "startup interval or ten-second reconnect baseline "
-                            "widened for bounded clock or delivery skew.",
-                        )
                         for backfilled_message in _iter_reconnect_backfill(
                             downloader,
                             channel_id,

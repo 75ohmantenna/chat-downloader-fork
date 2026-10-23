@@ -227,7 +227,8 @@ def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event ac
     # --- Pusher control frames (silently ignore) ------------------------------
     if event_name in _KNOWN_CONTROL_EVENTS:
         _record_diagnostic(record_diagnostic, "control_frame_count")
-        logger.debug("Ignoring Kick Pusher control event: %s", event_name)
+        if event_name not in (PUSHER_PING, PUSHER_PONG):
+            logger.debug("Ignoring Kick realtime control event: %s", event_name)
         return None
 
     # --- Resolve the Pusher event name to a normalized message type -----------
