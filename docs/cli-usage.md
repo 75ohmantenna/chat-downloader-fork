@@ -377,6 +377,11 @@ It does not throttle changing updates or change either capture file.
   inspect the site-specific code under `src/chat_downloader/sites/`.
 - The CLI exits with a nonzero status on failure or when interrupted
   (`KeyboardInterrupt` / `SIGTERM`); exit status `0` means a clean run.
+- If a downstream stdout reader closes early (for example, `head -n 1`),
+  the CLI exits with status `1` after capture cleanup. It redirects the broken
+  stdout descriptor to the null device so interpreter shutdown does not print
+  an ignored `BrokenPipeError` or replace that status with `120`. Output files
+  retain the records written before the pipe failure; capture does not continue.
 - On `SIGTERM` (e.g. `systemd` stopping the service, or `kill <pid>`) the CLI
   shuts down gracefully. The first SIGINT or SIGTERM finishes any record already
   being written, including writer, run, and checkpoint counts, before raising

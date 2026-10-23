@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import signal
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .chat_downloader import run
@@ -75,7 +77,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(cli_args: Sequence[str] | None = None) -> None:
+def _run_cli(cli_args: Sequence[str] | None) -> None:
     """Parse cli_args (default sys.argv[1:]) and run the chat downloader."""
     _install_cli_signal_handlers()
     install_cli_log_handler()
@@ -106,3 +108,18 @@ def main(cli_args: Sequence[str] | None = None) -> None:
     result = run(**args_dict)
     if not result.success or result.interrupted:
         sys.exit(1)
+
+
+def main(cli_args: Sequence[str] | None = None) -> None:
+    """Run the CLI and prevent a closed stdout pipe from breaking finalization."""
+    try:
+        try:
+            _run_cli(cli_args)
+        finally:
+            # Include buffered help/version output and run-loop pipe failures.
+            sys.stdout.flush()
+    except BrokenPipeError:
+        # The interpreter flushes stdout again at exit; keep that flush harmless.
+        with Path(os.devnull).open("w", encoding="utf-8") as devnull:
+            os.dup2(devnull.fileno(), sys.stdout.fileno())
+        raise SystemExit(1) from None

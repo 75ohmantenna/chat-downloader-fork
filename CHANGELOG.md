@@ -6,6 +6,13 @@ churn, and documentation maintenance belong in Git history unless they change
 behavior, compatibility, packaging, validation, or contributor workflow.
 -->
 
+## Unreleased
+
+### Fixes
+
+- Preserve CLI exit status `1` when a stdout reader closes early, finalize
+  capture resources, and prevent an ignored broken-pipe error at shutdown.
+
 ## 2.5.2 — 2026-10-23
 
 ### Features
