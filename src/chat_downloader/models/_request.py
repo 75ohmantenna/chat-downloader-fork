@@ -94,7 +94,8 @@ class ChatRequest:
     start_time: float | str | None = field(
         default=None,
         metadata=_cli_metadata(
-            "Start time in seconds or hh:mm:ss (None = from beginning)",
+            "Start time in seconds or hh:mm:ss (None = from beginning); "
+            "Twitch and Kick channel URLs cannot seek",
             group="time",
             flags=["-s"],
         ),
@@ -102,7 +103,8 @@ class ChatRequest:
     end_time: float | str | None = field(
         default=None,
         metadata=_cli_metadata(
-            "End time in seconds or hh:mm:ss (None = until end)",
+            "End time in seconds or hh:mm:ss (None = until end); "
+            "Twitch and Kick channel URLs cannot seek",
             group="time",
             flags=["-e"],
         ),

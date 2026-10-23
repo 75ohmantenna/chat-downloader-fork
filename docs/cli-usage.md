@@ -234,6 +234,9 @@ Filtering and output:
   limits, and output parity are unaffected. `--quiet` suppresses stdout entirely.
 - `--max_messages`, `--start_time`, `--end_time` — bound the capture.
   Time bounds accept seconds or `hh:mm:ss`; an end before the start is rejected.
+  Twitch and Kick channel URLs reject time bounds because live chat cannot
+  seek; use a VOD or clip URL for replay offsets, or `--timeout` to limit how
+  long a live capture runs. This also applies to offline Twitch channels.
   End bounds are inclusive. Kick treats a zero-duration window as an empty
   selection and does not request history for it.
 - `--timeout`, `--inactivity_timeout` — bound long-running captures.

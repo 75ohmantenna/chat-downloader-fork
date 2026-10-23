@@ -30,3 +30,4 @@ def test_generated_help_preserves_key_argument_groups() -> None:
     assert ".jsonl/.txt" in normalized_help
     assert "Other extensions are not supported" in normalized_help
     assert "use .jsonl for structured output" in normalized_help
+    assert "Twitch and Kick channel URLs cannot seek" in normalized_help

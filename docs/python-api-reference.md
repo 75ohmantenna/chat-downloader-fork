@@ -211,6 +211,11 @@ UTC-microsecond `received_timestamp`; provider timestamps retain priority, TXT
 labels the fallback `[received]`, including `kicks_gifted` notices.
 Replay/preloaded records are unchanged.
 
+Twitch channel URLs also reject `start_time` and `end_time`, including offline
+channels and reruns, with `InvalidParameter` before metadata or IRC access.
+Use a Twitch VOD or clip URL for replay offsets, or `timeout` to limit live
+capture duration.
+
 Validation raises `ValueError` for non-positive or non-integer message, retry,
 or buffer counts; malformed or non-finite start/end times; a non-finite
 `retry_timeout`; a `chat_type` other than `"live"` or `"top"`; a non-positive

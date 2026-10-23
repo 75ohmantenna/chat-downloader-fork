@@ -12,6 +12,8 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 - Preserve CLI exit status `1` when a stdout reader closes early, finalize
   capture resources, and prevent an ignored broken-pipe error at shutdown.
+- Reject replay time bounds on Twitch channel URLs before network access,
+  and explain live capture duration limits in CLI help and guides.
 
 ## 2.5.2 — 2026-10-23
 

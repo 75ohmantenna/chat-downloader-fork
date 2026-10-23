@@ -268,6 +268,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             params: Request options including message_groups and buffer_size.
 
         Raises:
+            InvalidParameter: Live chat cannot seek with start_time or end_time.
             UserNotFound: The channel does not exist.
         """
         request = self._coerce_chat_request(params)

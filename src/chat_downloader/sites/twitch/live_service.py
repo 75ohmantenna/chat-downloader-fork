@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol, cast
 from requests.exceptions import RequestException
 
 from chat_downloader.debugging import debug_log, log, logger
-from chat_downloader.errors import ParsingError, UserNotFound
+from chat_downloader.errors import InvalidParameter, ParsingError, UserNotFound
 from chat_downloader.redaction import BoundedSampleCapture
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
@@ -36,8 +36,7 @@ from .irc_transport import (
     get_chat_messages_by_stream_id,
 )
 
-# Twitch live IRC deduplication window. Tuned for multi-day captures and reconnect
-# storms; ~5 MB of IDs in memory at full capacity.
+# Bound recent message IDs retained across IRC connections.
 _LIVE_SEEN_MESSAGE_LIMIT = 50_000
 _SUCCESSFUL_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES"
 _SUCCESSFUL_FRAME_CAPTURE_LIMIT = 3
@@ -198,9 +197,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
 
     twitch_chat_irc = create_connection()
     message_count = 0
-    # Live Twitch chat can deliver tens of msg/s on busy channels. A larger
-    # window protects against duplicate emission after IRC reconnects,
-    # which can replay several minutes of messages.
+    # Retain recent IDs across reconnects to suppress repeated deliveries.
     seen_message_cache = _SeenMessageCache(limit=_LIVE_SEEN_MESSAGE_LIMIT)
     consecutive_connection_failures = 0
 
@@ -284,6 +281,14 @@ def get_chat_by_stream_id(
     request: ChatRequest,
 ) -> Chat:
     """Build a live chat object for a stream."""
+    if request.start_time is not None or request.end_time is not None:
+        msg = (
+            "Twitch live chat does not support --start_time or --end_time. "
+            "Use --timeout to limit live capture duration, or a Twitch VOD or "
+            "clip URL to retrieve a bounded replay."
+        )
+        raise InvalidParameter(msg)
+
     diagnostics = _TwitchLiveDiagnostics()
     query = [
         {

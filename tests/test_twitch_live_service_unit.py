@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 from requests.exceptions import RequestException
 
-from chat_downloader.errors import RetriesExceeded
+from chat_downloader.errors import InvalidParameter, RetriesExceeded
 from chat_downloader.sites.twitch import live_service
 from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 from tests.twitch_third_helpers import chat_request
@@ -47,6 +47,25 @@ def _stream_downloader(*gql_effects):
         _get_chat_messages_by_stream_id=Mock(return_value=iter(())),
         retry=Mock(),
     )
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [{"start_time": 0}, {"end_time": 0}, {"start_time": "00:00:01", "end_time": 2}],
+)
+def test_live_time_bounds_rejected_before_metadata_or_transport(bounds):
+    downloader = _stream_downloader()
+    with pytest.raises(
+        InvalidParameter, match=r"Twitch live chat.*--start_time"
+    ) as error:
+        live_service.get_chat_by_stream_id(
+            cast("Any", downloader), "example", _request(**bounds)
+        )
+    assert "--timeout" in str(error.value)
+    assert "VOD or clip URL" in str(error.value)
+    downloader._download_gql.assert_not_called()
+    downloader._update_badge_info.assert_not_called()
+    downloader._get_chat_messages_by_stream_id.assert_not_called()
 
 
 def _irc_factory(*effects):

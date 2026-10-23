@@ -38,6 +38,11 @@ The Twitch flow depends on the target type.
 
 ### Live streams
 
+Channel URLs reject `start_time` and `end_time` before metadata or IRC access,
+including when the channel is offline or broadcasting a rerun. Live IRC cannot
+seek. Use `timeout` to bound capture duration, or a VOD or clip URL for replay
+offsets. The CLI exposes these as `--start_time`, `--end_time`, and `--timeout`.
+
 1. Resolve the channel from the URL.
 2. Query Twitch GraphQL for stream metadata and status.
 3. Refresh channel and global badge definitions.
