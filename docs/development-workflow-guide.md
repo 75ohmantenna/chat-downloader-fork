@@ -274,6 +274,9 @@ uv run --locked mypy .
 uv run --locked lint-imports
 ```
 
+Strict type checking excludes ignored local `testing/` scratch scripts, along
+with build artifacts and tests outside the maintained fixture/drift harnesses.
+
 Documentation and release contracts:
 
 ```bash
