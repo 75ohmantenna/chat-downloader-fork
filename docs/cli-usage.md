@@ -487,6 +487,17 @@ prevent a capture from qualifying as complete.
 `--run_manifest run.json` writes a JSON report after shutdown with program
 version, recording identity/window, success, completion, termination, parity,
 current/prior run message counts, and output writer counts and SHA-256 hashes.
+`selected_window` retains the requested `start_time` and `end_time` as seconds;
+`null` means an unspecified bound. `effective_window` records the bounds passed
+to retrieval, including resume overlap, with `time_basis` of `recording` or
+`clip`. YouTube clip bounds are converted to recording-relative seconds.
+Kick replay windows include provider-side duration clamping. Twitch clips with
+a known source offset retain their clip-relative bounds and default duration.
+`effective_window` is `null` when retrieval setup did not return a chat.
+`recording.start_time` remains the absolute broadcast start and is separate
+from these relative seek bounds. `failure_stage` is `null` on success or names
+the failed phase: `initialization`, `bootstrap`, `capture`, `shutdown`,
+`verification`, `completion`, or `manifest`.
 For Kick live channels, `recording.start_time` contains the initial livestream
 start time in UTC Unix-epoch microseconds, or `null` when unavailable.
 `elapsed_seconds` measures initialization through capture shutdown using a
@@ -501,6 +512,7 @@ and active request-profile names and chat-view label are also retained from
 fixed vocabularies. Automatic
 YouTube, Twitch live, and Kick live inspection reports remain in
 `provider_inspection` when requested.
+YouTube bootstrap counters survive failures before a chat is created.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
 one deadline observation after bounded shutdown, shared with provider inspection
 and the debug summary. An incomplete count is a lower bound even if a worker

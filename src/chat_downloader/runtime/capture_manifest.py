@@ -15,6 +15,7 @@ from chat_downloader.metadata import __version__
 from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.sites.output_dispatch import _expand_output_file_name
+from chat_downloader.utils.time_utils import ensure_seconds
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -172,10 +173,40 @@ def _capture_outputs(chat: Chat, *, keep_created: bool = False) -> list[Path]:
     ]
 
 
+def _time_window(parameters: Mapping[str, object]) -> dict[str, float | None]:
+    """Normalize request bounds without persisting invalid or arbitrary values."""
+    return {
+        key: ensure_seconds(value)
+        if isinstance(value, (str, int, float)) and not isinstance(value, bool)
+        else None
+        for key in ("start_time", "end_time")
+        for value in (parameters.get(key),)
+    }
+
+
+def _effective_window(
+    chat: Chat | None, parameters: Mapping[str, object]
+) -> dict[str, object] | None:
+    """Report only fixed, normalized retrieval metadata after successful setup."""
+    if chat is None:
+        return None
+    window = chat._request_window if chat._request_window is not None else parameters
+    return {
+        **_time_window(window),
+        "time_basis": "clip" if window.get("time_basis") == "clip" else "recording",
+    }
+
+
 class RunManifest:
     """Validate artifact separation before capture; never replace an existing file."""
 
-    def __init__(self, name: str, resume: str | None) -> None:
+    def __init__(
+        self,
+        name: str,
+        resume: str | None,
+        *,
+        parameters: Mapping[str, object] | None = None,
+    ) -> None:
         """Reject existing destinations and reserved checkpoint paths."""
         self.path = Path(name).absolute()
         if self.path.exists() or self.path.is_symlink():
@@ -193,6 +224,8 @@ class RunManifest:
             )
             raise ValueError(msg)
         self.valid = True
+        self._parameters = parameters if parameters is not None else {}
+        self.selected_window = _time_window(self._parameters)
 
     def bind(self, chat: Chat) -> None:
         """Resolve lazy names before any output writer can open its file."""
@@ -238,6 +271,9 @@ class RunManifest:
             "success": result.success,
             "replay_complete": replay_complete(chat, result),
             "termination_reason": result.termination_reason,
+            "failure_stage": result.failure_stage,
+            "selected_window": self.selected_window,
+            "effective_window": _effective_window(chat, self._parameters),
             "parity_status": result.parity_status,
             "provider_inspection": result.provider_inspection,
             "message_count": result.message_count,
@@ -247,7 +283,7 @@ class RunManifest:
             "message_type_counts": result.message_type_counts,
             "elapsed_seconds": result.elapsed_seconds,
             "provider_diagnostics": _manifest_diagnostics(
-                getattr(chat, "diagnostics", {})
+                result.provider_diagnostics or getattr(chat, "diagnostics", {})
             ),
             "prefetched_after_deadline_count": result.prefetched_after_deadline_count,
             "deadline_prefetch_count_complete": result.deadline_prefetch_count_complete,

@@ -261,8 +261,10 @@ bootstrap calls preceding a returned chat, including actual page retries.
 also retain `initial_request_profile`, `active_request_profile`, and the chosen
 `chat_view` label. The view label uses `Top chat` or `Live chat` with a `replay`
 suffix when polling the replay endpoint, independent of the client profile's
-bootstrap token labels. Bootstrap failures that prevent creation of a chat still
-require debug logs; there is no chat diagnostic object to attach to that run.
+bootstrap token labels. A request-scoped setup ledger preserves these counters
+even if bootstrap fails before a chat is created. The run result, debug summary,
+and manifest retain that ledger after sessions close; a new retrieval resets
+it even when the provider session is reused.
 
 The offline [YouTube capture inspector](development-workflow-guide.md#youtube-capture-inspection)
 reports these counters alongside missing source timestamps, zero-offset mobile

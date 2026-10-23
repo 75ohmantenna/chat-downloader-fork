@@ -12,6 +12,7 @@ from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.output_dispatch import _expand_output_file_name
 from chat_downloader.utils.filename_utils import output_path_identity
+from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
@@ -192,6 +193,12 @@ def configure_chat(
 ) -> None:
     """Configure limits, timeouts, formatting, and output for a chat."""
     chat.site = site_object
+    if chat._request_window is None:
+        chat._request_window = {
+            "start_time": ensure_seconds(request.start_time),
+            "end_time": ensure_seconds(request.end_time),
+            "time_basis": "clip" if chat.video_type == "clip" else "recording",
+        }
     _configure_formatter(chat, request.format_file, request.format)
     _configure_output_writer(chat, request)
     # Start workers only after configuration succeeds; limit precedes timeout.

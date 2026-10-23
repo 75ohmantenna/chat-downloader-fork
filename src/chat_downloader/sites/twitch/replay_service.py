@@ -24,6 +24,7 @@ from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_float, get_list, get_str
+from chat_downloader.utils.time_utils import ensure_seconds
 
 from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
 from .constants import TWITCH_DEBUG_SAMPLE_LIMIT, build_known_comment_keys
@@ -420,7 +421,7 @@ def get_chat_by_clip_id(
     )
 
     diagnostics: dict[str, object] = {}
-    return Chat(
+    chat = Chat(
         downloader._get_chat_messages_by_vod_id(
             vod_id, request, duration, offset, diagnostics=diagnostics
         ),
@@ -431,3 +432,11 @@ def get_chat_by_clip_id(
         id=clip_id,
         diagnostics=diagnostics,
     )
+    chat._request_window = {
+        "start_time": ensure_seconds(request.start_time, 0),
+        "end_time": ensure_seconds(
+            request.end_time, duration if offset is not None else None
+        ),
+        "time_basis": "clip" if offset is not None else "recording",
+    }
+    return chat

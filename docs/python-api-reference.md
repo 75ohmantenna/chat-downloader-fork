@@ -109,6 +109,8 @@ these fields:
 | `elapsed_seconds` | Monotonic duration from initialization through capture shutdown, excluding output verification and manifest writing |
 | `prefetched_after_deadline_count` | One observation after bounded capture shutdown; an incomplete count is a lower bound |
 | `deadline_prefetch_count_complete` | Whether deadline accounting had finished when observed; inspection, manifest, and debug summary use the same observation |
+| `provider_diagnostics` | Snapshot of finalized chat diagnostics and the surviving request-scoped setup ledger; bootstrap counters survive failures before a chat exists |
+| `failure_stage` | Failed lifecycle phase, or `None` on success; see the CLI manifest reference for phase names |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.

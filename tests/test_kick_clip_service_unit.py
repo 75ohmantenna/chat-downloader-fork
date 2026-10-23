@@ -251,6 +251,11 @@ def test_clip_bounds_are_relative_clamped_and_do_not_mutate_request(mobile, curs
     chat = _get_chat(client, request=request)
     assert (request.start_time, request.end_time) == (10, 90)
     assert (chat.start_time, chat.duration) == (10, 50)
+    assert chat._request_window == {
+        "start_time": 10,
+        "end_time": 60,
+        "time_basis": "clip",
+    }
     assert list(chat) == []
     client.fetch_message_page.assert_called_once_with("1227772", cursor=cursor)
     if not mobile:

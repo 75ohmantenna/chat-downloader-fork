@@ -82,6 +82,11 @@ class YouTubeChatStreamsMixin:
             diagnostics=diagnostics,
             **initial_info,
         )
+        chat._request_window = {
+            "start_time": request.start_time,
+            "end_time": request.end_time,
+            "time_basis": "recording",
+        }
         chat._capture_inspector = lambda path, summary: inspect_capture(
             path, run_summary=summary
         )

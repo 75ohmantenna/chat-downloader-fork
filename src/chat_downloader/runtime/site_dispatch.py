@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 class _SiteSessionOwner(Protocol):
     """Narrow seam required to acquire a provider session."""
 
+    _request_diagnostics: dict[str, object]
+
     def create_session(
         self,
         chat_downloader_class: type[BaseChatDownloader],
@@ -88,6 +90,7 @@ def _create_chat_for_site(
     generator_method_name, match = match_info
     preflight_debug_samples()
     site_object = owner.create_session(site)
+    site_object._request_diagnostics = owner._request_diagnostics
     resolved_request = request.resolved_for_site(site_object)
     log("info", f"Site: {site_object._NAME}")
     log(
@@ -116,6 +119,7 @@ def _create_chat_for_site(
 
 def dispatch_chat(owner: _SiteSessionOwner, request: ChatRequest) -> Chat:
     """Resolve one request into a fully configured provider chat."""
+    owner._request_diagnostics = {}
     if not request.url:
         msg = "No URL provided."
         raise URLNotProvided(msg)

@@ -83,6 +83,11 @@ def test_twitch_clip_entry_accepts_chat_request() -> None:
     assert captured["params"] is request
     assert captured["duration"] == 45
     assert captured["offset"] == 15
+    assert chat._request_window == {
+        "start_time": 0,
+        "end_time": 45,
+        "time_basis": "clip",
+    }
 
 
 def test_twitch_stream_entry_accepts_chat_request() -> None:

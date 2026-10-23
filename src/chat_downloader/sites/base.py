@@ -51,6 +51,7 @@ class BaseChatDownloader:
         self._http = ChatDownloaderSession(**kwargs)
         self._has_initial_auth_cookies = self._has_auth_cookies
         self._cookie_rotation_warned = False
+        self._request_diagnostics: dict[str, object] = {}
 
     @property
     def session(self) -> requests.Session:
