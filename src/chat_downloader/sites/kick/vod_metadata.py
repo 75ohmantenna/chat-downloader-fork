@@ -74,6 +74,7 @@ def fetch_vod_metadata(
     ):
         msg = "Kick web video metadata returned a different video or channel."
         raise KickError(msg)
+    _reject_live_vod(video, username)
     if video.get("status") != "public" or video.get("is_live") is not False:
         msg = "Kick web video is not a public completed recording."
         raise KickError(msg)
@@ -98,6 +99,16 @@ def fetch_vod_metadata(
             "duration": duration * 1000,
         },
     }
+
+
+def _reject_live_vod(data: JSONDict, username: str) -> None:
+    """Explain why an ongoing broadcast cannot supply a completed replay."""
+    if data.get("is_live") is True:
+        msg = (
+            f"This Kick VOD is still live; use https://kick.com/{username} "
+            "to capture live chat, or retry after the broadcast ends."
+        )
+        raise KickError(msg)
 
 
 def _parse_vod_start(livestream: JSONDict, username: str) -> datetime:
@@ -141,6 +152,8 @@ def _resolve_vod_window(
         msg = f"Kick video for {username!r} has no associated livestream data."
         raise KickError(msg)
 
+    _reject_live_vod(data, username)
+    _reject_live_vod(livestream, username)
     channel = livestream.get("channel")
     channel_id = str(channel.get("id")) if isinstance(channel, dict) else None
     if not channel_id:

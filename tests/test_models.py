@@ -303,3 +303,23 @@ def test_downloader_config_valid_timeouts():
     cfg = DownloaderConfig(connect_timeout=5.0, read_timeout=30.0)
     assert cfg.connect_timeout == pytest.approx(5.0)
     assert cfg.read_timeout == pytest.approx(30.0)
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [(100, 50), ("01:00:00", 3599), (61, "0:01:00")],
+)
+def test_request_rejects_inverted_replay_window(start, end):
+    with pytest.raises(
+        ValueError, match="end_time must be greater than or equal to start_time"
+    ):
+        ChatRequest(start_time=start, end_time=end)
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [(None, 0), (0, None), ("1:00:00", 3605), (-10, "0:00:00"), (60, "0:01:00")],
+)
+def test_request_accepts_open_and_mixed_format_windows(start, end):
+    request = ChatRequest(start_time=start, end_time=end)
+    assert (request.start_time, request.end_time) == (start, end)

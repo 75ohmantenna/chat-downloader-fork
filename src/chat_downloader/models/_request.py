@@ -301,6 +301,16 @@ class ChatRequest:
             ("end_time", self.end_time),
         ):
             _validate_time_bound(time_name, time_value)
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and ensure_seconds(self.end_time) < ensure_seconds(self.start_time)
+        ):
+            msg = (
+                "end_time must be greater than or equal to start_time, got "
+                f"start_time={self.start_time!r} end_time={self.end_time!r}"
+            )
+            raise ValueError(msg)
 
     @classmethod
     def from_kwargs(cls, *, strict: bool = False, **kwargs: Any) -> Self:

@@ -104,7 +104,7 @@ def test_twitch_stream_entry_accepts_chat_request() -> None:
     )
     downloader._update_badge_info = Mock()
 
-    def fake_generator(stream_id, params, *, diagnostics=None):
+    def fake_generator(stream_id, params, *, diagnostics=None, control=None):
         captured["stream_id"] = stream_id
         captured["params"] = params
         captured["diagnostics"] = diagnostics

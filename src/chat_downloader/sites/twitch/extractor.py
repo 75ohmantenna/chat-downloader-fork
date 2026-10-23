@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
 
     from .irc_diagnostics import _TwitchLiveDiagnostics
+    from .live_service import _TwitchLiveIterator
 
 
 class TwitchError(SiteError):
@@ -222,6 +223,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         params: ChatRequest | dict[str, Any],
         *,
         diagnostics: _TwitchLiveDiagnostics | None = None,
+        control: _TwitchLiveIterator | None = None,
     ) -> Generator[dict[str, Any], None, None]:
         """Yield parsed IRC frames in arrival order via anonymous live chat.
 
@@ -231,6 +233,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             stream_id: Channel name.
             params: Live request options, including filters and buffer size.
             diagnostics: Mutable counters for the owning live-chat run.
+            control: Owner for interrupting the active IRC receive.
         """
         request = self._coerce_chat_request(params)
         yield from iter_stream_chat_messages(
@@ -240,6 +243,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             irc_factory=TwitchChatIRC,
             message_generator=get_chat_messages_by_stream_id,
             diagnostics=diagnostics,
+            control=control,
         )
 
     def _get_chat_by_stream_id(

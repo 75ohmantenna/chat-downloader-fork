@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from functools import partial
 from json.decoder import JSONDecodeError
+from threading import Event
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from requests.exceptions import RequestException
@@ -20,6 +21,7 @@ from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_str
+from chat_downloader.utils.timed_generator import _PollingCancelled
 
 from .capture_inspection import inspect_capture
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
@@ -65,13 +67,48 @@ class _MessageGenerator(Protocol):
 
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Iterator
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict
 
     from .extractor import TwitchChatDownloader
     from .types import BadgeSet
+
+
+class _TwitchLiveIterator:
+    """Own cancellation independently of the IRC generator's advancement lock."""
+
+    def __init__(self) -> None:
+        self.stopped = Event()
+        self.source: Iterator[JSONDict] = iter(())
+        self.irc: TwitchChatIRC | None = None
+
+    def __iter__(self) -> _TwitchLiveIterator:
+        return self
+
+    def __next__(self) -> JSONDict:
+        if self.stopped.is_set():
+            raise StopIteration
+        return next(self.source)
+
+    def check_stopped(self) -> None:
+        """Unwind setup or reconnect without entering an ordinary retry path."""
+        if self.stopped.is_set():
+            raise _PollingCancelled
+
+    def request_stop(self) -> None:
+        """Wake the active receive; the generator retains final socket ownership."""
+        self.stopped.set()
+        if self.irc is not None:
+            self.irc.request_stop()
+
+    def close(self) -> None:
+        """Stop the transport and close the source when it is idle."""
+        self.request_stop()
+        close = getattr(self.source, "close", None)
+        if callable(close):
+            close()
 
 
 def _is_duplicate_live_message(
@@ -92,11 +129,13 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     irc_factory: _IRCFactory | None = None,
     message_generator: _MessageGenerator | None = None,
     diagnostics: _TwitchLiveDiagnostics | None = None,
+    control: _TwitchLiveIterator | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Yield live IRC chat messages for a stream."""
     irc_factory = irc_factory or TwitchChatIRC
     message_generator = message_generator or get_chat_messages_by_stream_id
     diagnostics = diagnostics or _TwitchLiveDiagnostics()
+    control = control or _TwitchLiveIterator()
     if message_generator is get_chat_messages_by_stream_id:
         message_generator = cast(
             "_MessageGenerator",
@@ -118,6 +157,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
             f"https://{IRC_HOST}",
         )
         for attempt_number in _attempt_numbers(request.max_attempts):
+            control.check_stopped()
             diagnostics.increment("connection_attempt_count")
             irc: TwitchChatIRC | None = None
             try:
@@ -125,6 +165,8 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     connect_timeout=connect_timeout,
                     proxy_url=proxy_url,
                 )
+                control.irc = irc
+                control.check_stopped()
                 effective_receive_timeout = max(
                     request.message_receive_timeout,
                     _MIN_RECEIVE_TIMEOUT_SECONDS,
@@ -137,11 +179,17 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                 )
                 irc.set_timeout(effective_receive_timeout)
                 irc.join_channel(stream_id)
+                control.check_stopped()
             except OSError as error:
                 diagnostics.increment("connection_setup_failure_count")
                 if irc is not None:
                     irc.close_connection()
+                control.check_stopped()
                 downloader.retry(attempt_number, error=error, request=request)
+            except BaseException:
+                if irc is not None:
+                    irc.close_connection()
+                raise
             else:
                 diagnostics.increment("connection_success_count")
                 return irc
@@ -150,7 +198,6 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
 
     twitch_chat_irc = create_connection()
     message_count = 0
-    badge_set = downloader.badge_cache.snapshot()
     # Live Twitch chat can deliver tens of msg/s on busy channels. A larger
     # window protects against duplicate emission after IRC reconnects,
     # which can replay several minutes of messages.
@@ -158,6 +205,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     consecutive_connection_failures = 0
 
     try:
+        badge_set = downloader.badge_cache.snapshot()
         while True:
             try:
                 for raw_message in message_generator(
@@ -166,6 +214,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     request,
                     badge_set,
                 ):
+                    control.check_stopped()
                     if raw_message.get("action_type") == "reconnect":
                         diagnostics.increment("server_reconnect_requested_count")
                         log(
@@ -208,6 +257,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
 
             except ConnectionError as error:
                 twitch_chat_irc.close_connection()
+                control.check_stopped()
                 diagnostics.increment("reconnect_count")
                 consecutive_connection_failures += 1
                 wait_for_reconnect(
@@ -290,12 +340,15 @@ def get_chat_by_stream_id(
     else:
         downloader._update_badge_info(stream_id)
 
+    control = _TwitchLiveIterator()
+    control.source = downloader._get_chat_messages_by_stream_id(
+        stream_id,
+        request,
+        diagnostics=diagnostics,
+        control=control,
+    )
     chat = Chat(
-        downloader._get_chat_messages_by_stream_id(
-            stream_id,
-            request,
-            diagnostics=diagnostics,
-        ),
+        control,
         title=title,
         duration=None,
         status="live" if is_live else "upcoming",

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-import datetime as _dt
+import datetime as dt
 import json
 import os
 import time
@@ -104,7 +104,7 @@ def _assert_utc_aware(item: Any) -> None:
     if not isinstance(item, dict):
         return
     for key, value in item.items():
-        if isinstance(value, _dt.datetime) and value.tzinfo is None:
+        if isinstance(value, dt.datetime) and value.tzinfo is None:
             msg = (
                 f"Output field {key!r} contains a naive datetime "
                 f"({value!r}); JSONL accepts only JSON-compatible values. "

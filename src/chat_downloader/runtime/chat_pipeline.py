@@ -190,8 +190,8 @@ def configure_chat(
 ) -> None:
     """Configure limits, timeouts, formatting, and output for a chat."""
     chat.site = site_object
-    # Mutates chat.chat in wrapper order: limit first, then timeout wrapper.
-    _apply_message_limit(chat, request.max_messages)
-    _configure_timeouts(chat, request.timeout, request.inactivity_timeout)
     _configure_formatter(chat, request.format_file, request.format)
     _configure_output_writer(chat, request)
+    # Start workers only after configuration succeeds; limit precedes timeout.
+    _apply_message_limit(chat, request.max_messages)
+    _configure_timeouts(chat, request.timeout, request.inactivity_timeout)

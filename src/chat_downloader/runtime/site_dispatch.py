@@ -101,9 +101,16 @@ def _create_chat_for_site(
         resolved_request,
         site.__name__,
     )
-    configure_chat(chat, resolved_request, site_object)
-    log("debug", f"Chat information: {_chat_debug_snapshot(chat)}")
-    log("info", f'Retrieving chat for "{chat.title}".')
+    try:
+        configure_chat(chat, resolved_request, site_object)
+        log("debug", f"Chat information: {_chat_debug_snapshot(chat)}")
+        log("info", f'Retrieving chat for "{chat.title}".')
+    except BaseException:
+        try:
+            chat.close()
+        except Exception as error:  # noqa: BLE001 — preserve the setup failure
+            log("debug", f"Error closing partially configured chat: {error}")
+        raise
     return chat
 
 

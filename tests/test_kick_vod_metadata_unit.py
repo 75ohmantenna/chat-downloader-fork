@@ -10,6 +10,7 @@ import pytest
 
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick.api_client import KickApiClient
+from chat_downloader.sites.kick.clip_service import _resolve_clip_source_vod_window
 from chat_downloader.sites.kick.errors import KickError, KickVideoNotFound
 from chat_downloader.sites.kick.replay_service import get_vod_chat
 from chat_downloader.sites.kick.vod_metadata import (
@@ -39,6 +40,30 @@ def test_null_vod_title_falls_back_to_channel_name() -> None:
         }
     }
     assert _resolve_vod_window(data, "examplechannel")[2] == "examplechannel"
+
+
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize(
+    "resolve", [_resolve_vod_window, _resolve_clip_source_vod_window]
+)
+def test_in_progress_legacy_vod_suggests_channel_capture(nested, resolve):
+    data = load_fixture("video_in_progress.json")["response"]
+    if nested:
+        del data["is_live"]
+    with pytest.raises(
+        KickError, match=r"still live; use https://kick\.com/examplechannel"
+    ):
+        resolve(data, "examplechannel")
+
+
+def test_in_progress_web_vod_suggests_channel_capture(fallback_client):
+    payload = fallback_client.fetch_web_video_metadata.return_value["data"]
+    payload["is_live"] = load_fixture("video_in_progress.json")["response"]["is_live"]
+    payload["duration"] = 0
+    with pytest.raises(
+        KickError, match=r"still live; use https://kick\.com/examplechannel"
+    ):
+        fetch_vod_metadata(fallback_client, "examplechannel", VIDEO, REQUEST)
 
 
 @pytest.fixture

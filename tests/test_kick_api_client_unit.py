@@ -12,6 +12,7 @@ from chat_downloader.sites.kick.errors import (
     KickCountryBlocked,
     KickError,
     KickServerError,
+    KickVideoRestricted,
 )
 from tests.kick_helpers import (
     FakeKickSession,
@@ -23,11 +24,71 @@ from tests.kick_helpers import (
 
 CLIP_ID = "clip_01M0BHEHDAX2NEAGXG0DA8V9S5"
 START = "2026-01-01T00:00:00Z"
+VIDEO_ID = "b190fd3b-82e6-4b88-b33c-4b6deae0f968"
 
 
 def _client(responses, **options):
     session = FakeKickSession(responses)
     return KickApiClient(session=session, mobile_session=session, **options), session
+
+
+@pytest.mark.parametrize("video_id", [VIDEO_ID, VIDEO_ID.upper()])
+def test_subscriber_only_video_has_actionable_error(video_id):
+    recorded = load_fixture("video_subscriber_only_recorded.json")
+    client, _ = _client([FakeResponse(recorded["http_status"], recorded["response"])])
+    with pytest.raises(KickVideoRestricted, match="requires a channel subscription"):
+        client.fetch_video_metadata(video_id)
+    assert client.diagnostics["http_status_counts"] == {"403": 1}
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"uuid": "different"},
+        {"uuid": None},
+        {"is_private": False},
+        {"is_private": 1},
+        {"is_private": "true"},
+        {"status": "public"},
+        {"status": None},
+    ],
+)
+def test_unrecognized_video_denials_remain_terminal_challenges(changes):
+    payload = {
+        **load_fixture("video_subscriber_only_recorded.json")["response"],
+        **changes,
+    }
+    client, _ = _client([FakeResponse(403, payload)])
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_video_metadata(VIDEO_ID)
+
+
+@pytest.mark.parametrize("payload", [None, [], "denied"])
+def test_non_object_video_denials_remain_terminal_challenges(payload):
+    client, _ = _client([FakeResponse(403, payload)])
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_video_metadata(VIDEO_ID)
+
+
+def test_malformed_video_denial_remains_terminal_challenge():
+    client, _ = _client([FakeResponse(403, malformed=True)])
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_video_metadata(VIDEO_ID)
+
+
+def test_restricted_video_shape_cannot_override_other_resource_denials():
+    payload = load_fixture("video_subscriber_only_recorded.json")["response"]
+    client, _ = _client([FakeResponse(403, payload)])
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_channel(VIDEO_ID)
+
+
+def test_restricted_video_shape_requires_canonical_request_identity():
+    payload = load_fixture("video_subscriber_only_recorded.json")["response"]
+    payload["uuid"] = "invalid"
+    client, _ = _client([FakeResponse(403, payload)])
+    with pytest.raises(CaptchaChallengeRequired):
+        client.fetch_video_metadata("invalid")
 
 
 @pytest.mark.parametrize(

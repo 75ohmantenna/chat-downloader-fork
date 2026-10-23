@@ -40,7 +40,9 @@ class LiveDownloader:
         )
         self._update_badge_info = Mock()
 
-    def _get_chat_messages_by_stream_id(self, stream_id, request, *, diagnostics):
+    def _get_chat_messages_by_stream_id(
+        self, stream_id, request, *, diagnostics, control
+    ):
         rows = self.rows if self.rows is not None else [_text()]
         for row in rows:
             diagnostics.increment("received_irc_frame_count")

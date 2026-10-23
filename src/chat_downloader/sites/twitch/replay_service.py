@@ -50,7 +50,7 @@ class _FetchMessages(Protocol):
     def __call__(
         self,
         session_post: object,
-        download_gql_func: Callable[[JSONList], list[JSONDict]],
+        download_gql_func: Callable[[JSONList], JSONList],
         vod_id: str,
         cursor: str | None,
         content_offset_seconds: float | None,
@@ -247,8 +247,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 )
 
         if not comments:
-            if not first_iteration:
-                state["termination_reason"] = "pagination_stalled"
+            state["termination_reason"] = "pagination_stalled"
             break
         first_iteration = False
 

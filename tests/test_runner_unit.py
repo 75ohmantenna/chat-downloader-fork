@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -126,9 +127,12 @@ def test_execute_run_reports_acquisition_errors(downloader, logged, error, fragm
     assert result.error_message is not None
     assert fragment in result.error_message
     assert result.interrupted is isinstance(error, KeyboardInterrupt)
-    assert [(level, message) for level, message in logged if level == "error"] == [
-        ("error", result.error_message)
-    ]
+    errors = [(level, message) for level, message in logged if level == "error"]
+    assert errors == ([] if result.interrupted else [("error", result.error_message)])
+    if result.interrupted:
+        assert any(
+            level == "info" and "interrupted by user" in msg for level, msg in logged
+        )
     assert _summary(logged)["success"] is False
     assert factory.instance.closed is True
 
@@ -286,6 +290,52 @@ def test_log_run_summary_redacts_credentials(logged):
     assert all("<redacted>@example.invalid" in message for _level, message in logged)
 
 
+@pytest.mark.parametrize("success", [False, True])
+@pytest.mark.parametrize("exists", [False, True])
+def test_empty_output_summary_distinguishes_existing_files_and_errors(
+    tmp_path, logged, success, exists
+):
+    path = tmp_path / "chat.jsonl"
+    if exists:
+        path.write_text('{"message": "already captured"}\n')
+    chat = SimpleNamespace(
+        _output_dispatcher=SimpleNamespace(
+            writer_summaries=[
+                {"file_name": str(path), "file_created": False, "records_written": 0}
+            ]
+        )
+    )
+    _log_run_summary(chat, 0, {}, RunResult(success=success))
+    info = [msg for level, msg in logged if level == "info"]
+    if not success:
+        assert info == []
+    elif exists:
+        assert info == [f"No new records appended to existing output: {path}"]
+        assert path.read_text() == '{"message": "already captured"}\n'
+    else:
+        assert info == [
+            (
+                "Lazy output file was not created because no records were "
+                f"retrieved: {path}"
+            )
+        ]
+
+
+@pytest.mark.parametrize("error", [PermissionError("denied"), OSError("long path")])
+def test_lazy_output_stat_failure_does_not_replace_success(
+    monkeypatch, tmp_path, downloader, logged, error
+):
+    chat = Chat(iter(()))
+    chat.attach_writer(
+        ContinuousWriter(str(tmp_path / "chat.jsonl"), lazy_initialise=True)
+    )
+    monkeypatch.setattr(Path, "exists", MagicMock(side_effect=error))
+    result = execute_run(downloader(chat), quiet=True)
+    assert result.success
+    assert result.message_count == 0
+    assert _summary(logged)["success"] is True
+
+
 @pytest.mark.parametrize("message_count", [0, 1])
 @pytest.mark.parametrize("propagate", [False, True])
 def test_execute_run_interrupt_closes_real_chat_source(
@@ -303,7 +353,8 @@ def test_execute_run_interrupt_closes_real_chat_source(
         result = execute_run(factory, quiet=True)
         assert result.interrupted is True
         assert result.message_count == message_count
-        assert ("error", result.error_message) in logged
+        assert not any(level == "error" for level, _ in logged)
+        assert result.termination_reason == "interrupted"
 
     assert source.closed is True
     assert factory.instance.closed is True

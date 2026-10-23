@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 from dataclasses import dataclass, field
+from pathlib import Path
 from time import monotonic
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -230,15 +231,24 @@ def _log_run_summary(
     )
     for writer_summary in writer_summaries:
         if (
-            not writer_summary["file_created"]
+            getattr(result, "success", True)
+            and not writer_summary["file_created"]
             and writer_summary["records_written"] == 0
         ):
             file_name = sanitize_for_log(writer_summary["file_name"])
-            log(
-                "info",
-                "Lazy output file was not created because no records were "
-                f"retrieved: {file_name}",
+            try:
+                exists = Path(writer_summary["file_name"]).exists()
+            except OSError:
+                # Optional reporting must not replace the capture result.
+                exists = False
+            message = (
+                "No new records appended to existing output"
+                if exists
+                else (
+                    "Lazy output file was not created because no records were retrieved"
+                )
             )
+            log("info", f"{message}: {file_name}")
     log("debug", f"Run summary: {summary}")
 
 
@@ -368,6 +378,12 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         if run_config.resume:
             checkpoint_resources.enter_context(checkpoint_lock(run_config.resume))
             checkpoint = CaptureCheckpoint(run_config.resume, chat_params)
+            if checkpoint.limit is not None:
+                log(
+                    "debug",
+                    f"Resume checkpoint enforces max_messages={checkpoint.limit} "
+                    "after overlap suppression.",
+                )
         downloader = downloader_cls(**init_params)
         chat = downloader.get_chat(**chat_params)
         if manifest is not None:
@@ -434,7 +450,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         result.error_message = "Keyboard Interrupt"
         if propagate_interrupt:
             raise
-        log("error", result.error_message)
+        log("info", "Capture interrupted by user; outputs finalized on shutdown.")
 
     finally:
         with checkpoint_resources:

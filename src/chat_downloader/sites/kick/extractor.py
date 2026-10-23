@@ -8,9 +8,12 @@ Supports ``kick.com/{username}``, ``kick.com/{username}/videos/{uuid}``, and
 
 from __future__ import annotations
 
+from dataclasses import fields
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import unquote
 
+from chat_downloader.debugging import log
+from chat_downloader.models import ChatRequest, DownloaderConfig, get_field_default
 from chat_downloader.sites._message_dedup import _ConsoleState
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.utils.json_types import get_dict, get_int, get_list, get_str
@@ -26,7 +29,6 @@ if TYPE_CHECKING:
     import re
     from collections.abc import Mapping
 
-    from chat_downloader.models import ChatRequest
     from chat_downloader.sites.models import Chat
 
 __all__ = ["KickChatDownloader", "KickCountryBlocked", "KickError"]
@@ -75,6 +77,18 @@ class KickChatDownloader(BaseChatDownloader):
     def __init__(self, **kwargs: object) -> None:
         """Initialize base HTTP state and an isolated Kick API session."""
         super().__init__(**kwargs)
+        ignored = [
+            f"--{item.name}"
+            for item in fields(DownloaderConfig)
+            if item.name
+            in {"request_profile", "auto_profile_fallback", "twitch_client_id"}
+            and kwargs.get(item.name, get_field_default(item))
+            != get_field_default(item)
+        ]
+        if ignored:
+            log(
+                "warning", f"Ignoring {', '.join(ignored)}: not applicable to kick.com."
+            )
         proxies = dict(self.session.proxies) if self.session.proxies else None
         configured_headers = kwargs.get("headers")
         extra_headers = (
@@ -157,6 +171,19 @@ class KickChatDownloader(BaseChatDownloader):
             params,
         )
 
+    def _warn_ignored_request_options(self, request: ChatRequest) -> None:
+        """Warn about nondefault foreign options without logging their values."""
+        ignored = [
+            f"--{item.name}"
+            for item in fields(ChatRequest)
+            if item.metadata.get("cli", {}).get("group") in {"youtube", "twitch"}
+            and getattr(request, item.name) != get_field_default(item)
+        ]
+        if ignored:
+            log(
+                "warning", f"Ignoring {', '.join(ignored)}: not applicable to kick.com."
+            )
+
     def get_chat_by_channel(
         self,
         username: str,
@@ -171,6 +198,7 @@ class KickChatDownloader(BaseChatDownloader):
             KickError: If required channel metadata is incomplete.
         """
         request = self._coerce_chat_request(params)
+        self._warn_ignored_request_options(request)
         return build_channel_chat(self, username, request)
 
     def get_chat_by_video(  # pragma: no cover — network-dependent VOD API
@@ -186,6 +214,7 @@ class KickChatDownloader(BaseChatDownloader):
             KickError: If the video is not found or metadata is incomplete.
         """
         request = self._coerce_chat_request(params)
+        self._warn_ignored_request_options(request)
         return build_vod_chat(
             username,
             video_id,
@@ -211,6 +240,7 @@ class KickChatDownloader(BaseChatDownloader):
                 a replay interval.
         """
         request = self._coerce_chat_request(params)
+        self._warn_ignored_request_options(request)
         return build_clip_chat(
             username,
             clip_id,

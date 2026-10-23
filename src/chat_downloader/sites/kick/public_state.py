@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from time import monotonic
 from typing import TYPE_CHECKING
 
+from chat_downloader.debugging import logger
 from chat_downloader.utils.json_types import get_dict, get_int, get_list
 
 from .api_client import (
@@ -46,13 +48,26 @@ class KickPublicState:
         self._timeout = timeout
         self._closed = False
 
-    def _get(self, url: str, params: dict[str, str] | None = None) -> object:
+    def _get(
+        self, url: str, *, resource: str, params: dict[str, str] | None = None
+    ) -> object:
         if self._closed:
             msg = "KickPublicState is closed."
             raise RuntimeError(msg)
-        response = self._session.get(
-            url, params=params, timeout=self._timeout, allow_redirects=False
-        )
+        started = monotonic()
+        status = "transport_error"
+        try:
+            response = self._session.get(
+                url, params=params, timeout=self._timeout, allow_redirects=False
+            )
+            status = str(response.status_code)
+        finally:
+            logger.debug(
+                "Kick HTTP resource=%s origin=public status=%s elapsed=%.3fs",
+                resource,
+                status,
+                monotonic() - started,
+            )
         if response.status_code != 423 and _body_looks_like_challenge(response):
             _raise_for_challenge(response, "public state")
         _check_status(response, context="public state", resource="realtime")
@@ -60,7 +75,9 @@ class KickPublicState:
 
     def metadata(self, username: str) -> JSONDict:
         """Fetch the public channel snapshot without account credentials."""
-        payload = self._get(f"https://kick.com/api/v2/channels/{username}")
+        payload = self._get(
+            f"https://kick.com/api/v2/channels/{username}", resource="channel"
+        )
         if not isinstance(payload, dict):
             msg = "Kick public metadata was not an object."
             raise TypeError(msg)
@@ -72,7 +89,9 @@ class KickPublicState:
         if livestream_id < 1:
             return []
         payload = self._get(
-            "https://kick.com/current-viewers", {"ids[]": str(livestream_id)}
+            "https://kick.com/current-viewers",
+            resource="viewers",
+            params={"ids[]": str(livestream_id)},
         )
         if not isinstance(payload, list):
             msg = "Kick viewer counts were not an array."

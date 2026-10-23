@@ -27,6 +27,17 @@ class MessageFilter:
         if types_to_add:
             if "all" in types_to_add:
                 return
+            known_types = {
+                kind for kinds in message_groups_dict.values() for kind in kinds
+            }
+            invalid_types = set(types_to_add) - known_types
+            if invalid_types:
+                msg = (
+                    f"Invalid message types specified: {sorted(invalid_types)}. "
+                    f"Valid types: {', '.join(sorted(known_types))}. "
+                    "Chat messages use text_message."
+                )
+                raise InvalidParameter(msg)
             self._valid_types = set(types_to_add)
             return
 

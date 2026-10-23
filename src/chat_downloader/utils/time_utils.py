@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import math
 import re
 from typing import Any
@@ -59,7 +59,7 @@ ISO8601_REGEX = re.compile(
     re.VERBOSE,
 )
 
-UTC = datetime.UTC
+UTC = dt.UTC
 
 
 def timestamp_to_microseconds(timestamp: str) -> int:
@@ -122,7 +122,7 @@ def microseconds_to_timestamp(
         format: strftime format; codes: https://strftime.org/ and
             https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes.
     """
-    return datetime.datetime.fromtimestamp(
+    return dt.datetime.fromtimestamp(
         microseconds // MICROSECONDS_PER_SECOND,
         tz=UTC,
     ).strftime(format)
@@ -155,8 +155,8 @@ def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any
 
 def parse_timezone(
     matches: dict[str, str],
-    default_timezone: datetime.tzinfo | None = UTC,
-) -> datetime.tzinfo | None:
+    default_timezone: dt.tzinfo | None = UTC,
+) -> dt.tzinfo | None:
     """Parses ISO 8601 time zone specs into tzinfo offsets."""
     tz = matches.get("timezone")
     if tz == "Z":
@@ -171,16 +171,16 @@ def parse_timezone(
     if sign == "-":
         hours = -hours
         minutes = -minutes
-    return datetime.timezone(
-        datetime.timedelta(hours=hours, minutes=minutes),
+    return dt.timezone(
+        dt.timedelta(hours=hours, minutes=minutes),
         description,
     )
 
 
 def parse_date(
     datestring: str,
-    default_timezone: datetime.tzinfo | None = UTC,
-) -> datetime.datetime:
+    default_timezone: dt.tzinfo | None = UTC,
+) -> dt.datetime:
     """Parse an ISO 8601 date string, using its timezone when present.
 
     Args:
@@ -205,7 +205,7 @@ def parse_date(
     groups = {k: v for k, v in m.groupdict().items() if v is not None}
 
     try:
-        return datetime.datetime(
+        return dt.datetime(
             year=int(groups.get("year", 0)),
             month=int(groups.get("month", groups.get("monthdash", 1))),
             day=int(groups.get("day", groups.get("daydash", 1))),
@@ -222,7 +222,7 @@ def parse_date(
 
 def parse_iso8601(data_str: str) -> float:
     """Parse an ISO 8601 string and return microseconds since the Unix epoch."""
-    epoch = datetime.datetime(1970, 1, 1, tzinfo=UTC)
+    epoch = dt.datetime(1970, 1, 1, tzinfo=UTC)
     delta = parse_date(data_str) - epoch
     return float(
         (delta.days * 86_400 + delta.seconds) * MICROSECONDS_PER_SECOND

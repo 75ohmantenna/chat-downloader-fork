@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 
 import pytest
 
@@ -187,7 +187,7 @@ def test_parse_timezone_utc() -> None:
     matches = {"timezone": "Z"}
     tz = parse_timezone(matches)
     assert tz == UTC
-    assert tz == datetime.UTC
+    assert tz == dt.UTC
 
 
 def test_parse_timezone_none() -> None:
@@ -197,7 +197,7 @@ def test_parse_timezone_none() -> None:
     assert tz == UTC
 
     # Custom default
-    custom_tz = datetime.timezone(datetime.timedelta(hours=5))
+    custom_tz = dt.timezone(dt.timedelta(hours=5))
     tz = parse_timezone(matches, default_timezone=custom_tz)
     assert tz == custom_tz
 
@@ -211,7 +211,7 @@ def test_parse_timezone_positive_offset() -> None:
         "tz_minute": "30",
     }
     tz = parse_timezone(matches)
-    assert tz.utcoffset(None) == datetime.timedelta(hours=5, minutes=30)
+    assert tz.utcoffset(None) == dt.timedelta(hours=5, minutes=30)
 
 
 def test_parse_timezone_negative_offset() -> None:
@@ -223,75 +223,75 @@ def test_parse_timezone_negative_offset() -> None:
         "tz_minute": "0",
     }
     tz = parse_timezone(matches)
-    assert tz.utcoffset(None) == datetime.timedelta(hours=-8)
+    assert tz.utcoffset(None) == dt.timedelta(hours=-8)
 
 
 def test_parse_timezone_without_minutes() -> None:
     """Test parsing timezone without minutes."""
     matches = {"timezone": "+05", "tz_sign": "+", "tz_hour": "5"}
     tz = parse_timezone(matches)
-    assert tz.utcoffset(None) == datetime.timedelta(hours=5)
+    assert tz.utcoffset(None) == dt.timedelta(hours=5)
 
 
 def test_parse_date_basic() -> None:
     """Test basic date parsing (lines 217-241)."""
-    dt = parse_date("2020-01-15T10:30:45Z")
-    assert dt.year == 2020
-    assert dt.month == 1
-    assert dt.day == 15
-    assert dt.hour == 10
-    assert dt.minute == 30
-    assert dt.second == 45
+    parsed_date = parse_date("2020-01-15T10:30:45Z")
+    assert parsed_date.year == 2020
+    assert parsed_date.month == 1
+    assert parsed_date.day == 15
+    assert parsed_date.hour == 10
+    assert parsed_date.minute == 30
+    assert parsed_date.second == 45
 
 
 def test_parse_date_with_fractional_seconds() -> None:
     """Test parsing date with fractional seconds (lines 235-237)."""
-    dt = parse_date("2020-06-15T12:30:45.123456Z")
-    assert dt.microsecond == 123456
+    parsed_date = parse_date("2020-06-15T12:30:45.123456Z")
+    assert parsed_date.microsecond == 123456
 
 
 def test_parse_date_with_timezone_offset() -> None:
     """Test parsing date with timezone offset (lines 238)."""
-    dt = parse_date("2020-06-15T12:30:45+05:30")
-    assert dt.tzinfo.utcoffset(None) == datetime.timedelta(hours=5, minutes=30)
+    parsed_date = parse_date("2020-06-15T12:30:45+05:30")
+    assert parsed_date.tzinfo.utcoffset(None) == dt.timedelta(hours=5, minutes=30)
 
     dt_neg = parse_date("2020-06-15T12:30:45-08:00")
-    assert dt_neg.tzinfo.utcoffset(None) == datetime.timedelta(hours=-8)
+    assert dt_neg.tzinfo.utcoffset(None) == dt.timedelta(hours=-8)
 
 
 def test_parse_date_year_only() -> None:
     """Test parsing year only."""
-    dt = parse_date("2020")
-    assert dt.year == 2020
-    assert dt.month == 1
-    assert dt.day == 1
+    parsed_date = parse_date("2020")
+    assert parsed_date.year == 2020
+    assert parsed_date.month == 1
+    assert parsed_date.day == 1
 
 
 def test_parse_date_year_month() -> None:
     """Test parsing year-month."""
-    dt = parse_date("2020-06")
-    assert dt.year == 2020
-    assert dt.month == 6
-    assert dt.day == 1
+    parsed_date = parse_date("2020-06")
+    assert parsed_date.year == 2020
+    assert parsed_date.month == 6
+    assert parsed_date.day == 1
 
 
 def test_parse_date_with_dashes() -> None:
     """Test parsing date with dashes (monthdash, daydash)."""
-    dt = parse_date("2020-6-5")
-    assert dt.year == 2020
-    assert dt.month == 6
-    assert dt.day == 5
+    parsed_date = parse_date("2020-6-5")
+    assert parsed_date.year == 2020
+    assert parsed_date.month == 6
+    assert parsed_date.day == 5
 
 
 def test_parse_date_compact_format() -> None:
     """Test parsing compact format (no dashes)."""
-    dt = parse_date("20200615T123045Z")
-    assert dt.year == 2020
-    assert dt.month == 6
-    assert dt.day == 15
-    assert dt.hour == 12
-    assert dt.minute == 30
-    assert dt.second == 45
+    parsed_date = parse_date("20200615T123045Z")
+    assert parsed_date.year == 2020
+    assert parsed_date.month == 6
+    assert parsed_date.day == 15
+    assert parsed_date.hour == 12
+    assert parsed_date.minute == 30
+    assert parsed_date.second == 45
 
 
 def test_parse_date_invalid_string() -> None:

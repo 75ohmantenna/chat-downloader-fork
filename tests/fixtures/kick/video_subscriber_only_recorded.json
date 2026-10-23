@@ -1,0 +1,14 @@
+{
+  "provenance": {
+    "source": "Anonymous GET https://kick.com/api/v1/video/ede931d6-b0a1-4dea-bbf6-858bb6c2b842",
+    "captured_date": "2026-10-14",
+    "source_sha256": "72aa5334e84af6a56b5c788053faaabc9eff523833d3e0461d3c09289310534b",
+    "curation": "Retained HTTP status and the uuid, is_private, and status response fields. Replaced uuid with the existing synthetic clip source VOD identity. Omitted unrelated metadata; no source VOD media was requested."
+  },
+  "http_status": 403,
+  "response": {
+    "uuid": "b190fd3b-82e6-4b88-b33c-4b6deae0f968",
+    "is_private": true,
+    "status": "subscriber_only"
+  }
+}

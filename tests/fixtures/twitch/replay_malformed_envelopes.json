@@ -1,0 +1,18 @@
+{
+  "provenance": {
+    "source": "Synthetic adversarial GraphQL response examples",
+    "curation": "Invalid response envelopes exercise replay validation before dictionary access. These are reconstructed cases, not captured Twitch responses."
+  },
+  "responses": [
+    null,
+    true,
+    1,
+    "invalid response",
+    [null],
+    [true],
+    [1],
+    ["invalid batch entry"],
+    [[]],
+    {"data": {"video": null}}
+  ]
+}

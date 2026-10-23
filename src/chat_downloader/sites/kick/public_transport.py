@@ -81,6 +81,7 @@ class KickPublicTransport:
         self,
         *,
         username: str,
+        public_events: bool = True,
         channel_id: str,
         diagnostic_callback: Callable[[str], None] | None = None,
         trust_env: bool = True,
@@ -89,6 +90,7 @@ class KickPublicTransport:
     ) -> None:
         """Initialize ownership, bounded buffering, and snapshot state."""
         self._diagnostic_callback = diagnostic_callback
+        self._public_events = public_events
         self.username = username
         self.channel_id = channel_id
         self._trust_env = trust_env
@@ -102,7 +104,7 @@ class KickPublicTransport:
         self._state: KickPublicState | None = None
         self._channel: JSONDict = {}
         self._last_metadata: JSONDict | None = None
-        self._last_viewers: JSONList | None = None
+        self._last_viewers: tuple[JSONList, bool] | None = None
         self._next_poll = 0.0
         self._receive_timeout = 1.0
         self._pending: deque[JSONDict | Exception] = deque()
@@ -150,12 +152,16 @@ class KickPublicTransport:
             self._check_stopped()
             proxy = self._configured_proxy
             # Explicit arguments keep transport/session ownership typed and isolated.
-            self._state = KickPublicState(
-                proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
+            if self._public_events:
+                self._state = KickPublicState(
+                    proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
+                )
+                self._channel = self._state.metadata(self.username)
+                self._check_stopped()
+            scopes = (
+                (self.channel_id, None) if self._public_events else (self.channel_id,)
             )
-            self._channel = self._state.metadata(self.username)
-            self._check_stopped()
-            for channel_id in (self.channel_id, None):
+            for channel_id in scopes:
                 client = KickRealtimeClient(
                     proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
                 )
@@ -210,6 +216,8 @@ class KickPublicTransport:
             ]
         )
         self._check_stopped()
+        if not self._public_events:
+            return
         self._transports[1].subscribe_channels(
             [
                 f"channel.{self.channel_id}",
@@ -264,15 +272,20 @@ class KickPublicTransport:
             logger.debug("Kick public metadata poll failed (%s).", type(error).__name__)
         try:
             viewers = self._state.viewers(self._channel)
-            if viewers != self._last_viewers:
+            offline = (
+                "livestream" in self._channel and self._channel["livestream"] is None
+            )
+            viewer_state = (viewers, offline)
+            if viewer_state != self._last_viewers:
                 self._pending.append(
                     {
                         "event": "kick:viewer_count",
                         "data": viewers,
                         "source": "public_rest",
+                        "offline": offline,
                     }
                 )
-                self._last_viewers = viewers
+                self._last_viewers = viewer_state
         except (RequestException, OSError, KickError, ValueError, TypeError) as error:
             self._record_diagnostic("public_state_poll_failure_count")
             logger.debug("Kick public viewer poll failed (%s).", type(error).__name__)

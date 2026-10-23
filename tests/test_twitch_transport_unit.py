@@ -623,8 +623,8 @@ def test_twitch_chat_irc_registration_and_receive(irc_socket, split):
     encoded = text.encode()
     chunks = [encoded[:8], encoded[8:]] if split else [encoded]
     irc_socket.recv.side_effect = chunks
-    irc = irc_transport.TwitchChatIRC()
-    assert irc_socket.settimeout.call_args_list == [((None,), {})]
+    irc = irc_transport.TwitchChatIRC(connect_timeout=0.5)
+    assert irc_socket.settimeout.call_args_list == [((0.5,), {})]
     assert [call.args[0] for call in irc_socket.sendall.call_args_list] == [
         b"CAP REQ :twitch.tv/tags twitch.tv/commands\r\n",
         b"PASS listen\r\n",
@@ -894,10 +894,20 @@ def test_irc_transport_socket_errors_trigger_reconnect(responses, send_error, ma
         next(_stream_messages(irc))
 
 
-def test_twitch_chat_irc_registration_failure_closes_socket(irc_socket):
-    irc_socket.sendall.side_effect = OSError("broken pipe")
-    with pytest.raises(OSError):
-        irc_transport.TwitchChatIRC()
+@pytest.mark.parametrize("stage", ["settimeout", "sendall"])
+@pytest.mark.parametrize("error", [TimeoutError, KeyboardInterrupt, SystemExit])
+@pytest.mark.parametrize("close_fails", [False, True])
+def test_twitch_chat_irc_registration_failure_closes_socket(
+    irc_socket, stage, error, close_fails
+):
+    failure = error("registration interrupted")
+    getattr(irc_socket, stage).side_effect = failure
+    if close_fails:
+        irc_socket.close.side_effect = OSError("cleanup failed")
+    with pytest.raises(error) as caught:
+        irc_transport.TwitchChatIRC(connect_timeout=0.1)
+    assert caught.value is failure
+    irc_socket.settimeout.assert_called_once_with(0.1)
     irc_socket.close.assert_called_once()
 
 
