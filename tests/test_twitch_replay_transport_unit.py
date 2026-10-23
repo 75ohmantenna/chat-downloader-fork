@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from functools import partial
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.sites.twitch.graphql_client import (
     _download_gql,
     _PersistedQueryUnavailable,
@@ -95,14 +98,29 @@ def test_replay_request_position(
         [{"data": {}}],
         [{"data": {"video": None}}],
         _video_payload(None),
+        _video_payload({}),
+        _video_payload({"edges": None}),
+        _video_payload({"edges": {}}),
     ],
-    ids=["empty", "missing-data", "missing-video", "null-video", "null-comments"],
 )
-def test_replay_returns_none_for_malformed_or_empty_payloads(payload, mobile):
+def test_replay_rejects_missing_or_malformed_initial_page(payload, mobile):
     responses = (
         [_PersistedQueryUnavailable("rotated"), payload] if mobile else [payload]
     )
-    assert _replay(Mock(side_effect=responses), offset=1.5) == (None, None)
+    with pytest.raises(ParsingError):
+        _replay(Mock(side_effect=responses), offset=1.5)
+
+
+@pytest.mark.parametrize("mobile", [False, True])
+@pytest.mark.parametrize("cursor", [None, "next-page"])
+def test_malformed_response_envelopes_use_replay_error_policy(mobile, cursor):
+    fixture = Path(__file__).parent / "fixtures/twitch/replay_malformed_envelopes.json"
+    for payload in json.loads(fixture.read_text())["responses"]:
+        download = Mock(return_value=payload)
+        if mobile:
+            download.side_effect = [_PersistedQueryUnavailable("rotated"), payload]
+        with pytest.raises(ParsingError, match="video disappeared"):
+            _replay(download, cursor=cursor)
 
 
 def test_replay_fallback_composes_persisted_and_full_document_requests() -> None:

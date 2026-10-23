@@ -292,8 +292,8 @@ def test_twitch_irc_connect_uses_10_second_timeout() -> None:
     assert wrapped_sockets, "Expected TLS wrapper to produce a wrapped socket"
 
 
-def test_twitch_irc_connect_resets_to_blocking_after_connect() -> None:
-    """After TLS connect, the wrapped socket must switch to blocking mode."""
+def test_twitch_irc_registration_retains_configured_connect_timeout() -> None:
+    """IRC registration stays bounded after TLS connection establishment."""
     from chat_downloader.sites.twitch.irc_transport import TwitchChatIRC
 
     settimeout_calls = []
@@ -318,11 +318,9 @@ def test_twitch_irc_connect_resets_to_blocking_after_connect() -> None:
             return_value=FakeContext(),
         ),
     ):
-        TwitchChatIRC()
+        TwitchChatIRC(connect_timeout=0.5)
 
-    assert None in settimeout_calls, (
-        "Expected settimeout(None) call to reset to blocking mode"
-    )
+    assert settimeout_calls == [0.5]
 
 
 def test_twitch_irc_set_timeout_delegates_to_socket() -> None:

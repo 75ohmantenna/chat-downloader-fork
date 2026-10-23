@@ -9,12 +9,14 @@ from unittest.mock import Mock, patch
 import pytest
 from requests.exceptions import RequestException
 
+from chat_downloader import ChatDownloader
 from chat_downloader.errors import NoChatReplay, ParsingError, VideoUnavailable
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.capture_manifest import replay_complete
-from chat_downloader.runtime.runner import RunResult
+from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.twitch import _replay_vod_loop, replay_service
+from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
 from chat_downloader.sites.twitch.replay_transport import get_chat_messages_by_vod_id
 from chat_downloader.sites.twitch.types import BadgeSet
@@ -379,6 +381,48 @@ def test_missing_comments_after_first_page_marks_replay_incomplete(downloader):
     with patch.object(replay_service, "_parse_item", return_value=_message("m1")):
         assert _run(downloader, fetch, diagnostics=diagnostics) == [_message("m1")]
     assert diagnostics["termination_reason"] == "pagination_stalled"
+
+
+@pytest.mark.parametrize("video", [None, {"comments": {}}, {"comments": {"edges": []}}])
+def test_initial_replay_response_must_establish_completeness(
+    monkeypatch, tmp_path, video
+):
+    import json
+
+    monkeypatch.setattr(
+        TwitchChatDownloader,
+        "_download_gql",
+        Mock(
+            side_effect=[
+                [
+                    {
+                        "data": {
+                            "video": {
+                                "id": "123",
+                                "title": "Video",
+                                "lengthSeconds": 60,
+                            }
+                        }
+                    }
+                ],
+                [{"data": {"video": video}}],
+            ]
+        ),
+    )
+    manifest = tmp_path / "manifest.json"
+    result = execute_run(
+        ChatDownloader,
+        url="https://www.twitch.tv/videos/123",
+        proxy="",
+        quiet=True,
+        max_attempts=1,
+        require_complete=True,
+        run_manifest=str(manifest),
+    )
+    expected = video == {"comments": {"edges": []}}
+    assert result.success is expected
+    assert json.loads(manifest.read_text())["replay_complete"] is expected
+    assert result.message_count == 0
 
 
 @pytest.mark.parametrize("fallback", [False, True])
