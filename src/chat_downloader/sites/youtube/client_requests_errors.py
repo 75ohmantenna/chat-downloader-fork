@@ -128,7 +128,9 @@ def _handle_http_error(
             error_message,
             "HTTP/API error",
         )
-    log("error", error_message)
+    # The continuation owner may recover a rejected initial replay through a
+    # fresh profile. Terminal errors are reported by the run error boundary.
+    log("debug", error_message)
     return False
 
 

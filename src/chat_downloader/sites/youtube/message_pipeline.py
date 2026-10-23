@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from chat_downloader.debugging import log
@@ -251,6 +252,38 @@ def _record_action_diagnostics(
             )
 
 
+def _observe_replay_timing(
+    message: JSONDict, diagnostics: dict[str, object] | None
+) -> None:
+    """Expose supplied replay timing without inventing absent source timestamps."""
+    value = message.get("time_in_seconds")
+    if (
+        message.get("timestamp") is not None
+        or not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or (isinstance(value, float) and not isfinite(value))
+    ):
+        return
+    message["timing"] = {
+        "offset_source": "provider_replay",
+        "absolute_timestamp_available": False,
+        "zero_offset_ambiguous": value == 0,
+    }
+    if diagnostics is None:
+        return
+    count = cast("int", diagnostics.get("replay_timestamp_missing_count", 0))
+    diagnostics["replay_timestamp_missing_count"] = count + 1
+    diagnostics["replay_zero_offset_without_timestamp_count"] = cast(
+        "int", diagnostics.get("replay_zero_offset_without_timestamp_count", 0)
+    ) + int(value == 0)
+    if count == 0:
+        log(
+            "warning",
+            "YouTube replay records omit source timestamps; supplied replay offsets "
+            "are retained, but zero offsets may include imprecisely timed preroll.",
+        )
+
+
 def _process_actions(
     actions: list[JSONDict],
     offset: float | None,
@@ -312,6 +345,8 @@ def _process_actions(
         if not is_replay and pipeline_result.message is not None:
             _apply_live_timing(pipeline_result.message, loop_state, live_start_time_ms)
         if pipeline_result.message is not None:
+            if is_replay:
+                _observe_replay_timing(pipeline_result.message, diagnostics)
             emitted_message_count += 1
             yield pipeline_result.message
 

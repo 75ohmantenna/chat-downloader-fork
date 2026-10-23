@@ -512,7 +512,10 @@ and active request-profile names and chat-view label are also retained from
 fixed vocabularies. Automatic
 YouTube, Twitch live, and Kick live inspection reports remain in
 `provider_inspection` when requested.
-YouTube bootstrap counters survive failures before a chat is created.
+YouTube bootstrap counters survive failures before a chat is created. Replay
+diagnostics also count records missing source timestamps, ambiguous zero
+offsets, and attempted/successful initial replay profile recovery. A recovered
+HTTP error remains counted even though the run succeeds.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
 one deadline observation after bounded shutdown, shared with provider inspection
 and the debug summary. An incomplete count is a lower bound even if a worker

@@ -18,6 +18,7 @@ from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.continuation import _ContinuationLoop
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
+from chat_downloader.sites.youtube.message_pipeline import _observe_replay_timing
 from chat_downloader.sites.youtube.paid_events import PaidEventCache
 from chat_downloader.sites.youtube.parsing.actions_router import process_action
 from chat_downloader.sites.youtube.parsing.message_content_text_parser import (
@@ -143,6 +144,54 @@ def test_ticker_filter_enriches_from_paid_events_across_polls(monkeypatch):
     assert messages[0]["message"] == "Fixture paid message"
     assert messages[0]["money"]["amount"] == 20
     assert "Lemon" in messages[1]["message"]
+
+
+def test_replay_timing_provenance_warns_once_across_multiple_polls(monkeypatch):
+    logs = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.message_pipeline.log",
+        lambda level, text: logs.append((level, text)),
+    )
+    records = list(_replay(monkeypatch))
+    timed = [r for r in records if "time_in_seconds" in r]
+    assert all(r["timing"]["offset_source"] == "provider_replay" for r in timed)
+    assert all(r["timing"]["absolute_timestamp_available"] is False for r in timed)
+    assert timed[0]["time_in_seconds"] == 0
+    assert timed[0]["timing"]["zero_offset_ambiguous"] is True
+    assert timed[1]["time_in_seconds"] == 8392.57
+    assert timed[1]["timing"]["zero_offset_ambiguous"] is False
+    assert len([entry for entry in logs if entry[0] == "warning"]) == 1
+    assert all("timestamp" not in r for r in records)
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"timestamp": 0, "time_in_seconds": -19},
+        {"time_in_seconds": None},
+        {"time_in_seconds": True},
+        {"time_in_seconds": float("inf")},
+    ],
+)
+def test_timing_observation_preserves_known_timestamps_and_untimed_records(record):
+    before = record.copy()
+    diagnostics = {}
+    _observe_replay_timing(record, diagnostics)
+    assert record == before
+    assert diagnostics == {}
+
+
+def test_timing_provenance_works_without_a_diagnostics_collector():
+    record = {"time_in_seconds": 1.25}
+    _observe_replay_timing(record, None)
+    assert record["timing"]["zero_offset_ambiguous"] is False
+
+
+def test_timing_observation_does_not_coerce_large_integer_offsets_to_float():
+    record = {"time_in_seconds": 10**1000}
+    _observe_replay_timing(record, {})
+    assert record["time_in_seconds"] == 10**1000
+    assert record["timing"]["offset_source"] == "provider_replay"
 
 
 def _element(**models):
