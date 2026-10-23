@@ -457,8 +457,11 @@ shutdown recovery points, not continuous crash journals.
 `--verify_output` checks exact formatting, semantic deduplication, UTF-8, and
 physical line endings after a successful or interrupted run with safe cleanup.
 It requires one JSONL and one TXT
-output; append verification requires a resume checkpoint so run boundaries are
-known. A verification error makes the command fail. A zero-message success can
+output after duplicate destinations are removed, including aliases and expanded
+output templates. Different formats must use distinct files. Extra distinct
+destinations are rejected before writing. Append verification requires a resume
+checkpoint so run boundaries are known. A verification error makes the command
+fail. A zero-message success can
 have no files because writers initialize lazily. The run summary separately
 reports success, termination reason, parity status, and writer counts. A parity
 pass does not prove complete provider history.

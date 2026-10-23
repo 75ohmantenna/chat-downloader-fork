@@ -338,7 +338,7 @@ def test_resume_rejects_changed_request_artifacts_or_boundary(
 
 @pytest.mark.parametrize(
     "outputs",
-    [None, ["{title}.jsonl"], ["same.txt", "same.txt"], ["a.txt", "b.txt"]],
+    [None, ["{title}.jsonl"], ["a.txt", "b.txt"]],
 )
 def test_checkpoint_requires_explicit_distinct_output_paths(tmp_path, outputs) -> None:
     with pytest.raises(ValueError):

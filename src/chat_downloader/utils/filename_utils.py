@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 from string import Formatter
 
 from chat_downloader.errors import InvalidParameter
@@ -19,6 +21,16 @@ _RESERVED_WINDOWS_NAMES_RE = re.compile(
 # Maximum filename byte length in UTF-8.  Most modern filesystems allow 255
 # bytes; 200 gives comfortable headroom for extensions appended by callers.
 _MAX_FILENAME_BYTES = 200
+
+
+def output_path_identity(path: str | Path) -> tuple[object, ...]:
+    """Identify existing aliases by inode, otherwise by canonical path."""
+    canonical = os.path.normcase(os.path.realpath(path))
+    try:
+        info = Path(canonical).stat()
+    except OSError:
+        return ("path", canonical)
+    return ("inode", info.st_dev, info.st_ino)
 
 
 def validate_output_template(file_name: str) -> None:
