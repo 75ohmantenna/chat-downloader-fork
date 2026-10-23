@@ -33,6 +33,19 @@ more than one real consumer.
 **Revisit when:** a new provider or repeated cross-provider change shows that a
 shared abstraction would remove knowledge rather than merely move code.
 
+## Keep checkpoint verification and persistence together
+
+**Decision:** `runtime/capture_checkpoint.py` owns request and artifact identity,
+event-kind and occurrence boundaries, accepted-record rollback, and atomic
+checkpoint persistence. A reproduced inconsistent boundary (`offset: null`
+with recorded events) allowed duplicate appends despite matching output hashes.
+Validate the offset, event identities, occurrence counts, and total together
+before binding a source. The module is narrowly allowlisted above 400 lines;
+separating validation from this state would obscure the append contract.
+
+**Revisit when:** checkpoint validation has an independent consumer or a new
+ownership boundary removes coupling without splitting its integrity checks.
+
 ## Keep Kick clip fallback evidence together
 
 **Decision:** `sites/kick/clip_service.py` owns web and mobile clip-contract
@@ -44,6 +57,19 @@ must fail closed.
 
 **Revisit when:** a pure metadata-validation component gains another real
 consumer, or a new ownership boundary can remove state and fallback coupling.
+
+## Keep Kick HTTP response classification together
+
+**Decision:** `sites/kick/api_client.py` owns origin-scoped HTTP requests and
+their resource-specific status, challenge, identity, and JSON classification.
+The recorded subscriber-only VOD response demonstrates why HTTP 403 alone
+cannot identify a challenge: a validated video denial may enable public clip
+metadata fallback, while challenge documents must remain terminal. The client
+is narrowly allowlisted above 400 lines to keep that precedence and its
+diagnostics in one place.
+
+**Revisit when:** response policy gains an independent consumer or a new
+boundary removes coupling without separating status from resource identity.
 
 ## Keep Twitch replay identity and pagination together
 

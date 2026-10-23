@@ -288,7 +288,9 @@ than scanning until a paid event appears. Paid-cache enrichment still precedes
 both filters.
 
 Replay-wrapper offsets are used only when they are finite and nonnegative.
-Positive offsets provide authoritative millisecond precision. At the zero
+Positive offsets provide authoritative millisecond precision. Pinned replay
+banners retain the wrapper offset rather than replacing it with the older pinned
+message's displayed time, including during checkpointed captures. At the zero
 preroll floor, nested renderer display timing remains authoritative so signed
 negative paid and ticker items stay aligned. Malformed offsets fall back to
 the renderer's display timing instead of aborting the replay or replacing
@@ -297,7 +299,9 @@ is merged.
 
 Resume checkpoints retain signed replay offsets. A negative resume boundary
 starts polling at the zero preroll floor while retaining the signed presentation
-filter. Unparsed actions and invalid replay messages count as known record loss
+filter. Boundary overlap accounting distinguishes message and action types and
+their occurrence counts, preserving paid/ticker pairs sharing an ID and offset.
+Unparsed actions and invalid replay messages count as known record loss
 for completion reports; known control actions and requested filters do not.
 
 `NoChatReplay` indicates that YouTube does not expose replay chat for the

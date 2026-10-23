@@ -141,6 +141,17 @@ def test_filter_by_types() -> None:
     assert not f.should_add({"message_type": "paid_message"})
 
 
+@pytest.mark.parametrize("types", [["chat_message"], ["text_message", "bogus_type"]])
+def test_unknown_explicit_types_report_valid_provider_types(types):
+    with pytest.raises(InvalidParameter, match=r"Valid types:.*text_message"):
+        MessageFilter(_FILTER_GROUPS, types_to_add=types)
+
+
+def test_all_types_includes_future_events():
+    selected = MessageFilter(_FILTER_GROUPS, types_to_add=["all", "future_type"])
+    assert selected.should_add({"message_type": "future_type"})
+
+
 def test_filter_by_groups() -> None:
     f = MessageFilter(_FILTER_GROUPS, groups_to_add=["superchat"])
     assert f.should_add({"message_type": "paid_message"})
