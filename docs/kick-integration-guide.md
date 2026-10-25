@@ -718,6 +718,18 @@ environments diagnosable:
 3. **Plain requests session** with browser-like headers — last resort when
    neither specialized backend can be imported.
 
+The curl-cffi requirement starts at 0.17.0rc1, an intentional release candidate
+with patched native libraries. The offline transport checks require libcurl
+8.23.0 or later and, when enabled, Brotli 1.2.1 or later. They also exercise
+valid identity, gzip, and Brotli JSON responses through the real Kick session.
+This protects the automatic response-decoding path against regressions to
+the vulnerable Brotli decoder. Changing `Accept-Encoding` alone does not
+disable native response decoding. Standard installations retain automatic
+decoding with the patched backend and require certifi 2026.10.23 or later.
+Curl-cffi also honors custom CA configuration and can select Python's default
+trust store. Refresh any configured operating-system or custom bundles
+separately; upgrading certifi does not replace those stores.
+
 When a response body looks like a challenge page (Cloudflare markers, or an HTML
 body where JSON was expected) or returns HTTP 403, the client raises
 `CaptchaChallengeRequired` unless the response matches the validated
