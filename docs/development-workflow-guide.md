@@ -323,9 +323,11 @@ uv run pytest -v -m network --run-network
 
 `make ci` runs `lock-check`, `lint`, `spell`, `fmt-check`, `typecheck`,
 `coverage`, and `smoke`. GitHub Actions invokes this exact target after
-`uv sync --locked`. CI pins uv to `0.12.15` and `astral-sh/setup-uv` to
-`v10.1.0` by full commit SHA. Use the same uv version locally when validating
-tooling changes; standalone installations can run `uv self update 0.12.15`.
+`uv sync --locked`. CI pins uv to `0.13.5` and `astral-sh/setup-uv` to
+`v10.3.2` by full commit SHA. Checkout `v7.0.1` and setup-python `v7.1.0` are
+also pinned by full commit SHA. Python setup checks for the latest patch in
+each supported minor series. Use the same uv version locally when validating
+tooling changes; standalone installations can run `uv self update 0.13.5`.
 
 ## Dependency refreshes
 
@@ -334,8 +336,26 @@ in `pyproject.toml`, then `uv sync --locked` and `make ci`. Review the resolved
 versions and release notes, especially for networking libraries. Commit the
 generated `uv.lock` when intentionally updating dependencies. Wheel installers
 use the requirements in `pyproject.toml`, not this lockfile. Raise minimum
-versions there when a fix must reach installed users; urllib3 requires at least
-2.8.0 for HTTPS proxy TLS and streamed response security fixes.
+versions there when a fix must reach installed users. The current security
+floors are requests 2.34.2, certifi 2026.10.23, urllib3 2.8.0, curl-cffi
+0.17.0rc1, and setuptools 84.2.1 for isolated builds. The urllib3 floor covers
+HTTPS proxy TLS and streamed response security fixes. The certifi floor
+removes trust in a certificate authority affected by compromised intermediate
+keys. Curl-cffi 0.17.0rc1 is an intentional release candidate that bundles
+patched Brotli and libcurl; do not enable prereleases globally when refreshing
+other dependencies. The offline Kick transport checks inspect the loaded
+native libraries and exercise identity, gzip, and Brotli response decoding.
+
+Use refreshed managed Python builds: the October 2026 baseline is Python
+3.12.15, 3.13.17, and 3.14.9. After updating uv, install the refreshed builds
+with `uv python install --reinstall 3.12.15 3.13.17 3.14.9`, then recreate the
+project environment with `uv venv --python 3.12.15 --clear` and
+`uv sync --locked`. Existing environments do not automatically switch to an
+updated interpreter. Upgrade pip to at least 26.2.2 wherever it is installed;
+updating the project's certifi alone does not replace pip's bundled trust
+store. The locked virtualenv also bundles patched pip for supported Python
+versions. Keep TLS verification enabled and verify release checksums when
+bootstrapping tools from an environment with an older trust store.
 
 ## Architecture and test guardrails
 
