@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,3 +37,22 @@ def test_ci_fetches_full_history_for_issue_reference_guard() -> None:
 
     assert len(checkout_steps) == 1
     assert checkout_steps[0]["with"]["fetch-depth"] == 0
+
+
+@pytest.mark.parametrize("job_name", ["test", "network-replay"])
+def test_ci_uses_selected_interpreter_instead_of_local_python_pin(job_name) -> None:
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"][job_name]["steps"]
+    python_steps = [
+        step
+        for step in steps
+        if str(step.get("uses", "")).startswith("actions/setup-python@")
+    ]
+    assert len(python_steps) == 1
+    assert python_steps[0]["id"] == "python"
+    assert python_steps[0]["with"]["check-latest"] is True
+    # uv prioritizes .python-version over PATH unless UV_PYTHON is explicit.
+    run_steps = [step for step in steps if "run" in step]
+    assert len(run_steps) == 2
+    for step in run_steps:
+        assert step["env"]["UV_PYTHON"] == "${{ steps.python.outputs.python-path }}"

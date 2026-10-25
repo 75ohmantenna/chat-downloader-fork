@@ -326,8 +326,11 @@ uv run pytest -v -m network --run-network
 `uv sync --locked`. CI pins uv to `0.13.5` and `astral-sh/setup-uv` to
 `v10.3.2` by full commit SHA. Checkout `v7.0.1` and setup-python `v7.1.0` are
 also pinned by full commit SHA. Python setup checks for the latest patch in
-each supported minor series. Use the same uv version locally when validating
-tooling changes; standalone installations can run `uv self update 0.13.5`.
+each supported minor series. Installation and validation pass the selected
+interpreter path through `UV_PYTHON`, so the local `.python-version` cannot
+override the CI matrix or the scheduled job's Python version. Use the same uv
+version locally when validating tooling changes; standalone installations can
+run `uv self update 0.13.5`.
 
 ## Dependency refreshes
 
@@ -353,9 +356,12 @@ project environment with `uv venv --python 3.12.15 --clear` and
 `uv sync --locked`. Existing environments do not automatically switch to an
 updated interpreter. Upgrade pip to at least 26.2.2 wherever it is installed;
 updating the project's certifi alone does not replace pip's bundled trust
-store. The locked virtualenv also bundles patched pip for supported Python
-versions. Keep TLS verification enabled and verify release checksums when
-bootstrapping tools from an environment with an older trust store.
+store. It also does not refresh operating-system or custom CA bundles:
+curl-cffi honors CA environment overrides and can use Python's default trust
+store. Refresh those stores separately when they are configured. The locked
+virtualenv also bundles patched pip for supported Python versions. Keep TLS
+verification enabled and verify release checksums when bootstrapping tools
+from an environment with an older trust store.
 
 ## Architecture and test guardrails
 
