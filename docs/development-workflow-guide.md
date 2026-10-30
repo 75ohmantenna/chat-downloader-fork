@@ -323,14 +323,14 @@ uv run pytest -v -m network --run-network
 
 `make ci` runs `lock-check`, `lint`, `spell`, `fmt-check`, `typecheck`,
 `coverage`, and `smoke`. GitHub Actions invokes this exact target after
-`uv sync --locked`. CI pins uv to `0.13.5` and `astral-sh/setup-uv` to
-`v10.3.2` by full commit SHA. Checkout `v7.0.1` and setup-python `v7.1.0` are
+`uv sync --locked`. CI pins uv to `0.13.6` and `astral-sh/setup-uv` to
+`v10.3.3` by full commit SHA. Checkout `v7.0.1` and setup-python `v7.1.0` are
 also pinned by full commit SHA. Python setup checks for the latest patch in
 each supported minor series. Installation and validation pass the selected
 interpreter path through `UV_PYTHON`, so the local `.python-version` cannot
 override the CI matrix or the scheduled job's Python version. Use the same uv
 version locally when validating tooling changes; standalone installations can
-run `uv self update 0.13.5`.
+run `uv self update 0.13.6`.
 
 ## Dependency refreshes
 
@@ -341,22 +341,25 @@ generated `uv.lock` when intentionally updating dependencies. Wheel installers
 use the requirements in `pyproject.toml`, not this lockfile. Raise minimum
 versions there when a fix must reach installed users. The current security
 floors are requests 2.34.2, certifi 2026.10.23, urllib3 2.8.0, curl-cffi
-0.17.0rc1, and setuptools 84.2.1 for isolated builds. The urllib3 floor covers
+0.17.0, and setuptools 84.2.1 for isolated builds. The urllib3 floor covers
 HTTPS proxy TLS and streamed response security fixes. The certifi floor
 removes trust in a certificate authority affected by compromised intermediate
-keys. Curl-cffi 0.17.0rc1 is an intentional release candidate that bundles
-patched Brotli and libcurl; do not enable prereleases globally when refreshing
-other dependencies. The offline Kick transport checks inspect the loaded
-native libraries and exercise identity, gzip, and Brotli response decoding.
+keys. Curl-cffi 0.17.0 is the stable release that bundles patched Brotli and
+libcurl. The offline Kick transport checks inspect the loaded native libraries
+and exercise identity, gzip, and Brotli response decoding.
 
 Use refreshed managed Python builds: the October 2026 baseline is Python
-3.12.15, 3.13.17, and 3.14.9. After updating uv, install the refreshed builds
-with `uv python install --reinstall 3.12.15 3.13.17 3.14.9`, then recreate the
-project environment with `uv venv --python 3.12.15 --clear` and
+3.12.16, 3.13.18, and 3.14.10. These security releases block compromised
+certificate authority keys in Python's `ssl` module. After updating uv, install
+the refreshed builds with
+`uv python install --reinstall 3.12.16 3.13.18 3.14.10`, then recreate the
+project environment with `uv venv --python 3.12.16 --clear` and
 `uv sync --locked`. Existing environments do not automatically switch to an
-updated interpreter. Upgrade pip to at least 26.2.2 wherever it is installed;
-updating the project's certifi alone does not replace pip's bundled trust
-store. It also does not refresh operating-system or custom CA bundles:
+updated interpreter. The `.python-version` file selects the 3.12 series;
+installed environments still need to be recreated after a patch update.
+Upgrade pip to at least 26.2.2 wherever it is installed; updating the project's
+certifi alone does not replace pip's bundled trust store. It also does not
+refresh operating-system or custom CA bundles:
 curl-cffi honors CA environment overrides and can use Python's default trust
 store. Refresh those stores separately when they are configured. The locked
 virtualenv also bundles patched pip for supported Python versions. Keep TLS

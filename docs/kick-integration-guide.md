@@ -718,9 +718,9 @@ environments diagnosable:
 3. **Plain requests session** with browser-like headers — last resort when
    neither specialized backend can be imported.
 
-The curl-cffi requirement starts at 0.17.0rc1, an intentional release candidate
-with patched native libraries. The offline transport checks require libcurl
-8.23.0 or later and, when enabled, Brotli 1.2.1 or later. They also exercise
+The curl-cffi requirement starts at the stable 0.17.0 release with patched
+native libraries. The offline transport checks require libcurl 8.23.0 or later
+and, when enabled, Brotli 1.2.1 or later. They also exercise
 valid identity, gzip, and Brotli JSON responses through the real Kick session.
 This protects the automatic response-decoding path against regressions to
 the vulnerable Brotli decoder. Changing `Accept-Encoding` alone does not
