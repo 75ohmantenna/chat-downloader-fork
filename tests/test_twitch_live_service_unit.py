@@ -488,6 +488,9 @@ def test_real_live_get_chat_reports_content_free_metadata_diagnostics(
     assert chat.diagnostics["optional_metadata_degradation_count"] == (
         len(payloads) if degraded else 0
     )
+    assert chat.diagnostics["optional_metadata_primary_team_service_error_count"] == (
+        len(payloads) if degraded else 0
+    )
     assert all(isinstance(value, int) for value in chat.diagnostics.values())
     rendered_diagnostics = repr(chat.diagnostics).casefold()
     for private_value in ("primaryteam", "service error", "northernlion"):

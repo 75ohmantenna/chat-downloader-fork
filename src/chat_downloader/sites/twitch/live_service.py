@@ -17,7 +17,7 @@ from chat_downloader.redaction import BoundedSampleCapture
 from chat_downloader.sites._seen_cache import _SeenMessageCache
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.proxy import resolve_session_proxy
+from chat_downloader.sites.proxy import resolve_session_proxy, tls_socket_diagnostics
 from chat_downloader.sites.retry import _attempt_numbers, wait_for_reconnect
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_str
@@ -160,25 +160,26 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
             diagnostics.increment("connection_attempt_count")
             irc: TwitchChatIRC | None = None
             try:
-                irc = irc_factory(
-                    connect_timeout=connect_timeout,
-                    proxy_url=proxy_url,
-                )
-                control.irc = irc
-                control.check_stopped()
-                effective_receive_timeout = max(
-                    request.message_receive_timeout,
-                    _MIN_RECEIVE_TIMEOUT_SECONDS,
-                )
-                log(
-                    "debug",
-                    "Twitch IRC receive timeout: "
-                    f"requested={request.message_receive_timeout}s, "
-                    f"effective={effective_receive_timeout}s.",
-                )
-                irc.set_timeout(effective_receive_timeout)
-                irc.join_channel(stream_id)
-                control.check_stopped()
+                with diagnostics.measure_connection_setup():
+                    irc = irc_factory(
+                        connect_timeout=connect_timeout,
+                        proxy_url=proxy_url,
+                    )
+                    control.irc = irc
+                    control.check_stopped()
+                    effective_receive_timeout = max(
+                        request.message_receive_timeout,
+                        _MIN_RECEIVE_TIMEOUT_SECONDS,
+                    )
+                    log(
+                        "debug",
+                        "Twitch IRC receive timeout: "
+                        f"requested={request.message_receive_timeout}s, "
+                        f"effective={effective_receive_timeout}s.",
+                    )
+                    irc.set_timeout(effective_receive_timeout)
+                    irc.join_channel(stream_id)
+                    control.check_stopped()
             except OSError as error:
                 diagnostics.increment("connection_setup_failure_count")
                 if irc is not None:
@@ -191,6 +192,14 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                 raise
             else:
                 diagnostics.increment("connection_success_count")
+                for key in ("irc_tls_version", "irc_tls_cipher"):
+                    diagnostics.summary.pop(key, None)
+                diagnostics.summary.update(
+                    (f"irc_{key}", value)
+                    for key, value in tls_socket_diagnostics(
+                        getattr(irc, "socket", None)
+                    ).items()
+                )
                 return irc
         msg_0 = "unreachable: retry should have raised RetriesExceeded"
         raise RuntimeError(msg_0)
@@ -222,6 +231,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                         raise ConnectionError(msg)  # noqa: TRY301 — drives the outer reconnect loop via the enclosing except
 
                     # A normal IRC item proves the connection made progress.
+                    diagnostics.finish_outage()
                     # Future disconnects start a fresh bounded retry streak.
                     consecutive_connection_failures = 0
 
@@ -253,6 +263,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     yield raw_message
 
             except ConnectionError as error:
+                diagnostics.start_outage()
                 twitch_chat_irc.close_connection()
                 control.check_stopped()
                 diagnostics.increment("reconnect_count")
@@ -272,6 +283,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                 # future finite live transports.
                 break
     finally:
+        diagnostics.finish_outage()
         twitch_chat_irc.close_connection()
 
 

@@ -7,7 +7,9 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from typing import TYPE_CHECKING
+from contextlib import contextmanager
+from time import monotonic
+from typing import TYPE_CHECKING, cast
 
 from chat_downloader.redaction import capture_debug_sample, sanitize_for_log
 
@@ -18,7 +20,7 @@ from .constants import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterator, Mapping
 
 _EVENT_FRAME_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES"
 _EVENT_FRAME_CAPTURE_LIMIT = 12
@@ -89,6 +91,11 @@ class _TwitchLiveDiagnostics:
     def __init__(self) -> None:
         self.summary: dict[str, object] = {
             "optional_metadata_degradation_count": 0,
+            "optional_metadata_primary_team_service_error_count": 0,
+            "connection_setup_duration_ms": 0,
+            "connection_setup_max_duration_ms": 0,
+            "reconnect_outage_duration_ms": 0,
+            "reconnect_outage_max_duration_ms": 0,
             "connection_attempt_count": 0,
             "connection_success_count": 0,
             "connection_setup_failure_count": 0,
@@ -109,6 +116,37 @@ class _TwitchLiveDiagnostics:
             "live_emitted_count": 0,
         }
         self.reset_transport_state()
+        self._outage_started: float | None = None
+
+    @contextmanager
+    def measure_connection_setup(self) -> Iterator[None]:
+        """Measure only connection work, excluding cleanup and retry waits."""
+        started = monotonic()
+        try:
+            yield
+        finally:
+            self.record_duration("connection_setup", started)
+
+    def record_duration(self, name: str, started: float) -> None:
+        """Accumulate a bounded-schema monotonic duration in milliseconds."""
+        if name not in {"connection_setup", "reconnect_outage"}:
+            return
+        elapsed = max(0, round((monotonic() - started) * 1000))
+        total = f"{name}_duration_ms"
+        maximum = f"{name}_max_duration_ms"
+        self.summary[total] = cast("int", self.summary[total]) + elapsed
+        self.summary[maximum] = max(cast("int", self.summary[maximum]), elapsed)
+
+    def start_outage(self) -> None:
+        """Start one outage, retaining its origin across unsuccessful reconnects."""
+        if self._outage_started is None:
+            self._outage_started = monotonic()
+
+    def finish_outage(self) -> None:
+        """Measure through the first parsed frame or shutdown if recovery failed."""
+        if self._outage_started is not None:
+            self.record_duration("reconnect_outage", self._outage_started)
+            self._outage_started = None
 
     def reset_transport_state(self) -> None:
         """Discard one connection's partial frame without clearing counters."""
@@ -124,6 +162,8 @@ class _TwitchLiveDiagnostics:
     def record_optional_metadata_degradation(self) -> None:
         """Record one content-free recognized metadata degradation."""
         self.increment("optional_metadata_degradation_count")
+        # The GraphQL optional-service-error allowlist currently has one field.
+        self.increment("optional_metadata_primary_team_service_error_count")
 
     def record_received_data(self, data: str) -> int:
         """Count frames and return newly completed server PING commands."""

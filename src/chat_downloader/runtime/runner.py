@@ -280,6 +280,7 @@ def _verify_capture_outputs(
     *,
     checkpoint_bound: bool,
     verification_bound: bool,
+    verify_after_error: bool = False,
 ) -> None:
     """Run provider inspection, parity verification, and checkpoint save."""
     try:
@@ -292,7 +293,7 @@ def _verify_capture_outputs(
         if (
             run_config.verify_output
             and verification_bound
-            and (result.success or result.interrupted)
+            and (result.success or result.interrupted or verify_after_error)
             and chat is not None
         ):
             result.parity_status = "failed"
@@ -391,6 +392,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     checkpoint_resources = ExitStack()
     checkpoint_bound = False
     verification_bound = False
+    verify_after_error = False
     phase = "initialization"
     if run_config.verify_output:
         result.parity_status = "not_run"
@@ -466,6 +468,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         ValueError,
     ) as e:
         primary_error = True
+        verify_after_error = isinstance(e, BrokenPipeError) and phase == "capture"
         result.failure_stage = phase
         result.error_message = _classify_run_error(e)
         log("error", result.error_message)
@@ -521,6 +524,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 checkpoint,
                 checkpoint_bound=checkpoint_bound,
                 verification_bound=verification_bound,
+                verify_after_error=verify_after_error,
             )
 
         _complete_run_record(

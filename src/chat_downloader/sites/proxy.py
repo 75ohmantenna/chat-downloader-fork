@@ -26,6 +26,37 @@ _DEFAULT_PROXY_PORTS = {
     "socks5h": 1080,
 }
 _MAX_CONNECT_RESPONSE_BYTES = 64 * 1024
+TLS_DIAGNOSTIC_VERSIONS = frozenset({"TLSv1.2", "TLSv1.3"})
+TLS_DIAGNOSTIC_CIPHERS = frozenset(
+    {
+        "TLS_AES_128_GCM_SHA256",
+        "TLS_AES_256_GCM_SHA384",
+        "TLS_CHACHA20_POLY1305_SHA256",
+        "ECDHE-RSA-AES128-GCM-SHA256",
+        "ECDHE-RSA-AES256-GCM-SHA384",
+        "ECDHE-ECDSA-AES128-GCM-SHA256",
+        "ECDHE-ECDSA-AES256-GCM-SHA384",
+        "ECDHE-RSA-CHACHA20-POLY1305",
+        "ECDHE-ECDSA-CHACHA20-POLY1305",
+    }
+)
+
+
+def tls_socket_diagnostics(transport: object) -> dict[str, object]:
+    """Describe recognized negotiated TLS without retaining peer or proxy data."""
+    if not isinstance(transport, (ssl.SSLSocket, SSLTransport)):
+        return {}
+    try:
+        version = transport.version()
+        cipher = transport.cipher()
+    except (OSError, ValueError):
+        return {}
+    result: dict[str, object] = {}
+    if version in TLS_DIAGNOSTIC_VERSIONS:
+        result["tls_version"] = version
+    if cipher is not None and cipher[0] in TLS_DIAGNOSTIC_CIPHERS:
+        result["tls_cipher"] = cipher[0]
+    return result
 
 
 class _ProxySocket(Protocol):

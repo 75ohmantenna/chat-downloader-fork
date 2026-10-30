@@ -514,7 +514,10 @@ monotonic clock; output verification and manifest writing are excluded.
 continuation counters, including skipped-action reasons and parsing loss, plus
 Kick live transport, public-feed, snapshot, and backfill counters, and the full
 fixed set of Twitch live metadata, connection, frame, keepalive, filtering,
-deduplication, and emission counters. Counter values must be nonnegative
+deduplication, and emission counters. Twitch diagnostics also retain setup and
+reconnect outage durations in milliseconds, an optional-metadata field/cause
+counter, and recognized negotiated IRC TLS version and cipher labels. These
+labels omit peer addresses and proxy credentials. Counter values must be nonnegative
 integers; booleans and unknown counter names are excluded. YouTube's initial
 and active request-profile names and chat-view label are also retained from
 fixed vocabularies. Automatic
@@ -571,7 +574,9 @@ partial captures are also inspected after retrieval failures when the output
 pair was validated; the original error remains authoritative. Interrupted
 captures also run parity when outputs closed successfully, retaining the
 interrupted exit status and termination reason whether parity passes or fails.
-Other retrieval failures and cleanup failures leave parity `not_run`.
+When stdout closes during capture, finalized outputs also run parity without
+replacing the broken-pipe error or failure exit status. Other retrieval failures
+and cleanup failures leave parity `not_run`.
 
 The report also records `prefetched_after_deadline_count` and
 `deadline_prefetch_count_complete`. Parsed provider messages need not equal output

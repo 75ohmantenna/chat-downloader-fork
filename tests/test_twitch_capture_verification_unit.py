@@ -234,3 +234,27 @@ def test_replaced_output_identity_does_not_mask_primary_failure(tmp_path):
     assert result.error_message == "primary"
     assert result.provider_inspection["status"] == "error"
     assert result.parity_status == "not_run"
+
+
+@pytest.mark.parametrize("shutdown", ["clean", "corrupt", "failed"])
+def test_broken_pipe_verifies_finalized_artifacts_without_masking_error(
+    tmp_path, shutdown
+):
+    class Failed(LiveDownloader):
+        failure = BrokenPipeError("closed stdout")
+
+        def close(self):
+            if shutdown == "corrupt":
+                (tmp_path / "chat.txt").write_text("wrong\n")
+            if shutdown == "failed":
+                raise ValueError("cleanup failed")
+
+    result = execute_run(Failed, **_params(tmp_path))
+    assert not result.success
+    assert result.error_message == "closed stdout"
+    assert result.termination_reason == "error"
+    assert result.failure_stage == "capture"
+    assert (
+        result.parity_status
+        == {"clean": "passed", "corrupt": "failed", "failed": "not_run"}[shutdown]
+    )

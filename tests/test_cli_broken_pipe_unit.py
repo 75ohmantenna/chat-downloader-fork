@@ -60,6 +60,7 @@ def _run_capture(directory: str) -> None:
                 str(root / "chat.txt"),
                 "--run_manifest",
                 str(root / "run.json"),
+                "--verify_output",
             ]
         )
 
@@ -103,6 +104,8 @@ def test_closed_pipe_preserves_subprocess_status_and_capture_cleanup(
     manifest = json.loads((tmp_path / "run.json").read_text())
     assert manifest["success"] is False
     assert manifest["termination_reason"] == "error"
+    assert manifest["parity_status"] == "passed"
+    assert manifest["failure_stage"] == "capture"
     assert manifest["message_count"] == len(expected)
     assert all(
         output["records_written"] == len(expected) for output in manifest["outputs"]

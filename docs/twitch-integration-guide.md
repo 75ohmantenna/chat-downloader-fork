@@ -174,11 +174,16 @@ Each live `Chat` exposes fixed-schema connection counters through
 debug run summary, including failed runs.
 `--run_manifest` also retains the complete counter set under
 `provider_diagnostics`, without requiring debug logging or output verification.
-Only known nonnegative integer counters are retained.
+Only known nonnegative integer counters and recognized TLS labels are retained.
 
 | Field | Meaning |
 | --- | --- |
 | `optional_metadata_degradation_count` | Non-fatal result items with a recognized optional metadata service error |
+| `optional_metadata_primary_team_service_error_count` | Result items degraded by the optional `user.primaryTeam` service error |
+| `connection_setup_duration_ms` | Total monotonic milliseconds spent in IRC setup attempts, including failures |
+| `connection_setup_max_duration_ms` | Longest individual IRC setup attempt in milliseconds |
+| `reconnect_outage_duration_ms` | Total observed outage milliseconds through the first parsed non-reconnect frame, or shutdown |
+| `reconnect_outage_max_duration_ms` | Longest observed outage in milliseconds |
 | `connection_attempt_count` | IRC setup attempts |
 | `connection_success_count` | Completed socket, timeout, and channel-join setup |
 | `connection_setup_failure_count` | Setup attempts that failed before use |
@@ -198,9 +203,20 @@ Only known nonnegative integer counters are retained.
 | `filtered_message_count` | Parsed messages excluded by type/group filters |
 | `live_emitted_count` | Live messages emitted by the Twitch source generator |
 
-The mapping contains only counters: it does not retain the channel, endpoint,
+The mapping does not retain the channel, endpoint,
 raw IRC frames, or chat content. Its keys are fixed so unexpected counter names
 cannot grow retained state during a long capture.
+
+Setup timing includes socket connection, TLS, anonymous registration, and the
+channel-join send; it does not imply that Twitch acknowledged the join. Outage
+timing includes retry waits and repeated failed reconnect attempts. A recovery
+is observed on the first parsed non-reconnect frame, even if filters suppress
+it. An unrecovered outage is measured through capture cleanup; it does not
+certify recovery or account for messages Twitch did not deliver while offline.
+The optional `irc_tls_version` and `irc_tls_cipher` labels describe the latest
+successful IRC setup. They use fixed vocabularies; unsupported socket adapters
+or unrecognized values omit the labels. A subsequent connection replaces the
+prior TLS labels.
 
 `received_irc_frame_count` includes both message-bearing frames and benign IRC
 setup/control traffic. `benign_irc_control_frame_count` identifies the
@@ -227,6 +243,8 @@ metadata retries count separately, including an item whose usable-data shape
 later causes the caller to retry. A rejected persisted-query response contributes
 nothing; an accepted degraded fallback response contributes normally. The
 callback carries no path, message, channel, or response content.
+The fixed `optional_metadata_primary_team_service_error_count` identifies the
+currently recognized field and cause without retaining provider error text.
 
 ### Filtering and deduplication
 

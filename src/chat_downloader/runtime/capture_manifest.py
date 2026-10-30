@@ -15,6 +15,7 @@ from chat_downloader.metadata import __version__
 from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.sites.output_dispatch import _expand_output_file_name
+from chat_downloader.sites.proxy import TLS_DIAGNOSTIC_CIPHERS, TLS_DIAGNOSTIC_VERSIONS
 from chat_downloader.utils.time_utils import ensure_seconds
 
 if TYPE_CHECKING:
@@ -107,6 +108,11 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
             "history_recovery_failure_count",
             "live_emitted_count",
             "optional_metadata_degradation_count",
+            "optional_metadata_primary_team_service_error_count",
+            "connection_setup_duration_ms",
+            "connection_setup_max_duration_ms",
+            "reconnect_outage_duration_ms",
+            "reconnect_outage_max_duration_ms",
             "connection_attempt_count",
             "connection_success_count",
             "connection_setup_failure_count",
@@ -133,6 +139,13 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
     for key in ("initial_request_profile", "active_request_profile"):
         value = state.get(key)
         if isinstance(value, str) and value in REQUEST_PROFILES:
+            counters[key] = value
+    for key, allowed in (
+        ("irc_tls_version", TLS_DIAGNOSTIC_VERSIONS),
+        ("irc_tls_cipher", TLS_DIAGNOSTIC_CIPHERS),
+    ):
+        value = state.get(key)
+        if isinstance(value, str) and value in allowed:
             counters[key] = value
     view = state.get("chat_view")
     if isinstance(view, str) and view in {
