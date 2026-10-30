@@ -179,11 +179,13 @@ def _resolve_irc_message_and_emotes(
     match: re.Match[str],
 ) -> None:
     """Strip IRC ACTION and add display names to already-parsed emotes."""
-    from chat_downloader.utils.string_utils import remove_prefixes
-
     message_match = match.group(3)
     if message_match:
-        info["message"] = remove_prefixes(message_match, "ACTION ")
+        if message_match.startswith("\x01ACTION "):
+            message_match = message_match.removeprefix("\x01ACTION ").removesuffix(
+                "\x01"
+            )
+        info["message"] = message_match
 
         emotes = info.pop("emotes", None)
         if emotes and isinstance(emotes, list):

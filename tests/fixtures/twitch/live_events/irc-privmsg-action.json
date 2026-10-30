@@ -1,0 +1,4 @@
+{
+  "provenance": "Synthetic CTCP ACTION regression with emote positions relative to its text.",
+  "raw": "@badge-info=;badges=;color=#00FF7F;display-name=ExampleUser;emotes=25:6-10;id=action-1;room-id=123;tmi-sent-ts=1700000000000;user-id=456 :exampleuser!exampleuser@exampleuser.tmi.twitch.tv PRIVMSG #channel :\u0001ACTION waves Kappa\u0001\r\n"
+}

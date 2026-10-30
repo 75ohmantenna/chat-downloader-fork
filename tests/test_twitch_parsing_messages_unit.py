@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -36,6 +38,34 @@ from tests.twitch_third_helpers import (
 from tests.twitch_third_helpers import (
     parse_irc as _parse_irc,
 )
+
+
+@pytest.mark.parametrize("terminated", [True, False])
+def test_action_fixture_strips_framing_before_emotes_and_jsonl(tmp_path, terminated):
+    from chat_downloader.output.writers import JsonLinesContinuousWriter
+
+    fixture = (
+        Path(__file__).parent / "fixtures/twitch/live_events/irc-privmsg-action.json"
+    )
+    raw = json.loads(fixture.read_text(encoding="utf-8"))["raw"]
+    if not terminated:
+        raw = raw.replace("\x01\r\n", "\r\n")
+    parsed = _parse_irc(raw)
+    assert parsed["message"] == "waves Kappa"
+    assert parsed["emotes"][0]["name"] == "Kappa"
+    output = tmp_path / "action.jsonl"
+    writer = JsonLinesContinuousWriter(str(output))
+    try:
+        writer.write(parsed)
+    finally:
+        writer.close()
+    assert json.loads(output.read_text(encoding="utf-8"))["message"] == "waves Kappa"
+
+
+def test_plain_message_keeps_its_trailing_control_character():
+    assert _parse_irc(irc_frame("id=plain", "PRIVMSG", "waves\x01"))["message"] == (
+        "waves\x01"
+    )
 
 
 @pytest.mark.parametrize(
