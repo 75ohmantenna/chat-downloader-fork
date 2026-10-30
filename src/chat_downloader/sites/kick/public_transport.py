@@ -97,6 +97,8 @@ class KickPublicTransport:
         self._http_timeout = http_timeout
         self._configured_proxy = dict(proxy) if proxy else None
         self._stopped = Event()
+        self._reconnect_requested = Event()
+        self._reader_errors: Queue[Exception] = Queue()
         self._queue: Queue[JSONDict | Exception] = Queue(maxsize=1024)
         self._workers: list[Thread] = []
         self._transports: list[KickPusherTransport] = []
@@ -107,7 +109,7 @@ class KickPublicTransport:
         self._last_viewers: tuple[JSONList, bool] | None = None
         self._next_poll = 0.0
         self._receive_timeout = 1.0
-        self._pending: deque[JSONDict | Exception] = deque()
+        self._pending: deque[JSONDict] = deque()
 
     def _record_diagnostic(self, name: str) -> None:
         if self._diagnostic_callback is not None:
@@ -137,13 +139,25 @@ class KickPublicTransport:
                 if frame.get("event") == PUSHER_SUBSCRIPTION_SUCCEEDED:
                     self._record_diagnostic("public_subscription_count")
                 self._put(frame)
+                if self._reconnect_requested.is_set():
+                    break
         except Exception as error:  # noqa: BLE001 — transfer worker failures to the consumer
-            # Surface worker failures to the consumer, including terminal access errors.
-            self._put(error)
+            if not (
+                self._reconnect_requested.is_set()
+                and isinstance(error, ConnectionError)
+            ):
+                self._request_reconnect(error)
         finally:
             transport.close()
             if client is not None:
                 client.close()
+
+    def _request_reconnect(self, error: Exception) -> None:
+        """Stop reads while allowing each accepted publication to finish queuing."""
+        self._reader_errors.put_nowait(error)
+        self._reconnect_requested.set()
+        for transport in self._transports:
+            transport.request_stop()
 
     def connect(self, timeout: float | None, *, force_discover: bool = False) -> None:
         """Negotiate chat and global descriptors separately, including regional URLs."""
@@ -244,7 +258,11 @@ class KickPublicTransport:
             self._check_stopped()
 
     def _poll(self) -> None:
-        if self._state is None or time.monotonic() < self._next_poll:
+        if (
+            self._state is None
+            or self._reconnect_requested.is_set()
+            or time.monotonic() < self._next_poll
+        ):
             return
         self._next_poll = time.monotonic() + 60.0
         category_changed = False
@@ -290,24 +308,42 @@ class KickPublicTransport:
             self._record_diagnostic("public_state_poll_failure_count")
             logger.debug("Kick public viewer poll failed (%s).", type(error).__name__)
         if category_changed:
-            self._pending.append(ConnectionError("Kick public category feeds changed."))
+            self._request_reconnect(
+                ConnectionError("Kick public category feeds changed.")
+            )
 
     def recv(self) -> JSONDict | None:
         """Yield merged events without dropping buffered publications."""
         self._check_stopped()
         self._poll()
         if self._pending:
-            item = self._pending.popleft()
-            if isinstance(item, Exception):
-                raise item
-            return item
+            return self._pending.popleft()
         try:
             item = self._queue.get(timeout=self._receive_timeout)
         except Empty:
-            return None
+            if self._reconnect_requested.is_set() and not any(
+                worker.is_alive() for worker in self._workers
+            ):
+                # A reader may publish and exit just after the timed get failed.
+                try:
+                    item = self._queue.get_nowait()
+                except Empty:
+                    item = self._reader_error()
+            else:
+                return None
         if isinstance(item, Exception):
             raise item
         return item
+
+    def _reader_error(self) -> Exception:
+        """Retain the terminal outcome, preferring access errors over reconnects."""
+        error = self._reader_errors.get_nowait()
+        while not self._reader_errors.empty():
+            following = self._reader_errors.get_nowait()
+            if isinstance(error, ConnectionError):
+                error = following
+        self._reader_errors.put_nowait(error)
+        return error
 
     def send_pong(self) -> None:
         """Readers answer provider-specific keepalive before forwarding controls."""

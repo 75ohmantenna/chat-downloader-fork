@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from queue import Empty, Queue
 from threading import Event, Thread
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -703,14 +704,147 @@ def test_bounded_queue_shutdown_interrupts_backpressure_and_socket_errors(monkey
 
 def test_worker_access_failure_reaches_consumer_and_closes_its_http_owner(monkeypatch):
     transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    transport._receive_timeout = 0.001
     monkeypatch.setattr(
         pt, "read_frames", MagicMock(side_effect=CaptchaChallengeRequired("blocked"))
     )
     child, client = MagicMock(), MagicMock()
     transport._read(child, client)
-    assert isinstance(transport._queue.get(), CaptchaChallengeRequired)
+    with pytest.raises(CaptchaChallengeRequired, match="blocked"):
+        transport.recv()
     child.close.assert_called_once()
     client.close.assert_called_once()
+
+
+def test_category_reconnect_drains_recorded_prediction_before_resuming_live_chat():
+    first = public_state_transport()
+    first._channel = {"livestream": {"categories": [{"id": 1}]}}
+    first._state.metadata.return_value = {"livestream": {"categories": [{"id": 2}]}}
+    prediction = load_fixture("predictions_recorded.json")["events"][0]["frame"]
+    first._queue.put(prediction)
+    first.connect = lambda *_args, **_kwargs: None
+    first.subscribe = lambda *_args: None
+    first.set_timeout = lambda *_args: None
+    replacement = MagicMock()
+    replacement.recv.side_effect = [
+        {"event": PUSHER_SUBSCRIPTION_SUCCEEDED, "channel": "chatrooms.456.v2"},
+        pusher_frame(
+            "App\\Events\\SubscriptionEvent", load_fixture("subscription_event.json")
+        ),
+    ]
+    transports = iter([first, replacement])
+    client = MagicMock()
+    client.fetch_preloaded_chat_state.return_value = None
+    client.fetch_message_page.return_value = {"data": {"messages": [], "cursor": None}}
+    source = live_service._iter_chat_messages(
+        SimpleNamespace(_kick_client=client, _http_timeout=(1, 1)),
+        "slug",
+        "123",
+        "456",
+        ChatRequest(message_groups=["all"], retry_timeout=0, interruptible_retry=False),
+        live_service._KickLiveDiagnostics(),
+        transport_factory=lambda: next(transports),
+    )
+    received = []
+    try:
+        for item in source:
+            received.append(item)
+            if item["message_type"] == "subscription":
+                break
+    finally:
+        source.close()
+    assert [item["message_type"] for item in received] == [
+        "channel_metadata",
+        "viewer_count",
+        "prediction_updated",
+        "subscription",
+    ]
+    assert received[2]["metadata"]["data"] == prediction["data"]
+    client.fetch_message_page.assert_called_once()
+    replacement.close.assert_called()
+
+
+@pytest.mark.timeout(5)
+def test_category_reconnect_drains_full_queue_and_inflight_publication(monkeypatch):
+    transport = public_state_transport()
+    transport._queue = Queue(maxsize=1)
+    transport._queue.put({"event": "first"})
+    transport._state.metadata.return_value = {"livestream": {"categories": [{"id": 7}]}}
+    entering_put = Event()
+    original_put = transport._put
+
+    def put(item):
+        entering_put.set()
+        original_put(item)
+
+    reads = []
+
+    def frames(_transport):
+        reads.append("inflight")
+        yield {"event": "second"}
+        reads.append("unexpected extra read")
+
+    monkeypatch.setattr(transport, "_put", put)
+    monkeypatch.setattr(pt, "read_frames", frames)
+    child = MagicMock()
+    transport._transports.append(child)
+    worker = Thread(target=transport._read, args=(child,))
+    transport._workers.append(worker)
+    worker.start()
+    try:
+        assert entering_put.wait(5)
+        assert transport.recv()["event"] == "kick:public_state"
+        assert transport.recv()["event"] == "kick:viewer_count"
+        assert transport.recv()["event"] == "first"
+        worker.join(5)
+        assert not worker.is_alive()
+        assert transport.recv()["event"] == "second"
+        with pytest.raises(ConnectionError, match="category feeds changed"):
+            transport.recv()
+        assert reads == ["inflight"]
+    finally:
+        transport.close()
+
+
+def test_category_reconnect_preserves_terminal_reader_error_after_publications(
+    monkeypatch,
+):
+    transport = public_state_transport()
+    transport._state = None
+    transport._queue.put({"event": "accepted"})
+    transport._request_reconnect(ConnectionError("category change"))
+    monkeypatch.setattr(
+        pt, "read_frames", MagicMock(side_effect=CaptchaChallengeRequired("blocked"))
+    )
+    child = MagicMock()
+    transport._read(child)
+    transport._request_reconnect(ConnectionError("secondary disconnect"))
+    assert transport.recv()["event"] == "accepted"
+    with pytest.raises(CaptchaChallengeRequired, match="blocked"):
+        transport.recv()
+    transport.close()
+
+
+def test_reconnect_rechecks_publications_after_reader_exits_during_queue_timeout():
+    class LateQueue(Queue):
+        late = True
+
+        def get(self, block=True, timeout=None):
+            if timeout is not None and self.late:
+                self.late = False
+                self.put_nowait({"event": "last accepted publication"})
+                raise Empty
+            return super().get(block=block, timeout=timeout)
+
+    transport = public_state_transport()
+    transport._state = None
+    transport._queue = LateQueue()
+    transport._request_reconnect(ConnectionError("category change"))
+    assert transport.recv() == {"event": "last accepted publication"}
+    for _ in range(2):
+        with pytest.raises(ConnectionError, match="category change"):
+            transport.recv()
+    transport.close()
 
 
 @pytest.mark.parametrize(
