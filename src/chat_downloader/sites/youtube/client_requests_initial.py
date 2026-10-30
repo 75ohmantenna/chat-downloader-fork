@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
@@ -51,6 +52,32 @@ _INITIAL_PAGE_HOSTS = frozenset(
         "accounts.google.com",
     }
 )
+
+
+class _InitialDataScriptParser(HTMLParser):
+    """Read dedicated initial-data scripts without matching lookalike attributes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reading = False
+        self.parts: list[str] = []
+        self.result: JSONDict = {}
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "script":
+            self.reading = ("id", "yt-initial-data") in attrs
+            self.parts = []
+
+    def handle_data(self, data: str) -> None:
+        if self.reading:
+            self.parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "script" and self.reading:
+            value = try_parse_json("".join(self.parts), None)
+            if isinstance(value, dict) and value and not self.result:
+                self.result = value
+            self.reading = False
 
 
 def _contains_challenge_text(text: object) -> bool:
@@ -163,12 +190,13 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                     )
                     raise RetriesExceeded(msg)
 
-            yt_initial_data = cast(
-                "JSONDict",
-                try_parse_json(regex_search(html, yt_initial_data_re), None),
+            script_parser = _InitialDataScriptParser()
+            script_parser.feed(html)
+            yt_initial_data = script_parser.result or try_parse_json(
+                regex_search(html, yt_initial_data_re), None
             )
 
-            if not yt_initial_data:
+            if not isinstance(yt_initial_data, dict) or not yt_initial_data:
                 log("debug", f"HTML ({len(html)} chars): {html[:500]}")
                 msg = "Unable to parse initial video data"
                 raise ParsingError(msg)

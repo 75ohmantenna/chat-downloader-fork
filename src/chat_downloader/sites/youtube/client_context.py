@@ -12,7 +12,7 @@ from chat_downloader.request_profiles import (
     get_request_profile_innertube_context,
 )
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import get_str
+from chat_downloader.utils.json_types import get_dict, get_str
 
 if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
@@ -36,12 +36,24 @@ _MANAGED_API_HEADER_NAMES = frozenset(
 
 def _extract_account_syncid(ytcfg: JSONDict) -> str | None:
     """Extract account sync ID from YouTube config."""
+    explicit_delegated_session_id = get_str(ytcfg, "DELEGATED_SESSION_ID")
+    if explicit_delegated_session_id:
+        return explicit_delegated_session_id
     datasync_id = get_str(ytcfg, "DATASYNC_ID")
     if datasync_id:
         delegated_session_id, _ = _parse_data_sync_id(datasync_id)
         if delegated_session_id:
             return delegated_session_id
-    return get_str(ytcfg, "DELEGATED_SESSION_ID") or None
+    return None
+
+
+def _extract_visitor_data(ytcfg: JSONDict) -> str:
+    """Prefer the active context token, then config and response fallbacks."""
+    return (
+        get_str(get_dict(get_dict(ytcfg, "INNERTUBE_CONTEXT"), "client"), "visitorData")
+        or get_str(ytcfg, "VISITOR_DATA")
+        or get_str(get_dict(ytcfg, "responseContext"), "visitorData")
+    )
 
 
 def _generate_headers(
@@ -71,7 +83,7 @@ def _generate_headers(
     if account_syncid or session_index is not None:
         headers["x-goog-authuser"] = str(session_index or 0)
 
-    visitor_data = multi_get(ytcfg, "INNERTUBE_CONTEXT", "client", "visitorData")
+    visitor_data = _extract_visitor_data(ytcfg)
     if visitor_data:
         headers["x-goog-visitor-id"] = visitor_data
 
@@ -101,6 +113,9 @@ def _get_innertube_context(ytcfg: JSONDict) -> dict[str, Any]:
         client = {}
         context["client"] = client
 
+    visitor_data = _extract_visitor_data(ytcfg)
+    if visitor_data:
+        client["visitorData"] = visitor_data
     client.update({"hl": "en", "timeZone": "UTC", "utcOffsetMinutes": 0})
     return context
 

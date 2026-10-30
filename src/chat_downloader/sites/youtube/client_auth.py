@@ -120,6 +120,9 @@ def _session_id_parts(ytcfg: JSONDict | None) -> dict[str, str] | None:
     """Return session-id additional_parts from ytcfg, or None."""
     if not ytcfg:
         return None
+    explicit_user_session_id = get_str(ytcfg, "USER_SESSION_ID")
+    if explicit_user_session_id:
+        return {"u": explicit_user_session_id}
     datasync_id = get_str(ytcfg, "DATASYNC_ID")
     if not datasync_id:
         return None

@@ -121,6 +121,18 @@ That page provides:
 - playability metadata
 - initial continuation hints
 
+Initial data can come from a dedicated `yt-initial-data` script containing a
+JSON object or from the legacy `ytInitialData` assignment. A valid dedicated
+script takes precedence; malformed or empty script data falls back to the
+assignment.
+
+For authenticated requests, explicit `USER_SESSION_ID` and
+`DELEGATED_SESSION_ID` values take precedence over `DATASYNC_ID`. Visitor data
+uses the active InnerTube client context first, then top-level `VISITOR_DATA`
+or `responseContext.visitorData`. Fallback tokens populate both the generated
+API header and normalized request context; refreshed context tokens retain
+precedence over older configuration values.
+
 Available player and chat evidence determine whether the target is live, replay,
 post-live, or unavailable. Incomplete metadata can leave status unknown.
 
