@@ -122,10 +122,9 @@ def microseconds_to_timestamp(
         format: strftime format; codes: https://strftime.org/ and
             https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes.
     """
-    return dt.datetime.fromtimestamp(
-        microseconds // MICROSECONDS_PER_SECOND,
-        tz=UTC,
-    ).strftime(format)
+    seconds, fraction = divmod(microseconds, MICROSECONDS_PER_SECOND)
+    timestamp = dt.datetime.fromtimestamp(seconds, tz=UTC)
+    return (timestamp + dt.timedelta(microseconds=fraction)).strftime(format)
 
 
 def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any:

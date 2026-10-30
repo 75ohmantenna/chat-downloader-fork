@@ -353,3 +353,30 @@ def test_microseconds_to_timestamp_with_float() -> None:
     result = microseconds_to_timestamp(microseconds)
     assert isinstance(result, str)
     assert "2020" in result
+
+
+@pytest.mark.parametrize(
+    ("timestamp", "expected"),
+    [
+        (1704067200123456, "2024-01-01 00:00:00.123456"),
+        (1704067200000000.0, "2024-01-01 00:00:00.000000"),
+        (-1, "1969-12-31 23:59:59.999999"),
+    ],
+)
+def test_fractional_timestamp_formats_retain_microseconds(timestamp, expected):
+    from chat_downloader.formatting.format import ItemFormatter
+
+    pattern = "%Y-%m-%d %H:%M:%S.%f"
+    assert microseconds_to_timestamp(timestamp, format=pattern) == expected
+    formatter = ItemFormatter()
+    for field in ("timestamp", "received_timestamp"):
+        assert (
+            formatter.format(
+                {field: timestamp},
+                format_object={
+                    "template": "{" + field + "}",
+                    "keys": {field: {"template": "{0}", "format": pattern}},
+                },
+            )
+            == expected
+        )
