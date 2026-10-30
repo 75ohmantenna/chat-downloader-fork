@@ -203,15 +203,16 @@ class TimedGenerator:
             if not callable(close):
                 self._generator_closed = True
                 return
+            self._generator_closed = True
             try:
                 close()
             except (RuntimeError, StopIteration, ValueError) as error:
                 if self._is_reentrant_generator_close_error(error):
+                    self._generator_closed = False
                     return
                 from chat_downloader.debugging import log  # cycle guard
 
                 log("debug", f"Suppressed generator close() error: {error}")
-            self._generator_closed = True
 
     def _worker_loop(self) -> None:
         try:
@@ -236,9 +237,7 @@ class TimedGenerator:
                     return
                 except _PollingCancelled:
                     return
-                except BaseException as error:
-                    if isinstance(error, (SystemExit, GeneratorExit)):
-                        raise
+                except BaseException as error:  # noqa: BLE001 — transfer every source failure to the consumer
                     self._publish_result(("error", error, time.monotonic()))
                     return
         finally:
@@ -296,16 +295,16 @@ class TimedGenerator:
     ) -> NoReturn:
         """Raise or finish based on the error kind and deadline state."""
         reason = self._timeout_reason(completed_at)
-        if isinstance(captured_error, StopIteration):
-            self._cancel_timers()
-            self._closed = True
-            raise captured_error
-        if isinstance(captured_error, KeyboardInterrupt):
-            if reason is None:
-                self._cancel_timers()
-                self._closed = True
-                raise captured_error
+        if isinstance(captured_error, KeyboardInterrupt) and reason is not None:
             self._finish(reason)
+        try:
+            self.close()
+        except Exception as close_error:  # noqa: BLE001 — cleanup must preserve the source failure
+            from chat_downloader.debugging import log
+
+            log(
+                "debug", f"Suppressed close() error after source failure: {close_error}"
+            )
         raise captured_error
 
     def _handle_item_result(self, value: Any, completed_at: float) -> Any:

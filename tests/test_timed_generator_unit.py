@@ -95,25 +95,38 @@ def test_stopped_timer_uses_deadline_not_thread_liveness(timer_kind, expired):
     assert called == ([kind] if expired else [])
 
 
-def test_timed_generator_delivers_item_generated_before_inactivity_deadline() -> None:
-    generated = threading.Event()
+def test_timed_generator_delivers_item_generated_before_inactivity_deadline(
+    monkeypatch,
+) -> None:
+    published = threading.Event()
     called = []
+    clock = [100.0]
+    original_publish = TimedGenerator._publish_result
 
-    def gen():
-        generated.set()
-        yield "queued-before-deadline"
+    def publish(self, result):
+        accepted = original_publish(self, result)
+        if result[0] == "item":
+            published.set()
+        return accepted
 
-    tg = TimedGenerator(
-        gen(),
-        inactivity_timeout=0.1,
-        on_inactivity_timeout=lambda: called.append("inactivity"),
-    )
-    assert generated.wait(timeout=1.0)
-    time.sleep(0.15)
+    monkeypatch.setattr(TimedGenerator, "_publish_result", publish)
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(
+            iter(("queued-before-deadline",)),
+            inactivity_timeout=0.1,
+            on_inactivity_timeout=lambda: called.append("inactivity"),
+        )
+        try:
+            assert published.wait(timeout=5)
+            clock[0] += 0.15
+            timer.call_args.args[1]()
+            assert tg._inactivity_expired.is_set()
 
-    assert next(tg) == "queued-before-deadline"
-    assert called == []
-    tg.close()
+            assert next(tg) == "queued-before-deadline"
+            assert called == []
+        finally:
+            tg.close()
 
 
 def test_timeout_reason_uses_worker_completion_time_over_expiry_events() -> None:
@@ -332,17 +345,48 @@ def test_start_timer_requires_configured_timeout(timer_kind):
         getattr(tg, method)()
 
 
-def test_worker_loop_reraises_system_exit() -> None:
-    class ExitIter:
-        def __iter__(self):
-            return self
+@pytest.mark.timeout(5)
+@pytest.mark.parametrize("error_type", [SystemExit, GeneratorExit, ValueError])
+@pytest.mark.parametrize("timeouts", [{}, {"timeout": 60}, {"inactivity_timeout": 60}])
+def test_worker_transfers_exit_exceptions_to_consumer(error_type, timeouts) -> None:
+    def source():
+        yield "first"
+        raise error_type("source exit")
+
+    tg = TimedGenerator(source(), **timeouts)
+    try:
+        assert next(tg) == "first"
+        with pytest.raises(error_type, match="source exit"):
+            next(tg)
+        with pytest.raises(StopIteration):
+            next(tg)
+        assert tg._closed
+    finally:
+        tg.close()
+    assert not tg._worker.is_alive()
+
+
+def test_source_failure_retains_priority_when_cleanup_fails(monkeypatch):
+    class Source:
+        close_calls = 0
 
         def __next__(self):
-            raise SystemExit
+            raise ValueError("source failed")
 
-    tg = TimedGenerator(iter(()))
-    tg.generator = ExitIter()
-    tg._result_queue = queue.Queue(maxsize=1)
+        def close(self):
+            self.close_calls += 1
+            raise OSError("cleanup failed")
 
-    with pytest.raises(SystemExit):
-        tg._worker_loop()
+    logs = []
+    monkeypatch.setattr(_debugging, "log", lambda level, message: logs.append(message))
+    source = Source()
+    tg = TimedGenerator(source, timeout=60)
+    try:
+        with pytest.raises(ValueError, match="source failed"):
+            next(tg)
+        with pytest.raises(StopIteration):
+            next(tg)
+    finally:
+        tg.close()
+    assert source.close_calls == 1
+    assert any("cleanup failed" in line for line in logs)
