@@ -537,3 +537,48 @@ def test_multi_run_accounting(tmp_path, kind):
     if kind == "legacy":
         assert report["frame_accounting"] is None
         assert accounting["http_status_counts"] == {"200": 1, "404": 1}
+
+
+@pytest.mark.parametrize(
+    ("changes", "reasons"),
+    [
+        ({}, []),
+        ({"success": False}, ["run_failed"]),
+        ({"unsupported_event_count": 1}, ["accounting_gaps", "provider_anomalies"]),
+        ({"received": 6}, ["accounting_gaps"]),
+    ],
+)
+def test_review_reasons_explain_live_findings(capture, tmp_path, changes, reasons):
+    report = inspect_capture(capture, _log(tmp_path / "log", **changes))
+    assert report["review_reasons"] == reasons
+
+
+def test_interruption_reasons_do_not_hide_corrupt_records(capture, tmp_path):
+    log = _log(tmp_path / "log", success=False)
+    summary = ast.literal_eval(log.read_text().split("Run summary: ", 1)[1])
+    summary.update(
+        termination_reason="interrupted", deadline_prefetch_count_complete=False
+    )
+    report = inspect_capture(capture, _summary(log, summary))
+    assert report["status"] == "review"
+    assert report["review_reasons"] == [
+        "run_interrupted",
+        "deadline_accounting_incomplete",
+    ]
+    with capture.open("a") as output:
+        output.write("PRIVATE_SENTINEL\n")
+    report = inspect_capture(capture, log)
+    assert report["review_reasons"] == [
+        "record_issues",
+        "run_interrupted",
+        "deadline_accounting_incomplete",
+    ]
+    assert "PRIVATE_SENTINEL" not in json.dumps(report)
+
+
+def test_replay_review_has_a_separate_reason(tmp_path):
+    report = inspect_capture(
+        _write(tmp_path / "chat", [_text()]),
+        _replay_log(tmp_path / "log", termination_reason="interrupted"),
+    )
+    assert report["review_reasons"] == ["replay_incomplete_or_inconsistent"]

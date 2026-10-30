@@ -510,6 +510,38 @@ class _Inspection:
         }
 
 
+def _review_reasons(
+    record_issues: Mapping[str, object],
+    replay_accounting: dict[str, object] | None,
+    accounting: dict[str, int] | None,
+    summary: dict[str, object],
+) -> list[str]:
+    """Explain review status using fixed codes without echoing summary values."""
+    reasons = []
+    if record_issues:
+        reasons.append("record_issues")
+    if replay_accounting and replay_accounting["needs_review"]:
+        reasons.append("replay_incomplete_or_inconsistent")
+    if accounting:
+        if accounting["run_failed"]:
+            reasons.append(
+                "run_interrupted"
+                if summary.get("termination_reason") == "interrupted"
+                else "run_failed"
+            )
+        if accounting["deadline_accounting_incomplete"]:
+            reasons.append("deadline_accounting_incomplete")
+        if any(accounting[key] != 0 for key in _GAPS):
+            reasons.append("accounting_gaps")
+        if any(
+            accounting[key] != 0
+            for key in _ANOMALIES
+            if key != "deadline_accounting_incomplete"
+        ):
+            reasons.append("provider_anomalies")
+    return reasons
+
+
 def inspect_capture(
     path: Path | None,
     debug_log: Path | list[Path] | None = None,
@@ -550,14 +582,12 @@ def inspect_capture(
     replay_accounting = _replay_accounting(summaries, inspection) if replay else None
     report["replay_accounting"] = replay_accounting
     report["frame_accounting"] = accounting
-    report["status"] = (
-        "review"
-        if inspection.issues
-        or (replay_accounting and replay_accounting["needs_review"])
-        or (
-            accounting
-            and any(accounting[key] != 0 for key in (*_ANOMALIES, *_GAPS, "run_failed"))
-        )
-        else "ok"
+    reasons = _review_reasons(
+        inspection.issues,
+        replay_accounting,
+        accounting,
+        summaries[0] if summaries else {},
     )
+    report["review_reasons"] = reasons
+    report["status"] = "review" if reasons else "ok"
     return report

@@ -212,6 +212,13 @@ Interrupted captures also receive automatic TXT parity checks when cleanup
 succeeds. A passing parity result certifies the captured prefix's formatting,
 while the run remains interrupted and unsuccessful. The inspector can still
 require review for an interrupted run or incomplete deadline accounting.
+The additive `review_reasons` list explains that status with fixed codes:
+`run_interrupted`, `run_failed`, `deadline_accounting_incomplete`,
+`record_issues`, `accounting_gaps`, `provider_anomalies`, and
+`replay_incomplete_or_inconsistent`. An interrupted run can have valid captured
+records and passing TXT parity; its interruption alone does not establish
+corruption. Record issues, provider anomalies, and accounting gaps remain
+reported alongside interruption. Status and exit-code rules are unchanged.
 
 To inspect an existing live capture or replay archive offline:
 
@@ -241,6 +248,40 @@ counters default them to zero and cannot establish that no historical gap
 occurred. Filters, deduplication, and deadline prefetch can make parsed counts
 differ from output; a count gap is
 evidence to investigate, not proof of message loss.
+
+For an opt-in live CLI smoke matrix, run:
+
+```bash
+uv run python scripts/smoke_kick_live.py --run-network --channel xqc \
+  --duration 480 --artifacts /tmp/kick-smoke-new
+```
+
+The artifact directory must not exist. The runner creates it with mode `0700`,
+runs an eight-minute all-groups capture by default, then checks help/version,
+quiet and compact output, text filtering, custom headers, inactivity shutdown,
+and rejection of unsupported output extensions and live replay-only options.
+Each capture writes JSONL, TXT, and a manifest with output verification. Child
+processes have independent wall-clock limits and cannot wait for stdin. Short
+cases default to ten seconds; `--case-duration` changes that limit. Very short
+durations can expire during connection setup and correctly require review for
+incomplete deadline accounting. Live availability and event delivery can also
+cause the smoke run to fail.
+
+Repeat `--proxy socks5://host:port` to add bounded all-groups proxy captures.
+Proxy arguments apply only to those extra cases; other cases use the normal
+environment proxy policy. The runner does not read a proxy config or persist
+proxy arguments in its aggregate report. Shell arguments and history can still
+contain credentials. Raw child logs and chat captures stay in the private
+directory. Stdout and `report.json` contain only case names, exit codes, fixed
+statuses, and counts. Exit zero means every case passed; exit one means at
+least one case failed or required review. A nonempty capture is required except
+for the inactivity case. This is observational live coverage; it cannot prove
+server-side completeness or exercise every rare event.
+
+`tests/test_kick_connection_drop_unit.py` supplements live observation with
+real loopback WebSocket connections. Abrupt TCP closure and a WebSocket close
+frame both drive reconnect, history backfill, duplicate suppression, verified
+writers, and manifest finalization without external network access.
 
 For a Kick VOD or clip replay, the same command detects reverse-history
 diagnostics from the run summary and reconciles replay pages, records, skips,
