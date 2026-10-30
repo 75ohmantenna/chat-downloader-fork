@@ -93,6 +93,16 @@ def test_invalid_offsets_do_not_crash_inspection(tmp_path, offset):
     assert report["issues"]["invalid_replay_offset"]["count"] == 1
 
 
+@pytest.mark.parametrize("received", [True, -1, "private", 1.5])
+def test_invalid_received_timestamps_require_review(tmp_path, received):
+    report = inspect_capture(
+        _write(tmp_path / "capture.jsonl", [_text(received_timestamp=received)])
+    )
+    assert report["status"] == "review"
+    assert report["issues"]["invalid_received_timestamp"]["count"] == 1
+    assert "private" not in json.dumps(report)
+
+
 @pytest.mark.parametrize(
     "summary",
     [

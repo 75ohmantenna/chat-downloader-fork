@@ -1,0 +1,28 @@
+{
+  "player_response": {
+    "playabilityStatus": {
+      "status": "LOGIN_REQUIRED",
+      "reason": "Sign in to confirm you are not a bot"
+    }
+  },
+  "initial_data": {
+    "contents": {
+      "twoColumnWatchNextResults": {
+        "conversationBar": {
+          "liveChatRenderer": {
+            "continuations": [
+              {
+                "reloadContinuationData": {
+                  "continuation": "fixture-live-token"
+                }
+              }
+            ],
+            "header": {
+              "liveChatHeaderRenderer": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -65,8 +65,9 @@ class DownloaderConfig:
     auto_profile_fallback: bool = field(
         default=True,
         metadata=_cli_metadata(
-            "Auto-switch YouTube request profiles after generic initial "
-            "playability or repeated incomplete continuation responses",
+            "Auto-switch YouTube request profiles after unknown broadcast status, "
+            "generic initial playability, or repeated incomplete "
+            "continuation responses",
             group="init",
         ),
     )

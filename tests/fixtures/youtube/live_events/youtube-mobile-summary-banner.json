@@ -1,0 +1,55 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addBannerToLiveChatCommand": {
+            "bannerRenderer": {
+              "liveChatBannerRenderer": {
+                "contents": {
+                  "elementRenderer": {
+                    "newElement": {
+                      "type": {
+                        "componentType": {
+                          "model": {
+                            "liveChatSummaryBannerModel": {
+                              "liveChatBannerChatSummaryRenderer": {
+                                "liveChatSummaryId": "fixture-summary",
+                                "chatSummary": {
+                                  "elementsAttributedString": {
+                                    "content": "Viewers discuss the match."
+                                  }
+                                },
+                                "header": {
+                                  "elementsAttributedString": {
+                                    "content": "Chat summary"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "actionId": "fixture-summary",
+                "targetId": "live-chat-banner",
+                "isStackable": true,
+                "bannerType": "LIVE_CHAT_BANNER_TYPE_CHAT_SUMMARY"
+              }
+            }
+          }
+        }
+      ],
+      "continuations": [
+        {
+          "timedContinuationData": {
+            "timeoutMs": 5000,
+            "continuation": "fixture-next"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -47,6 +47,20 @@ def _banner_message(model: JSONDict) -> JSONDict:
     return fields if fields.get("message") else {}
 
 
+def _summary_banner(model: JSONDict) -> JSONDict:
+    """Normalize the observed mobile summary without its UI command payloads."""
+    summary = get_dict(model, "liveChatBannerChatSummaryRenderer")
+    text = attributed_text(
+        get_dict(get_dict(summary, "chatSummary"), "elementsAttributedString")
+    )
+    if not text:
+        return {}
+    return {
+        "liveChatSummaryId": get_str(summary, "liveChatSummaryId"),
+        "chatSummary": text,
+    }
+
+
 def _paid_message(model: JSONDict) -> JSONDict:
     data = get_dict(model, "paidMessageData")
     if not data:
@@ -84,6 +98,10 @@ def _engagement(model: JSONDict) -> JSONDict:
 _MODELS = {
     "liveChatTextMessageModel": ("liveChatTextMessageRenderer", _text_message),
     "liveChatTextMessageBannerModel": ("liveChatTextMessageRenderer", _banner_message),
+    "liveChatSummaryBannerModel": (
+        "liveChatBannerChatSummaryRenderer",
+        _summary_banner,
+    ),
     "superChatItemModel": ("liveChatPaidMessageRenderer", _paid_message),
     "liveChatPaidStickerModel": ("liveChatPaidStickerRenderer", _paid_sticker),
     "viewerEngagementMessageModel": (

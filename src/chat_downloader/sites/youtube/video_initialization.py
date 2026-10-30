@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
+from chat_downloader.errors import ParsingError
 from chat_downloader.request_profiles import get_next_request_profile
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_str
@@ -77,7 +78,19 @@ class YouTubeVideoInitializationMixin:
                 ),
             }
 
-            if not yt_initial_data.get("_chat_downloader_continuation_info"):
+            unknown_status = details["status"] == "unknown"
+            if (
+                unknown_status
+                and get_str(
+                    get_dict(player_response_info, "playabilityStatus"), "status"
+                )
+                not in {"", "OK"}
+                and not _has_generic_unplayable_reason(player_response_info)
+            ):
+                raise_if_playability_error(player_response_info, yt_initial_data)
+            if not unknown_status and not yt_initial_data.get(
+                "_chat_downloader_continuation_info"
+            ):
                 # Refresh submenu tokens through the chat-page bootstrap.
                 try:
                     client_continuation = multi_get(
@@ -130,13 +143,20 @@ class YouTubeVideoInitializationMixin:
             bootstrap_unplayable = bool(
                 yt_initial_data.get("_chat_downloader_continuation_info")
             ) and _has_generic_unplayable_reason(player_response_info)
-            if details["continuation_info"] and not bootstrap_unplayable:
+            if (
+                details["continuation_info"]
+                and not bootstrap_unplayable
+                and not unknown_status
+            ):
                 return details, ytcfg
 
             next_profile = (
                 get_next_request_profile(proto._request_profile, site="youtube")
                 if getattr(proto, "_auto_profile_fallback", False)
-                and _has_generic_unplayable_reason(player_response_info)
+                and (
+                    unknown_status
+                    or _has_generic_unplayable_reason(player_response_info)
+                )
                 else None
             )
             if (
@@ -144,6 +164,13 @@ class YouTubeVideoInitializationMixin:
                 or next_profile in attempted_profiles
                 or not proto.apply_request_profile(next_profile)
             ):
+                if unknown_status:
+                    msg = (
+                        "YouTube bootstrap did not establish live or replay status. "
+                        "Try a fresh retrieval with --request_profile youtube_android "
+                        "or youtube_ios, or another proxy."
+                    )
+                    raise ParsingError(msg)
                 raise_if_playability_error(player_response_info, yt_initial_data)
                 return details, ytcfg
 
@@ -151,6 +178,6 @@ class YouTubeVideoInitializationMixin:
             bootstrap.increment("bootstrap_profile_switch_count")
             log(
                 "warning",
-                "Switching YouTube request profile after a generic initial "
-                f"playability response: {next_profile}",
+                "Switching YouTube request profile after an incomplete or generic "
+                f"initial playability response: {next_profile}",
             )

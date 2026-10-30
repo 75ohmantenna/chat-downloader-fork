@@ -121,8 +121,8 @@ That page provides:
 - playability metadata
 - initial continuation hints
 
-This is enough to determine whether the target is live, replay, post-live, or
-unavailable.
+Available player and chat evidence determine whether the target is live, replay,
+post-live, or unavailable. Incomplete metadata can leave status unknown.
 
 Unauthenticated regular video requests with an explicit Android or iOS profile
 start with InnerTube `player` and `next` requests. This avoids the mobile watch
@@ -336,9 +336,22 @@ fallback logic lives in `video_initialization.py` and `continuation.py`;
 profile headers and InnerTube context adjustments live in `client_context.py`
 and `request_profiles.py`.
 
+When player broadcast fields are missing, a chat renderer with an explicit
+replay flag establishes the replay surface as `post_live` until player metadata
+confirms a stable archive; it cannot certify strict completion or resume. A live
+renderer with a reload token establishes live status. Conflicting chat evidence
+remains unknown. Missing player fields alone do not establish a past
+premiere. Unknown status triggers bounded profile fallback when enabled, then
+fails before selecting an endpoint if no response establishes live or replay
+status. A non-clip request retains its requested video ID when the player omits
+it, while mismatched player IDs still fail validation.
+
 The session owns profile-generated headers. Explicit `--user-agent` and
 `--header` overrides remain unchanged during fallback, as do runtime headers
-such as authorization and visitor identifiers.
+such as authorization and visitor identifiers. A custom User-Agent or client
+header can conflict with the profile fingerprint and cause HTTP 400. Retry with
+profile defaults before choosing a complete browser User-Agent override; profile
+rotation never silently replaces an explicit override.
 
 The initial InnerTube fallback uses the same request-profile context fields
 when constructing its `player` and `next` payloads. Continuation-loop profile
@@ -362,8 +375,8 @@ no replay.
 Android and iOS `next` responses use mobile-specific `playerOverlays` and
 `engagementPanels` layouts rather than the desktop conversation bar. The
 bootstrap recognizes their filter-mode models to preserve distinct Top and
-Live chat selections. Mobile `elementRenderer` text, pinned banner, Super Chat,
-paid-sticker, and viewer-engagement models are normalized into the corresponding
+Live chat selections. Mobile `elementRenderer` text, pinned banner, chat summary,
+Super Chat, paid-sticker, and viewer-engagement models are normalized into the corresponding
 classic message types. Inline emote images use their UTF-16 attachment ranges to
 restore labels and image metadata; malformed or overlapping ranges retain the original
 text. Paid stickers retain their accessibility description as message text.
@@ -371,8 +384,9 @@ Unknown models remain visible in debug diagnostics.
 
 Mobile pinned banners retain their text, author, message ID, avatar, and observed
 verification badge. Transparent author-layout images are not membership badges.
-Banner expansion and collapse commands are recognized UI metadata. Unsupported
-or malformed mobile banner content is captured for review and counted as parsing
+Mobile chat-summary banners retain their summary ID and text as
+`banner_chat_summary`. Banner expansion and collapse commands are recognized UI
+metadata. Unsupported or malformed mobile banner content is captured for review and counted as parsing
 loss instead of being emitted as an empty banner.
 
 Cross-profile archives preserve provider text and emoji metadata. Web renderers
@@ -384,9 +398,16 @@ profiles; JSONL/TXT parity compares outputs within one capture.
 Mobile response logging identifiers are not original-message timestamps.
 Mobile messages therefore omit `timestamp` when the provider supplies only a
 logging identifier; replay offsets remain available in `time_in_seconds` and
-`time_text`. Classic renderer timestamps are unchanged. A live mobile message
-without an original timestamp also has no derived timing; callers must not
-interpret an absent timestamp as the current time.
+`time_text`. Classic renderer timestamps are unchanged. A live message without a
+source timestamp records a separate
+`received_timestamp` in UTC microseconds for its continuation batch. This is
+receipt time, including for initial backlog records, and does not establish the
+original event time or a replay offset. Default live TXT and stdout render it
+with a `[received]` label. Replay records keep their provider offsets and do not
+receive this fallback. Capture inspection reports `received_timestamp_fallbacks`,
+`missing_all_timestamps`, and `timing_status` (`source`, `receive_fallback`, or
+`missing`); missing source timestamps remain an observation rather than proof of
+parser loss. Invalid receive timestamps require review.
 
 Mobile replay models can also place preroll messages at offset zero without
 providing the signed Web display time. Zero-time windows can consequently differ

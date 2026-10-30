@@ -245,7 +245,7 @@ def test_video_status_helpers_resolve_types_statuses_and_continuations():
         ({"isUpcoming": True}, {}, "upcoming"),
         ({"isPostLiveDvr": True}, {}, "post_live"),
         ({"isLiveContent": True}, {}, "was_live"),
-        ({}, {}, "past"),
+        ({}, {}, "unknown"),
     ]:
         assert _determine_status(video, broadcast) == status
     for items, expected in [

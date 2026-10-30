@@ -107,6 +107,14 @@ def validate_and_finalize_message(
 ) -> dict[str, Any] | None:
     """Validate parsed message and add message_type field."""
     if not original_message_type:
+        capture_debug_sample(
+            f"youtube-untyped-action-{original_action_type}",
+            {
+                "original_item": original_item,
+                "original_action_type": original_action_type,
+            },
+            sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
+        )
         debug_log("No message type", f"Action type: {original_action_type}")
         return None
 

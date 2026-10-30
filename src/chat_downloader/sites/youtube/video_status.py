@@ -18,6 +18,7 @@ from .video_status_helpers import (
     _determine_video_type,
     _extract_continuation_info,
     _log_player_response_shape,
+    infer_chat_status,
 )
 from .video_status_models import VideoDetails
 
@@ -74,6 +75,8 @@ def parse_video_details(
     )
     continuation_info = _extract_continuation_info(yt_initial_data)
     status = _determine_status(video_details, live_details)
+    if status == "unknown":
+        status = infer_chat_status(yt_initial_data)
     if status == "not_live" and get_bool(yt_initial_data, "_chat_downloader_is_replay"):
         # Mobile premieres omit broadcast metadata but explicitly expose replay chat.
         status = "was_live"
@@ -82,7 +85,8 @@ def parse_video_details(
         title=title,
         author=author,
         author_id=author_id,
-        original_video_id=original_video_id,
+        original_video_id=original_video_id
+        or (video_id if video_type != "clip" else None),
         video_type=resolved_type,
         status=status,
         start_time=start_time,

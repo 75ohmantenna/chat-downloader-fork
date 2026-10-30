@@ -66,6 +66,8 @@ class _Inspection:
         self.types = dict.fromkeys(sorted(_KNOWN_TYPES), 0)
         self.issues: dict[str, dict[str, int]] = {}
         self.missing_timestamps = 0
+        self.receive_fallbacks = 0
+        self.missing_all_timestamps = 0
         self.zero_without_timestamp = 0
         self.minimum_offset: float | None = None
         self.maximum_offset: float | None = None
@@ -107,6 +109,14 @@ class _Inspection:
             self.missing_timestamps += 1
         elif type(timestamp) is not int or timestamp < 0:
             self.issue("invalid_timestamp")
+        received = record.get("received_timestamp")
+        if received is not None and (type(received) is not int or received < 0):
+            self.issue("invalid_received_timestamp")
+        elif timestamp is None:
+            if received is None:
+                self.missing_all_timestamps += 1
+            else:
+                self.receive_fallbacks += 1
         offset = record.get("time_in_seconds")
         if offset is None:
             return
@@ -207,6 +217,13 @@ def inspect_capture(
             "message_types": {k: v for k, v in inspection.types.items() if v},
             "issues": inspection.issues,
             "missing_source_timestamps": inspection.missing_timestamps,
+            "received_timestamp_fallbacks": inspection.receive_fallbacks,
+            "missing_all_timestamps": inspection.missing_all_timestamps,
+            "timing_status": "missing"
+            if inspection.missing_all_timestamps
+            else "receive_fallback"
+            if inspection.receive_fallbacks
+            else "source",
             "zero_offset_without_timestamp": inspection.zero_without_timestamp,
             "minimum_offset_seconds": inspection.minimum_offset,
             "maximum_offset_seconds": inspection.maximum_offset,

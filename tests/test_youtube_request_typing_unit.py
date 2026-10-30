@@ -75,7 +75,7 @@ def test_youtube_video_initialization_keeps_request_typed_for_video_metadata() -
         def _parse_video_data(self, video_id, params, video_type="video"):
             self.parse_request = params
             return (
-                {"continuation_info": {"Live chat": "token"}},
+                {"status": "live", "continuation_info": {"Live chat": "token"}},
                 {},
                 {"contents": {}},
                 {},

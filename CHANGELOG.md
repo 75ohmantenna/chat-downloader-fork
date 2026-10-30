@@ -10,6 +10,13 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Infer YouTube live/replay status from chat evidence when player metadata is
+  missing, and retry unknown bootstrap status within the profile fallback limit.
+- Preserve mobile chat-summary banners and report unsupported action samples.
+- Record labeled receive timestamps for YouTube live messages without source
+  timing, and expose timestamp fallback coverage in capture inspection.
+- Explain custom request-fingerprint conflicts in YouTube HTTP 400 guidance.
+
 - Preserve CLI exit status `1` when a stdout reader closes early, finalize
   capture resources, and prevent an ignored broken-pipe error at shutdown.
 - Reject replay time bounds on Twitch channel URLs before network access,

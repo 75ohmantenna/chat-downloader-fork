@@ -130,7 +130,7 @@ these fields:
 | `connect_timeout` | `10.0` | TCP connect timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `read_timeout` | `30.0` | HTTP read timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `request_profile` | `None` | Optional request-header preset (`youtube_web`, `youtube_android`, `youtube_ios`, `twitch_web`); any other value raises `ValueError` during configuration |
-| `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after generic initial playability, repeated incomplete continuation responses, or an initial replay `INVALID_ARGUMENT` rejection |
+| `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after unknown broadcast status, generic initial playability, repeated incomplete continuation responses, or an initial replay `INVALID_ARGUMENT` rejection |
 | `twitch_client_id` | `None` | Optional Twitch Client-ID override for GraphQL and VOD comment requests |
 
 Helper:
@@ -201,7 +201,11 @@ bracketed notice containing the removed-message or affected-author identifier
 when available. Live `time_in_seconds` and `time_text` values are relative to
 capture startup: messages returned in the initial backlog use negative values,
 while later messages use positive values. Replay chats keep the standard
-elapsed-time rendering.
+elapsed-time rendering. YouTube live records without source timing include a
+separate UTC-microsecond `received_timestamp` for the continuation batch; default
+live text output labels it `[received]`. This is receipt time, including for
+backlog, and does not establish an event timestamp or replay offset. Capture
+inspection reports source omissions and receive fallbacks separately.
 
 Kick VOD offsets are relative to the recording start and are clamped to its
 duration. Kick clip offsets are relative to the clip; the web path maps them

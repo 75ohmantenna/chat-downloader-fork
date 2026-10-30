@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 from chat_downloader.debugging import logger
 from chat_downloader.utils.conversion_utils import float_or_none
-from chat_downloader.utils.json_types import get_dict
+from chat_downloader.utils.json_types import JSONDict, get_dict, get_list, get_str
 
 from .helpers import extract_chat_submenu_continuations
 
@@ -75,7 +75,7 @@ def _determine_video_type(
         clip_start = (float_or_none(clip_config.get("startTimeMs", 0)) or 0.0) / 1e3
         clip_end = (float_or_none(clip_config.get("endTimeMs", 0)) or 0.0) / 1e3
         return "clip", clip_start, clip_end
-    if not video_details.get("isLiveContent"):
+    if video_details.get("isLiveContent") is False:
         return "premiere", None, None
     return "video", None, None
 
@@ -83,7 +83,7 @@ def _determine_video_type(
 def _determine_status(
     video_details: dict[str, Any],
     live_details: dict[str, Any],
-) -> Literal["post_live", "live", "upcoming", "was_live", "not_live", "past"]:
+) -> Literal["post_live", "live", "upcoming", "was_live", "not_live", "unknown"]:
     """Resolve broadcast status from player response metadata."""
     is_live = video_details.get("isLive")
     if is_live is None:
@@ -113,7 +113,39 @@ def _determine_status(
             live_details.get("startTimestamp") or live_details.get("endTimestamp"),
         )
         return "was_live" if has_broadcast_details else "not_live"
-    return "past"
+    return "unknown"
+
+
+def infer_chat_status(
+    initial_data: JSONDict,
+) -> Literal["live", "post_live", "unknown"]:
+    """Use renderer evidence when player broadcast metadata is absent."""
+    pending = [initial_data]
+    evidence: set[str] = set()
+    while pending:
+        node = pending.pop()
+        renderer = get_dict(node, "liveChatRenderer")
+        if renderer.get("isReplay") is True:
+            evidence.add("post_live")
+        has_token = any(
+            get_str(get_dict(item, "reloadContinuationData"), "continuation")
+            for item in get_list(renderer, "continuations")
+            if isinstance(item, dict)
+        )
+        replay = renderer.get("isReplay")
+        if has_token and (replay is None or replay is False):
+            evidence.add("live")
+        for value in node.values():
+            if isinstance(value, dict):
+                pending.append(value)
+            elif isinstance(value, list):
+                pending.extend(item for item in value if isinstance(item, dict))
+    if evidence == {"live"}:
+        return "live"
+    if evidence == {"post_live"}:
+        # A replay surface alone does not prove that the archive is finalized.
+        return "post_live"
+    return "unknown"
 
 
 def _extract_continuation_info(

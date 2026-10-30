@@ -11,6 +11,7 @@ from collections import Counter
 from dataclasses import dataclass
 from enum import StrEnum
 from math import isfinite
+from time import time_ns
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from chat_downloader.debugging import log
@@ -218,8 +219,11 @@ def _apply_live_timing(
     message: JSONDict,
     loop_state: ContinuationLoopState,
     live_start_time_ms: int,
+    received_timestamp: int,
 ) -> None:
     """Add signed presentation timing and advance nonnegative polling state."""
+    if message.get("timestamp") is None:
+        message["received_timestamp"] = received_timestamp
     live_offset = derive_live_offset_milliseconds(message, live_start_time_ms)
     if live_offset is not None:
         enrich_live_message_timing(message, live_offset)
@@ -318,6 +322,7 @@ def _process_actions(
     processed_action_count = 0
     emitted_message_count = 0
     non_emission_counts: Counter[NonEmissionReason] = Counter()
+    received_timestamp = time_ns() // 1000
     if diagnostics is not None:
         diagnostics["poll_count"] = cast("int", diagnostics.get("poll_count", 0)) + 1
     for action in actions:
@@ -343,7 +348,12 @@ def _process_actions(
             )
             return True
         if not is_replay and pipeline_result.message is not None:
-            _apply_live_timing(pipeline_result.message, loop_state, live_start_time_ms)
+            _apply_live_timing(
+                pipeline_result.message,
+                loop_state,
+                live_start_time_ms,
+                received_timestamp,
+            )
         if pipeline_result.message is not None:
             if is_replay:
                 _observe_replay_timing(pipeline_result.message, diagnostics)

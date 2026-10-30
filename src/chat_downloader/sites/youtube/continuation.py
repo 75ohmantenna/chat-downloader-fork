@@ -198,7 +198,9 @@ def _raise_if_api_error(yt_info: JSONDict) -> None:
         msg = (
             f"YouTube rejected the chat continuation (HTTP 400): {error_message}. "
             "Try a fresh retrieval with --request_profile youtube_android or "
-            "youtube_ios. This response does not establish replay availability."
+            "youtube_ios. If overriding --user-agent or --header, retry without "
+            "those overrides so the profile supplies a consistent fingerprint. "
+            "This response does not establish replay availability."
         )
         raise ChatDownloaderError(msg)
     msg = f"YouTube API error ({error_code}): {error_message}"

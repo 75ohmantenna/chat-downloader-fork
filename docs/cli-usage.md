@@ -180,6 +180,13 @@ AI deletion notices retain their AI-moderated marker and
 violated-rule labels in TXT instead of becoming indistinguishable from ordinary
 deletions.
 
+YouTube live records without a source timestamp carry a separate UTC-microsecond
+`received_timestamp`. Default live TXT and stdout label this fallback `[received]`;
+it describes receipt of the continuation batch, including backlog, rather than
+the original event time. Replay offsets are unaffected. Capture inspection
+reports missing source timing, receive fallbacks, and records without either
+timestamp.
+
 YouTube text output renders moderation events without message text as a
 bracketed notice. The notice identifies the removed message or affected author
 when YouTube supplies that identifier, instead of writing a blank line.
@@ -256,10 +263,11 @@ Request control:
   `youtube_android`, `youtube_ios`, or `twitch_web`. Unknown names fail during
   configuration.
 - `--auto_profile_fallback` — rotate YouTube request profiles when initial
-  playability is generically unavailable, continuation payloads are
+  broadcast status is unknown, playability is generically unavailable, continuation payloads are
   repeatedly incomplete, or an initial replay request receives
   `INVALID_ARGUMENT`. Explicit `--user-agent` and `--header` values remain
-  authoritative during rotation.
+  authoritative during rotation. Inconsistent User-Agent or client-header
+  overrides can cause HTTP 400; retry with profile defaults to isolate them.
 - `--youtube_replay_poll_interval` — explicitly override completed YouTube
   replay polling with an interval from 0.5 through 8 seconds. The default
   respects the provider delay; faster polling is opt-in and can be rate-limited.
