@@ -8,7 +8,7 @@ import base64
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
-from chat_downloader.errors import UserNotFound
+from chat_downloader.errors import ParsingError, UserNotFound
 from chat_downloader.sites.remap import (
     Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
 )
@@ -39,7 +39,8 @@ def get_user_clips(
     clip_remapping = build_clip_remapping()
 
     remaining_count = limit
-    offset = 0
+    cursor = base64.b64encode(b"0").decode()
+    seen_cursors = {cursor}
     while True:
         num_to_get = max(min(remaining_count, 100), 0)
         if num_to_get <= 0:
@@ -49,7 +50,7 @@ def get_user_clips(
             {
                 "operationName": "ClipsCards__User",
                 "variables": {
-                    "cursor": base64.b64encode(str(offset).encode()).decode(),
+                    "cursor": cursor,
                     "login": username,
                     "limit": num_to_get,
                     "criteria": {"filter": filter_by},
@@ -63,14 +64,25 @@ def get_user_clips(
         clips = multi_get(info, 0, "data", "user", "clips")
         if not clips:
             break
-        edges = clips.get("edges") or []
+        edges = get_list(clips, "edges")
+        has_next_page = bool(multi_get(clips, "pageInfo", "hasNextPage"))
+        if has_next_page and len(edges) < remaining_count:
+            final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
+            next_cursor = get_str(final_edge, "cursor")
+            if not next_cursor or next_cursor in seen_cursors:
+                msg = "Twitch clip discovery did not advance its pagination cursor."
+                raise ParsingError(msg)
+            cursor = next_cursor
+            seen_cursors.add(cursor)
         remaining_count -= len(edges)
 
         for edge in edges:
-            node = edge.get("node") or {}
+            if not isinstance(edge, dict):
+                continue
+            node = get_dict(edge, "node")
             yield r.remap_dict(node, clip_remapping)
 
-        if not multi_get(clips, "pageInfo", "hasNextPage"):
+        if not has_next_page:
             break
 
 

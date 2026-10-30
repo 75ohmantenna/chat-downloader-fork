@@ -8,6 +8,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.sites.twitch import discovery, url_generation
 from chat_downloader.sites.twitch.graphql_client import _download_gql
 
@@ -158,6 +159,61 @@ def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes()
     assert queries[1]["cursor"] == "cursor-2"
     assert [item["id"] for item in result] == ["7", "8"]
     assert result[1]["resource_restriction"] == "restricted"
+
+
+def test_clip_discovery_uses_returned_cursor_beyond_first_hundred():
+    first = [_edge({"id": str(index)}, "opaque-next") for index in range(100)]
+    download = Mock(
+        side_effect=[
+            _page("clips", first, True),
+            _page("clips", [_edge({"id": "100"})]),
+        ]
+    )
+    result = list(discovery.get_user_clips(Mock(), download, "streamer", limit=200))
+    assert [item["id"] for item in result] == [str(index) for index in range(101)]
+    queries = [call.args[1][0]["variables"] for call in download.call_args_list]
+    assert queries[0]["cursor"] == "MA=="
+    assert queries[1]["cursor"] == "opaque-next"
+    assert [query["limit"] for query in queries] == [100, 100]
+
+
+@pytest.mark.parametrize("cursors", [[""], ["MA=="], ["next", "next"], ["a", "b", "a"]])
+def test_clip_discovery_rejects_missing_repeated_or_cyclic_cursors(cursors):
+    download = Mock(
+        side_effect=[
+            _page("clips", [_edge({"id": str(index)}, cursor)], True)
+            for index, cursor in enumerate(cursors)
+        ]
+    )
+    with pytest.raises(ParsingError, match="pagination cursor"):
+        list(discovery.get_user_clips(Mock(), download, "streamer", limit=100))
+    assert download.call_count == len(cursors)
+
+
+@pytest.mark.parametrize("more", [False, True])
+def test_clip_discovery_empty_page_never_repeats_its_request(more):
+    download = Mock(return_value=_page("clips", [], more))
+    if more:
+        with pytest.raises(ParsingError, match="pagination cursor"):
+            list(discovery.get_user_clips(Mock(), download, "streamer", limit=100))
+    else:
+        assert list(discovery.get_user_clips(Mock(), download, "streamer")) == []
+    download.assert_called_once()
+
+
+def test_clip_limit_does_not_require_an_unused_continuation():
+    download = Mock(return_value=_page("clips", [_edge({"id": "one"}, "")], True))
+    assert list(discovery.get_user_clips(Mock(), download, "streamer", limit=1)) == [
+        {"id": "one"}
+    ]
+    download.assert_called_once()
+
+
+def test_clip_discovery_skips_non_object_edges():
+    download = Mock(return_value=_page("clips", ["malformed", _edge({"id": "one"})]))
+    assert list(discovery.get_user_clips(Mock(), download, "streamer")) == [
+        {"id": "one"}
+    ]
 
 
 @pytest.mark.parametrize(
