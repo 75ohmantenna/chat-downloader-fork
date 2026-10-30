@@ -226,8 +226,8 @@ Filtering and output:
   Use `--message_groups all` for a provider's complete supported event surface.
   Unknown explicit types are rejected with the provider's valid type names;
   ordinary chat uses `text_message`. The special type `all` accepts every type.
-  In typed API requests, an explicit `ChatRequest.message_types` value overrides
-  `message_groups`, including the `all` group.
+  In typed API requests, a nonempty `ChatRequest.message_types` list overrides
+  `message_groups`, including the `all` group. An empty list uses groups.
 - `--format` or `--format_file` — change rendered text output.
 - `--output` — write one or more files (repeatable).
 - `--compact_console` — opt into suppressing unchanged supported state updates
@@ -471,7 +471,8 @@ lock only after confirming the previous process has stopped. Checkpoints are
 shutdown recovery points, not continuous crash journals.
 
 `--verify_output` checks exact formatting, semantic deduplication, UTF-8, and
-physical line endings after a successful or interrupted run with safe cleanup.
+physical line endings after successful or interrupted retrieval, or a stdout
+pipe failure, when cleanup succeeds.
 It requires one JSONL and one TXT
 output after duplicate destinations are removed, including aliases and expanded
 output templates. Different formats must use distinct files. Extra distinct

@@ -1,12 +1,13 @@
 # Repository Guide
 
 The actual checked-in codebase is the single source of truth for all
-documentation of implemented behavior, public interfaces, defaults, project
-structure, and executable tooling. This includes source code, bundled data,
-and configuration. Tests verify behavior and protect intended contracts;
-documentation and fixtures describe it rather than override it. Verify claims
-against the relevant implementation before adding or updating prose, including
-this guide and nested agent guides. When they differ, correct the prose; change
+documentation, comments, and docstrings about implemented behavior, public
+interfaces, defaults, project structure, and executable tooling. This includes
+source code, bundled data, and configuration. Tests verify behavior and protect
+intended contracts; documentation and fixtures describe it rather than override
+it. Verify claims against the relevant implementation before adding or updating
+prose, including this guide and nested agent guides. When they differ, correct
+the prose; change
 code only for a separately established bug or requested behavior change.
 Historical release notes describe their release, and plans must be clearly
 identified as unimplemented. This guide sets repository workflow and review
@@ -16,9 +17,9 @@ rules, not runtime behavior. See the documentation source map in
 ## Project facts
 
 `chat-downloader-fork` is a Python 3.12+ CLI and typed API for YouTube, Twitch,
-and Kick live chat and replay. CI tests Python 3.12, 3.13, and 3.14. It is a
-personal fork of `xenova/chat-downloader`; upstream does not support fork-owned
-changes.
+and Kick live chat and replay. The CI workflow targets Python 3.12, 3.13, and
+3.14. It is a personal fork of `xenova/chat-downloader`; upstream does not
+support fork-owned changes.
 
 Important locations:
 

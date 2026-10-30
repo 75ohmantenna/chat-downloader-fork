@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Owned client for Kick's unauthenticated JSON endpoints."""
+"""Owned Kick JSON client with optional main-origin cookie authentication."""
 
 from __future__ import annotations
 

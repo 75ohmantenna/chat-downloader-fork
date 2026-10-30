@@ -244,7 +244,7 @@ module names.
 |--------|---------|
 | `chat_streams.py` | `YouTubeChatStreamsMixin`; entry points for video and clip chat |
 | `continuation.py` | The cohesive continuation request loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`); delegates action pages to `message_pipeline.py`. `chat_streams.py` constructs the loop directly |
-| `continuation_helpers.py` | Pure, downloader-independent helpers: `ContinuationLoopState`, `build_continuation_params`, `update_state_from_result`, live-timing/poll-delay/URL/filter builders |
+| `continuation_helpers.py` | Downloader-independent state, timing, request-body, poll-delay, URL, and filter helpers; includes wall-clock observation and in-place message enrichment |
 | `continuations.py` | Continuation token-key definitions and response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
 
 #### Other YouTube modules
@@ -293,7 +293,7 @@ module names.
 | `capture_inspection.py` | Content-free Kick record validation and live/replay ledger reconciliation using the shared strict reader; shared by automatic live verification and the offline CLI |
 | `live_service.py` | Live chat orchestration: channel metadata, preloaded history and pin state, message streaming with deduplication, clock/latency-safe reconnect backfill, bounded diagnostics, and rejected-key recovery |
 | `deleted_message_cache.py` | Bounded FIFO original-text and author-name cache for live deletion notices |
-| `replay_window.py` | Pure Kick replay bounds, reverse cursor, and skip classification |
+| `replay_window.py` | Kick replay bounds, record parsing, and skip-diagnostic updates; reverse cursors are constructed in `history.py` |
 | `replay_service.py` | VOD metadata, reverse history spooling, replay-relative timestamps, filtering, and completion diagnostics |
 | `vod_metadata.py` | Legacy video lookup and validated, origin-isolated current website metadata fallback |
 | `clip_service.py` | Web/mobile clip metadata validation, clip-relative bounds, and source-VOD or absolute-time replay assembly |

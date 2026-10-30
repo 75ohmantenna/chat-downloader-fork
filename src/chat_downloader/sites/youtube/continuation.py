@@ -4,8 +4,9 @@
 
 Per-run downloader/context/progress state, setup, request/response handling,
 and iteration belong to _ContinuationLoop.
-Pure helpers live in .continuation_helpers and .continuations; module-level
-functions here are stateless and downloader-independent for isolated testing.
+State/timing helpers and response parsing live in .continuation_helpers and
+.continuations. Module-level helpers here also log diagnostics and update state;
+the loop owns request and session orchestration.
 """
 
 from __future__ import annotations
@@ -317,11 +318,11 @@ class _ContinuationLoop:
     def _build_context(self) -> _ChatContext:
         """Validate message groups/types and update session headers for setup.
 
-        Return context so setup no longer needs the downloader.
+        Return per-run context while retaining downloader ownership on the loop.
 
         Raises:
-            NoContinuation: Requested chat type index is absent.
-            InvalidParameter: Unknown message group.
+            NoContinuation: The requested chat view has no continuation token.
+            InvalidParameter: Unknown message group or explicit message type.
         """
         initial_info = self.initial_info
         self.ytcfg = apply_request_profile_to_ytcfg(

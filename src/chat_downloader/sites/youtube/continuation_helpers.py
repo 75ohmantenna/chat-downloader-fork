@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 
-"""Pure helpers for the YouTube chat continuation loop.
+"""State, timing, request-body, and filter helpers for YouTube continuations.
 
-Stateless functions and the loop's mutable state model. These carry no
+Includes wall-clock observation and in-place timing enrichment. These carry no
 downloader/session dependency and no network I/O, so they are unit-tested in
 isolation. The orchestration that wires them together lives in
 :mod:`.continuation`.

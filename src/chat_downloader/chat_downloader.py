@@ -223,7 +223,8 @@ class ChatDownloader:
 def run(*, propagate_interrupt: bool = False, **kwargs: Any) -> RunResult:
     """Run a ChatDownloader session, handling/logging errors and closing it afterward.
 
-    Iterates all chat messages, logging them unless quiet=True.
+    Iterates accepted chat messages and prints formatted output unless quiet=True.
+    Optional console compaction suppresses unchanged eligible state updates.
 
     Args:
         propagate_interrupt: Re-raise KeyboardInterrupt for embedding applications.

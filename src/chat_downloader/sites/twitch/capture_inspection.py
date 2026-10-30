@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Content-free, offline inspection of one Twitch live JSONL capture."""
+"""Content-free automatic and offline inspection of Twitch live JSONL captures."""
 
 from __future__ import annotations
 

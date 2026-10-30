@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: MIT
 
-"""Fetch Kick metadata, resolve chatrooms, and emit history then Pusher chat.
+"""Fetch Kick metadata and emit history, negotiated live events, and snapshots.
 
-Deduplicate both sources and filter requested message groups/types. Injectable
-transport/frame iteration allows testing without Kick. Chatrooms and Pusher
-remain active offline.
+Deduplicate sources and filter requested message groups/types. Injectable
+Pusher/Centrifugo transports allow testing without Kick. Offline channels retain
+chat capture; startup and reconnect recovery retrieve bounded history.
 """
 
 from __future__ import annotations

@@ -113,7 +113,10 @@ class ChatRequest:
     # ── Retry ─────────────────────────────────────────────────────────────────
     max_attempts: int = field(
         default=DEFAULT_MAX_ATTEMPTS,
-        metadata=_cli_metadata("Maximum retry attempts", group="retry"),
+        metadata=_cli_metadata(
+            "Maximum attempts per retry loop, including the initial attempt",
+            group="retry",
+        ),
     )
     retry_timeout: float | None = field(
         default=None,

@@ -8,21 +8,10 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
-### Fixes
+## 2.6.0 — 2026-10-30
 
-- Infer YouTube live/replay status from chat evidence when player metadata is
-  missing, and retry unknown bootstrap status within the profile fallback limit.
-- Preserve mobile chat-summary banners and report unsupported action samples.
-- Record labeled receive timestamps for YouTube live messages without source
-  timing, and expose timestamp fallback coverage in capture inspection.
-- Explain custom request-fingerprint conflicts in YouTube HTTP 400 guidance.
-
-- Preserve CLI exit status `1` when a stdout reader closes early, finalize
-  capture resources, and prevent an ignored broken-pipe error at shutdown.
-- Reject replay time bounds on Twitch channel URLs before network access,
-  and explain live capture duration limits in CLI help and guides.
-
-## 2.5.2 — 2026-10-23
+This release includes the untagged 2.5.2 preparation and subsequent changes
+since v2.5.1.
 
 ### Features
 
@@ -30,33 +19,65 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Render Kick prediction state and optionally compact unchanged console updates
   while retaining every record in output files.
 - Recover Kick startup and reconnect chat gaps with bounded history pagination.
+- Add an opt-in Kick live CLI smoke matrix with private artifacts and bounded
+  captures, and explain inspection review status with fixed reason codes.
 
 ### Fixes
 
 - Restore the 2.5.1 replay integrity, cancellation, YouTube banner timing,
   Twitch validation, Kick access fallback, formatting, and metadata fixes that
   were overwritten by the later 2.5.0 snapshot.
-- Reject inverted replay time bounds and unknown provider message types before
-  they can produce misleading empty captures.
+- Reject inverted replay bounds and unknown provider message types instead of
+  allowing misleading empty captures. Reject replay time bounds on Twitch
+  channels before network access, and explain live capture duration limits.
+- Reject inconsistent checkpoint boundaries before appending, retry malformed
+  Twitch replay envelopes, and preserve replay windows and setup diagnostics
+  in run reports.
+- Preserve CLI failure status on closed stdout pipes, finalize capture resources,
+  and verify safely closed output without replacing the original pipe error.
+- Transfer timed-iterator source failures to the consuming thread and close
+  Twitch IRC sockets when registration is interrupted.
+- Resolve lazy output aliases after discovery and deduplicate verification
+  destinations before capture writes begin.
+- Follow Twitch clip-discovery server cursors and reject stalled traversal.
+  Strip IRC ACTION framing before emote lookup and structured output.
+- Preserve fractional seconds in custom timestamp formats.
+- Infer YouTube live/replay status from chat evidence when player metadata is
+  missing, and retry unknown bootstrap status within the profile fallback limit.
+- Read YouTube dedicated initial-data scripts with legacy fallback, prefer
+  explicit account identities, and preserve refreshed visitor-token precedence.
+- Preserve mobile chat-summary banners and report unsupported action samples.
+- Record labeled receive timestamps for YouTube live messages without source
+  timing, and expose timestamp fallback coverage in capture inspection.
+- Explain custom request-fingerprint conflicts in YouTube HTTP 400 guidance.
+- Drain accepted Kick publications before reconnecting or reporting reader
+  failures, and preserve bounded history recovery and deadline accounting.
 - Report existing resume output accurately, explain checkpoint message limits,
-  and log normal user interruptions at INFO while retaining failure status.
+  and keep optional output reporting from replacing capture results.
+- Log normal user interruptions at INFO while retaining failure exit status.
 - Explain in-progress Kick VODs and suggest the live channel URL.
 - Warn about nondefault YouTube and Twitch options on Kick without logging
   their values. Use transport-neutral control-frame labels, omit repetitive
   keepalive logs, and show actual history-recovery windows.
 - Skip Kick public-event connections and state polling for text-only captures.
+- Retain bounded Twitch setup/outage timing, optional-metadata causes, and
+  recognized negotiated IRC TLS labels in capture diagnostics.
+
+### Dependencies and tooling
+
+- Refresh locked dependencies and require requests 2.34.2, certifi 2026.10.23,
+  curl-cffi 0.17.0, and setuptools 84.2.1 or newer for installed/build tooling.
+- Honor the selected CI interpreter during locked installation and validation,
+  and document interpreter and independent CA trust-store refreshes.
 - Exclude ignored local `testing/` scripts from strict type checking.
-- Reject inconsistent replay checkpoint boundaries before appending, retry
-  malformed Twitch response envelopes, and keep optional output reporting from
-  replacing capture results when a filesystem probe fails.
-- Close Twitch IRC sockets when registration is interrupted, preserving the
-  original interruption even if socket cleanup fails.
+- Reconcile current guides, CLI/API examples, comments, and docstrings with
+  implemented behavior and distinguish configured CI from observed validation.
 
 ### Compatibility
 
 - Replay checkpoints use schema version 2 and remain bound to the program
   version and built-in formats. Finish resumable captures with their original
-  version or start new captures after upgrading.
+  version or start new captures after upgrading to 2.6.0.
 
 ## 2.5.1 — 2026-10-15
 

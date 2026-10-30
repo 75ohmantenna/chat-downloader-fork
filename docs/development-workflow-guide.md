@@ -10,7 +10,7 @@ support and AI-assistance disclosures.
 
 ## Tooling baseline
 
-- Python support: 3.12+; CI validates 3.12, 3.13, and 3.14.
+- Python support: 3.12+; the CI matrix targets 3.12, 3.13, and 3.14.
 - Dependency and build metadata: `pyproject.toml` and `uv.lock`.
 - Tests and coverage: pytest and coverage.py.
 - Formatting and linting: Ruff, with an 88-character line length.
@@ -57,9 +57,10 @@ committed lockfile.
 Network tests remain opt-in locally. Every external check carries
 `@pytest.mark.network`, one scope marker (`network_replay`, `network_live`, or
 `network_environment`), and a hard timeout. Parser and transport regressions
-should normally use curated fixtures under `tests/fixtures/`. GitHub Actions
-runs the stable `network_replay` contracts weekly and on manual dispatch;
-volatile live and environment checks do not gate pushes or pull requests.
+should normally use curated fixtures under `tests/fixtures/`. The GitHub Actions
+workflow schedules stable `network_replay` contracts weekly and on manual
+dispatch; volatile live and environment checks do not gate pushes or pull
+requests.
 
 ## Commands
 
@@ -437,6 +438,11 @@ data, and configuration. Give each explanation one owning document and link to
 it elsewhere; ownership identifies where prose is maintained, not a second
 source of truth.
 
+This rule also applies to code comments, docstrings, CLI help, examples, and
+configuration comments. Describe units, mutation, side effects, retry bounds,
+and lifecycle ownership from the actual implementation; do not retain claims
+from an earlier architecture merely because a test still passes.
+
 Before adding or changing a claim, inspect its implementation using the source
 map below. When prose and implementation disagree, correct the prose. Change
 code only for a separately established bug or requested behavior change, with
@@ -601,7 +607,9 @@ Provider-specific diagnosis and fixture-promotion steps live in the
 
 ## Release procedure
 
-1. Confirm `master` is clean and synchronized with `origin/master`.
+1. Confirm `master` is clean and synchronized with `origin/master`. Check local
+   and remote release tags; a version in metadata or a changelog heading alone
+   does not establish that it was released.
 2. Select the next semantic version from the user-visible changes since the
    latest `v*` tag.
 3. Move relevant `Unreleased` entries under a new numbered release heading,
@@ -609,7 +617,11 @@ Provider-specific diagnosis and fixture-promotion steps live in the
    as the topmost numbered `CHANGELOG.md` heading. Leave `pyproject.toml`
    unchanged; setuptools reads the version dynamically.
 4. Run `uv lock`, `uv lock --check`, `uv sync --locked`, and `make ci`.
-5. Inspect the built wheel metadata and confirm the expected version.
+5. Inspect the built wheel metadata and confirm the expected version. Confirm
+   validation for the release commit across Python 3.12–3.14. Workflow files
+   alone do not prove execution: GitHub Actions must be enabled, and the runs
+   must cover the intended commit. Record any local matrix or opt-in network
+   validation separately from hosted results.
 6. Create and verify the signed release commit, then create and verify the
    signed annotated `v<version>` tag at that commit.
 7. If the release was prepared in a second checkout, fetch its branch into the
@@ -624,13 +636,15 @@ version and the topmost numbered changelog release.
 
 ## Hosted CI
 
-GitHub Actions is the only supported hosted CI platform. The `test` job runs
-`make ci` on Python 3.12, 3.13, and 3.14 for pushes to every branch, pull
-requests targeting `master`, and manual dispatch. The separate Python 3.14
-`network-replay` job runs stable replay contracts on the weekly schedule and
-manual dispatch. Both jobs use locked dependencies, read-only contents
-permission, concurrency cancellation, and a 20-minute timeout. The `test`
+GitHub Actions is the only supported hosted CI platform. The workflow defines
+a `test` job for `make ci` on Python 3.12, 3.13, and 3.14 on pushes to every
+branch, pull requests targeting `master`, and manual dispatch. The separate
+Python 3.14 `network-replay` job runs stable replay contracts on the weekly
+schedule and manual dispatch. Both jobs use locked dependencies, read-only
+contents permission, concurrency cancellation, and a 20-minute timeout. The `test`
 checkout retains full Git history so the fork-history issue-reference guard can
-inspect every commit after its recorded baseline.
+inspect every commit after its recorded baseline. Repository-level Actions
+settings control whether these jobs execute; check actual run results before
+claiming hosted validation.
 
 Do not add Gitea, Forgejo, Codeberg, or Woodpecker CI configuration.

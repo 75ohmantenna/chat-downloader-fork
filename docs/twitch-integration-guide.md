@@ -102,7 +102,7 @@ instead of repeating a page.
 - `parsing/badges.py`: badge parsing and icon shaping helpers
 - `remappings.py`: remapping dictionary builders
 - `validation_keys.py`: known-key sets and raw replay-shape debug validation
-- `types.py`: badge cache and related immutable snapshots
+- `types.py`: badge cache and copied lookup snapshots treated as read-only
 - `constants.py`: persisted-query names and hashes, message groups, IRC
   constants, GraphQL operation payloads, and known-key builders
 
@@ -575,12 +575,12 @@ the run result, debug summary, and run manifest contains the same content-free
 JSONL findings and IRC frame accounting as the offline inspector. Its `status`
 is `ok`, `review`, or `error`; a review or inspection error makes the run
 unsuccessful even when `parity_status` is `passed`. Parity is still checked if
-inspection fails, and its independent status remains available. YouTube and
-Twitch/Kick replays retain parity-only verification; Kick live capture attaches
-its own provider inspector. Closed partial captures are
-also inspected after retrieval failures when
-the output pair was validated; the original error remains authoritative and
-parity stays `not_run`.
+inspection fails, and its independent status remains available. YouTube captures
+and Kick live capture attach their own provider inspectors; Twitch and Kick
+replays retain parity-only verification. Closed partial captures are also
+inspected after retrieval failures when the output pair was validated; the
+original error remains authoritative. Interrupted and broken-stdout captures
+also run parity after safe cleanup; other retrieval errors leave parity `not_run`.
 
 Kick and Twitch inspection use `utils/capture_reader.py` for strict UTF-8 JSONL
 reading and regular-file ownership. Provider record rules and ledger accounting

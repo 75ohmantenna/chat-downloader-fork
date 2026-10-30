@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: MIT
 
-"""Pure YouTube action processing: parse, validate/finalize, then type/time filters.
+"""YouTube action parsing, validation, filtering, timing, and poll diagnostics.
 
-No network/logging side effects. process_pipeline_action returns a PipelineResult.
+Action processing returns a PipelineResult. Page iteration updates timing and
+diagnostic state, logs aggregate outcomes, and warns about missing replay timing.
 """
 
 from __future__ import annotations

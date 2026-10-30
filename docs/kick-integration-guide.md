@@ -169,7 +169,7 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `extractor.py`: `KickChatDownloader`, URL matching, public site methods
 - `live_service.py`: live chat orchestration (metadata, chatroom resolution,
   preloaded history, WebSocket loop, deduplication, reconnect)
-- `replay_window.py`: pure replay bounds and record classification
+- `replay_window.py`: replay bounds, record parsing, and skip-diagnostic updates
 - `replay_service.py`: VOD orchestration (metadata, time-window pagination)
 - `clip_service.py`: web/mobile clip metadata validation and source-VOD or
   absolute-time replay assembly

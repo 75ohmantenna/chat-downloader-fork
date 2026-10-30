@@ -18,8 +18,8 @@ from chat_downloader.debugging import log
 MODE_APPEND_TEXT = "a"
 MODE_WRITE_TEXT = "w"
 
-# Wall-clock seconds between fsync()s. Per-record flush handles process
-# crashes; fsync also survives OS-level events like power loss.
+# Monotonic seconds between write-triggered fsync()s. Per-record flush moves
+# records into the OS; fsync requests durable storage for those written so far.
 _FSYNC_INTERVAL_SECONDS = 60.0
 _TAIL_SCAN_BYTES = 8192
 
@@ -50,7 +50,8 @@ def _repair_jsonl_final_line(file_name: str) -> None:
     This writer always terminates records with ``\n``. A final non-newline byte
     can therefore be either an interrupted write or a complete externally
     produced record missing its terminator. Scan backward in fixed-size chunks
-    so recovery cost is independent of a multi-gigabyte log's total size.
+    until a newline is found. Scanning scales with the trailing record plus
+    one chunk; without a newline it spans the whole file. Decoding loads the tail.
     """
     path = Path(file_name)
     if not path.exists() or path.stat().st_size == 0:
@@ -174,7 +175,7 @@ class ContinuousFileWriter(ABC):
         Per-message flush moves bytes from Python buffers into the OS,
         protecting against SIGKILL. fsync forces the OS to commit them
         to disk, protecting against power events. fsync per record is
-        too expensive on long live streams, so it runs on a timer.
+        too expensive on long live streams, so each write checks elapsed time.
         """
         if self.file is None:
             return

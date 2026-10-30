@@ -3,7 +3,7 @@
 Maintained YouTube, Twitch, and Kick live and replay chat CLI and Python API.
 This is a personal fork of
 [`xenova/chat-downloader`](https://github.com/xenova/chat-downloader),
-targeting Python 3.12+; CI validates Python 3.12, 3.13, and 3.14.
+targeting Python 3.12+; the CI workflow defines Python 3.12, 3.13, and 3.14 checks.
 
 The supported file formats are JSON Lines (`.jsonl`) and formatted text
 (`.txt`). Network tests are opt-in locally; the default suite is fully offline.
@@ -23,13 +23,16 @@ others. Accordingly:
 ## Development Notes
 
 Development of this fork has been AI-assisted, primarily with Anthropic's
-Claude and OpenAI's Codex. Hosted CI runs the canonical `make ci` quality gate
-on pushes and pull requests. Its locked checks include codespell, Ruff lint and
-format checks, mypy, import-linter, the offline test suite with 100% line
-coverage, a package build, and an isolated installation smoke test. These
-checks do not constitute a security audit and do not replace your own review.
-**Use at your own risk.** A separate weekly and manually triggered CI job runs
-the stable replay network contracts on Python 3.14.
+Claude and OpenAI's Codex. The GitHub Actions workflow configures the canonical
+`make ci` quality gate for pushes and pull requests. Its locked checks include
+codespell, Ruff lint and format checks, mypy, import-linter, the offline test
+suite with 100% line coverage, a package build, and an isolated installation
+smoke test. These checks do not constitute a security audit and do not replace
+your own review.
+**Use at your own risk.** A separate weekly and manually triggered CI job is
+configured for stable replay network contracts on Python 3.14. Hosted checks
+require GitHub Actions to be enabled; inspect the runs for the commit being
+released rather than treating workflow configuration as a passing result.
 
 ## Supported Platforms
 

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Pure replay window selection and boundary classification."""
+"""Replay window selection, record parsing, and skip-diagnostic updates."""
 
 from __future__ import annotations
 

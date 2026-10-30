@@ -169,14 +169,14 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `url` | `""` | Stream, video, or clip URL |
 | `start_time` | `None` | Inclusive replay start offset; must not exceed `end_time`; supported by YouTube, Twitch replay, and Kick VOD/clip URLs |
 | `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD/clip URLs |
-| `max_attempts` | `15` | Maximum retry attempts |
+| `max_attempts` | `15` | Maximum attempts per retry loop, including the initial attempt; reconnect recovery uses a consecutive-failure budget |
 | `retry_timeout` | `None` | Delay before retry; `None` uses exponential backoff, while a negative value requires an interactive terminal |
 | `interruptible_retry` | `True` | Allow an interactive user to trigger a waiting retry immediately; redirected stdin uses the full delay |
-| `timeout` | `None` | Overall runtime limit |
-| `inactivity_timeout` | `None` | Stop after idle period |
+| `timeout` | `None` | Message-retrieval duration limit after chat configuration; provider setup and finalization can extend total wall time |
+| `inactivity_timeout` | `None` | Stop when the configured message iterator yields no message within this period; filtered provider traffic does not reset it |
 | `max_messages` | `None` | Stop after this many messages |
 | `message_groups` | site default | High-level message filtering; `["all"]` accepts every supported provider event type |
-| `message_types` | `None` | Explicit provider message types; unknown names fail, `all` accepts every type; overrides `message_groups` when supplied |
+| `message_types` | `None` | Explicit provider message types; unknown names fail, `all` accepts every type; a nonempty list overrides `message_groups`, while `None` or an empty list uses groups |
 | `output` | `None` | Output path or list of paths |
 | `overwrite` | `True` | Replace existing output files |
 | `sort_keys` | `True` | Sort keys in JSON output |
@@ -266,7 +266,7 @@ chat = downloader.get_chat_request(request)
 | `quiet` | `False` | Suppress formatted chat output to stdout |
 | `compact_console` | `False` | Suppress unchanged provider-selected state updates on stdout; retain file records and capture counts |
 | `resume` | `None` | Create or resume a validated replay shutdown checkpoint |
-| `verify_output` | `False` | Verify one JSONL/TXT pair after successful or interrupted retrieval with safe cleanup; inspect supported provider captures even after retrieval errors |
+| `verify_output` | `False` | Verify one JSONL/TXT pair after successful, interrupted, or broken-stdout retrieval with safe cleanup; inspect supported provider captures even after other retrieval errors |
 | `require_complete` | `False` | Fail unless the selected completed replay is exhausted without known record loss |
 | `run_manifest` | `None` | New filename for a JSON outcome, recording, and output-hash report |
 | `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |
@@ -497,7 +497,11 @@ captured samples into stable fixture names.
 
 ## Public Errors
 
-All package-specific errors derive from `ChatDownloaderError`.
+The exported downloader-specific errors derive from `ChatDownloaderError`.
+Direct API calls can also propagate configuration `ValueError`/`TypeError`,
+standard I/O errors, and transport exceptions; catching the package base class
+does not catch those failures. Internal testing-mode controls use a separate
+`debugging.TestingException`.
 
 Common exceptions:
 

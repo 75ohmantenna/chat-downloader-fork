@@ -3,8 +3,7 @@
 """Twitch type definitions for badge caching.
 
 These types provide explicit, instance-owned badge caches that are passed
-through parsing functions for deterministic, pure parsing without relying on
-module-level global state.
+through parsing functions without relying on module-level badge state.
 
 Usage
 -----
@@ -34,9 +33,10 @@ from typing import Any
 
 @dataclass
 class BadgeSet:
-    """Immutable snapshot of badge data for use during parsing.
+    """Badge-data snapshot treated as read-only by parsing code.
 
-    The snapshot makes badge lookup deterministic for one parse operation.
+    The dataclass and its dictionaries are mutable; BadgeCache.snapshot() copies
+    lookup dictionaries while sharing individual badge metadata dictionaries.
 
     Attributes:
         global_badges: Global badges keyed by ``(setID, version)`` tuples.
@@ -72,9 +72,9 @@ class BadgeCache:
     def snapshot(self) -> BadgeSet:
         """Return a :class:`BadgeSet` snapshot suitable for parsing.
 
-        Copies the top-level dicts so that any subsequent update to the cache
-        does not affect an in-progress parse.  Inner badge dicts are *not*
-        deep-copied; they are treated as read-only by parsing code.
+        Copies global and per-channel lookup dictionaries, isolating additions
+        and replacements from an in-progress parse. Individual badge metadata
+        dictionaries remain shared and are treated as read-only by parsing code.
 
         Returns:
             :class:`BadgeSet` with shallow copies of the current badge data.

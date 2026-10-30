@@ -114,8 +114,8 @@ can cover the remaining paths without implementation-shaped tests.
 
 **Decision:** `sites/youtube/continuation.py` owns the stateful live/replay
 continuation behavior as one unit: context construction, request-profile
-fallback, response handling, progress guards, and iteration. Pure timing,
-filter, URL, and state helpers remain in `continuation_helpers.py`.
+fallback, response handling, progress guards, and iteration. Downloader-independent
+timing, filter, URL, and state helpers remain in `continuation_helpers.py`.
 
 The loop is intentionally allowlisted above 400 lines. Its integration tests
 must exercise the assembled path, not only isolated helper stages.

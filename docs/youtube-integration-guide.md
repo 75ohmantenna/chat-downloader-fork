@@ -86,7 +86,7 @@ The normal YouTube flow is:
 - `chat_streams.py`: site-level chat entry methods
 - `continuation.py`: cohesive live/replay polling loop, request-profile
   fallback, response handling, and action iteration
-- `continuation_helpers.py`: pure state, timing, filter, and URL helpers
+- `continuation_helpers.py`: state, timing, filter, request-body, and URL helpers
 - `chat_users_router.py` and `chat_users_retrieval.py`: optional chat-user
   lookup routing and retrieval helpers
 - `continuations.py`: continuation parsing models and utilities
@@ -176,8 +176,10 @@ available for classification.
 
 ### Chat-page continuation recovery
 
-The integration then loads either the live chat page or the live chat replay
-page once to recover the active chat-view continuation tokens.
+Page bootstrap attempts to load the live chat or replay page when the watch
+response supplies a reload token and status is known. Direct InnerTube bootstrap
+already supplies normalized continuation hints and skips this enrichment.
+Each bootstrap profile attempt can make its own chat-page request.
 
 This matters because the watch page alone is not always enough to choose the
 right continuation reliably, especially when both `Top chat` and `Live chat`
@@ -245,8 +247,9 @@ Live console and TXT output use the original message's UTC clock time,
 including seconds (`01:21:15`), with the default and `24_hour` formats.
 Replay output still uses elapsed video time. JSONL preserves the original
 microsecond `timestamp` and capture-relative timing fields. When a provider
-timestamp is absent, formatting falls back to existing timing fields; it does
-not invent a message timestamp.
+timestamp is absent, records receive a separate per-batch `received_timestamp`;
+default live formatting marks it `[received]`. This does not invent source
+timing or a capture-relative replay offset.
 
 The live and replay action loops retain `poll_count`, `processed_action_count`,
 `emitted_message_count`, and `non_emission_counts` in capture diagnostics.
@@ -567,8 +570,8 @@ To turn a captured drift sample into a permanent regression anchor:
    make ci
    ```
    It parameterizes over every dictionary-shaped `live_events/*.json` file and
-   asserts no drift sentinel fires. If the harness passes, the fix is complete
-   and the fixture is a permanent regression anchor.
+   asserts no drift sentinel fires. A passing harness protects those fixture
+   shapes; also verify the affected behavior through its composition tests.
 
 The four sentinel phrases checked by the harness are `"Unknown action"`,
 `"Unknown message type"`, `"Missing keys found"`, and

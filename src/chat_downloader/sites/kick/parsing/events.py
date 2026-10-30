@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 
-"""Kick/Pusher event dispatch.
+"""Dispatch Kick events from normalized Pusher-style realtime envelopes.
 
 A dispatch dictionary maps normalized message types (resolved from raw Pusher
 ``event`` names via ``EVENT_NAME_MAP``) to parser functions. Pusher protocol
-control frames are recognized and ignored; unknown events are debug-logged by
-name and can be captured through the sanitized opt-in sample mechanism before
-being skipped so they can never crash normal chat logging.
+control frames are counted and omitted from message output. Non-heartbeat
+controls are debug-logged; unknown events can be logged and captured through
+the sanitized opt-in sample mechanism before being skipped.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ from chat_downloader.utils.json_types import get_int, get_str
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-#: Pusher protocol control frames that are expected and silently ignored.
+#: Expected Pusher-style controls counted and omitted from message output.
 _KNOWN_CONTROL_EVENTS = frozenset(
     {
         PUSHER_CONNECTION_ESTABLISHED,
@@ -224,7 +224,7 @@ def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event ac
         msg = "Kick Pusher returned an error event (subscription/protocol failure)."
         raise KickError(msg)
 
-    # --- Pusher control frames (silently ignore) ------------------------------
+    # --- Pusher-style controls (count and omit from message output) -----------
     if event_name in _KNOWN_CONTROL_EVENTS:
         _record_diagnostic(record_diagnostic, "control_frame_count")
         if event_name not in (PUSHER_PING, PUSHER_PONG):
@@ -316,8 +316,7 @@ def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event ac
             record_diagnostic,
             MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX + message_type,
         )
-        # A single malformed frame must never tear down the live download
-        # loop (which only retries on ConnectionError); skip it instead.
+        # Skip recognized malformed payloads without reconnecting the feed.
         capture_debug_sample(
             "kick-malformed-event",
             {

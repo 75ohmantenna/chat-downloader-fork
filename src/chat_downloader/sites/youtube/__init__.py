@@ -13,7 +13,7 @@ bootstrap, request, continuation, parsing, and discovery modules:
 - chat_streams.py: Live and replay stream entry points.
 - continuation.py: The stateful continuation request loop.
 - message_pipeline.py: Action-page parsing, filtering, timing, and diagnostics.
-- continuation_helpers.py and continuations.py: Pure loop helpers and the
+- continuation_helpers.py and continuations.py: State/timing helpers and the
   response parser.
 - parsing/: action routing and message normalization.
 """
