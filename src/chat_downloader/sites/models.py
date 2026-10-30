@@ -88,6 +88,7 @@ class Chat:
 
         self.start_time = start_time
         self.id = id
+        self._metadata_pending = False
         self.diagnostics = diagnostics if diagnostics is not None else {}
         self._request_window: dict[str, object] | None = None
 

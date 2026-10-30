@@ -28,6 +28,7 @@ def _copy_chat_metadata(chat_item: Chat, chat: Any) -> None:
     for key, value in vars(chat).items():
         if key != "chat" and not key.startswith("_"):
             setattr(chat_item, key, value)
+    chat_item._metadata_pending = False
 
 
 class YouTubeChatUsersRetrievalMixin:
@@ -42,6 +43,7 @@ class YouTubeChatUsersRetrievalMixin:
         request = coerce_chat_request(params)
         title = try_get_first_value(user_video_args)
         chat_item = Chat(title=title, id=title)
+        chat_item._metadata_pending = True
         chat_item._capture_inspector = lambda path, summary: inspect_capture(
             path, run_summary=summary
         )

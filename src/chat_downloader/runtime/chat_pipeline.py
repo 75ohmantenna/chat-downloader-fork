@@ -5,13 +5,16 @@
 from __future__ import annotations
 
 import time
+from string import Formatter
 from typing import TYPE_CHECKING, Any, Protocol
 
 from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.continuous_write import ContinuousWriter
-from chat_downloader.sites.output_dispatch import _expand_output_file_name
-from chat_downloader.utils.filename_utils import output_path_identity
+from chat_downloader.sites.output_dispatch import (
+    _expand_output_file_name,
+    _register_output_path,
+)
 from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import TimedGenerator
 
@@ -163,21 +166,16 @@ def _configure_output_writer(
         )
         # Unknown lazy metadata cannot establish that different templates will
         # identify one file. Keep them distinct until real metadata is known.
-        unresolved = ("{title}" in output_file and chat.title is None) or (
-            "{id}" in output_file and chat.id is None
-        )
-        identity = output_path_identity(output_file if unresolved else expanded_path)
-        suffix = expanded_path.rsplit(".", 1)[-1].lower()
-        if identity in seen:
-            if seen[identity] != suffix:
-                msg = "Different output formats require distinct files."
-                raise ValueError(msg)
-            log(
-                "warning",
-                f"Duplicate output path '{output_file}' — skipping.",
-            )
+        fields = {
+            field for _text, field, _spec, _conversion in Formatter().parse(output_file)
+        }
+        unresolved = (
+            "title" in fields and (chat.title is None or chat._metadata_pending)
+        ) or ("id" in fields and (chat.id is None or chat._metadata_pending))
+        if not _register_output_path(
+            output_file, None if unresolved else expanded_path, seen
+        ):
             continue
-        seen[identity] = suffix
         chat.attach_writer(
             writer_factory(
                 output_file,

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypedDict
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
 from chat_downloader.utils.filename_utils import (
+    output_path_identity,
     sanitize_filename_component,
     validate_output_template,
 )
@@ -76,6 +77,26 @@ def _expand_output_file_name(
     return file_name.format(title=safe_title, id=safe_id)
 
 
+def _register_output_path(
+    file_name: str, identity_path: str | None, seen: dict[tuple[object, ...], str]
+) -> bool:
+    """Accept each effective destination once, rejecting format conflicts."""
+    identity = (
+        ("template", file_name)
+        if identity_path is None
+        else output_path_identity(identity_path)
+    )
+    suffix = file_name.rsplit(".", 1)[-1].lower()
+    if identity in seen:
+        if seen[identity] != suffix:
+            msg = "Different output formats require distinct files."
+            raise ValueError(msg)
+        log("warning", f"Duplicate output path '{file_name}' — skipping.")
+        return False
+    seen[identity] = suffix
+    return True
+
+
 class _ChatOutputDispatcher:
     """Manage writer setup, callback dispatch, deduplication, and chat shutdown.
 
@@ -104,21 +125,38 @@ class _ChatOutputDispatcher:
 
     def _initialise_writers(self) -> None:
         """Initialize each attached writer once before dispatch begins."""
+        self._resolve_writer_paths()
         for writer in self.writers:
             writer_id = id(writer)
             if writer_id in self._initialised_writer_ids:
                 continue
 
             if not writer.is_initialised():
-                writer.file_name = _expand_output_file_name(
-                    writer.file_name,
-                    title=self._chat.title,
-                    video_id=self._chat.id,
-                )
                 log("debug", f"Writing to file: {writer.file_name}")
                 writer.initialize()
 
             self._initialised_writer_ids.add(writer_id)
+
+    def _resolve_writer_paths(self) -> None:
+        """Validate all final aliases before any lazy writer opens its file."""
+        if all(writer.is_initialised() for writer in self.writers):
+            return
+        seen: dict[tuple[object, ...], str] = {}
+        resolved = []
+        for writer in self.writers:
+            path = (
+                writer.file_name
+                if writer.is_initialised()
+                else _expand_output_file_name(
+                    writer.file_name, title=self._chat.title, video_id=self._chat.id
+                )
+            )
+            unique = _register_output_path(writer.file_name, path, seen)
+            if writer.is_initialised() or unique:
+                resolved.append((writer, path))
+        self.writers = [writer for writer, _path in resolved]
+        for writer, path in resolved:
+            writer.file_name = path
 
     def attach_writer(self, writer: ChatOutputWriter) -> None:
         """Attach a writer to the chat, ignoring repeated object attachment."""
