@@ -85,6 +85,11 @@ run manifests.
 - `replay_transport.py`: replay comment retrieval
 - `discovery.py` and `url_generation.py`: discovery helpers and generated URLs
 
+Clip URL enumeration follows the server's returned edge cursor after its
+initial request. When another page is needed, missing, repeated, or cyclic
+continuation cursors, including empty continuing pages, raise `ParsingError`
+instead of repeating a page.
+
 ### Parsing and shared Twitch data
 
 - `parsing/messages.py`: high-level IRC and replay parsing orchestration
@@ -107,6 +112,10 @@ modules directly when tests or integrations need patch points:
 `replay_transport.py` for replay comments, and `parsing/` for message shaping.
 
 ## Live Capture Details
+
+IRC ACTION messages remove both framing delimiters before emote lookup and
+structured output. A missing closing delimiter is accepted; unrelated message
+control characters remain in JSONL and are handled by text formatting.
 
 ### Metadata first
 

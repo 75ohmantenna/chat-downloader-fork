@@ -324,6 +324,10 @@ for item in chat:
 - `TimedGenerator`: generator wrapper that enforces timeout and inactivity
   limits
 
+`TimedGenerator` transfers source exceptions to the consuming thread, including
+`SystemExit` and `GeneratorExit`. Call `close()` when stopping consumption early
+to request worker shutdown and cancel its timers.
+
 Custom `ItemFormatter` field definitions may provide a `template`, an optional
 `singular_template`, and `omit_if_false: true`. The singular template is used
 only for an exact numeric value of one; booleans and numeric strings continue to
@@ -367,6 +371,8 @@ Kick activity formats use this conversion for subscriber counts and months.
 A field definition with `format: "iso8601"` renders a date string as UTC
 `YYYY-MM-DD HH:MM:SS`, treating dates without a timezone as UTC. Invalid dates
 render as an empty value; use `omit_if_false: true` to omit their template too.
+Custom `timestamp` and `received_timestamp` strftime formats preserve fractional
+seconds with `%f`; the built-in formats continue to display whole seconds.
 Conditional fields suppress their complete rendered
 fragment for false, zero, empty, or null values, with the `count` exception
 described above. The final formatted string,
@@ -393,6 +399,10 @@ rejected. The substituted values
 are sanitized as single filename components. Targets are deduplicated after
 placeholder expansion and canonical path resolution; existing hard links are
 also treated as one destination.
+YouTube channel discovery keeps distinct templates until the selected video's
+metadata is available. Final aliases and format conflicts are checked before
+any lazy output file opens; already resolved outputs retain preflight
+deduplication for verification.
 
 File writers are crash-resilient: each record is flushed on write and the file
 is synchronized to disk periodically (about every 60 seconds). JSONL accepts

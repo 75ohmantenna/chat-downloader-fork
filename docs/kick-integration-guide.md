@@ -407,8 +407,11 @@ Private account, points, notifications, ads, age verification, and
 metadata polling supplies snapshots of livestream changes. Reconnect history
 recovers chat and the current pin; the public APIs do not provide equivalent
 history for arbitrary lifecycle events, so transitions during an outage can be
-missed. Snapshot polling may miss transitions between polls. Long in-flight HTTP
-requests can delay shutdown; incomplete deadline accounting is explicitly
+missed. Category changes and reader failures stop further socket reads and
+drain accepted publications, including frames waiting for queue space, before
+the consumer receives the reconnect or access error. Snapshot polling may miss
+transitions between polls. Long in-flight HTTP requests can delay shutdown;
+incomplete deadline accounting is explicitly
 reported for review by automatic live verification and the offline inspector
 rather than certified.
 

@@ -157,9 +157,14 @@ duplicated mechanism without absorbing provider-specific policy.
 **Decision:** Output identity is evaluated only after `{title}` and `{id}`
 metadata placeholders are expanded and the path is canonicalized. Existing
 files are also compared by device and inode so hard-link aliases cannot attach
-multiple writers to the same destination. Filename expansion itself remains
-owned by the output dispatcher, while the runtime pipeline owns writer
-selection and duplicate suppression.
+multiple writers to the same destination. The runtime pipeline selects writers
+and suppresses resolved duplicates during setup. The output dispatcher owns
+filename expansion and the final alias check before lazy writers open.
+
+Channel discovery marks its initial metadata as provisional. Distinct templates
+remain attached until real video metadata is available; the dispatcher checks
+the entire resolved set before opening lazy writers. Already resolved targets
+are still deduplicated during setup so verification sees the effective pair.
 
 **Revisit when:** output targets grow beyond local files or a writer backend
 provides a stronger destination-identity contract.
