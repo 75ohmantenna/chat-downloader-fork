@@ -25,6 +25,7 @@ from chat_downloader.utils.timed_generator import _PollingCancelled
 
 from .capture_inspection import inspect_capture
 from .constants import IRC_HOST, MESSAGE_GROUPS, build_known_irc_keys
+from .graphql_client import _decode_metadata_resource
 from .irc_diagnostics import (
     _EventDiverseIrcFrameCapture,
     _TwitchLiveDiagnostics,
@@ -315,20 +316,18 @@ def get_chat_by_stream_id(
     stream_info: JSONDict | None = None
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            stream_info = downloader._download_gql(
+            raw = downloader._download_gql(
                 query,
                 record_optional_degradation=(
                     diagnostics.record_optional_metadata_degradation
                 ),
-            )[0]["data"]["user"]
+            )
+            stream_info = _decode_metadata_resource(raw, "user")
             break
         except (
             JSONDecodeError,
             RequestException,
             ParsingError,
-            KeyError,
-            IndexError,
-            TypeError,
         ) as error:
             downloader.retry(attempt_number, error=error, request=request)
 

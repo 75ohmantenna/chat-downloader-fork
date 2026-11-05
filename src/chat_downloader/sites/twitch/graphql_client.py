@@ -87,6 +87,26 @@ def _contains_challenge_text(text: object) -> bool:
     return contains_any_hint(text, _CHALLENGE_HINTS)
 
 
+def _decode_metadata_resource(raw: JSONAny, resource_key: str) -> JSONDict | None:
+    """Decode one batched metadata response without conflating null and damage."""
+    if not isinstance(raw, list) or len(raw) != 1:
+        msg = "Invalid Twitch metadata response batch"
+        raise ParsingError(msg)
+    entry = raw[0]
+    if not isinstance(entry, dict):
+        msg = "Invalid Twitch metadata response entry"
+        raise ParsingError(msg)
+    data = entry.get("data")
+    if not isinstance(data, dict) or resource_key not in data:
+        msg = "Invalid Twitch metadata response data"
+        raise ParsingError(msg)
+    resource = data[resource_key]
+    if resource is not None and not isinstance(resource, dict):
+        msg = "Invalid Twitch metadata response resource"
+        raise ParsingError(msg)
+    return resource
+
+
 def _download_base_gql(
     session_post: _SessionPost,
     ops: JSONList,

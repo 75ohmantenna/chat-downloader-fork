@@ -181,6 +181,7 @@ def get_top_livestreams(
 
     remaining_count = limit
     cursor = ""
+    seen_cursors = {cursor}
 
     while True:
         num_to_get = max(min(remaining_count, 30), 0)
@@ -210,13 +211,25 @@ def get_top_livestreams(
             )
             break
 
-        edges = streams_info.get("edges") or []
-        if not edges:
-            break
-
-        cursor = edges[-1].get("cursor") or ""
-        remaining_count -= num_to_get
+        edges = get_list(streams_info, "edges")
+        has_next_page = bool(multi_get(streams_info, "pageInfo", "hasNextPage"))
+        if has_next_page and len(edges) < remaining_count:
+            final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
+            next_cursor = get_str(final_edge, "cursor")
+            if not next_cursor or next_cursor in seen_cursors:
+                msg = (
+                    "Twitch livestream discovery did not advance its pagination cursor."
+                )
+                raise ParsingError(msg)
+            cursor = next_cursor
+            seen_cursors.add(cursor)
+        remaining_count -= len(edges)
 
         for edge in edges:
-            node = edge.get("node") or {}
+            if not isinstance(edge, dict):
+                continue
+            node = get_dict(edge, "node")
             yield r.remap_dict(node, livestream_remapping)
+
+        if not has_next_page:
+            break

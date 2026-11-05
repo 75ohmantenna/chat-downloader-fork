@@ -31,7 +31,7 @@ from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
 from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
 from .constants import TWITCH_DEBUG_SAMPLE_LIMIT, build_known_comment_keys
-from .graphql_client import _handle_gql_errors
+from .graphql_client import _decode_metadata_resource, _handle_gql_errors
 from .parsing.messages import _MalformedMessage, _parse_item
 from .replay_transport import get_chat_messages_by_vod_id
 from .validation_keys import find_unexpected_vod_edge_paths
@@ -366,7 +366,7 @@ def get_chat_by_vod_id(
 
     def _fetch_video() -> JSONDict | None:
         raw = downloader._download_gql(query)
-        return cast("JSONDict | None", raw[0]["data"]["video"])
+        return _decode_metadata_resource(raw, "video")
 
     video: JSONDict | None = _fetch_gql_one(downloader, _fetch_video, request)
 

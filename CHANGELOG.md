@@ -37,6 +37,10 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   allowing terminal input to skip the delay.
 - Reject stalled Twitch video discovery and preserve valid replay comments
   around malformed message fragments, recording the skipped record as loss.
+- Retry malformed Twitch live and VOD metadata envelopes within the configured
+  attempt budget while preserving terminal null-resource handling.
+- Preserve livestream discovery limits across short Twitch pages and reject
+  stalled or cyclic continuation cursors before emitting repeated pages.
 - Process every inner YouTube replay action with its own filtering and loss
   accounting instead of silently retaining only the first event.
 - Avoid duplicate YouTube replay-page delivery and overlapping channel-recovery

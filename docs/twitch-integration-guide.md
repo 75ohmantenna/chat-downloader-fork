@@ -71,9 +71,11 @@ Malformed message containers or fragment text also count as record loss and
 are skipped without discarding later valid comments or re-emitting the page.
 Malformed emote enrichment retains usable message text.
 
-Video discovery rejects continuing pages without a new usable cursor, including
-empty pages and historical cursor cycles. Terminal pages and satisfied finite
-limits do not require an unused continuation.
+Livestream, video, and clip discovery count returned edges rather than requested
+page sizes, so short pages do not consume unused limit slots. Continuing pages
+without a new usable cursor, including empty pages and historical cursor cycles,
+raise `ParsingError` before that page is emitted. Terminal pages and satisfied
+finite limits do not require an unused continuation.
 
 ## Module Guide
 
@@ -332,6 +334,11 @@ Stream metadata, VOD metadata, and the mobile replay-comment operation have a
 bounded full-document fallback. It runs only after Twitch explicitly reports a
 missing persisted query; authentication, challenge, availability, and other
 GraphQL errors retain their normal handling without a fallback request.
+
+Live and VOD metadata use the same envelope validation inside their configured
+retry loops. Missing or malformed batches, data containers, and non-null resource
+containers raise `ParsingError` and consume that retry budget. An explicit null
+video or user remains terminal unavailability rather than a malformed response.
 
 If Twitch rotates a hash or changes required variables, failures usually appear
 first in:

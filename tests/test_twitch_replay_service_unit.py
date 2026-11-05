@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
@@ -14,17 +15,23 @@ import pytest
 from requests.exceptions import RequestException
 
 from chat_downloader import ChatDownloader
-from chat_downloader.errors import NoChatReplay, ParsingError, VideoUnavailable
+from chat_downloader.errors import (
+    NoChatReplay,
+    ParsingError,
+    RetriesExceeded,
+    UserNotFound,
+    VideoUnavailable,
+)
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.capture_manifest import replay_complete
 from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.models import Chat
-from chat_downloader.sites.twitch import _replay_vod_loop, replay_service
+from chat_downloader.sites.twitch import _replay_vod_loop, live_service, replay_service
 from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
 from chat_downloader.sites.twitch.replay_transport import get_chat_messages_by_vod_id
 from chat_downloader.sites.twitch.types import BadgeSet
-from chat_downloader.utils.timed_generator import TimedGenerator
+from chat_downloader.utils.timed_generator import TimedGenerator, _PollingCancelled
 from tests.twitch_third_helpers import chat_request
 
 
@@ -172,6 +179,107 @@ def test_replay_metadata(downloader, kind, metadata, retry, expected):
         downloader._update_badge_info.assert_called_once_with("streamer", "channel-123")
     else:
         downloader._update_badge_info.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["vod", "stream"])
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        [],
+        None,
+        [None],
+        [{}],
+        [{"data": None}],
+        [{"data": []}],
+        [{"data": {}}],
+        [{"data": {"video": "private-content", "user": "private-content"}}],
+        [{"data": {"video": [], "user": []}}],
+        [{"data": {}}, {"data": {}}],
+    ],
+)
+def test_public_metadata_malformed_envelope_retries(kind, malformed):
+    resource = "video" if kind == "vod" else "user"
+    metadata = (
+        {"title": "Recovered", "lengthSeconds": 12}
+        if kind == "vod"
+        else {
+            "id": "channel-1",
+            "stream": {"type": "live"},
+            "lastBroadcast": {"title": "Recovered"},
+        }
+    )
+    payloads = [malformed, [{"data": {resource: metadata}}]]
+    with closing(TwitchChatDownloader()) as provider:
+        provider._session_post = Mock(
+            side_effect=[
+                Mock(status_code=200, text="", json=Mock(return_value=payload))
+                for payload in payloads
+            ]
+        )
+        provider._update_badge_info = Mock()
+        with patch.object(provider, "retry", wraps=provider.retry) as retry:
+            chat = getattr(provider, f"get_chat_by_{kind}_id")(
+                "123", _request(max_attempts=2, retry_timeout=0)
+            )
+        assert chat.title == "Recovered"
+        assert provider._session_post.call_count == 2
+        retry.assert_called_once()
+        error = retry.call_args.kwargs["error"]
+        assert isinstance(error, ParsingError)
+        assert "private-content" not in str(error)
+        chat.close()
+
+
+@pytest.mark.parametrize("kind", ["vod", "stream"])
+def test_public_metadata_envelope_exhaustion_is_bounded(kind):
+    with closing(TwitchChatDownloader()) as provider:
+        provider._session_post = Mock(
+            return_value=Mock(status_code=200, text="", json=Mock(return_value=[]))
+        )
+        with pytest.raises(RetriesExceeded):
+            getattr(provider, f"get_chat_by_{kind}_id")(
+                "123", _request(max_attempts=2, retry_timeout=0)
+            )
+        assert provider._session_post.call_count == 2
+
+
+@pytest.mark.parametrize("metadata", [None, {}])
+@pytest.mark.parametrize(
+    ("kind", "resource", "error"),
+    [("vod", "video", VideoUnavailable), ("stream", "user", UserNotFound)],
+)
+def test_public_metadata_absent_resource_is_terminal(kind, resource, error, metadata):
+    with closing(TwitchChatDownloader()) as provider:
+        provider._session_post = Mock(
+            return_value=Mock(
+                status_code=200,
+                text="",
+                json=Mock(return_value=[{"data": {resource: metadata}}]),
+            )
+        )
+        with patch.object(provider, "retry") as retry, pytest.raises(error):
+            getattr(provider, f"get_chat_by_{kind}_id")(
+                "123", _request(max_attempts=2, retry_timeout=0)
+            )
+        assert provider._session_post.call_count == 1
+        retry.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["vod", "stream"])
+@pytest.mark.parametrize(
+    "error_type", [TypeError, IndexError, AttributeError, _PollingCancelled]
+)
+def test_metadata_collaborator_failures_propagate(downloader, kind, error_type):
+    error = error_type()
+    downloader._download_gql.side_effect = error
+    service = replay_service if kind == "vod" else live_service
+    with pytest.raises(error_type) as raised:
+        getattr(service, f"get_chat_by_{kind}_id")(
+            downloader, "123", _request(max_attempts=2)
+        )
+    assert raised.value is error
+    downloader.retry.assert_not_called()
+    assert downloader._download_gql.call_count == 1
 
 
 def test_replay_service_iter_vod_chat_messages_retries_then_stops_on_empty_page(

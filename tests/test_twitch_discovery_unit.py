@@ -122,23 +122,113 @@ def _mapped_fields(common, fields):
         ),
     ],
 )
-def test_discovery_remaps_fields_and_stream_pages(kind, node, expected):
-    pages = [_page(kind, [_edge(node)])]
-    if kind == "streams":
-        pages.append(_page(kind, [_edge(None, "cursor-2")]))
-    download = Mock(side_effect=pages)
+def test_discovery_remaps_fields(kind, node, expected):
+    download = Mock(return_value=_page(kind, [_edge(node)]))
     if kind == "clips":
         result = list(discovery.get_user_clips(Mock(), download, "streamer", limit=1))
         assert download.call_args.args[1][0]["operationName"] == "ClipsCards__User"
-        assert result == [expected]
     else:
-        result = list(discovery.get_top_livestreams(Mock(), download, limit=31))
-        queries = [call.args[1][0]["variables"] for call in download.call_args_list]
-        assert len(queries) == 2
-        assert queries[0]["cursor"] == ""
-        assert queries[1]["cursor"] == "cursor-1"
-        assert queries[1]["limit"] == 1
-        assert result == [expected, {}]
+        result = list(discovery.get_top_livestreams(Mock(), download, limit=1))
+        assert download.call_args.args[1][0]["operationName"] == "BrowsePage_Popular"
+    assert result == [expected]
+    download.assert_called_once()
+
+
+def test_stream_discovery_accounts_for_returned_edges_on_short_pages():
+    first = [_edge({"id": "0"}, "next")]
+    second = [_edge({"id": str(index)}, "") for index in range(1, 31)]
+    download = Mock(
+        side_effect=[_page("streams", first, True), _page("streams", second, True)]
+    )
+    result = list(discovery.get_top_livestreams(Mock(), download, limit=31))
+    assert [item["id"] for item in result] == [str(index) for index in range(31)]
+    queries = [call.args[1][0]["variables"] for call in download.call_args_list]
+    assert [query["limit"] for query in queries] == [30, 30]
+    assert [query["cursor"] for query in queries] == ["", "next"]
+
+
+@pytest.mark.parametrize("cursors", [[None], [""], ["next", "next"], ["a", "b", "a"]])
+def test_stream_discovery_rejects_missing_repeated_or_cyclic_cursors(cursors):
+    pages = []
+    for index, cursor in enumerate(cursors):
+        edge = {"node": {"id": str(index)}}
+        if cursor is not None:
+            edge["cursor"] = cursor
+        pages.append(_page("streams", [edge], True))
+    download = Mock(side_effect=pages)
+    streams = discovery.get_top_livestreams(Mock(), download, limit=31)
+    assert [next(streams)["id"] for _ in cursors[:-1]] == [
+        str(index) for index in range(len(cursors) - 1)
+    ]
+    with pytest.raises(ParsingError, match="pagination cursor"):
+        next(streams)
+    assert download.call_count == len(cursors)
+
+
+@pytest.mark.parametrize("more", [False, True])
+def test_stream_discovery_empty_page_never_repeats_its_request(more):
+    download = Mock(side_effect=[_page("streams", [], more)])
+    if more:
+        with pytest.raises(ParsingError, match="pagination cursor"):
+            list(discovery.get_top_livestreams(Mock(), download, limit=31))
+    else:
+        assert list(discovery.get_top_livestreams(Mock(), download, limit=31)) == []
+    download.assert_called_once()
+
+
+@pytest.mark.parametrize("cursor", [None, "", "first"])
+@pytest.mark.parametrize("more", [False, True])
+def test_stream_discovery_limit_does_not_require_an_unused_continuation(cursor, more):
+    final_edge = {"node": {"id": "two"}}
+    if cursor is not None:
+        final_edge["cursor"] = cursor
+    download = Mock(
+        side_effect=[
+            _page("streams", [_edge({"id": "one"}, "first")], True),
+            _page("streams", [final_edge], more),
+        ]
+    )
+    assert list(discovery.get_top_livestreams(Mock(), download, limit=2)) == [
+        {"id": "one"},
+        {"id": "two"},
+    ]
+    assert download.call_count == 2
+
+
+@pytest.mark.parametrize("cursor", [None, "", "first"])
+def test_stream_discovery_terminal_page_does_not_require_a_fresh_cursor(cursor):
+    final_edge = {"node": {"id": "two"}}
+    if cursor is not None:
+        final_edge["cursor"] = cursor
+    download = Mock(
+        side_effect=[
+            _page("streams", [_edge({"id": "one"}, "first")], True),
+            _page("streams", [final_edge]),
+        ]
+    )
+    assert list(discovery.get_top_livestreams(Mock(), download, limit=31)) == [
+        {"id": "one"},
+        {"id": "two"},
+    ]
+    assert download.call_count == 2
+
+
+def test_stream_discovery_missing_page_info_terminates():
+    download = Mock(
+        side_effect=[[{"data": {"streams": {"edges": [_edge({"id": "one"}, "next")]}}}]]
+    )
+    assert list(discovery.get_top_livestreams(Mock(), download, limit=31)) == [
+        {"id": "one"}
+    ]
+    download.assert_called_once()
+
+
+def test_stream_discovery_skips_non_object_edges():
+    download = Mock(side_effect=[_page("streams", ["malformed", _edge({"id": "one"})])])
+    assert list(discovery.get_top_livestreams(Mock(), download, limit=2)) == [
+        {"id": "one"}
+    ]
+    download.assert_called_once()
 
 
 def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes():
