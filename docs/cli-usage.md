@@ -197,9 +197,14 @@ text is rounded to whole seconds. TXT output emits one semantic paid event.
 Output names may contain `{title}` and `{id}` placeholders; use `{{` and `}}`
 for literal braces. Other fields, conversions, and format specifications are
 rejected when the request is validated. Metadata is sanitized before
-substitution. Duplicate targets are removed after expansion,
-path resolution, and existing-file identity checks, so aliases and hard links
-do not receive the same message twice.
+substitution. Duplicate targets are removed after expansion and path resolution.
+Names containing substituted fields require a new destination, regardless of
+`--overwrite`; an existing generated target is an error, not an append target.
+Fixed explicit paths retain overwrite and append behavior, including names with
+escaped literal braces. Capture destinations must be regular files with one
+link: symbolic links, hard links, special files, and unverifiable file identities
+are rejected before repair or truncation. New files are created with mode `0600`
+where POSIX permissions apply.
 
 Every record is flushed to the OS as it is written. A write also synchronizes
 the file to disk when at least 60 seconds have elapsed since the previous sync;

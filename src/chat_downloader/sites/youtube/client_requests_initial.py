@@ -17,6 +17,7 @@ from chat_downloader.errors import (
     RetriesExceeded,
     VideoNotFound,
 )
+from chat_downloader.sites.session import reject_redirect
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.retry_utils import (
     RetryPolicy,
@@ -144,7 +145,8 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
     )
     for attempt_number in range(1, max_attempts + 1):
         try:
-            response = session_get(url)
+            response = session_get(url, allow_redirects=True)
+            reject_redirect(response)
             html = response.text
             response_url = getattr(response, "url", None)
             try:

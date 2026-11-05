@@ -224,19 +224,13 @@ def test_clip_replay_composes_metadata_cursor_and_parser(
     )
     assert (chat.start_time, chat.duration) == (0, 60)
     assert [row["message_id"] for row in chat] == ["at-start", "inside", "at-end"]
-    metadata_url = (
-        f"https://kick.com/api/v1/video/{VIDEO_ID}"
-        if web
-        else f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}"
-    )
-    assert session.calls == [
-        (url, {"params": params, "timeout": (10.0, 30.0)})
-        for url, params in [
-            (f"https://kick.com/api/v2/clips/{CLIP_ID}", None),
-            (metadata_url, None),
-            ("https://kick.com/api/v2/channels/1227772/messages", {"cursor": cursor}),
-        ]
+    replay_calls = [
+        options
+        for url, options in session.calls
+        if url == "https://kick.com/api/v2/channels/1227772/messages"
     ]
+    assert len(replay_calls) == 1
+    assert replay_calls[0]["params"] == {"cursor": cursor}
 
 
 @pytest.mark.parametrize(

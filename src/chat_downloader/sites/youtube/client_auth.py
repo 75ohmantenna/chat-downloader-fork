@@ -7,12 +7,17 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import time
+from copy import copy
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qsl, urlencode
 
+from chat_downloader.sites.session import get_scoped_cookie
 from chat_downloader.utils.json_types import get_str
 
 if TYPE_CHECKING:
+    from http.cookiejar import Cookie
+
+    from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.utils.json_types import JSONDict
 
 from .constants_patterns import (
@@ -21,6 +26,22 @@ from .constants_patterns import (
     _YT_SOCS_CONSENTED_PREFIX,
     _YT_SOCS_INIT_VALUE,
 )
+
+_AUTH_COOKIE_DOMAINS = frozenset({"youtube.com", "www.youtube.com"})
+_AUTH_COOKIE_URL = "https://www.youtube.com/"
+
+
+def _get_youtube_cookie(session: BaseChatDownloader, name: str) -> Cookie | None:
+    """Read only cookies applicable to YouTube's canonical HTTPS origin."""
+    return get_scoped_cookie(
+        session.session.cookies, name, _AUTH_COOKIE_URL, _AUTH_COOKIE_DOMAINS
+    )
+
+
+def _get_youtube_cookie_value(session: BaseChatDownloader, name: str) -> str | None:
+    """Return a scoped value for authentication and preference promotion."""
+    cookie = _get_youtube_cookie(session, name)
+    return cookie.value if cookie is not None else None
 
 
 def _initialize_pref(session: Any) -> None:
@@ -31,7 +52,7 @@ def _initialize_pref(session: Any) -> None:
     language or timezone mismatches when the user has a non-English PREF cookie
     in their browser-exported cookie file.
     """
-    pref_cookie = session.get_cookie_value("PREF")
+    pref_cookie = _get_youtube_cookie_value(session, "PREF")
     pref: dict[str, str] = {}
     if pref_cookie:
         with contextlib.suppress(ValueError):
@@ -42,9 +63,9 @@ def _initialize_pref(session: Any) -> None:
 
 def _initialize_consent(session: Any) -> None:
     """Initialize YouTube consent cookies."""
-    if session.get_cookie_value("__Secure-3PSID"):
+    if _get_youtube_cookie_value(session, "__Secure-3PSID"):
         return
-    socs = session.get_cookie_value("SOCS")
+    socs = _get_youtube_cookie_value(session, "SOCS")
     if socs and not socs.startswith(_YT_SOCS_CONSENTED_PREFIX):  # not consented
         return
     session.set_cookie_value(_YT_DOMAIN, "SOCS", _YT_SOCS_INIT_VALUE, secure=True)
@@ -52,9 +73,9 @@ def _initialize_consent(session: Any) -> None:
 
 def _get_sid_cookies(session: Any) -> tuple[str | None, str | None, str | None]:
     """Extract SAPISID cookie variants from the session."""
-    yt_sapisid = session.get_cookie_value("SAPISID")
-    yt_1psapisid = session.get_cookie_value("__Secure-1PAPISID")
-    yt_3psapisid = session.get_cookie_value("__Secure-3PAPISID")
+    yt_sapisid = _get_youtube_cookie_value(session, "SAPISID")
+    yt_1psapisid = _get_youtube_cookie_value(session, "__Secure-1PAPISID")
+    yt_3psapisid = _get_youtube_cookie_value(session, "__Secure-3PAPISID")
     return yt_sapisid, yt_1psapisid, yt_3psapisid
 
 
@@ -105,14 +126,17 @@ def _ensure_primary_sapisid(
     if yt_sapisid:
         return yt_sapisid
     sapisid_value = yt_3psapisid or yt_1psapisid
-    if sapisid_value:
-        session.set_cookie_value(
-            _YT_DOMAIN,
-            "SAPISID",
-            sapisid_value,
-            secure=True,
-            expire_time=time_now + _YT_SAPISID_EXPIRE_SECONDS,
-        )
+    source_name = "__Secure-3PAPISID" if yt_3psapisid else "__Secure-1PAPISID"
+    source = _get_youtube_cookie(session, source_name)
+    if sapisid_value and source is not None:
+        expiry = time_now + _YT_SAPISID_EXPIRE_SECONDS
+        if source.expires is not None:
+            expiry = min(expiry, source.expires)
+        promoted = copy(source)
+        promoted.name = "SAPISID"
+        promoted.secure = True
+        promoted.expires = expiry
+        session.session.cookies.set_cookie(promoted)
     return sapisid_value
 
 

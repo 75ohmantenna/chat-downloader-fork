@@ -4,15 +4,13 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
 from chat_downloader.debugging import log
+from chat_downloader.output._secure_file import _OutputFile
 from chat_downloader.output.writers import (
     _WRITER_CLASSES,
-    MODE_APPEND_TEXT,
-    MODE_WRITE_TEXT,
     ContinuousFileWriter,
     JsonLinesContinuousWriter,
     TextContinuousWriter,
@@ -54,6 +52,10 @@ class ContinuousWriter:
         self.format = format
         self.lazy_initialise = lazy_initialise
         self._writer: ContinuousFileWriter | None = None
+        self._prepared_file: _OutputFile | None = None
+        self._file_identity: tuple[int, int] | None = None
+        self._require_new_file = False
+        self._defer_initialization = False
         self._writer_kwargs = kwargs
         self._validate_extension(file_name)
 
@@ -101,8 +103,11 @@ class ContinuousWriter:
 
         try:
             self._open_writer(self.file_name)
-        except (OSError, ValueError):
+        except BaseException:
             self._writer = None
+            if self._prepared_file is not None:
+                prepared, self._prepared_file = self._prepared_file, None
+                prepared.close()
             raise
 
     def _get_extension(self, file_name: str | None) -> str:
@@ -132,26 +137,39 @@ class ContinuousWriter:
             )
             raise ValueError(msg)
 
-    def _open_writer(self, file_name: str) -> None:
-        """Create parent directories, seed the file, and instantiate writer."""
-        file_name = os.path.normpath(file_name)
-        self._validate_extension(file_name)
-        extension = self._get_extension(file_name)
-        path = Path(file_name)
-        if not path.exists() or self.overwrite:
-            directory = path.parent
-            if directory.name:
-                directory.mkdir(parents=True, exist_ok=True)
-            file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
-            with path.open(file_mode, encoding="utf-8"):
-                pass
-
-        writer_class = _WRITER_CLASSES[extension]
-        self._writer = writer_class(
-            file_name=file_name,
-            overwrite=self.overwrite,
-            **self._writer_kwargs,
+    def _prepare_output(self) -> None:
+        """Acquire and validate a handle without repairing or truncating it."""
+        if self._writer is not None or self._prepared_file is not None:
+            return
+        if self.file_name is None:
+            msg = "File name not set"
+            raise ValueError(msg)
+        self._validate_extension(self.file_name)
+        self._prepared_file = _OutputFile(
+            self.file_name,
+            append=not self.overwrite,
+            exclusive=self._require_new_file,
         )
+
+    def _open_writer(self, file_name: str) -> None:
+        """Instantiate the concrete writer using the preflighted handle."""
+        self._prepare_output()
+        prepared, self._prepared_file = self._prepared_file, None
+        writer_class = _WRITER_CLASSES[self._get_extension(file_name)]
+        try:
+            self._writer = writer_class(
+                file_name=file_name,
+                overwrite=self.overwrite,
+                _prepared_file=prepared,
+                _defer_initialization=self._defer_initialization,
+                **self._writer_kwargs,
+            )
+            if prepared is not None:
+                self._file_identity = (prepared.info.st_dev, prepared.info.st_ino)
+        except BaseException:
+            if prepared is not None:
+                prepared.close()
+            raise
 
     def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
         """Write *item* using the underlying writer."""
@@ -171,6 +189,9 @@ class ContinuousWriter:
     def close(self) -> None:
         """Close the underlying writer if initialized."""
         writer = self._writer
+        if self._prepared_file is not None:
+            prepared, self._prepared_file = self._prepared_file, None
+            prepared.close()
         if writer is not None:
             writer.close()
 

@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
+from urllib.parse import parse_qs, urlencode, urlsplit
 
+from chat_downloader.errors import InvalidParameter
 from chat_downloader.utils.json_types import dig, get_dict, get_list, get_str
 
 from .client_context import _get_innertube_context
@@ -32,6 +34,35 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict, JSONList
 
     from ._protocols import YouTubeDownloaderProto
+
+
+def _canonical_playlist_url(url: str) -> str:
+    """Validate public playlist input before any session state can be sent."""
+    msg = "Expected an HTTPS YouTube playlist URL with one playlist identifier."
+    try:
+        parsed = urlsplit(url)
+        valid_origin = (
+            parsed.scheme == "https"
+            and parsed.hostname in {"youtube.com", "www.youtube.com", "m.youtube.com"}
+            and parsed.username is None
+            and parsed.password is None
+            and parsed.port in {None, 443}
+        )
+        playlist_ids = parse_qs(parsed.query, keep_blank_values=True).get("list", [])
+    except ValueError:
+        raise InvalidParameter(msg) from None
+    if (
+        not valid_origin
+        or parsed.path != "/playlist"
+        or len(playlist_ids) != 1
+        or not playlist_ids[0]
+        or not all(
+            character.isascii() and (character.isalnum() or character in "_-")
+            for character in playlist_ids[0]
+        )
+    ):
+        raise InvalidParameter(msg)
+    return f"{_YT_HOME}/playlist?{urlencode({'list': playlist_ids[0]})}"
 
 
 def _playlist_section_items(content: JSONDict) -> JSONList:
@@ -97,6 +128,7 @@ class YouTubePlaylistDiscoveryMixin:
         """Get items from a YouTube playlist."""
         from chat_downloader.models import ChatRequest as ChatRequestModel
 
+        playlist_url = _canonical_playlist_url(playlist_url)
         if params is None:
             request = ChatRequestModel()
         elif isinstance(params, ChatRequestModel):

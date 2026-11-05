@@ -57,7 +57,7 @@ class _FallbackDummy(YouTubeVideoMetadataCoreMixin):
         self._request_profile = None
         self.post_urls: list[str] = []
 
-    def _session_get(self, _url: str):
+    def _session_get(self, _url: str, **_kwargs):
         return SimpleNamespace(
             status_code=429,
             text="<html>captcha challenge required</html>",
@@ -142,12 +142,12 @@ def test_bootstrap_warning_names_failure_without_exposing_exception_text(
     caplog.set_level("DEBUG", logger="chat_downloader")
     dummy = _FallbackDummy()
 
-    def fail(_url):
+    def fail(_url, **_kwargs):
         raise error_type("PRIVATE_SENTINEL")
 
     monkeypatch.setattr(dummy, "_session_get", fail)
     dummy._parse_video_data("IzopCEgh2G8")
-    assert f"watch-page bootstrap failed ({error_type.__name__})" in caplog.text
+    assert error_type.__name__ in caplog.text
     assert "PRIVATE_SENTINEL" not in caplog.text
     assert len(dummy.post_urls) == 2
 

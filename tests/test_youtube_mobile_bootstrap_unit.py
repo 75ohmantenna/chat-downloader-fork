@@ -39,7 +39,7 @@ class _MobileMetadata(YouTubeVideoMetadataCoreMixin):
             payload=self.player if "/player?" in url else self.next,
         )
 
-    def _session_get(self, url):
+    def _session_get(self, url, **_kwargs):
         self.calls.append(("GET", url, None))
         player = json.dumps(_fixture("youtube-IzopCEgh2G8-player-web.json"))
         initial = json.dumps(_fixture("youtube-IzopCEgh2G8-next-web.json"))

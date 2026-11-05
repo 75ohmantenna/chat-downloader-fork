@@ -34,7 +34,7 @@ dependencies = [
     "urllib3>=2.8.0,<3.0.0",
     "colorlog>=6.7.0,<7.0.0",
     "PySocks>=1.7.1",
-    "websocket-client>=1.7.0,<2.0.0",
+    "websocket-client>=1.9.2,<2.0.0",
     "cloudscraper>=1.2.0,<2.0.0",
     "curl-cffi>=0.17.0",
 ]

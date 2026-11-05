@@ -502,7 +502,7 @@ def test_failed_record_recovery_never_certifies_torn_files(
         assert execute_run(Downloader, **params, max_messages=1).success
         previous = checkpoint_path.read_bytes()
     original_write = ContinuousWriter.write
-    original_open = Path.open
+    original_truncate = os.ftruncate
     torn_record = False
 
     def torn_write(writer, item, *, flush=False):
@@ -512,13 +512,15 @@ def test_failed_record_recovery_never_certifies_torn_files(
             torn_record = True
             raise RuntimeError("failure after appending before acceptance")
 
-    def failed_truncation(path, mode="r", *args, **kwargs):
-        if torn_record and path.suffix == ".jsonl" and mode == "r+b":
+    def failed_truncation(descriptor, size):
+        info = os.fstat(descriptor)
+        raw = (tmp_path / "chat.jsonl").stat()
+        if torn_record and (info.st_dev, info.st_ino) == (raw.st_dev, raw.st_ino):
             raise OSError("record recovery denied")
-        return original_open(path, mode, *args, **kwargs)
+        return original_truncate(descriptor, size)
 
     monkeypatch.setattr(ContinuousWriter, "write", torn_write)
-    monkeypatch.setattr(Path, "open", failed_truncation)
+    monkeypatch.setattr(os, "ftruncate", failed_truncation)
     result = execute_run(Downloader, **params)
     assert not result.success
     assert result.error_message == "record recovery denied"
@@ -895,3 +897,74 @@ def test_verifier_expands_lazy_paths_and_reports_text_mismatch(tmp_path, corrupt
             verify_capture(chat)
     else:
         verify_capture(chat)
+
+
+@pytest.mark.parametrize("exhausted", [False, True])
+@pytest.mark.parametrize("with_manifest", [False, True])
+@pytest.mark.parametrize("replacement", ["regular", "missing"])
+def test_checkpoint_does_not_adopt_artifacts_replaced_after_close(
+    tmp_path, params, exhausted, with_manifest, replacement
+):
+    first_options = {} if exhausted else {"max_messages": 2}
+    assert execute_run(Downloader, **params, **first_options).success
+    checkpoint = Path(params["resume"])
+    prior_checkpoint = checkpoint.read_bytes()
+    outputs = [Path(name) for name in params["output"]]
+
+    class Replaced(Downloader):
+        def close(self):
+            for output in outputs:
+                output.rename(output.with_suffix(output.suffix + ".original"))
+                if replacement == "regular":
+                    output.write_text("", encoding="utf-8")
+
+    report = tmp_path / "replacement.json"
+    options = {"run_manifest": str(report)} if with_manifest else {}
+    result = execute_run(Replaced, **params, **options)
+    assert not result.success
+    assert result.message_count == (0 if exhausted else 2)
+    assert checkpoint.read_bytes() == prior_checkpoint
+    if report.exists():
+        assert not load_json(report)["success"]
+
+
+def test_exhausted_resume_rejects_in_place_changes(tmp_path, params):
+    assert execute_run(Downloader, **params).success
+    checkpoint = Path(params["resume"])
+    previous = checkpoint.read_bytes()
+
+    class Cleared(Downloader):
+        def close(self):
+            for name in params["output"]:
+                Path(name).write_text("", encoding="utf-8")
+
+    report = tmp_path / "cleared.json"
+    result = execute_run(Cleared, **params, run_manifest=str(report))
+    assert not result.success
+    assert result.message_count == 0
+    assert checkpoint.read_bytes() == previous
+    assert not report.exists()
+
+
+def test_new_checkpoint_rejects_output_created_before_first_record(tmp_path, params):
+    class Arrival(Downloader):
+        def get_chat(self, **kwargs):
+            chat = super().get_chat(**kwargs)
+            source = chat.chat
+
+            def arriving():
+                for name in params["output"]:
+                    Path(name).write_text("UNRELATED_CAPTURE", encoding="utf-8")
+                yield from source
+
+            chat.chat = arriving()
+            return chat
+
+    result = execute_run(Arrival, **params)
+    assert not result.success
+    assert result.message_count == 0
+    assert not Path(params["resume"]).exists()
+    assert all(
+        Path(name).read_text(encoding="utf-8") == "UNRELATED_CAPTURE"
+        for name in params["output"]
+    )

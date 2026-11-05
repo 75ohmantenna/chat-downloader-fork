@@ -11,16 +11,19 @@ from __future__ import annotations
 import json
 import time
 from contextlib import suppress
-from typing import TYPE_CHECKING, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Protocol, TypedDict, Unpack, cast
 from urllib.parse import urlparse
 
 from websocket import (
+    ABNF,
+    WebSocket,
     WebSocketBadStatusException,
     WebSocketConnectionClosedException,
     WebSocketException,
     WebSocketTimeoutException,
     create_connection,
 )
+from websocket._abnf import frame_buffer
 
 from chat_downloader.debugging import logger
 from chat_downloader.redaction import capture_debug_sample
@@ -33,10 +36,17 @@ from .constants import (
     PUSHER_PONG,
     PUSHER_SUBSCRIBE,
 )
+from .errors import KickResourceLimit
 from .pusher_discovery import _HttpClient, get_pusher_ws_url
+from .resource_limits import (
+    MAX_WEBSOCKET_MESSAGE_BYTES,
+    MAX_WEBSOCKET_MESSAGE_FRAMES,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
+
+    from websocket._dispatcher import DispatcherBase, WrappedDispatcher
 
     from chat_downloader.sites.proxy import _ProxySocket
     from chat_downloader.utils.json_types import JSONDict
@@ -47,6 +57,18 @@ class _ConnectionOptions(TypedDict, total=False):
 
     socket: _ProxySocket
     origin: str
+
+
+class _WebSocketOptions(TypedDict, total=False):
+    """Constructor options understood by websocket-client's socket wrapper."""
+
+    get_mask_key: Callable[[int], bytes] | None
+    sockopt: list[tuple[int, int, int | bytes]] | None
+    sslopt: dict[str, object] | None
+    fire_cont_frame: bool
+    enable_multithread: bool
+    skip_utf8_validation: bool
+    dispatcher: DispatcherBase | WrappedDispatcher | None
 
 
 class _WebSocketConnection(Protocol):
@@ -86,6 +108,68 @@ class _KickTransport(Protocol):
 
 _IDLE_WATCHDOG_SECONDS = 180.0
 _MIN_RECEIVE_TIMEOUT_SECONDS = 1.0
+
+
+class _BoundedFrameBuffer(frame_buffer):
+    """Reserve wire lengths before websocket-client reads or joins payloads.
+
+    websocket-client 1.x calls recv_length once per frame, before mask/payload
+    reads, and retains that state across receive timeouts. Count control frames
+    too: interleaved pings must not reset an unfinished message's budget.
+    """
+
+    def __init__(
+        self, recv_fn: Callable[[int], bytes], *, skip_utf8_validation: bool
+    ) -> None:
+        """Initialize per-message reservations independently of frame resets."""
+        super().__init__(recv_fn, skip_utf8_validation)
+        self._message_bytes = 0
+        self._message_frames = 0
+        self._failed = False
+
+    def recv_frame(self) -> ABNF:
+        """Keep a rejected socket terminal even if another receive is attempted."""
+        if self._failed:
+            self._limit()
+        return super().recv_frame()
+
+    def recv_length(self) -> None:
+        """Reject excess declared length/fragments before reading any payload."""
+        super().recv_length()
+        # The base method guarantees both fields after decoding a wire header.
+        length = cast("int", self.length)
+        header = cast("tuple[int, ...]", self.header)
+        self._message_bytes += length
+        self._message_frames += 1
+        if (
+            self._message_bytes > MAX_WEBSOCKET_MESSAGE_BYTES
+            or self._message_frames > MAX_WEBSOCKET_MESSAGE_FRAMES
+        ):
+            self._failed = True
+            self._limit()
+        if header[0] and header[4] in (
+            ABNF.OPCODE_TEXT,
+            ABNF.OPCODE_BINARY,
+            ABNF.OPCODE_CONT,
+        ):
+            self._message_bytes = 0
+            self._message_frames = 0
+
+    @staticmethod
+    def _limit() -> None:
+        msg = "Kick WebSocket resource limit exceeded; capture is incomplete."
+        raise KickResourceLimit(msg)
+
+
+class _BoundedWebSocket(WebSocket):
+    """Use the library's real framing and IO with pre-allocation wire budgets."""
+
+    def __init__(self, **options: Unpack[_WebSocketOptions]) -> None:
+        """Replace the dependency's frame buffer before any socket reads."""
+        super().__init__(**options)
+        self.frame_buffer = _BoundedFrameBuffer(
+            self._recv, skip_utf8_validation=options.get("skip_utf8_validation", False)
+        )
 
 
 def _connect_error_message(error: WebSocketException | OSError) -> str:
@@ -133,6 +217,7 @@ def _default_connector(
             "_WebSocketConnection",
             create_connection(
                 url,
+                class_=_BoundedWebSocket,
                 timeout=timeout,
                 **connection_options,
             ),

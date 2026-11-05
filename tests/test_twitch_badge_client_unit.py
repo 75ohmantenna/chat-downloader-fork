@@ -215,7 +215,7 @@ def test_metadata_badge_fallback_cache_parser_and_reconnect_compose():
     )
     requests = []
 
-    def session_post(_url, json, headers):
+    def session_post(_url, json, headers, **_kwargs):
         requests.append(json)
         return SimpleNamespace(status_code=200, text="", json=lambda: next(payloads))
 

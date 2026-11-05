@@ -5,18 +5,19 @@
 from __future__ import annotations
 
 import datetime as dt
+import io
 import json
 import os
 import time
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import IO, Any
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
+from chat_downloader.output._secure_file import _OutputFile
 
-# File operation constants
-MODE_APPEND_TEXT = "a"
-MODE_WRITE_TEXT = "w"
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import IO, BinaryIO
 
 # Monotonic seconds between write-triggered fsync()s. Per-record flush moves
 # records into the OS; fsync requests durable storage for those written so far.
@@ -24,70 +25,62 @@ _FSYNC_INTERVAL_SECONDS = 60.0
 _TAIL_SCAN_BYTES = 8192
 
 
-def _repair_text_final_line(file_name: str) -> None:
-    """Terminate an existing text file's final line before appending."""
-    path = Path(file_name)
-    if not path.exists() or path.stat().st_size == 0:
+def _repair_text_final_line(file: BinaryIO, file_name: str) -> None:
+    """Terminate the validated file's final line before appending."""
+    end = file.seek(0, os.SEEK_END)
+    if not end:
         return
-
-    with path.open("r+b") as file:
-        file.seek(-1, os.SEEK_END)
-        if file.read(1) == b"\n":
-            return
-        file.seek(0, os.SEEK_END)
-        file.write(b"\n")
-        file.flush()
-        os.fsync(file.fileno())
+    file.seek(end - 1)
+    if file.read(1) == b"\n":
+        return
+    file.seek(0, os.SEEK_END)
+    file.write(b"\n")
+    file.flush()
+    os.fsync(file.fileno())
     log(
         "warning",
         f"Terminated the final text line in {file_name} before append.",
     )
 
 
-def _repair_jsonl_final_line(file_name: str) -> None:
-    r"""Repair a missing or crash-truncated final JSONL newline before append.
+def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
+    r"""Repair a missing or crash-truncated final newline on the same handle.
 
-    This writer always terminates records with ``\n``. A final non-newline byte
-    can therefore be either an interrupted write or a complete externally
-    produced record missing its terminator. Scan backward in fixed-size chunks
-    until a newline is found. Scanning scales with the trailing record plus
-    one chunk; without a newline it spans the whole file. Decoding loads the tail.
+    Scan backward in fixed-size chunks until a newline is found, then validate
+    only the trailing record. Never reopen an inspected destination by pathname.
     """
-    path = Path(file_name)
-    if not path.exists() or path.stat().st_size == 0:
+    end = file.seek(0, os.SEEK_END)
+    if not end:
+        return
+    file.seek(end - 1)
+    if file.read(1) == b"\n":
         return
 
-    with path.open("r+b") as file:
-        end = file.seek(0, os.SEEK_END)
-        file.seek(end - 1)
-        if file.read(1) == b"\n":
-            return
+    position = end
+    truncate_at = 0
+    while position > 0:
+        chunk_start = max(0, position - _TAIL_SCAN_BYTES)
+        file.seek(chunk_start)
+        chunk = file.read(position - chunk_start)
+        newline_index = chunk.rfind(b"\n")
+        if newline_index >= 0:
+            truncate_at = chunk_start + newline_index + 1
+            break
+        position = chunk_start
 
-        position = end
-        truncate_at = 0
-        while position > 0:
-            chunk_start = max(0, position - _TAIL_SCAN_BYTES)
-            file.seek(chunk_start)
-            chunk = file.read(position - chunk_start)
-            newline_index = chunk.rfind(b"\n")
-            if newline_index >= 0:
-                truncate_at = chunk_start + newline_index + 1
-                break
-            position = chunk_start
-
-        file.seek(truncate_at)
-        tail = file.read(end - truncate_at)
-        try:
-            json.loads(tail)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            file.truncate(truncate_at)
-            action = "Removed an incomplete trailing JSONL record from"
-        else:
-            file.seek(0, os.SEEK_END)
-            file.write(b"\n")
-            action = "Terminated the final JSONL record in"
-        file.flush()
-        os.fsync(file.fileno())
+    file.seek(truncate_at)
+    tail = file.read(end - truncate_at)
+    try:
+        json.loads(tail)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        file.truncate(truncate_at)
+        action = "Removed an incomplete trailing JSONL record from"
+    else:
+        file.seek(0, os.SEEK_END)
+        file.write(b"\n")
+        action = "Terminated the final JSONL record in"
+    file.flush()
+    os.fsync(file.fileno())
     log(
         "warning",
         f"{action} {file_name} before append.",
@@ -126,6 +119,8 @@ class ContinuousFileWriter(ABC):
         file_name: str,
         *,
         overwrite: bool = True,
+        _prepared_file: _OutputFile | None = None,
+        _defer_initialization: bool = False,
         **kwargs: Any,  # noqa: ARG002 — base class contract; subclasses consume kwargs
     ) -> None:
         """Initialize the writer for the given file path."""
@@ -133,9 +128,64 @@ class ContinuousFileWriter(ABC):
         self.overwrite = overwrite
         self.file: IO[Any] | None = None
         self._last_fsync_monotonic = time.monotonic()
+        self._prepared_file = _prepared_file
+        self._defer_initialization = _defer_initialization
+        self._pending_file: BinaryIO | None = None
+        self._repair_final_line: Callable[[BinaryIO, str], None] | None = None
+
+    def _open_file(self, repair: Callable[[BinaryIO, str], None]) -> None:
+        """Transfer a validated stream, optionally deferring destructive setup."""
+        prepared = self._prepared_file or _OutputFile(
+            self.file_name, append=not self.overwrite, exclusive=False
+        )
+        self._prepared_file = prepared
+        try:
+            self._pending_file = prepared.detach()
+            self._repair_final_line = repair
+            if not self._defer_initialization:
+                prepared.validate(self._pending_file)
+                self._initialize_file()
+        except BaseException:
+            self.close()
+            prepared.close()
+            self._prepared_file = None
+            raise
+
+    def _initialize_file(self) -> None:
+        """Commit an already-validated, pinned stream without namespace lookups."""
+        stream = self._pending_file
+        prepared = self._prepared_file
+        repair = self._repair_final_line
+        if stream is None or prepared is None or repair is None:
+            return
+        self._pending_file = None
+        self._prepared_file = None
+        self._repair_final_line = None
+        try:
+            if self.overwrite:
+                stream.truncate(0)
+                stream.seek(0)
+            else:
+                repair(stream, self.file_name)
+                stream.seek(0, os.SEEK_END)
+            self.file = io.TextIOWrapper(stream, encoding="utf-8")
+        except BaseException:
+            stream.close()
+            raise
+        finally:
+            prepared.close()
 
     def close(self) -> None:
         """Durably flush and close the underlying file handle if open."""
+        pending = getattr(self, "_pending_file", None)
+        if pending is not None:
+            self._pending_file = None
+            try:
+                pending.close()
+            finally:
+                prepared, self._prepared_file = self._prepared_file, None
+                if prepared is not None:
+                    prepared.close()
         if self.file:
             if getattr(self.file, "closed", False) is True:
                 self.file = None
@@ -207,10 +257,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         """Initialize a JSON Lines writer."""
         super().__init__(file_name, **kwargs)
         self.sort_keys = sort_keys
-        file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
-        if not self.overwrite:
-            _repair_jsonl_final_line(self.file_name)
-        self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
+        self._open_file(_repair_jsonl_final_line)
 
     def write(self, item: Any, *, flush: bool = False) -> None:
         """Write *item* as a single JSON line."""
@@ -230,10 +277,7 @@ class TextContinuousWriter(ContinuousFileWriter):
     def __init__(self, file_name: str, **kwargs: Any) -> None:
         """Initialize a line-oriented text writer."""
         super().__init__(file_name, **kwargs)
-        file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
-        if not self.overwrite:
-            _repair_text_final_line(self.file_name)
-        self.file = Path(self.file_name).open(file_mode, encoding="utf-8")  # noqa: SIM115
+        self._open_file(_repair_text_final_line)
 
     def write(self, item: Any, *, flush: bool = False) -> None:
         """Write *item* as a string line."""

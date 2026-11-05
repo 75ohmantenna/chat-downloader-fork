@@ -14,6 +14,7 @@ from chat_downloader.utils.json_types import get_dict, get_str
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _YT_CFG_RE,
+    _YT_HOME,
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
@@ -36,7 +37,7 @@ class YouTubeChatUsersRouterMixin:
         """Resolve a channel live shortcut to its canonical video chat."""
         proto = cast("YouTubeDownloaderProto", self)
         _, _, player_response = _get_initial_info(
-            params.url,
+            f"{_YT_HOME}/{match.group('type') or ''}{match.group('id')}/live",
             proto._session_get,
             params,
             _YT_INITIAL_DATA_RE,

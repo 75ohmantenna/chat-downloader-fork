@@ -6,12 +6,12 @@ from __future__ import annotations
 
 import gc
 import os
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
 import chat_downloader.debugging as _debugging
+from chat_downloader.output import _secure_file
 from chat_downloader.output.continuous_write import (
     ContinuousFileWriter,
     ContinuousWriter,
@@ -111,21 +111,21 @@ def test_append_initialization_preserves_competing_writer(
 ):
     path = tmp_path / "nested" / f"test.{extension}"
     assert not path.exists()
-    original_exists = Path.exists
+    original_entry_info = _secure_file._entry_info
     interleaved = False
 
-    def exists_after_competing_write(candidate):
+    def inspect_after_competing_write(candidate, directory_fd):
         nonlocal interleaved
-        exists = original_exists(candidate)
-        if candidate == path and not exists and not interleaved:
+        info = original_entry_info(candidate, directory_fd)
+        if candidate == path and info is None and not interleaved:
             interleaved = True
             # A has observed absence; B creates, writes, and closes before A opens.
             with ContinuousWriter(str(path), overwrite=False) as competing:
                 competing.write(first)
-        return exists
+        return info
 
     with (
-        patch.object(Path, "exists", exists_after_competing_write),
+        patch.object(_secure_file, "_entry_info", inspect_after_competing_write),
         ContinuousWriter(str(path), overwrite=False, lazy_initialise=lazy) as writer,
     ):
         assert writer.is_initialised() is (not lazy)

@@ -47,7 +47,7 @@ class _FinalFallback(YouTubeVideoMetadataCoreMixin):
         self.posts = []
         self._request_diagnostics = {}
 
-    def _session_get(self, _url):
+    def _session_get(self, _url, **_kwargs):
         raise ParsingError("watch bootstrap unavailable")
 
     def _session_post(self, url, **kwargs):

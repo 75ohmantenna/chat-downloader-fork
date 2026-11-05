@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
     from .runner import RunResult
 
+type _ArtifactSignature = tuple[tuple[int, int], str]
+
 
 def is_completed_replay(chat: Chat | None) -> bool:
     """Ask the owning provider whether the chat is a stable completed replay."""
@@ -217,6 +219,30 @@ def _effective_window(
     }
 
 
+def _artifact_signature(
+    path: Path, expected: tuple[int, int] | None = None
+) -> _ArtifactSignature:
+    """Hash a validated regular file and retain the identity actually read."""
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        msg = "Capture artifacts must be regular files with exactly one link."
+        raise ValueError(msg)
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as source:
+        opened = os.fstat(source.fileno())
+        identity = (opened.st_dev, opened.st_ino)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or identity != (before.st_dev, before.st_ino)
+            or (expected is not None and identity != expected)
+        ):
+            msg = "Manifest artifact identity changed after capture."
+            raise ValueError(msg)
+        return identity, hashlib.file_digest(source, "sha256").hexdigest()
+
+
 class RunManifest:
     """Validate artifact separation before capture; never replace an existing file."""
 
@@ -259,7 +285,11 @@ class RunManifest:
         self.valid = True
 
     def write(
-        self, chat: Chat | None, result: RunResult, *, verified_existing: bool = False
+        self,
+        chat: Chat | None,
+        result: RunResult,
+        *,
+        verified_artifacts: Mapping[Path, _ArtifactSignature] | None = None,
     ) -> None:
         """Write final outcome and full artifact hashes after writers close."""
         if not self.valid:
@@ -274,16 +304,24 @@ class RunManifest:
             msg = "Run manifest must be distinct from chat outputs."
             raise ValueError(msg)
         artifacts: list[dict[str, object]] = []
-        for path, writer in zip(outputs, writers, strict=True):
+        for path, writer, output_writer in zip(
+            outputs, writers, dispatcher.writers if dispatcher else (), strict=True
+        ):
             signature = None
             # Unopened files can predate this run: never certify them as output.
-            if writer["file_created"] or (verified_existing and path.exists()):
-                descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
-                with os.fdopen(descriptor, "rb") as source:
-                    if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
-                        msg = "Manifest artifacts must be regular files."
-                        raise ValueError(msg)
-                    signature = hashlib.file_digest(source, "sha256").hexdigest()
+            previous = (
+                verified_artifacts.get(path.absolute())
+                if verified_artifacts is not None
+                else None
+            )
+            if writer["file_created"] or previous is not None:
+                writer_identity = getattr(output_writer, "_file_identity", None)
+                expected = writer_identity or (previous[0] if previous else None)
+                observed = _artifact_signature(path, expected)
+                if previous is not None and observed != previous:
+                    msg = "Manifest artifact changed after checkpoint verification."
+                    raise ValueError(msg)
+                signature = observed[1]
             artifacts.append({**writer, "sha256": signature})
         payload = {
             "schema_version": 1,

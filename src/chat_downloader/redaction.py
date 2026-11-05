@@ -217,6 +217,10 @@ def is_sensitive_header(name: object, value: object) -> bool:
 def sanitize_for_log(value: Any) -> Any:
     """Return a log-safe copy of ``value`` with sensitive fields redacted."""
     if isinstance(value, dict):
+        sensitive_value = any(
+            isinstance(label, str) and _is_sensitive_key(label)
+            for label in (value.get("key"), value.get("name"))
+        )
         sanitized: dict[Any, Any] = {}
         for key, item in value.items():
             if (
@@ -228,7 +232,9 @@ def sanitize_for_log(value: Any) -> Any:
                     k: REDACTED if is_sensitive_header(k, v) else sanitize_for_log(v)
                     for k, v in item.items()
                 }
-            elif isinstance(key, str) and _is_sensitive_key(key):
+            elif isinstance(key, str) and (
+                _is_sensitive_key(key) or (key == "value" and sensitive_value)
+            ):
                 sanitized[key] = REDACTED if item is not None else None
             else:
                 sanitized[key] = sanitize_for_log(item)

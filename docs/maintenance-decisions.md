@@ -149,17 +149,27 @@ Kick Pusher application key may force one fresh discovery and reconnect, but a
 repeated rejection is terminal. This keeps recovery close to the protocol that
 defines the signal and prevents infinite reconnect loops.
 
+Kick's low-level WebSocket module also owns pre-payload frame/fragment
+reservations and installation of the bounded dependency frame buffer.
+It is narrowly allowlisted above 400 lines so the reservation hook, real socket
+construction, and receive/close contract remain visible together. The supported
+dependency floor is websocket-client 1.9.2, whose framing/timeout behavior is
+covered by the transport composition regressions.
+
 **Revisit when:** a provider-independent lifecycle primitive can replace
 duplicated mechanism without absorbing provider-specific policy.
 
 ## Compare output destinations after expansion
 
 **Decision:** Output identity is evaluated only after `{title}` and `{id}`
-metadata placeholders are expanded and the path is canonicalized. Existing
-files are also compared by device and inode so hard-link aliases cannot attach
-multiple writers to the same destination. The runtime pipeline selects writers
-and suppresses resolved duplicates during setup. The output dispatcher owns
-filename expansion and the final alias check before lazy writers open.
+metadata placeholders are expanded and the path is canonicalized. The runtime
+pipeline suppresses resolved duplicates while preserving generated-name
+provenance. Generated destinations require exclusive creation even when aliased
+with an explicit path; fixed explicit paths retain overwrite/append semantics.
+The dispatcher checks the complete target set before destructive initialization.
+Validated regular files must have exactly one link; symlinks, hard links, and
+unverifiable identities fail closed. Repair, writes, and interrupted rollback
+use validated descriptors, never pathname reopens.
 
 Channel discovery marks its initial metadata as provisional. Distinct templates
 remain attached until real video metadata is available; the dispatcher checks

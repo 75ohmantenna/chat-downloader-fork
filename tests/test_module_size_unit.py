@@ -32,6 +32,10 @@ ALLOWLIST: frozenset[str] = frozenset(
         # lifecycle. Splitting those phases would obscure their shared retry,
         # deduplication, and transport-close invariants.
         "sites/kick/live_service.py",
+        # One low-level wire boundary: reserve frame/fragment lengths before
+        # dependency allocation, install the bounded socket, and own receive/
+        # close behavior. Keeping these together exposes the pre-read invariant.
+        "sites/kick/websocket_transport.py",
         # Cohesive capture integrity contract relocated from the offline script:
         # record identity/emote validation and live/replay counter reconciliation
         # share the inspected artifact state and content-free report schema.

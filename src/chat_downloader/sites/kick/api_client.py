@@ -38,10 +38,12 @@ from .errors import (
     KickCountryBlocked,
     KickError,
     KickForwardHistoryRejected,
+    KickResourceLimit,
     KickServerError,
     KickVideoNotFound,
     KickVideoRestricted,
 )
+from .history_response import fetch_history_response
 from .http_session import _KickSession, create_kick_session
 
 if TYPE_CHECKING:
@@ -221,6 +223,7 @@ class KickApiClient:
         request_kwargs: dict[str, object] = {
             "params": params,
             "timeout": self._timeout,
+            "allow_redirects": False,
         }
         if (mobile or web) and self._mobile_header_overrides:
             request_kwargs["headers"] = dict(self._mobile_header_overrides)
@@ -229,15 +232,19 @@ class KickApiClient:
             token = token_provider() if token_provider is not None else None
             if _is_safe_bearer_token(token):
                 request_kwargs["headers"] = {"Authorization": f"Bearer {token}"}
-        if web:
-            request_kwargs["allow_redirects"] = False
         started = monotonic()
         self.diagnostics["http_requests"] = (
             cast("int", self.diagnostics["http_requests"]) + 1
         )
         status_key = "transport_error"
+        response_exceeded = False
         try:
-            response = session.get(url, **request_kwargs)
+            if resource == "messages":
+                response, response_exceeded = fetch_history_response(
+                    session, url, request_kwargs
+                )
+            else:
+                response = session.get(url, **request_kwargs)
             status_key = str(response.status_code)
         finally:
             self._status_counts[status_key] = self._status_counts.get(status_key, 0) + 1
@@ -251,22 +258,13 @@ class KickApiClient:
                 status_key,
                 monotonic() - started,
             )
-        if response.status_code == _KICK_COUNTRY_BLOCKED_STATUS:
-            # Kick's explicit country-block status outranks body heuristics.
-            _check_status(response, context=context, resource=resource)
-        if _body_looks_like_challenge(response):
-            _raise_for_challenge(response, context)
-        if forward_history and _response_rejects_start_time(response):
-            msg = f"Kick rejected forward message history for {context!r}."
-            raise KickForwardHistoryRejected(msg)
-        _check_status(response, context=context, resource=resource)
-        data = _decode_json(response, context=context, resource=resource)
-        if not isinstance(data, dict):
-            msg = f"Kick {resource} response for {context!r} was not a JSON object."
-            raise KickServerError(
-                msg, retry_after=parse_retry_after(getattr(response, "headers", None))
-            )
-        return data
+        return _interpret_response(
+            response,
+            context=context,
+            resource=resource,
+            forward_history=forward_history,
+            response_exceeded=response_exceeded,
+        )
 
     def _require_open_session(
         self, *, mobile: bool = False, web: bool = False
@@ -304,6 +302,41 @@ class KickApiClient:
                 session.close()
             except (OSError, RuntimeError) as error:
                 logger.debug("Error closing Kick API session: %s", error)
+
+
+def _interpret_response(
+    response: requests.Response,
+    *,
+    context: str,
+    resource: _ResourceKind,
+    forward_history: bool,
+    response_exceeded: bool,
+) -> JSONDict:
+    """Apply status/challenge precedence before parsing a bounded history body."""
+    if 300 <= response.status_code < 400:
+        msg = "Unexpected HTTP redirect from Kick API."
+        raise KickServerError(msg)
+    if response.status_code == _KICK_COUNTRY_BLOCKED_STATUS:
+        # Kick's explicit country-block status outranks body heuristics.
+        _check_status(response, context=context, resource=resource)
+    if _body_looks_like_challenge(response):
+        _raise_for_challenge(response, context)
+    if forward_history and _response_rejects_start_time(response):
+        msg = f"Kick rejected forward message history for {context!r}."
+        raise KickForwardHistoryRejected(msg)
+    _check_status(response, context=context, resource=resource)
+    if response_exceeded:
+        msg = (
+            "Kick history response byte resource limit exceeded; capture is incomplete."
+        )
+        raise KickResourceLimit(msg)
+    data = _decode_json(response, context=context, resource=resource)
+    if not isinstance(data, dict):
+        msg = f"Kick {resource} response for {context!r} was not a JSON object."
+        raise KickServerError(
+            msg, retry_after=parse_retry_after(getattr(response, "headers", None))
+        )
+    return data
 
 
 def _response_rejects_start_time(response: requests.Response) -> bool:

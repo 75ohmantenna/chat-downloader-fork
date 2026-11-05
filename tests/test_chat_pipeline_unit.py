@@ -176,6 +176,11 @@ def test_output_aliases_write_each_item_once(tmp_path, suffix, template, existin
     chat = Chat(iter([message]), title="same", status="live")
     chat.set_formatter(lambda _: "hello")
     configure_output_writer(chat, request)
+    if template and existing:
+        with pytest.raises(FileExistsError, match="Generated output filename"):
+            list(chat)
+        assert output.read_text(encoding="utf-8") == old
+        return
     assert list(chat) == [message]
     lines = output.read_text(encoding="utf-8").splitlines()
     if existing:
