@@ -181,6 +181,11 @@ response supplies a reload token and status is known. Direct InnerTube bootstrap
 already supplies normalized continuation hints and skips this enrichment.
 Each bootstrap profile attempt can make its own chat-page request.
 
+The final InnerTube fallback retries failed `player` and `next` operations
+independently within the request budget; a successful `player` response is not
+downloaded again when `next` fails. Chat-page enrichment uses the same bounded
+transient retry policy. Terminal access errors are not retried.
+
 This matters because the watch page alone is not always enough to choose the
 right continuation reliably, especially when both `Top chat` and `Live chat`
 views exist.
@@ -405,11 +410,16 @@ rotation never silently replaces an explicit override.
 The initial InnerTube fallback uses the same request-profile context fields
 when constructing its `player` and `next` payloads. Continuation-loop profile
 fallback remains separate and still handles incomplete chat-poll responses
-after bootstrap has succeeded. Empty response objects and absent, empty, or
-non-dictionary live-chat continuation blocks enter the bounded request retry
-and profile-recovery path. A nonempty block with an empty action list is valid.
+after bootstrap has succeeded. Empty response objects, non-object JSON roots,
+and absent, empty, or non-dictionary live-chat continuation blocks enter the
+bounded request retry and profile-recovery path. A nonempty block with an empty
+action list is valid. Invalid or overflowing pacing hints use the default delay.
 Generic unplayability in an InnerTube bootstrap is checked even when `next`
 exposes tokens, so unusable Web replay tokens do not bypass profile recovery.
+
+Channel and playlist browse continuations surface terminal HTTP/API errors;
+an error response is not treated as successful exhaustion of the listing.
+
 A first replay response with HTTP 400
 `INVALID_ARGUMENT` also permits bounded profile fallback, refreshing bootstrap
 tokens and config for the new profile while preserving seek and clip bounds.

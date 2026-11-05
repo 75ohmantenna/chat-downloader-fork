@@ -21,6 +21,7 @@ from chat_downloader.utils.json_types import (
     get_list,
     get_str,
 )
+from chat_downloader.utils.retry_utils import parse_retry_after
 
 from .constants import (
     CHANNEL_API_TEMPLATE,
@@ -262,7 +263,9 @@ class KickApiClient:
         data = _decode_json(response, context=context, resource=resource)
         if not isinstance(data, dict):
             msg = f"Kick {resource} response for {context!r} was not a JSON object."
-            raise KickServerError(msg)
+            raise KickServerError(
+                msg, retry_after=parse_retry_after(getattr(response, "headers", None))
+            )
         return data
 
     def _require_open_session(
@@ -383,7 +386,7 @@ def _check_status(
         or status >= HTTPStatus.INTERNAL_SERVER_ERROR
     ):
         msg = f"Kick {resource} API returned HTTP {status} for {context!r}."
-        raise KickServerError(msg)
+        raise KickServerError(msg, retry_after=parse_retry_after(response.headers))
     if status != HTTPStatus.OK:
         msg = f"Kick {resource} API returned unexpected HTTP {status} for {context!r}."
         raise KickError(msg)
@@ -415,4 +418,6 @@ def _decode_json(
         return cast("JSONAny", response.json())
     except (JSONDecodeError, ValueError) as error:
         msg = f"Kick {resource} API returned malformed JSON for {context!r}."
-        raise KickServerError(msg) from error
+        raise KickServerError(
+            msg, retry_after=parse_retry_after(getattr(response, "headers", None))
+        ) from error

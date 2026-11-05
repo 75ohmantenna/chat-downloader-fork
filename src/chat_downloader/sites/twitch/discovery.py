@@ -134,6 +134,7 @@ def get_user_videos(
 
     remaining_count: float = float("inf") if limit is None else limit
     cursor: str | None = None
+    seen_cursors: set[str] = set()
 
     while True:
         num_to_get = int(max(min(remaining_count, 30), 0))
@@ -142,26 +143,31 @@ def get_user_videos(
 
         query = _build_user_videos_query(username, num_to_get, video_type, sort, cursor)
         info = download_gql_func(session_post, query)
-        if not info:
-            break
-
         videos = _extract_user_videos(info, username)
         if not videos:
             break
 
         edges = get_list(videos, "edges")
+        has_next_page = bool(multi_get(videos, "pageInfo", "hasNextPage"))
+        if has_next_page and len(edges) < remaining_count:
+            final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
+            next_cursor = get_str(final_edge, "cursor")
+            if not next_cursor or next_cursor in seen_cursors:
+                msg = "Twitch video discovery did not advance its pagination cursor."
+                raise ParsingError(msg)
+            cursor = next_cursor
+            seen_cursors.add(cursor)
         remaining_count -= len(edges)
 
         for edge in edges:
             if not isinstance(edge, dict):
                 continue
-            cursor = get_str(edge, "cursor") or None
             node = get_dict(edge, "node")
             if not node:
                 continue
             yield r.remap_dict(node, video_remapping)
 
-        if not multi_get(videos, "pageInfo", "hasNextPage"):
+        if not has_next_page:
             break
 
 

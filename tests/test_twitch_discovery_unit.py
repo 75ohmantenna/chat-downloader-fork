@@ -216,6 +216,65 @@ def test_clip_discovery_skips_non_object_edges():
     ]
 
 
+@pytest.mark.parametrize("cursors", [[""], ["next", "next"], ["a", "b", "a"]])
+def test_video_discovery_rejects_missing_repeated_or_cyclic_cursors(cursors):
+    download = Mock(
+        side_effect=[
+            _page("videos", [_edge({"id": str(index)}, cursor)], True)
+            for index, cursor in enumerate(cursors)
+        ]
+    )
+    with pytest.raises(ParsingError, match="pagination cursor"):
+        list(discovery.get_user_videos(Mock(), download, "streamer"))
+    assert download.call_count == len(cursors)
+
+
+@pytest.mark.parametrize("limit", [1, None])
+@pytest.mark.parametrize("more", [False, True])
+def test_video_discovery_empty_page_never_repeats_its_request(limit, more):
+    download = Mock(side_effect=[_page("videos", [], more)])
+    if more:
+        with pytest.raises(ParsingError, match="pagination cursor"):
+            list(discovery.get_user_videos(Mock(), download, "streamer", limit=limit))
+    else:
+        assert (
+            list(discovery.get_user_videos(Mock(), download, "streamer", limit=limit))
+            == []
+        )
+    download.assert_called_once()
+
+
+@pytest.mark.parametrize("cursor", ["", "first"])
+@pytest.mark.parametrize("more", [False, True])
+def test_video_discovery_limit_does_not_require_an_unused_continuation(cursor, more):
+    download = Mock(
+        side_effect=[
+            _page("videos", [_edge({"id": "one"}, "first")], True),
+            _page("videos", [_edge({"id": "two"}, cursor)], more),
+        ]
+    )
+    assert list(discovery.get_user_videos(Mock(), download, "streamer", limit=2)) == [
+        {"id": "one"},
+        {"id": "two"},
+    ]
+    assert download.call_count == 2
+
+
+@pytest.mark.parametrize("cursor", ["", "first"])
+def test_video_discovery_terminal_page_does_not_require_a_fresh_cursor(cursor):
+    download = Mock(
+        side_effect=[
+            _page("videos", [_edge({"id": "one"}, "first")], True),
+            _page("videos", [_edge({"id": "two"}, cursor)]),
+        ]
+    )
+    assert list(discovery.get_user_videos(Mock(), download, "streamer")) == [
+        {"id": "one"},
+        {"id": "two"},
+    ]
+    assert download.call_count == 2
+
+
 @pytest.mark.parametrize(
     ("kind", "payload", "limit"),
     [

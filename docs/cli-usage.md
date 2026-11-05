@@ -219,6 +219,12 @@ defaults come from metadata on `DownloaderConfig`, `ChatRequest`, and
 `RunConfig` in `src/chat_downloader/models/`; argument registration remains
 explicit in `cli_args.py`.
 
+HTTP retries honor valid `Retry-After` integer seconds and HTTP dates as a
+minimum wait, alongside the configured backoff or fixed retry delay. Enter
+cannot shorten that minimum; manual retry prompts appear only after it.
+Capture cancellation still interrupts the wait, and server hints do not add
+attempts to the configured retry budget. Invalid hints use the normal policy.
+
 Filtering and output:
 
 - `--message_groups` and `--message_types` are mutually exclusive CLI filters.

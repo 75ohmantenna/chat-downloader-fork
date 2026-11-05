@@ -154,7 +154,7 @@ def _extract_timeout_ms(raw_timeout: object) -> int | None:
         return None
     try:
         return int(raw_timeout)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         log("debug", f"Ignoring invalid continuation timeout: {raw_timeout}")
         return None
 

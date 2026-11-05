@@ -32,6 +32,11 @@ class KickServerError(KickError):
     conditions such as a missing chatroom id.
     """
 
+    def __init__(self, message: str, *, retry_after: float | None = None) -> None:
+        """Retain only the parsed server delay needed by retry callers."""
+        super().__init__(message)
+        self.retry_after = retry_after
+
 
 class KickForwardHistoryRejected(KickError):
     """Raised for a validated rejection of forward history's start field."""

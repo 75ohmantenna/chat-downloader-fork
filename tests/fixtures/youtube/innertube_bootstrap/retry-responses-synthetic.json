@@ -1,0 +1,8 @@
+{
+  "description": "Synthetic bootstrap failures: malformed, incomplete, transient, terminal, and enrichment selector responses.",
+  "incomplete_player": {"responseContext": {}},
+  "incomplete_next": {},
+  "transient_error": {"error": {"code": 503, "message": "Service unavailable"}},
+  "terminal_error": {"error": {"code": 401, "message": "Access denied"}},
+  "enrichment": {"continuationContents": {"liveChatContinuation": {"header": {"liveChatHeaderRenderer": {"viewSelector": {"sortFilterSubMenuRenderer": {"subMenuItems": [{"title": "Live chat", "continuation": {"reloadContinuationData": {"continuation": "retry-live"}}}]}}}}}}}
+}

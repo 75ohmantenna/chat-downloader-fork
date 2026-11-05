@@ -154,7 +154,7 @@ def _resolve_poll_delay_ms(
     else:
         try:
             poll_delay_ms = int(timeout_ms)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             poll_delay_ms = _YOUTUBE_POLL_DELAY_FALLBACK_MS
         if poll_delay_ms < 0:
             poll_delay_ms = _YOUTUBE_POLL_DELAY_FALLBACK_MS

@@ -13,8 +13,10 @@ if TYPE_CHECKING:
 
     import requests
 
+    from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONAny, JSONDict
 
+from chat_downloader.errors import ParsingError, VideoNotFound
 from chat_downloader.request_profiles import (
     REQUEST_PROFILE_INNERTUBE_CONTEXTS,
     get_request_profile_innertube_client_id,
@@ -28,8 +30,15 @@ from chat_downloader.utils.json_types import (
     get_list,
     get_str,
 )
+from chat_downloader.utils.retry_utils import (
+    RetryPolicy,
+    get_retry_after,
+    parse_retry_after,
+)
+from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
 from .client_context import apply_request_profile_to_innertube_context
+from .client_requests_initial import _raise_if_challenge_response
 from .constants_patterns import _YT_HOME
 from .helpers import extract_chat_submenu_continuations
 
@@ -116,21 +125,105 @@ def _fallback_context(profile_name: object) -> JSONDict:
     return apply_request_profile_to_innertube_context(base_context, profile)
 
 
+def request_bootstrap_json(
+    session_request: Callable[..., requests.Response],
+    url: str,
+    parse_response: Callable[[requests.Response], JSONDict],
+    params: ChatRequest | None = None,
+    **kwargs: object,
+) -> JSONDict:
+    """Retry one read-only bootstrap operation without replaying earlier successes."""
+    policy = RetryPolicy(
+        max_attempts=params.max_attempts if params is not None else 1,
+        retry_timeout=params.retry_timeout if params is not None else None,
+        interruptible_retry=False,
+    )
+    attempt = 1
+    while True:
+        _check_polling_cancelled()
+        response_minimum = None
+        try:
+            response = session_request(url, **kwargs)
+            response_minimum = parse_retry_after(getattr(response, "headers", None))
+            status = getattr(response, "status_code", 200)
+            if status == 404:
+                msg = "YouTube bootstrap returned HTTP 404"
+                raise VideoNotFound(msg)
+            if status in {403, 429}:
+                _raise_if_challenge_response(
+                    response, url=url, error_message=f"HTTP {status}"
+                )
+            if status >= 400:
+                msg = f"YouTube bootstrap returned HTTP {status}"
+                raise HTTPError(msg, response=response)
+            return parse_response(response)
+        except (RequestException, OSError, ValueError, ParsingError) as error:
+            failed_response = getattr(error, "response", None)
+            status = getattr(failed_response, "status_code", 0)
+            if status in {403, 429}:
+                _raise_if_challenge_response(
+                    failed_response, url=url, error_message=str(error)
+                )
+            if status >= 400 and status not in {408, 429} and status // 100 != 5:
+                raise
+            if not policy.can_retry(attempt):
+                raise
+            error_minimum = get_retry_after(error)
+            policy.wait(
+                attempt,
+                server_minimum=(
+                    response_minimum if error_minimum is None else error_minimum
+                ),
+            )
+        attempt += 1
+
+
 def _post_innertube_json(
     session_post: Any,
     endpoint: str,
     payload: JSONDict,
+    params: ChatRequest | None,
 ) -> JSONDict:
-    response = session_post(
+    def parse_response(response: requests.Response) -> JSONDict:
+        data = response.json()
+        if not isinstance(data, dict) or not data:
+            msg = f"Incomplete YouTube {endpoint} bootstrap"
+            raise ParsingError(msg)
+        if "error" in data:
+            code = get_int(get_dict(data, "error"), "code")
+            _raise_if_challenge_response(
+                response,
+                url=f"{_YT_HOME}/youtubei/v1/{endpoint}",
+                error_message=get_str(get_dict(data, "error"), "message"),
+            )
+            if code == 404:
+                msg = "YouTube bootstrap returned error 404"
+                raise VideoNotFound(msg)
+            if code:
+                response.status_code = code
+                msg = f"YouTube {endpoint} bootstrap returned error {code}"
+                raise HTTPError(
+                    msg,
+                    response=response,
+                )
+            msg = f"Incomplete YouTube {endpoint} bootstrap"
+            raise ParsingError(msg)
+        if (
+            endpoint == "player"
+            and not get_str(get_dict(data, "videoDetails"), "videoId")
+            and get_str(get_dict(data, "playabilityStatus"), "status") in {"", "OK"}
+        ):
+            msg = "YouTube player bootstrap did not supply video details"
+            raise ParsingError(msg)
+        return data
+
+    return request_bootstrap_json(
+        session_post,
         f"{_YT_HOME}/youtubei/v1/{endpoint}?key={_DEFAULT_INNERTUBE_API_KEY}",
+        parse_response,
+        params,
         json=payload,
     )
-    status = getattr(response, "status_code", 200)
-    if status >= 400:
-        msg = f"YouTube {endpoint} bootstrap returned HTTP {status}"
-        raise HTTPError(msg, response=response)
-    data = response.json()
-    return data if isinstance(data, dict) else {}
 
 
 def _walk_json_dicts(value: JSONAny) -> Iterator[JSONDict]:
@@ -255,13 +348,14 @@ def get_innertube_video_bootstrap(
     video_id: str,
     session_post: Any,
     request_profile: object,
+    params: ChatRequest | None = None,
 ) -> tuple[JSONDict, JSONDict, JSONDict]:
     """Return initial data, config, and player response from InnerTube."""
     context = _fallback_context(request_profile)
     payload: JSONDict = {"context": context, "videoId": video_id}
 
-    player_response = _post_innertube_json(session_post, "player", payload)
-    next_response = _post_innertube_json(session_post, "next", payload)
+    player_response = _post_innertube_json(session_post, "player", payload, params)
+    next_response = _post_innertube_json(session_post, "next", payload, params)
 
     yt_initial_data = _build_fallback_initial_data(next_response)
     ytcfg = _build_fallback_ytcfg(

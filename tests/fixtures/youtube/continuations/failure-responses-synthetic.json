@@ -1,0 +1,25 @@
+{
+  "provenance": "Synthetic deterministic failure-recovery regression payloads; no network capture or credentials.",
+  "responses": [
+    {"status": 401, "body": {"error": {"code": 401, "message": "Authentication required"}}},
+    {"status": 400, "body": {"error": {"code": 400, "message": "Invalid browse continuation"}}},
+    {"status": 404, "body": {}},
+    {"status": 200, "body": {"error": {"code": 401, "message": "Authentication required"}}},
+    {"status": 200, "body": null},
+    {"status": 200, "body": []},
+    {"status": 200, "body": "unexpected"},
+    {"status": 200, "body": 17},
+    {"status": 429, "body": {"error": null}},
+    {"status": 503, "body": null}
+  ],
+  "poll_delay_template": {
+    "continuationContents": {
+      "liveChatContinuation": {
+        "actions": [],
+        "continuations": [
+          {"timedContinuationData": {"continuation": "next", "timeoutMs": "1e10000"}}
+        ]
+      }
+    }
+  }
+}

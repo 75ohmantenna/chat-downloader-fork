@@ -100,6 +100,7 @@ class YouTubeVideoMetadataCoreMixin:
                     video_id,
                     partial(bootstrap.request, proto._session_post),
                     getattr(self, "_request_profile", None),
+                    params,
                 )
 
         yt_initial_data, ytcfg, player_response_info = initial

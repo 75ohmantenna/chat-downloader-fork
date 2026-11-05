@@ -105,7 +105,19 @@ def test_incomplete_continuation(payload, match, detail):
         ({"pollingIntervalMillis": 2500}, 2500),
         *[
             ({"timeoutMs": value}, None)
-            for value in ("soon", [], {}, None, True, False)
+            for value in (
+                "soon",
+                [],
+                {},
+                None,
+                True,
+                False,
+                float("inf"),
+                float("-inf"),
+                float("nan"),
+                "1e10000",
+                "9" * 5000,
+            )
         ],
     ],
 )

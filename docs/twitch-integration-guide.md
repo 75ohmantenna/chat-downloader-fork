@@ -67,6 +67,13 @@ supply no new cursor or repeat a historical cursor are withheld from output
 and mark the traversal incomplete. Empty continuing pages retain a bounded retry budget.
 Terminal pages do not require a new cursor. Unexpected edge or node shapes
 count as known record loss for `--require_complete` and run manifests.
+Malformed message containers or fragment text also count as record loss and
+are skipped without discarding later valid comments or re-emitting the page.
+Malformed emote enrichment retains usable message text.
+
+Video discovery rejects continuing pages without a new usable cursor, including
+empty pages and historical cursor cycles. Terminal pages and satisfied finite
+limits do not require an unused continuation.
 
 ## Module Guide
 

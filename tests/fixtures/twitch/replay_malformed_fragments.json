@@ -1,0 +1,46 @@
+{
+  "provenance": "Curated synthetic GraphQL replay page: a null fragment text between two valid comments.",
+  "raw": [
+    {
+      "data": {
+        "video": {
+          "comments": {
+            "edges": [
+              {
+                "__typename": "VideoCommentEdge",
+                "cursor": "cursor-before",
+                "node": {
+                  "__typename": "Comment",
+                  "id": "before",
+                  "contentOffsetSeconds": 1,
+                  "message": {"fragments": [{"text": "first", "emote": null}]}
+                }
+              },
+              {
+                "__typename": "VideoCommentEdge",
+                "cursor": "cursor-malformed",
+                "node": {
+                  "__typename": "Comment",
+                  "id": "malformed",
+                  "contentOffsetSeconds": 2,
+                  "message": {"fragments": [{"text": null, "emote": null}]}
+                }
+              },
+              {
+                "__typename": "VideoCommentEdge",
+                "cursor": "cursor-after",
+                "node": {
+                  "__typename": "Comment",
+                  "id": "after",
+                  "contentOffsetSeconds": 3,
+                  "message": {"fragments": [{"text": "last", "emote": null}]}
+                }
+              }
+            ],
+            "pageInfo": {"hasNextPage": false}
+          }
+        }
+      }
+    }
+  ]
+}

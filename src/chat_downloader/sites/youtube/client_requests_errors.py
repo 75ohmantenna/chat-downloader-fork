@@ -10,10 +10,13 @@ from typing import TYPE_CHECKING, Any
 from chat_downloader.debugging import log
 from chat_downloader.errors import (
     CaptchaChallengeRequired,
+    ChatDownloaderError,
     IncompleteContinuationError,
     RetriesExceeded,
 )
 from chat_downloader.utils.dict_utils import multi_get
+from chat_downloader.utils.json_types import get_dict
+from chat_downloader.utils.retry_utils import parse_retry_after
 from chat_downloader.utils.string_utils import contains_any_hint
 
 from .continuations import summarize_continuation_payload
@@ -55,10 +58,12 @@ def _apply_retry_or_raise(
     url: str,
     message: str,
     exc_cls: type[Exception],
+    *,
+    server_minimum: float | None = None,
 ) -> None:
     """Wait for another attempt or raise with endpoint context."""
     if policy.can_retry(attempt_number):
-        policy.wait(attempt_number, interruptible=False)
+        policy.wait(attempt_number, interruptible=False, server_minimum=server_minimum)
         return
     msg = f"Retries exhausted. {message}. Endpoint: {url}"
     raise exc_cls(msg)
@@ -80,6 +85,7 @@ def _retry_or_raise_exhausted(
     log_label: str,
     *,
     exc_cls: type[Exception] = RetriesExceeded,
+    server_minimum: float | None = None,
 ) -> bool:
     """Log, sleep, and return True to retry; raise when budget is gone."""
     log(
@@ -88,7 +94,9 @@ def _retry_or_raise_exhausted(
         f"(attempt {attempt_number}/{max_attempts}): {error_message}",
     )
     if retry_policy.can_retry(attempt_number):
-        retry_policy.wait(attempt_number, interruptible=False)
+        retry_policy.wait(
+            attempt_number, interruptible=False, server_minimum=server_minimum
+        )
         return True
     msg = (
         f"Retries exhausted after {max_attempts} attempt(s). "
@@ -103,12 +111,19 @@ def _handle_http_error(
     attempt_number: int,
     max_attempts: int,
     retry_policy: RetryPolicy,
+    *,
+    allow_terminal_error: bool = True,
 ) -> bool:
     """Retry transient HTTP errors; leave terminal JSON errors to the caller."""
     response_text = getattr(response, "text", "")
     error_message = f"HTTP {response.status_code}"
     try:
-        yt_error = response.json().get("error", {}).get("message")
+        payload = response.json()
+        yt_error = (
+            get_dict(payload, "error").get("message")
+            if isinstance(payload, dict)
+            else None
+        )
         if yt_error:
             error_message = f"{error_message}: {yt_error}"
     except (JSONDecodeError, ValueError):
@@ -127,7 +142,14 @@ def _handle_http_error(
             continuation_url,
             error_message,
             "HTTP/API error",
+            server_minimum=parse_retry_after(getattr(response, "headers", None)),
         )
+    if not allow_terminal_error:
+        msg = (
+            f"YouTube browse request failed: {error_message}. "
+            f"Endpoint: {continuation_url}"
+        )
+        raise ChatDownloaderError(msg)
     # The continuation owner may recover a rejected initial replay through a
     # fresh profile. Terminal errors are reported by the run error boundary.
     log("debug", error_message)
@@ -140,6 +162,8 @@ def _handle_json_api_error(
     attempt_number: int,
     max_attempts: int,
     retry_policy: RetryPolicy,
+    *,
+    server_minimum: float | None = None,
 ) -> bool:
     """Handle API challenges, transient statuses, and incomplete responses."""
     _raw_code = error.get("code")
@@ -162,6 +186,7 @@ def _handle_json_api_error(
             continuation_url,
             detail,
             "API error",
+            server_minimum=server_minimum,
         )
     if isinstance(error_message, str) and "unknown error" in error_message.lower():
         return _retry_or_raise_exhausted(
@@ -172,6 +197,7 @@ def _handle_json_api_error(
             detail,
             "incomplete continuation response",
             exc_cls=IncompleteContinuationError,
+            server_minimum=server_minimum,
         )
     return False
 
@@ -185,6 +211,7 @@ def _handle_missing_live_chat_continuation(
     max_attempts: int,
     retry_policy: RetryPolicy,
     continuation_url: str,
+    server_minimum: float | None = None,
 ) -> bool:
     """Retry absent, empty, or wrongly typed required live-chat blocks.
 
@@ -206,4 +233,58 @@ def _handle_missing_live_chat_continuation(
         f"Summary: {summary}",
         "incomplete continuation response",
         exc_cls=IncompleteContinuationError,
+        server_minimum=server_minimum,
     )
+
+
+def _validate_continuation_body(
+    payload: object,
+    *,
+    require_live_chat_continuation: bool,
+    attempt_number: int,
+    max_attempts: int,
+    retry_policy: RetryPolicy,
+    continuation_url: str,
+    server_minimum: float | None,
+) -> JSONDict | None:
+    """Validate a decoded page before browse extraction or chat recovery."""
+    if not isinstance(payload, dict):
+        _retry_or_raise_exhausted(
+            attempt_number,
+            max_attempts,
+            retry_policy,
+            continuation_url,
+            "Expected a JSON object in continuation response body.",
+            "incomplete continuation response",
+            exc_cls=IncompleteContinuationError,
+            server_minimum=server_minimum,
+        )
+        return None
+    error = payload.get("error")
+    if isinstance(error, dict) and _handle_json_api_error(
+        error,
+        continuation_url,
+        attempt_number,
+        max_attempts,
+        retry_policy,
+        server_minimum=server_minimum,
+    ):
+        return None
+    if not require_live_chat_continuation and "error" in payload:
+        msg = (
+            "YouTube browse response contains an API error. "
+            f"Endpoint: {continuation_url}. Error: {error}"
+        )
+        raise ChatDownloaderError(msg)
+    if _handle_missing_live_chat_continuation(
+        payload,
+        require_live_chat_continuation=require_live_chat_continuation,
+        error=error,
+        attempt_number=attempt_number,
+        max_attempts=max_attempts,
+        retry_policy=retry_policy,
+        continuation_url=continuation_url,
+        server_minimum=server_minimum,
+    ):
+        return None
+    return payload

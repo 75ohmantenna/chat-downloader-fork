@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
+from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
 from typing import Any, cast
@@ -72,7 +74,11 @@ def _edge(message_id, cursor="c1"):
     return {
         "__typename": "VideoCommentEdge",
         "cursor": cursor,
-        "node": {"__typename": "Comment", "id": message_id},
+        "node": {
+            "__typename": "Comment",
+            "id": message_id,
+            "message": {"fragments": [{"text": message_id}]},
+        },
     }
 
 
@@ -715,8 +721,6 @@ def test_missing_comments_after_first_page_marks_replay_incomplete(downloader):
 def test_initial_replay_response_must_establish_completeness(
     monkeypatch, tmp_path, video
 ):
-    import json
-
     monkeypatch.setattr(
         TwitchChatDownloader,
         "_download_gql",
@@ -766,3 +770,114 @@ def test_missing_video_mid_pagination_raises(downloader, fallback):
         get_chat_messages_by_vod_id(
             None, downloader._download_gql, "123", "cursor-1", 0
         )
+
+
+@pytest.mark.parametrize("require_complete", [False, True])
+def test_malformed_fragment_preserves_replay_output_and_reports_loss(
+    monkeypatch, tmp_path, require_complete
+):
+    fixture = Path(__file__).parent / "fixtures/twitch/replay_malformed_fragments.json"
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    download = Mock(
+        side_effect=[
+            [{"data": {"video": {"title": "Replay", "lengthSeconds": 60}}}],
+            payload["raw"],
+        ]
+    )
+    monkeypatch.setattr(TwitchChatDownloader, "_download_gql", download)
+    output = tmp_path / "chat.jsonl"
+    manifest = tmp_path / "manifest.json"
+    result = execute_run(
+        ChatDownloader,
+        url="https://www.twitch.tv/videos/123",
+        output=str(output),
+        run_manifest=str(manifest),
+        proxy="",
+        quiet=True,
+        max_attempts=3,
+        require_complete=require_complete,
+    )
+    assert result.success is not require_complete
+    assert result.message_count == 2
+    assert [
+        json.loads(line)["message_id"] for line in output.read_text().splitlines()
+    ] == ["before", "after"]
+    report = json.loads(manifest.read_text())
+    assert report["provider_diagnostics"]["parse_error"] == 1
+    assert not report["replay_complete"]
+    assert download.call_count == 2
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        None,
+        [],
+        "not-an-object",
+        {},
+        {"fragments": None},
+        {"fragments": {}},
+        {"fragments": "not-a-list"},
+        {"fragments": [None]},
+        {"fragments": [[]]},
+        {"fragments": [{}]},
+        {"fragments": [{"text": None}]},
+        {"fragments": [{"text": 1}]},
+        {"fragments": [{"text": []}]},
+    ],
+)
+def test_malformed_nested_message_skips_only_its_record(downloader, message):
+    edges = [_edge("before"), _edge("malformed"), _edge("after")]
+    edges[1]["node"]["message"] = message
+    diagnostics: dict[str, object] = {}
+    fetch = Mock(side_effect=[_response(edges)])
+    result = _run(downloader, fetch, diagnostics=diagnostics)
+    assert [item["message_id"] for item in result] == ["before", "after"]
+    assert diagnostics == {"parse_error": 1}
+    fetch.assert_called_once()
+    downloader.retry.assert_not_called()
+
+
+@pytest.mark.parametrize("diagnostics", [None, {}])
+def test_missing_message_is_a_record_parse_error(downloader, diagnostics):
+    edge = _edge("malformed")
+    del edge["node"]["message"]
+    assert (
+        _run(downloader, Mock(return_value=_response([edge])), diagnostics=diagnostics)
+        == []
+    )
+    if diagnostics is not None:
+        assert diagnostics == {"parse_error": 1}
+
+
+@pytest.mark.parametrize(
+    "error_type", [TypeError, ValueError, RuntimeError, ParsingError]
+)
+def test_message_enrichment_collaborator_errors_are_not_swallowed_or_retried(
+    downloader, monkeypatch, error_type
+):
+    from chat_downloader.sites.twitch.parsing import messages
+
+    edges = [_edge("before"), _edge("broken"), _edge("after")]
+    edges[1]["node"]["message"]["fragments"] = [
+        {"text": "Kappa", "emote": {"emoteID": "25", "id": "emote;0;4"}}
+    ]
+    error = error_type("collaborator failure")
+    monkeypatch.setattr(messages, "_generate_emote_image_list", Mock(side_effect=error))
+    fetch = Mock(side_effect=[_response(edges)])
+    diagnostics: dict[str, object] = {}
+    source = replay_service.iter_vod_chat_messages(
+        cast("Any", downloader),
+        "123",
+        _request(max_attempts=3),
+        max_duration=60,
+        fetch_messages=cast("replay_service._FetchMessages", fetch),
+        diagnostics=diagnostics,
+    )
+    assert next(source)["message_id"] == "before"
+    with pytest.raises(error_type, match="collaborator failure") as caught:
+        next(source)
+    assert caught.value is error
+    assert diagnostics == {}
+    fetch.assert_called_once()
+    downloader.retry.assert_not_called()

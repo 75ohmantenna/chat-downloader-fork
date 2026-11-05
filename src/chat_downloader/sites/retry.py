@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from chat_downloader.debugging import log
 from chat_downloader.errors import RetriesExceeded
 from chat_downloader.utils.conversion_utils import attempts
-from chat_downloader.utils.retry_utils import RetryPolicy
+from chat_downloader.utils.retry_utils import RetryPolicy, get_retry_after
 from chat_downloader.utils.string_utils import get_title_of_webpage
 from chat_downloader.utils.timed_generator import polling_sleep
 
@@ -81,6 +81,7 @@ def retry(
         attempt_number,
         interruptible=interruptible_retry,
         sleep_func=polling_sleep,
+        server_minimum=get_retry_after(error),
     )
 
 
@@ -111,4 +112,8 @@ def wait_for_reconnect(
         f"{attempt_number}/{policy.max_attempts} {policy.sleep_text(attempt_number)}. "
         f"{type(error).__name__}: {error}",
     )
-    policy.wait(attempt_number, sleep_func=polling_sleep)
+    policy.wait(
+        attempt_number,
+        sleep_func=polling_sleep,
+        server_minimum=get_retry_after(error),
+    )

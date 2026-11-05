@@ -659,8 +659,24 @@ def test_parse_irc_item_handles_flag_without_equals_and_disabled_modes() -> None
     assert parsed["slow_mode"] is False
 
 
-def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -> None:
-    """A malformed emote id in a VOD fragment must not crash the parse."""
+@pytest.mark.parametrize(
+    "emote",
+    [
+        {"emoteID": "999", "id": "no-semicolons-here"},
+        "not-an-object",
+        ["not-an-object"],
+        {"emoteID": [], "id": "emote;0;4"},
+        {"emoteID": "", "id": "emote;0;4"},
+        {"id": "emote;0;4"},
+        {"emoteID": "999"},
+        {"emoteID": "999", "from": None, "to": 4},
+        {"emoteID": "999", "from": float("inf"), "to": 4},
+    ],
+)
+def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text(
+    emote,
+) -> None:
+    """Malformed emote enrichment must not discard usable message text."""
     message = {
         "userColor": "#abcdef",
         "userBadges": [],
@@ -668,7 +684,7 @@ def test_parse_message_info_skips_malformed_vod_emote_and_keeps_message_text() -
             {"text": "hello "},
             {
                 "text": "BadEmote",
-                "emote": {"emoteID": "999", "id": "no-semicolons-here"},
+                "emote": emote,
             },
             {"text": " world"},
         ],

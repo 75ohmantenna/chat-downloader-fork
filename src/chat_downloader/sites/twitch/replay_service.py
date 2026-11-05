@@ -32,7 +32,7 @@ from chat_downloader.utils.timed_generator import _check_polling_cancelled
 from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
 from .constants import TWITCH_DEBUG_SAMPLE_LIMIT, build_known_comment_keys
 from .graphql_client import _handle_gql_errors
-from .parsing.messages import _parse_item
+from .parsing.messages import _MalformedMessage, _parse_item
 from .replay_transport import get_chat_messages_by_vod_id
 from .validation_keys import find_unexpected_vod_edge_paths
 
@@ -133,10 +133,18 @@ def _process_vod_edge(  # noqa: C901 — edge validation and filtering are one c
     owner = get_dict(get_dict(node, "video"), "owner")
     effective_creator_channel_id = creator_channel_id or get_str(owner, "id")
 
-    data: JSONDict = cast(
-        "JSONDict",
-        _parse_item(node, offset, effective_creator_channel_id, badge_set),
-    )
+    try:
+        data: JSONDict = cast(
+            "JSONDict",
+            _parse_item(node, offset, effective_creator_channel_id, badge_set),
+        )
+    except _MalformedMessage as error:
+        if diagnostics is not None:
+            diagnostics["parse_error"] = (
+                cast("int", diagnostics.get("parse_error", 0)) + 1
+            )
+        logger_obj.debug("Skipping malformed comment message: %s", error)
+        return None, "skip"
     unexpected_keys = data.keys() - build_known_comment_keys()
     if unexpected_keys:
         capture_debug_sample(

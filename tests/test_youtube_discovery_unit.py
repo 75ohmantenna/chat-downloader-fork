@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from chat_downloader.errors import InvalidParameter, NoVideos, UserNotFound
+from chat_downloader.errors import (
+    ChatDownloaderError,
+    InvalidParameter,
+    NoVideos,
+    UserNotFound,
+)
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube import discovery, discovery_playlists, helpers
 from chat_downloader.sites.youtube.chat_users_router import YouTubeChatUsersRouterMixin
@@ -498,3 +505,79 @@ def test_empty_token_does_not_mark_seen_and_refreshes_visitor(monkeypatch):
     assert configs[0]["INNERTUBE_CONTEXT"]["client"]["visitorData"] == "visitor-1"
     assert params["context"]["client"]["visitorData"] == "visitor-2"
     assert seen == set()
+
+
+@pytest.mark.parametrize("playlist", [False, True])
+@pytest.mark.parametrize("case_number", [0, 1, 2, 3])
+def test_terminal_browse_failures_surface_after_initial_items(
+    monkeypatch, make_fake_http_response, playlist, case_number
+):
+    fixture = Path(__file__).parent / (
+        "fixtures/youtube/continuations/failure-responses-synthetic.json"
+    )
+    case = json.loads(fixture.read_text(encoding="utf-8"))["responses"][case_number]
+    if playlist:
+        _patch_playlist(
+            monkeypatch,
+            [wrap("playlistVideoRenderer.videoId", "one"), _continuation("next")],
+            parse=True,
+        )
+        downloader = _Playlist()
+    else:
+        _patch_browse(
+            monkeypatch,
+            [
+                _tab(
+                    wrap(
+                        "richGridRenderer.contents",
+                        [_rich_video("one"), _continuation("next")],
+                    )
+                )
+            ],
+        )
+        monkeypatch.setattr(
+            discovery, "_parse_video", lambda value: {"video_id": value["videoId"]}
+        )
+        downloader = _Discovery()
+    post = Mock(return_value=make_fake_http_response(case["status"], case["body"]))
+    downloader._session_post = post
+    request = ChatRequest(max_attempts=3, retry_timeout=0)
+    items = (
+        downloader.get_playlist_items(PLAYLIST, request)
+        if playlist
+        else downloader.get_user_videos(channel_id="example", params=request)
+    )
+    assert next(items) == {"video_id": "one"}
+    with pytest.raises(ChatDownloaderError, match="YouTube browse"):
+        next(items)
+    assert post.call_count == 1
+
+
+@pytest.mark.parametrize("error", [None, [], "denied"])
+def test_malformed_browse_error_is_not_silent_end_of_results(
+    monkeypatch, make_fake_http_response, error
+):
+    _patch_playlist(monkeypatch, [_continuation("next")])
+    downloader = _Playlist()
+    downloader._session_post = Mock(
+        return_value=make_fake_http_response(200, {"error": error})
+    )
+    with pytest.raises(ChatDownloaderError, match="contains an API error"):
+        list(downloader.get_playlist_items(PLAYLIST, ChatRequest(max_attempts=3)))
+
+
+def test_valid_empty_browse_response_still_ends_normally(
+    monkeypatch, make_fake_http_response
+):
+    _patch_playlist(
+        monkeypatch,
+        [wrap("playlistVideoRenderer.videoId", "one"), _continuation("next")],
+        parse=True,
+    )
+    downloader = _Playlist()
+    post = Mock(return_value=make_fake_http_response(200, {}))
+    downloader._session_post = post
+    assert list(downloader.get_playlist_items(PLAYLIST, ChatRequest())) == [
+        {"video_id": "one"}
+    ]
+    assert post.call_count == 1

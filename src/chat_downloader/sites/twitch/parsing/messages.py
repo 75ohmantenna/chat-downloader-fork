@@ -13,6 +13,7 @@ from logging import DEBUG
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import debug_log, logger
+from chat_downloader.errors import ParsingError
 from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.remap import (
     Remapper as r,  # noqa: N813 — compact table-construction alias; used as r("key", ...) throughout remapping tables
@@ -45,8 +46,37 @@ if TYPE_CHECKING:
     from chat_downloader.sites.twitch.types import BadgeSet
 
 
-def _parse_message_info(message: dict[str, Any]) -> dict[str, Any]:
+class _MalformedMessage(ParsingError):
+    """A provider comment has no usable message or fragment text."""
+
+
+def _parse_vod_emote(emote: object) -> tuple[str, int, int] | None:
+    """Skip malformed enrichment without discarding otherwise valid text."""
+    if not isinstance(emote, dict):
+        debug_log(f"Skipping malformed VOD emote: expected an object, got {emote!r}")
+        return None
+    emote_id = emote.get("emoteID")
+    if not isinstance(emote_id, str) or not emote_id:
+        debug_log(f"Skipping malformed VOD emote: invalid emote ID {emote_id!r}")
+        return None
+    try:
+        encoded_positions = emote.get("id")
+        if isinstance(encoded_positions, str):
+            _, begin_text, end_text = encoded_positions.split(";")
+            begin, end = int(begin_text), int(end_text)
+        else:
+            begin, end = int(emote["from"]), int(emote["to"])
+    except (TypeError, ValueError, KeyError, OverflowError) as emote_error:
+        debug_log(f"Skipping malformed VOD emote ({emote!r}): {emote_error}")
+        return None
+    return emote_id, begin, end
+
+
+def _parse_message_info(message: object) -> dict[str, Any]:
     """Parse GraphQL message fragments into text, emotes, and badge information."""
+    if not isinstance(message, dict) or not isinstance(message.get("fragments"), list):
+        msg = "Twitch comment message must contain a fragments list."
+        raise _MalformedMessage(msg)
     message_info = {
         "author_colour": message.get("userColor"),
         "author_badges": message.get("userBadges") or [],
@@ -57,25 +87,17 @@ def _parse_message_info(message: dict[str, Any]) -> dict[str, Any]:
     emote_locations: dict[str, list[str]] = {}
 
     for fragment in message["fragments"]:
+        if not isinstance(fragment, dict) or not isinstance(fragment.get("text"), str):
+            msg = "Twitch comment fragment must contain string text."
+            raise _MalformedMessage(msg)
         message_text += fragment["text"]
 
         emote = fragment.get("emote")
         if emote:
-            try:
-                emote_id = emote["emoteID"]
-                encoded_positions = emote.get("id")
-                if isinstance(encoded_positions, str):
-                    _, begin_text, end_text = encoded_positions.split(";")
-                    begin, end = int(begin_text), int(end_text)
-                else:
-                    begin, end = int(emote["from"]), int(emote["to"])
-            except (TypeError, ValueError, KeyError) as emote_error:
-                debug_log(
-                    "Skipping malformed VOD emote "
-                    f"(id={emote.get('id')!r}): {emote_error}",
-                )
+            parsed_emote = _parse_vod_emote(emote)
+            if parsed_emote is None:
                 continue
-
+            emote_id, begin, end = parsed_emote
             if emote_id not in emotes:
                 emote_locations[emote_id] = []
                 emotes[emote_id] = {
@@ -167,6 +189,9 @@ def _parse_item(
         badge_set: Snapshot enriching normalized badge names/versions with
             channel or global metadata.
     """
+    if "message" not in item:
+        msg = "Twitch comment is missing its message."
+        raise _MalformedMessage(msg)
     info = r.remap_dict(item, build_comment_remapping())
 
     if "time_in_seconds" in info:

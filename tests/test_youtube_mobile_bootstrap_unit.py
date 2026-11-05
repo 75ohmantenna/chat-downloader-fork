@@ -74,7 +74,17 @@ def test_mobile_bootstrap_starts_with_profiled_player_and_next(profile, caplog):
 
 
 @pytest.mark.parametrize(
-    "failure", ["network", "json", "player", "next", "http", "missing-id", "empty-next"]
+    "failure",
+    [
+        "network",
+        "json",
+        "player",
+        "next",
+        "http",
+        "missing-id",
+        "missing-id-ok",
+        "empty-next",
+    ],
 )
 def test_mobile_bootstrap_recovers_through_watch_page(failure, caplog):
     site = _MobileMetadata()
@@ -88,8 +98,10 @@ def test_mobile_bootstrap_recovers_through_watch_page(failure, caplog):
         site.next = {"error": {"message": "PRIVATE_SENTINEL"}}
     elif failure == "http":
         site.status = 503
-    elif failure == "missing-id":
+    elif failure in {"missing-id", "missing-id-ok"}:
         site.player["videoDetails"].pop("videoId")
+        if failure == "missing-id-ok":
+            site.player["playabilityStatus"]["status"] = "OK"
     else:
         site.next = []
 
@@ -100,7 +112,7 @@ def test_mobile_bootstrap_recovers_through_watch_page(failure, caplog):
     diagnostics = config["_chat_downloader_bootstrap_diagnostics"]
     assert diagnostics["bootstrap_fallback_count"] == 1
     assert diagnostics["bootstrap_request_count"] == (
-        2 if site.error or failure == "http" else 3
+        2 if site.error or failure in {"http", "player", "missing-id-ok"} else 3
     )
     assert diagnostics["bootstrap_http_error_count"] == (1 if failure == "http" else 0)
     assert "mobile InnerTube bootstrap failed" in caplog.text

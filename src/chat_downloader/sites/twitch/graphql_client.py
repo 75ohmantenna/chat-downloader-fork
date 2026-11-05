@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from json.decoder import JSONDecodeError
 from typing import TYPE_CHECKING, cast
 
 from chat_downloader.debugging import log
@@ -17,6 +18,7 @@ from chat_downloader.errors import (
 )
 from chat_downloader.metadata import __version__
 from chat_downloader.utils.json_types import get_list, get_str
+from chat_downloader.utils.retry_utils import parse_retry_after
 from chat_downloader.utils.string_utils import contains_any_hint
 from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
@@ -117,7 +119,14 @@ def _download_base_gql(
         )
     if status_code >= 400:
         response.raise_for_status()
-    result = response.json()
+    try:
+        result = response.json()
+    except JSONDecodeError as error:
+        # Preserve the decoder exception type without retaining the raw response.
+        error.__dict__["retry_after"] = parse_retry_after(
+            getattr(response, "headers", None)
+        )
+        raise
     _check_polling_cancelled()
     return result
 

@@ -4,9 +4,14 @@
 
 from __future__ import annotations
 
+import math
 import sys
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC
+from email.utils import parsedate_to_datetime
+from threading import TIMEOUT_MAX
 from typing import TYPE_CHECKING
 
 from chat_downloader.errors import ChatDownloaderError
@@ -21,6 +26,82 @@ from .timed_input import timed_input
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+
+_MAX_SLEEP_SECONDS = min(86_400, int(TIMEOUT_MAX))
+
+
+def _finite_delay(value: object) -> float | None:
+    """Accept only finite, nonnegative, representable numeric delays."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        seconds = float(value)
+    except OverflowError:
+        return None
+    if isinstance(value, int) and seconds < value:
+        seconds = math.nextafter(seconds, math.inf)
+    return seconds if math.isfinite(seconds) and seconds >= 0 else None
+
+
+def parse_retry_after(headers: object, *, now: float | None = None) -> float | None:
+    """Parse Retry-After delta-seconds or an HTTP date without capping its delay."""
+    if not isinstance(headers, Mapping):
+        return None
+    value = next(
+        (
+            value
+            for name, value in headers.items()
+            if isinstance(name, str) and name.casefold() == "retry-after"
+        ),
+        None,
+    )
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if value.isascii() and value.isdecimal():
+        try:
+            return _finite_delay(int(value.lstrip("0") or "0"))
+        except ValueError:
+            return None
+    try:
+        date = parsedate_to_datetime(value)
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=UTC)
+        seconds = date.timestamp() - (time.time() if now is None else now)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+    return max(0.0, seconds) if math.isfinite(seconds) else None
+
+
+def get_retry_after(error: object) -> float | None:
+    """Recover a sanitized exception delay or its attached HTTP response header."""
+    seen: set[int] = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        delay = _finite_delay(getattr(error, "retry_after", None))
+        if delay is not None:
+            return delay
+        response = getattr(error, "response", None)
+        delay = parse_retry_after(getattr(response, "headers", None))
+        if delay is not None:
+            return delay
+        error = getattr(error, "__cause__", None)
+    return None
+
+
+def _sleep_delay(seconds: float, sleep: Callable[[float], None]) -> None:
+    """Split platform-overflowing waits without shortening the server minimum."""
+    whole_seconds = int(seconds)
+    fraction = seconds - whole_seconds
+    while whole_seconds > _MAX_SLEEP_SECONDS:
+        _check_polling_cancelled()
+        sleep(_MAX_SLEEP_SECONDS)
+        _check_polling_cancelled()
+        whole_seconds -= _MAX_SLEEP_SECONDS
+    _check_polling_cancelled()
+    sleep(whole_seconds + fraction)
+    _check_polling_cancelled()
 
 
 def _stdin_is_interactive() -> bool:
@@ -74,10 +155,19 @@ class RetryPolicy:
         *,
         interruptible: bool | None = None,
         sleep_func: Callable[[float], None] | None = None,
+        server_minimum: float | None = None,
     ) -> None:
-        """Wait according to the policy before next retry."""
+        """Wait without allowing Enter to bypass a valid server minimum."""
         _check_polling_cancelled()
         seconds = self.sleep_seconds(attempt_number)
+        minimum = _finite_delay(server_minimum) or 0.0
+        sleep = sleep_func or (
+            time.sleep if _POLLING_STOP_EVENT.get() is None else polling_sleep
+        )
+        if minimum > 0:
+            _sleep_delay(max(seconds or 0.0, minimum), sleep)
+            if seconds is not None:
+                return
         if seconds is None:
             if not _stdin_is_interactive():
                 msg = "Manual retry requires an interactive terminal."
@@ -98,9 +188,4 @@ class RetryPolicy:
             _check_polling_cancelled()
             return
 
-        _check_polling_cancelled()
-        sleep = sleep_func or (
-            time.sleep if _POLLING_STOP_EVENT.get() is None else polling_sleep
-        )
-        sleep(seconds)
-        _check_polling_cancelled()
+        _sleep_delay(seconds, sleep)

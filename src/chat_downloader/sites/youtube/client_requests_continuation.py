@@ -11,13 +11,16 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import RetriesExceeded
-from chat_downloader.utils.retry_utils import RetryPolicy
+from chat_downloader.utils.retry_utils import (
+    RetryPolicy,
+    get_retry_after,
+    parse_retry_after,
+)
 
 from .client_requests_errors import (
     _apply_retry_or_raise,
     _handle_http_error,
-    _handle_json_api_error,
-    _handle_missing_live_chat_continuation,
+    _validate_continuation_body,
 )
 
 if TYPE_CHECKING:
@@ -71,8 +74,10 @@ def _get_continuation_info(
             "int", counters["continuation_retry_count"]
         ) + int(attempt_number > 1)
         response_text = ""
+        server_minimum = None
         try:
             response = session_post(continuation_url, **post_kwargs)
+            server_minimum = parse_retry_after(getattr(response, "headers", None))
             response_text = getattr(response, "text", "")
             counters["http_error_count"] = cast(
                 "int", counters["http_error_count"]
@@ -84,30 +89,20 @@ def _get_continuation_info(
                 attempt_number,
                 max_attempts,
                 retry_policy,
+                allow_terminal_error=require_live_chat_continuation,
             ):
                 continue
 
-            json_response: JSONDict = response.json()
-
-            error = json_response.get("error")
-            if isinstance(error, dict) and _handle_json_api_error(
-                error,
-                continuation_url,
-                attempt_number,
-                max_attempts,
-                retry_policy,
-            ):
-                continue
-
-            if _handle_missing_live_chat_continuation(
-                json_response,
+            json_response = _validate_continuation_body(
+                response.json(),
                 require_live_chat_continuation=require_live_chat_continuation,
-                error=error,
                 attempt_number=attempt_number,
                 max_attempts=max_attempts,
                 retry_policy=retry_policy,
                 continuation_url=continuation_url,
-            ):
+                server_minimum=server_minimum,
+            )
+            if json_response is None:
                 continue
 
         except JSONDecodeError:
@@ -123,6 +118,7 @@ def _get_continuation_info(
                 continuation_url,
                 f"Unable to parse JSON: {response_text[:200]}",
                 RetriesExceeded,
+                server_minimum=server_minimum,
             )
             continue
 
@@ -141,6 +137,7 @@ def _get_continuation_info(
                 continuation_url,
                 f"{type(exc).__name__}: {exc}",
                 RetriesExceeded,
+                server_minimum=get_retry_after(exc),
             )
             continue
 

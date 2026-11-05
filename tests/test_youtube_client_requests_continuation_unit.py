@@ -118,4 +118,4 @@ def test_retry_helpers_wait_before_retrying(monkeypatch, incomplete) -> None:
         )
     else:
         _apply_retry_or_raise(policy, 1, "http://url", "reason", RetriesExceeded)
-    assert waits == [(1, {"interruptible": False})]
+    assert waits == [(1, {"interruptible": False, "server_minimum": None})]

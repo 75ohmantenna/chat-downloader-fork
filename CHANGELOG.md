@@ -10,6 +10,13 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Surface rejected YouTube browse pages instead of silently truncating listings;
+  recover malformed continuation roots and overflowing polling hints.
+- Apply configured retries to YouTube fallback bootstrap and chat-page requests.
+- Honor server `Retry-After` minimum delays across provider HTTP retries without
+  allowing terminal input to skip the delay.
+- Reject stalled Twitch video discovery and preserve valid replay comments
+  around malformed message fragments, recording the skipped record as loss.
 - Process every inner YouTube replay action with its own filtering and loss
   accounting instead of silently retaining only the first event.
 - Avoid duplicate YouTube replay-page delivery and overlapping channel-recovery

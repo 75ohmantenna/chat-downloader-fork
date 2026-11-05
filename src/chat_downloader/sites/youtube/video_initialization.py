@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
@@ -14,7 +15,11 @@ from chat_downloader.utils.json_types import get_dict, get_str
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.string_utils import regex_search
 
-from .client_requests_bootstrap import BootstrapRequests, merge_bootstrap_diagnostics
+from .client_requests_bootstrap import (
+    BootstrapRequests,
+    merge_bootstrap_diagnostics,
+    request_bootstrap_json,
+)
 from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_LIVE_CHAT_REPLAY_URL,
@@ -25,6 +30,8 @@ from .playability import raise_if_playability_error
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
+    import requests
+
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict
 
@@ -43,6 +50,16 @@ def _has_generic_unplayable_reason(player_response: JSONDict) -> bool:
         return False
     reason = (get_str(playability, "reason") or "").strip().rstrip(".").casefold()
     return reason in _GENERIC_UNPLAYABLE_REASONS
+
+
+def _parse_chat_bootstrap(response: requests.Response) -> JSONDict:
+    data = try_parse_json(regex_search(response.text, _YT_INITIAL_DATA_RE))
+    if not isinstance(data, dict) or not extract_chat_submenu_continuations(
+        data, fallback_labels=["Top chat", "Live chat"]
+    ):
+        msg = "YouTube chat-page bootstrap did not supply submenu tokens"
+        raise ParsingError(msg)
+    return data
 
 
 class YouTubeVideoInitializationMixin:
@@ -111,12 +128,11 @@ class YouTubeVideoInitializationMixin:
                     chat_url = (
                         _YT_LIVE_CHAT_REPLAY_URL if is_replay else _YT_LIVE_CHAT_URL
                     )
-                    response = bootstrap.request(
-                        proto._session_get,
+                    dict_live_chats = request_bootstrap_json(
+                        partial(bootstrap.request, proto._session_get),
                         f"{chat_url}?continuation={client_continuation}",
-                    )
-                    dict_live_chats = try_parse_json(
-                        regex_search(response.text, _YT_INITIAL_DATA_RE)
+                        _parse_chat_bootstrap,
+                        params,
                     )
                     canonical_labels = {
                         label: f"{label} replay" if is_replay else label
@@ -131,7 +147,7 @@ class YouTubeVideoInitializationMixin:
                         details["continuation_info"][
                             canonical_labels.get(source_label, source_label)
                         ] = token
-                except (KeyError, TypeError, IndexError) as exc:
+                except (KeyError, TypeError, IndexError, ParsingError) as exc:
                     log(
                         "warning",
                         "Unable to enrich chat submenu continuation tokens from "

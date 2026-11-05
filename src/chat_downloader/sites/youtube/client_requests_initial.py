@@ -18,7 +18,11 @@ from chat_downloader.errors import (
     VideoNotFound,
 )
 from chat_downloader.utils.json_utils import try_parse_json
-from chat_downloader.utils.retry_utils import RetryPolicy
+from chat_downloader.utils.retry_utils import (
+    RetryPolicy,
+    get_retry_after,
+    parse_retry_after,
+)
 from chat_downloader.utils.string_utils import (
     contains_any_hint,
     get_title_of_webpage,
@@ -182,7 +186,13 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                         f"{label} (attempt {attempt_number}/{max_attempts}): {detail}",
                     )
                     if retry_policy.can_retry(attempt_number):
-                        retry_policy.wait(attempt_number, interruptible=False)
+                        retry_policy.wait(
+                            attempt_number,
+                            interruptible=False,
+                            server_minimum=parse_retry_after(
+                                getattr(response, "headers", None)
+                            ),
+                        )
                         continue
                     msg = (
                         f"Retries exhausted after {max_attempts} attempt(s) "
@@ -216,7 +226,11 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                 f"{type(e).__name__}: {e}",
             )
             if retry_policy.can_retry(attempt_number):
-                retry_policy.wait(attempt_number, interruptible=False)
+                retry_policy.wait(
+                    attempt_number,
+                    interruptible=False,
+                    server_minimum=get_retry_after(e),
+                )
                 continue
             raise
         else:

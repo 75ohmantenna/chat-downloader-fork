@@ -96,7 +96,7 @@ def test_retry_wait_is_not_interruptible() -> None:
     _apply_retry_or_raise(
         policy, 1, "https://example.com/", "some error", RetriesExceeded
     )
-    policy.wait.assert_called_once_with(1, interruptible=False)
+    policy.wait.assert_called_once_with(1, interruptible=False, server_minimum=None)
 
 
 def test_exhausted_retry_error_includes_reason_and_url(policy) -> None:
