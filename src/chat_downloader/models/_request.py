@@ -321,13 +321,12 @@ class ChatRequest:
             raise ValueError(msg)
 
     @classmethod
-    def from_kwargs(cls, *, strict: bool = False, **kwargs: Any) -> Self:
+    def from_kwargs(cls, *, strict: bool = True, **kwargs: Any) -> Self:
         """Construct a :class:`ChatRequest` from keyword arguments.
 
         This is the canonical keyword-argument mapping; do not duplicate it.
-        Unknown keys are silently ignored by default (internal callers forward
-        opaque dicts); pass ``strict=True`` to raise :exc:`TypeError` listing
-        them — the public API boundary always does.
+        Unknown keys raise :exc:`TypeError` by default. Pass ``strict=False``
+        only when deliberately extracting request fields from a mixed mapping.
         """
         known = {f.name for f in dc_fields(cls)}
         unknown = sorted(k for k in kwargs if k not in known)

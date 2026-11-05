@@ -70,6 +70,11 @@ same interfaces as production callers.
 | Kick API HTTP | `kick/http_session.py` creates the Cloudflare-capable transports owned by `KickApiClient`, preserves explicit/environment proxy policy, lazily converts an applicable main-origin `session_token` cookie into bearer authentication, and origin-isolates the anonymous mobile host from credentials | Kick channel metadata plus reconnect/VOD/clip history and metadata retry transient network, malformed-response, 429, and 5xx failures; provider-specific HTTP 423 is a terminal country/region block; clip replay can fail over from unavailable web/source-VOD metadata to the anonymous mobile v1 contract while preserving terminal access policy and reconciling known channel and duration evidence; startup/reconnect preload state remains one-shot best-effort | `KickChatDownloader.close()` closes the client sessions and base session exactly once |
 | Kick live WebSocket | `kick/public_transport.py` negotiates anonymous chat and channel connections independently; Pusher and Centrifugo readers confirm public feeds, answer heartbeats, and bound acknowledgement waits; Centrifugo renews anonymous connection tokens | `kick/live_service.py` creates a fresh transport after bounded, backed-off consecutive failures, waits for confirmed resubscription, and recovers a ten-second timestamp baseline through a clock/latency-safe envelope under page/record limits; public transports renegotiate descriptors, while the legacy Pusher seam permits one forced key-discovery reconnect before a repeated `pusher:error` becomes terminal | Cooperative deadline cancellation wakes socket and queue readers; owned transports and sessions close on setup failure, reconnect, and exit |
 
+Direct API callers own each returned `Chat` independently of the downloader's
+shared provider sessions. A `Chat` context manager closes its source and writers
+on early exit without closing the reusable provider session. Downloader closure
+alone does not finalize returned chats.
+
 `Chat.close()` requests closure through message-limit and timeout wrappers before
 output writers are finalized. When the timeout worker is actively advancing the
 provider iterator, its join is intentionally bounded; writer finalization may

@@ -177,6 +177,10 @@ class ChatDownloader:
         output paths, formatting, provider options); see that class for
         defaults and semantics.
 
+        Use the returned Chat as a context manager, or close it in finally
+        before closing this downloader. Its source, workers, and output writers
+        have a separate lifetime from reusable provider sessions.
+
         Raises:
             URLNotProvided: No URL provided.
             ChatGeneratorError: No valid generator found for the site.
@@ -189,7 +193,10 @@ class ChatDownloader:
         return self.get_chat_request(ChatRequest.from_kwargs(strict=True, **params))
 
     def get_chat_request(self, request: ChatRequest) -> Chat:
-        """Typed entry point for chat retrieval via :class:`ChatRequest`."""
+        """Retrieve a typed request; the caller owns the returned Chat lifetime.
+
+        Use it as a context manager or close it before closing the downloader.
+        """
         return dispatch_chat(self, request)
 
     def create_session(
@@ -213,7 +220,7 @@ class ChatDownloader:
         return self._session_pool.get(chat_downloader_class)
 
     def close(self) -> None:
-        """Close all sessions associated with the object."""
+        """Close shared provider sessions, not independently owned Chat objects."""
         self._session_pool.close()
 
 

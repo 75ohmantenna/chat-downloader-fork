@@ -24,9 +24,11 @@ from chat_downloader import ChatDownloader
 
 downloader = ChatDownloader()
 try:
-    chat = downloader.get_chat("https://www.youtube.com/watch?v=QBFiiEVBWvE")
-    for message in chat:
-        print(message.get("author"), message.get("message"))
+    with downloader.get_chat(
+        "https://www.youtube.com/watch?v=QBFiiEVBWvE"
+    ) as chat:
+        for message in chat:
+            print(message.get("author"), message.get("message"))
 finally:
     downloader.close()
 ```
@@ -62,6 +64,16 @@ Important methods:
 
 Use `ChatDownloader` when you want direct control over lifecycle, cookies, or
 session reuse.
+
+Each returned `Chat` owns its message source, deadline worker, and attached
+outputs separately from the downloader's shared provider sessions. Use
+`with downloader.get_chat(...) as chat:` (or `with
+downloader.get_chat_request(request) as chat:`) so an early `break` or exception
+in consumer code closes the chat. Without a context manager, call `chat.close()`
+in `finally`, before `downloader.close()`. Closing a chat leaves its provider
+session available for another request; closing the downloader does not close
+returned chats. A deadline does not replace explicit cleanup after abandoning
+iteration.
 
 Public `get_cookie_value()` remains name-only introspection. Authentication
 instead selects cookies using provider domain, path, expiry, secure-transport,
@@ -239,9 +251,9 @@ non-finite `message_receive_timeout`. A non-finite
 
 Helpers:
 
-- `from_kwargs(**kwargs)`: build a request from keyword arguments; pass
-  `strict=True` to reject unknown keyword arguments instead of silently
-  ignoring them
+- `from_kwargs(**kwargs)`: build a request from keyword arguments, rejecting
+  unknown names with `TypeError` by default; use `strict=False` only when
+  deliberately extracting request fields from a mixed mapping
 - `with_updates(**kwargs)`: clone with selected values replaced
 - `resolved_for_site(site_object)`: resolve site defaults against a concrete
   site instance
@@ -261,7 +273,12 @@ request = ChatRequest(
 )
 
 downloader = ChatDownloader()
-chat = downloader.get_chat_request(request)
+try:
+    with downloader.get_chat_request(request) as chat:
+        for message in chat:
+            print(message)
+finally:
+    downloader.close()
 ```
 
 ### `RunConfig`
@@ -321,12 +338,18 @@ malformed-event-type counts, truncated backfill counts and uncovered time, and
 the last decoded or synthetic frame's receive timestamp. See the
 [Kick diagnostic schema](kick-integration-guide.md#live-diagnostics).
 
-In normal usage, treat it as an iterable of message dictionaries:
+Use the chat as a context-managed iterable of message dictionaries:
 
 ```python
-for item in chat:
-    print(item["message_type"], item.get("message"))
+with chat:
+    for item in chat:
+        print(item["message_type"], item.get("message"))
 ```
+
+Context exit closes the message source and attached outputs on early exit,
+consumer failure, or exhaustion. It does not suppress consumer exceptions.
+Source shutdown keeps its existing bounded-worker behavior; an in-flight
+provider request may finish later under its transport timeout.
 
 ## Output and Formatting Helpers
 
@@ -334,6 +357,14 @@ for item in chat:
 - `ItemFormatter`: text-formatting engine used for stdout and `.txt` output
 - `TimedGenerator`: generator wrapper that enforces timeout and inactivity
   limits
+
+`ContinuousWriter` accepts `overwrite`, `format`, `lazy_initialise`, and
+`sort_keys` as keyword-only options. Unknown names raise `TypeError` before any
+output file or parent directory is created, repaired, or truncated, including
+with lazy initialization. `sort_keys` defaults to `True` and affects JSONL only;
+the factory accepts it for TXT output without changing the text. Concrete text
+writers do not accept JSON-specific options. Use `overwrite=False` to append to
+an explicit output path; a misspelling such as `over_write` is an error.
 
 `TimedGenerator` transfers source exceptions to the consuming thread, including
 `SystemExit` and `GeneratorExit`. Call `close()` when stopping consumption early

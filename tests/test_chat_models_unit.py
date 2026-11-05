@@ -33,6 +33,24 @@ class _Writer:
             raise self.error
 
 
+class _CloseableSource:
+    def __init__(self, items=(), error=None):
+        self.items = iter(items)
+        self.error = error
+        self.close_calls = 0
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self.items)
+
+    def close(self):
+        self.close_calls += 1
+        if self.error is not None:
+            raise self.error
+
+
 @pytest.fixture
 def logs(monkeypatch):
     messages = []
@@ -211,3 +229,80 @@ def test_writer_summary_does_not_count_failed_write(dispatcher):
     assert dispatcher.writer_summaries == [
         {"file_name": "failed.jsonl", "file_created": True, "records_written": 0}
     ]
+
+
+@pytest.mark.parametrize("exit_kind", ["unused", "break", "exhausted", "explicit"])
+def test_chat_context_closes_source_and_writers_once(exit_kind):
+    items = [{"message": "first"}, {"message": "second"}]
+    source = _CloseableSource(items)
+    writer = _Writer()
+    chat = Chat(source)
+    chat.attach_writer(writer)
+
+    with chat as managed:
+        assert managed is chat
+        if exit_kind == "break":
+            for item in managed:
+                assert item == items[0]
+                break
+        elif exit_kind == "exhausted":
+            assert list(managed) == items
+            assert source.close_calls == writer.close_calls == 1
+        elif exit_kind == "explicit":
+            managed.close()
+
+    chat.close()
+    assert source.close_calls == writer.close_calls == 1
+    assert writer.received == (
+        items[:1] if exit_kind == "break" else items if exit_kind == "exhausted" else []
+    )
+
+
+@pytest.mark.parametrize(
+    "consumer_error", [RuntimeError("consumer"), KeyboardInterrupt(), SystemExit(7)]
+)
+@pytest.mark.parametrize("cleanup_failure", [None, "source", "writer"])
+def test_chat_context_preserves_consumer_error(consumer_error, cleanup_failure, logs):
+    source = _CloseableSource(
+        [{"message": "first"}],
+        error=LookupError("source cleanup") if cleanup_failure == "source" else None,
+    )
+    writer = _Writer(
+        error=ValueError("writer cleanup") if cleanup_failure == "writer" else None
+    )
+    chat = Chat(source)
+    chat.attach_writer(writer)
+
+    with pytest.raises(type(consumer_error)) as raised, chat:
+        assert next(chat) == {"message": "first"}
+        raise consumer_error
+
+    assert raised.value is consumer_error
+    chat.close()
+    assert source.close_calls == writer.close_calls == 1
+    if cleanup_failure is not None:
+        assert any(
+            "Suppressed close() error" in message
+            and f"{cleanup_failure} cleanup" in message
+            for message in logs
+        )
+
+
+@pytest.mark.parametrize("cleanup_failure", ["source", "writer"])
+def test_chat_context_propagates_unexpected_cleanup_error_without_body_error(
+    cleanup_failure,
+):
+    cleanup_error = LookupError("cleanup")
+    source = _CloseableSource(
+        error=cleanup_error if cleanup_failure == "source" else None
+    )
+    writer = _Writer(error=cleanup_error if cleanup_failure == "writer" else None)
+    chat = Chat(source)
+    chat.attach_writer(writer)
+
+    with pytest.raises(LookupError) as raised, chat:
+        pass
+
+    assert raised.value is cleanup_error
+    chat.close()
+    assert source.close_calls == writer.close_calls == 1

@@ -192,18 +192,32 @@ def test_coercion_preserves_requests_and_accepts_legacy_values(chat_request):
 @pytest.mark.parametrize(
     "unknown",
     [
+        {"over_write": False},
         {"totally_unknown": "bad"},
         {"alpha": "a", "beta": 2},
         {"not_a_real_param": "oops", "another_bogus": 42},
     ],
 )
-def test_unknown_request_keys(unknown):
-    request = ChatRequest.from_kwargs(url="example", **unknown)
-    assert request.url == "example"
-    assert all(not hasattr(request, name) for name in unknown)
+def test_unknown_request_keys_rejected_by_default(unknown):
     with pytest.raises(TypeError) as error:
-        ChatRequest.from_kwargs(strict=True, url="example", **unknown)
+        ChatRequest.from_kwargs(url="example", **unknown)
     assert all(name in str(error.value) for name in unknown)
+
+
+def test_request_kwargs_explicit_filtering_preserves_request_options():
+    request = ChatRequest.from_kwargs(
+        strict=False,
+        url="https://example.com/chat",
+        overwrite=False,
+        sort_keys=False,
+        quiet=True,
+        cookies="session.txt",
+    )
+    assert request.url == "https://example.com/chat"
+    assert request.overwrite is False
+    assert request.sort_keys is False
+    assert not hasattr(request, "quiet")
+    assert not hasattr(request, "cookies")
 
 
 def test_retry_kwargs_contains_only_retry_fields():

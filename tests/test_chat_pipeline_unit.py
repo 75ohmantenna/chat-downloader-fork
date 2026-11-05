@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
+from queue import Full
+from threading import Event
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -10,8 +13,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from chat_downloader.models import ChatRequest, SiteDefault
+from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime import chat_pipeline
+from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.models import Chat
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 apply_message_limit = chat_pipeline._apply_message_limit
 configure_chat = chat_pipeline.configure_chat
@@ -224,3 +230,109 @@ def test_configure_chat_composes_real_limit_formatter_and_writer(tmp_path) -> No
     assert list(chat) == [{"message_id": "one", "message_type": "text_message"}]
     assert '"message_id": "one"' in output.read_text(encoding="utf-8")
     assert "two" not in output.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("consumer_failure", [False, True])
+def test_chat_context_closes_backpressured_pipeline_and_keeps_session_reusable(
+    tmp_path, monkeypatch, consumer_failure
+):
+    class Source:
+        def __init__(self):
+            self.next_calls = 0
+            self.close_calls = 0
+            self.stop_calls = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            self.next_calls += 1
+            return {
+                "message_id": str(self.next_calls),
+                "message_type": "text_message",
+                "message": "hello",
+            }
+
+        def request_stop(self):
+            self.stop_calls += 1
+
+        def close(self):
+            self.close_calls += 1
+
+    output = tmp_path / "chat.jsonl"
+    source = Source()
+    site = BaseChatDownloader()
+    session = site.session
+    chat = Chat(source, title="Example", status="live")
+    configure_chat(
+        chat,
+        ChatRequest(output=str(output), timeout=60, max_messages=10, format="default"),
+        site,
+    )
+    timed = chat.chat
+    assert isinstance(timed, TimedGenerator)
+    backpressured = Event()
+    put = timed._result_queue.put
+
+    def observe_put(result, *args, **kwargs):
+        try:
+            return put(result, *args, **kwargs)
+        except Full:
+            if result[0] == "item" and result[1]["message_id"] == "3":
+                backpressured.set()
+            raise
+
+    # Observe an actual full bounded queue, without replacing its put or
+    # cancellation behavior. The consumer does not advance after its first item.
+    monkeypatch.setattr(timed._result_queue, "put", observe_put)
+    consumer_error = RuntimeError("consumer failed after first item")
+    expectation = pytest.raises(RuntimeError) if consumer_failure else nullcontext()
+    try:
+        with expectation as raised, chat as managed:
+            for item in managed:
+                assert item["message_id"] == "1"
+                assert chat._output_dispatcher is not None
+                writer = chat._output_dispatcher.writers[0]
+                assert isinstance(writer, ContinuousWriter)
+                assert writer.writer is not None
+                stream = writer.writer.file
+                assert stream is not None
+                assert not stream.closed
+                assert backpressured.wait(timeout=5)
+                assert timed._worker.is_alive()
+                if consumer_failure:
+                    raise consumer_error
+                break
+
+        if consumer_failure:
+            assert raised.value is consumer_error
+        timed._worker.join(timeout=5)
+        assert not timed._worker.is_alive()
+        assert timed._stop_requested.is_set()
+        assert source.stop_calls == source.close_calls == 1
+        assert stream.closed
+        assert [json.loads(line) for line in output.read_text().splitlines()] == [item]
+
+        chat.close()
+        chat.close()
+        assert source.stop_calls == source.close_calls == 1
+
+        # The next chat still passes through the real provider-session open
+        # guard. Only the HTTP boundary is synthetic; no network is needed.
+        response = SimpleNamespace(status_code=200, text="reused session")
+        get = MagicMock(return_value=response)
+        monkeypatch.setattr(session, "get", get)
+
+        def next_chat_source():
+            yield {"message": site._session_get("https://example.test/chat").text}
+
+        next_chat = Chat(next_chat_source(), title="Next", status="live")
+        configure_chat(next_chat, ChatRequest(format="default"), site)
+        with next_chat:
+            assert list(next_chat) == [{"message": "reused session"}]
+        assert site.session is session
+        get.assert_called_once()
+    finally:
+        chat.close()
+        timed._worker.join(timeout=5)
+        site.close()

@@ -44,9 +44,9 @@ class ContinuousWriter:
         overwrite: bool = True,
         format: str | None = None,  # noqa: A002 — public ContinuousWriter API; renaming would break callers
         lazy_initialise: bool = False,
-        **kwargs: Any,
+        sort_keys: bool = True,
     ) -> None:
-        """Initialize the factory, optionally deferring writer creation."""
+        """Initialize the factory; ``sort_keys`` affects only JSONL output."""
         self.file_name = file_name
         self.overwrite = overwrite
         self.format = format
@@ -56,7 +56,7 @@ class ContinuousWriter:
         self._file_identity: tuple[int, int] | None = None
         self._require_new_file = False
         self._defer_initialization = False
-        self._writer_kwargs = kwargs
+        self._sort_keys = sort_keys
         self._validate_extension(file_name)
 
         if not self.lazy_initialise:
@@ -68,9 +68,9 @@ class ContinuousWriter:
         return self._writer
 
     @property
-    def sort_keys(self) -> bool | None:
-        """Return the configured JSON key-sorting option."""
-        return self._writer_kwargs.get("sort_keys")
+    def sort_keys(self) -> bool:
+        """Return the JSON key-sorting option, unused for text output."""
+        return self._sort_keys
 
     @property
     def output_mode(self) -> str:
@@ -156,13 +156,18 @@ class ContinuousWriter:
         self._prepare_output()
         prepared, self._prepared_file = self._prepared_file, None
         writer_class = _WRITER_CLASSES[self._get_extension(file_name)]
+        options = (
+            {"sort_keys": self.sort_keys}
+            if writer_class is JsonLinesContinuousWriter
+            else {}
+        )
         try:
             self._writer = writer_class(
                 file_name=file_name,
                 overwrite=self.overwrite,
                 _prepared_file=prepared,
                 _defer_initialization=self._defer_initialization,
-                **self._writer_kwargs,
+                **options,
             )
             if prepared is not None:
                 self._file_identity = (prepared.info.st_dev, prepared.info.st_ino)
@@ -212,5 +217,5 @@ class ContinuousWriter:
             log(
                 "debug",
                 "Suppressed error during garbage-collection close of "
-                f"{self.file_name!r}: {e}",
+                f"{getattr(self, 'file_name', None)!r}: {e}",
             )

@@ -286,7 +286,7 @@ def test_documented_cli_examples_parse_and_match_supported_urls() -> None:
                 for placeholder, value in replacements.items():
                     args = [arg.replace(placeholder, value) for arg in args]
                 parsed = vars(parser.parse_args(args))
-                request = ChatRequest.from_kwargs(**parsed)
+                request = ChatRequest.from_kwargs(strict=False, **parsed)
                 assert any(site.matches(request.url) for site in get_all_sites()), (
                     f"{document.relative_to(ROOT)}: unsupported URL {request.url!r}"
                 )
