@@ -190,7 +190,10 @@ class ChatRequest:
     )
     overwrite: bool = field(
         default=True,
-        metadata=_cli_metadata("Overwrite existing output file", group="output"),
+        metadata=_cli_metadata(
+            "Overwrite existing explicit output file; generated names must be new",
+            group="output",
+        ),
     )
     sort_keys: bool = field(
         default=True,

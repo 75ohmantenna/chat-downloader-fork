@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from chat_downloader.debugging import logger
 from chat_downloader.errors import SiteError
 from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.sites.session import get_scoped_cookie
 
 from .badge_client import update_badge_info
 from .constants import VALID_URLS
@@ -94,7 +95,13 @@ class TwitchChatDownloader(BaseChatDownloader):
 
     def _download_base_gql(self, ops: Any) -> Any:
         """Execute a list of base GraphQL operations and return the JSON response."""
-        auth_token: str | None = self.get_cookie_value(GQL_AUTH_COOKIE_NAME)
+        cookie = get_scoped_cookie(
+            self.session.cookies,
+            GQL_AUTH_COOKIE_NAME,
+            "https://www.twitch.tv/",
+            frozenset({"twitch.tv", "www.twitch.tv"}),
+        )
+        auth_token = cookie.value if cookie is not None else None
         return _download_base_gql(
             self._session_post, ops, auth_token, **self._client_id_kwargs()
         )
@@ -114,10 +121,16 @@ class TwitchChatDownloader(BaseChatDownloader):
         kwargs: dict[str, Any] = self._client_id_kwargs()
         if record_optional_degradation is not None:
             kwargs["record_optional_degradation"] = record_optional_degradation
+        cookie = get_scoped_cookie(
+            self.session.cookies,
+            GQL_AUTH_COOKIE_NAME,
+            "https://www.twitch.tv/",
+            frozenset({"twitch.tv", "www.twitch.tv"}),
+        )
         return _download_gql(
             self._session_post,
             ops,
-            self.get_cookie_value(GQL_AUTH_COOKIE_NAME),
+            cookie.value if cookie is not None else None,
             **kwargs,
         )
 

@@ -190,10 +190,14 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   credential-shaped user headers and cookies from the main origin.
 - `http_session.py`: constructs the client's isolated curl-cffi,
   cloudscraper, or requests transport and defines its narrow session Protocol.
+- `history_response.py`: decoded history-body limits before buffering or parsing,
+  using bounded response hooks or a synchronous native content callback.
 - `websocket_transport.py`: the *only* module that imports `websocket-client`.
   Exposes a small parsing-free interface (`connect` / `subscribe` / `recv` /
   `send_pong` / `close`) plus the `read_frames` generator. The connector is
   injectable so the live path is fully unit-testable without network access.
+  Its pre-payload frame reservations rely on websocket-client 1.9.2 or newer.
+  Oversized declared lengths are rejected before payload reads or accumulation.
 
 - `realtime_connection.py`: isolated anonymous negotiation and token requests.
 - `centrifugo_transport.py`: public protocol replies, publications, and lease renewal.
@@ -522,13 +526,39 @@ in-flight history request, and skips a late pin refresh. The loop carries
 
 VOD and clip chat use `api/v2/channels/{id}/messages`. Reverse pagination
 passes the returned cursor unchanged and emits the selected history from a
-bounded-memory spool. Repeated pages or cursors fail as incomplete retrieval,
-instead of reporting a successful truncated capture. The final debug summary
-includes the protocol, page and record counts, selected/observed timestamps,
-HTTP status totals and latency, and an explicit termination reason. Deadline
-cancellation signals the replay iterator even during an active page request and
-stops buffered pagination before another page is fetched. An in-flight
-fetch remains subject to the configured HTTP timeouts and retry policy.
+bounded-memory spool with individual record readback. Repeated pages or cursors
+fail as incomplete retrieval instead of reporting successful truncation. The
+final debug summary includes the protocol, page and record counts,
+selected/observed timestamps, HTTP status totals and latency, and an explicit
+termination reason. Deadline cancellation is checked between requests and
+through hashing, record preparation, classification, encoding, and readback.
+An in-flight fetch remains subject to configured HTTP timeouts and retry policy.
+Routine `max_messages` closure preserves its message-limit outcome and does not
+invalidate successfully collected history.
+
+### Resource limits
+
+Internal limits are independent of `max_messages`, which limits chronological
+output rather than reverse-history collection. Wire and replay resource errors
+stop capture explicitly and leave history incomplete; live preload and recovery
+do not downgrade a resource rejection into another best-effort request.
+History bodies are bounded before full buffering or JSON decoding, including
+decompressed bodies. String escaping and hashing use bounded chunks, and the
+spool checks expansion limits before writing.
+
+| Resource | Limit |
+| --- | --- |
+| WebSocket payload per completed data message, including interleaved controls | 8 MiB |
+| WebSocket frames per completed data message | 4,096 |
+| Centrifugo entries per batch / queued publications | 4,096 each |
+| Decoded history HTTP response | 8 MiB |
+| Serialized replay record, including newline | 16 MiB |
+| Serialized replay page | 64 MiB |
+| Total replay spool | 512 MiB |
+| Replay pages | 100,000 |
+| Raw replay records | 10,000,000 |
+| Characters per replay cursor | 4,096 |
+| Cumulative retained cursor bytes | 8 MiB |
 
 Forward `start_time` queries are capped and can omit messages within a
 five-second interval on busy channels. The returned cursor

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import time
 from collections import deque
@@ -21,16 +22,32 @@ from .constants import (
     PUSHER_PING,
     PUSHER_SUBSCRIPTION_SUCCEEDED,
 )
-from .errors import KickRealtimeRejected, KickServerError
+from .errors import KickRealtimeRejected, KickResourceLimit, KickServerError
+from .resource_limits import (
+    MAX_CENTRIFUGO_BATCH_ENTRIES,
+    MAX_CENTRIFUGO_QUEUED_FRAMES,
+)
 from .websocket_transport import KickPusherTransport
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from chat_downloader.utils.json_types import JSONDict
 
     from .realtime_connection import KickRealtimeClient
     from .websocket_transport import _PusherConnector
+
+
+def _batch_lines(raw: str | bytes) -> Iterator[str | bytes]:
+    """Iterate a bounded batch without materializing a per-line list."""
+    stream: Iterator[str | bytes] = (
+        io.StringIO(raw) if isinstance(raw, str) else io.BytesIO(raw)
+    )
+    for count, line in enumerate(stream, 1):
+        if count > MAX_CENTRIFUGO_BATCH_ENTRIES:
+            msg = "Kick realtime batch resource limit exceeded; capture is incomplete."
+            raise KickResourceLimit(msg)
+        yield line
 
 
 class KickCentrifugoTransport(KickPusherTransport):
@@ -56,6 +73,7 @@ class KickCentrifugoTransport(KickPusherTransport):
         self._commands: dict[int, tuple[str, str, float]] = {}
         self._next_id = 0
         self._frames: deque[JSONDict] = deque()
+        self._resource_error: KickResourceLimit | None = None
         self._refresh_at = float("inf")
         self._heartbeat_at = float("inf")
         self._heartbeat_seconds = 180.0
@@ -75,6 +93,7 @@ class KickCentrifugoTransport(KickPusherTransport):
         """Open the socket and authenticate only its anonymous connection."""
         self._commands.clear()
         self._frames.clear()
+        self._resource_error = None
         self._next_id = 0
         self._refresh_at = float("inf")
         self._heartbeat_seconds = 180.0
@@ -167,8 +186,14 @@ class KickCentrifugoTransport(KickPusherTransport):
             "channel": get_str(push, "channel"),
         }
 
+    def _queue_frame(self, frame: JSONDict) -> None:
+        if len(self._frames) >= MAX_CENTRIFUGO_QUEUED_FRAMES:
+            msg = "Kick realtime queue resource limit exceeded; capture is incomplete."
+            raise KickResourceLimit(msg)
+        self._frames.append(frame)
+
     def _decode(self, raw: str | bytes) -> None:
-        for line in raw.splitlines():
+        for line in _batch_lines(raw):
             try:
                 item = json.loads(line)
                 if not isinstance(item, dict):
@@ -181,13 +206,27 @@ class KickCentrifugoTransport(KickPusherTransport):
                 else:
                     frame = self._publication(get_dict(item, "push"))
                 if frame is not None:
-                    self._frames.append(frame)
+                    self._queue_frame(frame)
             except (ValueError, TypeError):
                 # Do not sample wire frames: connect/refresh replies can contain tokens.
                 self._record_diagnostic("invalid_websocket_frame_count")
 
+    def _receive_batch(self) -> None:
+        try:
+            raw = self.recv_raw()
+            if raw is not None:
+                self._heartbeat_at = time.monotonic() + self._heartbeat_seconds
+                self._decode(raw)
+        except KickResourceLimit as error:
+            self._resource_error = error
+            self._frames.clear()
+            self.close()
+            raise
+
     def recv(self) -> JSONDict | None:
         """Read batches, enforce command/heartbeat deadlines, and renew the lease."""
+        if self._resource_error is not None:
+            raise self._resource_error
         if self._frames:
             return self._frames.popleft()
         now = time.monotonic()
@@ -204,8 +243,5 @@ class KickCentrifugoTransport(KickPusherTransport):
                 msg = "Kick anonymous token renewal failed temporarily."
                 raise ConnectionError(msg) from error
             self._command("refresh", {"token": token})
-        raw = self.recv_raw()
-        if raw is not None:
-            self._heartbeat_at = time.monotonic() + self._heartbeat_seconds
-            self._decode(raw)
+        self._receive_batch()
         return self._frames.popleft() if self._frames else None

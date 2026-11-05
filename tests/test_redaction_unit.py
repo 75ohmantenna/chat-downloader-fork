@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import stat
+from json import JSONDecodeError
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,7 +17,11 @@ import pytest
 import chat_downloader.debugging as dbg
 import chat_downloader.redaction as red
 from chat_downloader.runtime.runner import execute_run
+from chat_downloader.sites.models import Chat
 from chat_downloader.sites.session import ChatDownloaderSession
+from chat_downloader.sites.youtube.client_requests_continuation import (
+    _get_continuation_info,
+)
 from tests.core_third_helpers import captured_logs, restore_loggers
 
 
@@ -276,6 +281,59 @@ def test_proxy_validation_runtime_logging_redacts_malformed_credentials() -> Non
     assert "contact=user@example.invalid" in output
 
 
+@pytest.mark.parametrize("quiet", [False, True])
+@pytest.mark.parametrize("recovers", [False, True])
+def test_malformed_continuation_body_stays_out_of_run_diagnostics(
+    quiet, recovers, capsys
+):
+    body = '{"message":"PRIVATE_CHAT_SENTINEL"'
+    attempts = 0
+
+    class Response:
+        status_code = 200
+        text = body
+
+        def json(self):
+            nonlocal attempts
+            attempts += 1
+            if not recovers or attempts == 1:
+                raise JSONDecodeError("invalid PRIVATE_CHAT_SENTINEL", body, 0)
+            return {"continuationContents": {"liveChatContinuation": {"actions": []}}}
+
+    class Downloader:
+        def __init__(self, **_):
+            pass
+
+        def get_chat(self, **params):
+            def messages():
+                _get_continuation_info(
+                    "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
+                    lambda *_args, **_kwargs: Response(),
+                    params,
+                )
+                yield {"message": "accepted", "message_type": "text_message"}
+
+            chat = Chat(messages(), title="synthetic", id="synthetic")
+            chat.set_formatter(lambda message: message["message"])
+            return chat
+
+        def close(self):
+            pass
+
+    dbg.set_log_level("info")
+    with captured_logs(safe=True) as stream:
+        result = execute_run(Downloader, quiet=quiet, max_attempts=2, retry_timeout=0)
+    output = stream.getvalue()
+    assert result.success is recovers
+    assert result.message_count == int(recovers)
+    assert "Unable to parse JSON" in output
+    assert "PRIVATE_CHAT_SENTINEL" not in output
+    assert "PRIVATE_CHAT_SENTINEL" not in (result.error_message or "")
+    captured = capsys.readouterr()
+    assert captured.out == ("accepted\n" if recovers and not quiet else "")
+    assert "PRIVATE_CHAT_SENTINEL" not in captured.err
+
+
 def test_capture_debug_sample_writes_sanitized_json_deterministically(sample_dir):
     payload = {
         "authorization": "secret",
@@ -291,6 +349,45 @@ def test_capture_debug_sample_writes_sanitized_json_deterministically(sample_dir
         "authorization": red.REDACTED,
         "headers": {"Authorization": red.REDACTED},
     }
+
+
+@pytest.mark.parametrize(
+    "semantic_key",
+    ["visitor_data", "visitorData", "x-goog-visitor-id", "access_token"],
+)
+@pytest.mark.parametrize("label_field", ["key", "name"])
+def test_sample_redacts_semantic_tracking_values(sample_dir, semantic_key, label_field):
+    payload = {
+        "responseContext": {
+            "params": [
+                {label_field: semantic_key, "value": "TRACKING_SENTINEL"},
+                {"key": "logged_in", "value": "0"},
+                {"key": "visitor_data", "value": None},
+                {"key": 7, "value": "ordinary"},
+            ]
+        }
+    }
+    path = red.capture_debug_sample("youtube-tracking", payload)
+    assert path is not None
+    serialized = Path(path).read_text(encoding="utf-8")
+    assert "TRACKING_SENTINEL" not in serialized
+    assert json.loads(serialized)["responseContext"]["params"] == [
+        {label_field: semantic_key, "value": red.REDACTED},
+        {"key": "logged_in", "value": "0"},
+        {"key": "visitor_data", "value": None},
+        {"key": 7, "value": "ordinary"},
+    ]
+    assert payload["responseContext"]["params"][0]["value"] == "TRACKING_SENTINEL"
+    if os.name != "nt":
+        assert stat.S_IMODE(Path(path).stat().st_mode) == 0o600
+
+
+@pytest.mark.parametrize("sensitive_field", ["key", "name"])
+def test_semantic_redaction_checks_both_labels(sensitive_field):
+    payload = {"key": "benign", "name": "benign", "value": "SECRET_SENTINEL"}
+    payload[sensitive_field] = "access_token"
+    assert red.sanitize_for_log(payload) == {**payload, "value": red.REDACTED}
+    assert payload["value"] == "SECRET_SENTINEL"
 
 
 def test_bounded_capture_composes_opt_in_attempt_limits_and_sanitization(

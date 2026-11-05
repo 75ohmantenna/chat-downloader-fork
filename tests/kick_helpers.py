@@ -77,6 +77,15 @@ class FakeResponse:
             raise json.JSONDecodeError("bad json", self.text or "", 0)
         return self._payload
 
+    def iter_content(self, chunk_size=16 * 1024):
+        """Expose a real byte-stream contract for bounded history consumers."""
+        content = b"bad JSON" if self._malformed else self.text.encode("utf-8")
+        for start in range(0, len(content), chunk_size):
+            yield content[start : start + chunk_size]
+
+    def close(self):
+        self.closed = True
+
 
 class FakeKickSession:
     """Stand-in for the session returned by ``create_kick_session``.

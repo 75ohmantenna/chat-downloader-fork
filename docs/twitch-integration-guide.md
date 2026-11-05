@@ -372,6 +372,13 @@ explicit proxy is supplied, standard environment proxy variables may apply.
 Combining cookies with an effective remote proxy is rejected before a session
 is created; `proxy=""` explicitly opts out of environment proxies.
 
+GraphQL authentication selects `auth-token` cookies only from applicable Twitch
+domain/path/port/expiry scope. Foreign or inapplicable cookies and conflicting
+applicable values are not promoted into OAuth headers. GraphQL redirects are
+rejected before decoding; custom authentication headers cannot follow them to
+another destination. Decoder retry diagnostics do not extract response-body
+titles.
+
 ### GraphQL hash rotation
 
 When Twitch rotates a persisted-query hash:

@@ -19,9 +19,14 @@ from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.formatting import format as format_module
 from chat_downloader.metadata import __version__
 from chat_downloader.models import ChatRequest
+from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.utils.filename_utils import output_path_identity
 
-from .capture_manifest import has_record_loss, is_completed_replay
+from .capture_manifest import (
+    _artifact_signature,
+    has_record_loss,
+    is_completed_replay,
+)
 from .capture_replay_order import ordered_initial_preroll
 
 if TYPE_CHECKING:
@@ -29,6 +34,8 @@ if TYPE_CHECKING:
 
     from chat_downloader.sites.models import Chat
     from chat_downloader.utils.json_types import JSONDict
+
+    from .capture_manifest import _ArtifactSignature
 
 _BOUNDARY_LIMIT = 10_000
 
@@ -49,16 +56,38 @@ def _valid_offset(value: object) -> TypeGuard[int | float]:
     return (type(value) is int or type(value) is float) and math.isfinite(value)
 
 
-def _file_signature(path: Path) -> str | None:
-    """Hash a regular artifact, distinguishing lazy absence from bad inputs."""
-    if path.is_symlink() or (path.exists() and not path.is_file()):
-        msg = "Checkpoint artifacts must be regular files, not links."
-        raise ValueError(msg)
+def _file_state(
+    path: Path, expected: tuple[int, int] | None = None
+) -> _ArtifactSignature | None:
+    """Read a regular artifact without following a substituted pathname."""
     try:
-        with path.open("rb") as stream:
-            return hashlib.file_digest(stream, "sha256").hexdigest()
+        return _artifact_signature(path, expected)
     except FileNotFoundError:
         return None
+
+
+def _file_signature(path: Path) -> str | None:
+    """Hash a regular artifact, distinguishing lazy absence from bad inputs."""
+    state = _file_state(path)
+    return state[1] if state is not None else None
+
+
+def _verified_file_state(
+    path: Path,
+    writer_identity: tuple[int, int] | None,
+    previous: _ArtifactSignature | None,
+) -> _ArtifactSignature | None:
+    """Require the opened artifact, or the unchanged verified resumed prefix."""
+    expected = writer_identity or (previous[0] if previous else None)
+    current = _file_state(path, expected)
+    if (
+        (writer_identity is not None and current is None)
+        or (writer_identity is None and current != previous)
+        or (previous is not None and current is not None and current[0] != previous[0])
+    ):
+        msg = "Capture files changed after checkpoint verification."
+        raise ValueError(msg)
+    return current
 
 
 def _builtin_format_signature() -> str:
@@ -196,7 +225,15 @@ class CaptureCheckpoint:
         self.limit = request.max_messages
         self._prior_offset: float | None = None
         self._prior_events: Counter[str] = Counter()
-        self._initial_signatures = [_file_signature(path) for path in self.outputs]
+        initial_files = [_file_state(path) for path in self.outputs]
+        self.artifacts = {
+            path: state
+            for path, state in zip(self.outputs, initial_files, strict=True)
+            if state is not None
+        }
+        self._initial_signatures = [
+            state[1] if state is not None else None for state in initial_files
+        ]
         if self.path.exists():
             self._load()
         elif any(value is not None for value in self._initial_signatures):
@@ -274,6 +311,11 @@ class CaptureCheckpoint:
         chat.diagnostics["checkpoint_overlap_suppressed"] = 0
         chat.diagnostics["prior_message_count"] = self.total
         chat.diagnostics["prior_record_loss"] = self.record_loss
+        dispatcher = chat._output_dispatcher
+        if dispatcher is not None:
+            for path, writer in zip(self.outputs, dispatcher.writers, strict=True):
+                if path not in self.artifacts and isinstance(writer, ContinuousWriter):
+                    writer._require_new_file = True
         source = chat.chat
 
         def remaining() -> Generator[JSONDict, None, None]:
@@ -358,7 +400,7 @@ class CaptureCheckpoint:
             raise ChatDownloaderError(msg)
         offset, events = self.offset, self.events.copy()
         count = counter.message_count
-        with dispatcher.record_transaction(self.outputs):
+        with dispatcher.record_transaction():
             try:
                 item = next(chat)
                 self.observe(item)
@@ -387,6 +429,13 @@ class CaptureCheckpoint:
         ):
             msg = "Checkpoint not saved: output records disagree."
             raise ChatDownloaderError(msg)
+        artifacts = {}
+        for path, writer in zip(self.outputs, dispatcher.writers, strict=True):
+            state = _verified_file_state(
+                path, getattr(writer, "_file_identity", None), self.artifacts.get(path)
+            )
+            if state is not None:
+                artifacts[path] = state
         self.resets = list(self.reset_positions(count))
         self.total += count
         record_loss = has_record_loss(chat.diagnostics)
@@ -402,6 +451,10 @@ class CaptureCheckpoint:
                 "resets": self.resets,
                 "completed": self.completed and not record_loss,
                 "record_loss": record_loss,
-                "artifacts": [_file_signature(path) for path in self.outputs],
+                "artifacts": [
+                    artifacts[path][1] if path in artifacts else None
+                    for path in self.outputs
+                ],
             },
         )
+        self.artifacts = artifacts

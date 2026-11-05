@@ -167,6 +167,15 @@ overlay metadata for title and view count. Playlist discovery reads the selected
 tab's list sections and supports both `playlistVideoRenderer` and video
 `lockupViewModel` items, including modern continuation items. Playlist links and
 items nested in menus or sidebars are excluded from video enumeration.
+
+Public `get_playlist_items()` accepts HTTPS `/playlist` URLs from `youtube.com`,
+`www.youtube.com`, or `m.youtube.com`, with exactly one nonempty playlist ID.
+It canonicalizes the request to `www.youtube.com` before any authenticated
+request; userinfo, nonstandard ports, foreign origins, and invalid IDs fail
+before transport. Initial pages follow at most five same-origin HTTPS redirects;
+provider API requests reject redirects. Matched HTTP channel `/live` shortcuts
+are reconstructed as canonical HTTPS requests before credentials are sent.
+
 Populated unknown discovery renderers produce an aggregate debug diagnostic and
 bounded `youtube-unsupported-discovery-items` samples when capture is enabled,
 so parser drift can be distinguished from an empty list.
@@ -498,6 +507,16 @@ are available. Header values are sanitized before they appear in debug logs.
 Cookie-authenticated sessions reject effective remote proxies, including
 proxies inherited from the environment. A loopback proxy emits a warning;
 `proxy=""` explicitly disables environment proxies.
+
+Authentication cookies must apply to the YouTube origin, path, port, and
+transport and must not be expired. Conflicting applicable values are not used.
+Promoted SID cookies retain their source domain and host-only/path restrictions
+and do not outlive the source cookie. Public name-only cookie introspection does
+not control authentication selection.
+
+Malformed continuation JSON reports attempt and response-length diagnostics,
+not body text. Debug response samples remain separately opted in and private;
+visitor tokens in provider name/value tracking entries are redacted.
 
 ## Observed Live Message Types
 

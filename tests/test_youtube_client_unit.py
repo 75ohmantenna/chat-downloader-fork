@@ -232,7 +232,10 @@ def test_get_initial_info_raises_challenge_on_sorry_page(monkeypatch) -> None:
     response.url = "https://www.google.com/sorry/index?continue=..."
     monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: _WATCH_URL)
     with pytest.raises(CaptchaChallengeRequired) as exc_info:
-        _initial(lambda _url: response, {"max_attempts": 2, "retry_timeout": 0})
+        _initial(
+            lambda _url, **_kwargs: response,
+            {"max_attempts": 2, "retry_timeout": 0},
+        )
     assert "captcha/challenge" in str(exc_info.value)
     assert "--request_profile" in str(exc_info.value)
 
@@ -443,6 +446,6 @@ def test_initial_page_diagnostics_report_safe_final_host(
     _patch_initial_parser(monkeypatch, "", valid=False)
     result = SimpleNamespace(status_code=200, text="<html></html>", url=final_url)
     with pytest.raises(ParsingError):
-        _initial(lambda _: result, None)
+        _initial(lambda _, **_kwargs: result, None)
     assert f"HTTP 200; final_host={host}" in caplog.text
     assert "PRIVATE_SENTINEL" not in caplog.text

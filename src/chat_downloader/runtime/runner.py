@@ -354,9 +354,9 @@ def _complete_run_record(
             manifest.write(
                 chat,
                 result,
-                verified_existing=checkpoint is not None
-                and checkpoint.loaded
-                and checkpoint_bound,
+                verified_artifacts=checkpoint.artifacts
+                if checkpoint is not None and checkpoint_bound
+                else None,
             )
     except (OSError, ValueError) as error:
         result.success = False

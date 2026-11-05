@@ -130,7 +130,7 @@ def test_extractor_gql_headers_and_degradation(
         ]
     post = _post(payload)
     monkeypatch.setattr(downloader, "_session_post", post)
-    monkeypatch.setattr(downloader, "get_cookie_value", lambda _name: "test-token")
+    downloader.set_cookie_value(".twitch.tv", "auth-token", "test-token", secure=True)
     kwargs = {"record_optional_degradation": callback} if degraded else {}
     assert getattr(downloader, method)(_operations(), **kwargs) == payload
     headers = post.call_args.kwargs["headers"]

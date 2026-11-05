@@ -13,6 +13,7 @@ from .chat_users_retrieval import YouTubeChatUsersRetrievalMixin
 from .chat_users_router import YouTubeChatUsersRouterMixin
 from .client_auth import (
     _get_sid_cookies,
+    _get_youtube_cookie_value,
     _initialize_consent,
     _initialize_pref,
 )
@@ -59,7 +60,7 @@ class YouTubeChatDownloader(
         YouTube authentication requires LOGIN_INFO cookie plus at least one
         SAPISID variant (SAPISID, __Secure-1PAPISID, or __Secure-3PAPISID).
         """
-        has_login_info = bool(self.get_cookie_value("LOGIN_INFO"))
+        has_login_info = bool(_get_youtube_cookie_value(self, "LOGIN_INFO"))
         yt_sapisid, yt_1psapisid, yt_3psapisid = _get_sid_cookies(self)
         return has_login_info and bool(yt_sapisid or yt_1psapisid or yt_3psapisid)
 

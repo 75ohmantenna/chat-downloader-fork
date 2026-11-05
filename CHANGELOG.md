@@ -10,6 +10,22 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Reject off-origin YouTube playlist requests before using authenticated sessions.
+- Preserve cookie domain, path, expiry, and transport scope when selecting Twitch
+  authentication or promoting YouTube SID cookies; do not use ambiguous values.
+- Reject provider API redirects and constrain YouTube initial-page redirects to
+  bounded same-origin HTTPS requests.
+- Keep malformed response bodies and body-derived titles out of ordinary retry
+  diagnostics.
+- Validate capture files before truncation, retain their descriptors through
+  append repair and checkpoint rollback, and reject links and special files.
+- Require new destinations for metadata-generated output names, preventing
+  streamer-controlled title collisions from replacing or mixing captures.
+- Stop oversized Kick wire messages and replay collections with explicit
+  incomplete-capture failures rather than silently discarding records.
+- Require websocket-client 1.9.2 or newer for bounded pre-allocation framing.
+- Redact sensitive provider `key`/`value` and `name`/`value` diagnostic entries,
+  including visitor identifiers.
 - Surface rejected YouTube browse pages instead of silently truncating listings;
   recover malformed continuation roots and overflowing polling hints.
 - Apply configured retries to YouTube fallback bootstrap and chat-page requests.

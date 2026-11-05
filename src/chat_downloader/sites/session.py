@@ -9,7 +9,7 @@ from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlsplit
 
 import requests
 
@@ -18,7 +18,7 @@ from chat_downloader._timeout_defaults import (
     DEFAULT_READ_TIMEOUT,
 )
 from chat_downloader.debugging import log
-from chat_downloader.errors import CookieError, InvalidParameter
+from chat_downloader.errors import CookieError, InvalidParameter, ParsingError
 from chat_downloader.request_profiles import (
     get_request_profile_headers,
     normalize_request_profile,
@@ -26,8 +26,15 @@ from chat_downloader.request_profiles import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
+    from http.cookiejar import CookieJar
+    from typing import Protocol
 
     from chat_downloader.utils.json_types import JSONAny
+
+    class _StatusResponse(Protocol):
+        @property
+        def status_code(self) -> int: ...
+
 
 _ALLOWED_PROXY_SCHEMES = frozenset({"http", "https", "socks4", "socks5", "socks5h"})
 _DEFAULT_SESSION_HEADERS = {
@@ -113,6 +120,87 @@ def build_cookie(spec: CookieSpec) -> Cookie:
         comment_url=None,
         rest=cookie_rest,
     )
+
+
+def get_scoped_cookie(
+    cookies: CookieJar,
+    name: str,
+    url: str,
+    allowed_domains: frozenset[str],
+) -> Cookie | None:
+    """Select an applicable provider cookie, failing closed on ambiguity."""
+    parsed = urlsplit(url)
+    host = parsed.hostname or ""
+    path = parsed.path or "/"
+    matches = [
+        cookie
+        for cookie in cookies
+        if cookie.name == name
+        and cookie.domain.lstrip(".").lower() in allowed_domains
+        and _cookie_applies(cookie, host, path, parsed.scheme, parsed.port)
+    ]
+    values = {cookie.value for cookie in matches}
+    if len(values) != 1:
+        return None
+    # Equal values need no jar-order tie breaker. Prefer the narrowest scope so
+    # derived cookies never broaden an otherwise identical credential.
+    return min(
+        matches,
+        key=lambda cookie: (
+            -len(cookie.path),
+            -len(cookie.domain),
+            cookie.domain,
+            cookie.expires if cookie.expires is not None else float("inf"),
+            not cookie.secure,
+            cookie.port or "",
+        ),
+    )
+
+
+def _cookie_applies(
+    cookie: Cookie, host: str, path: str, scheme: str, port: int | None
+) -> bool:
+    """Check domain, path, lifetime, transport and explicit port restrictions."""
+    domain = cookie.domain.lstrip(".").lower()
+    domain_matches = host == domain or (
+        cookie.domain_specified and host.endswith("." + domain)
+    )
+    cookie_path = cookie.path or "/"
+    path_matches = path == cookie_path or path.startswith(
+        cookie_path if cookie_path.endswith("/") else cookie_path + "/"
+    )
+    actual_port = str(port or (443 if scheme == "https" else 80))
+    return (
+        domain_matches
+        and path_matches
+        and not cookie.is_expired()
+        and (not cookie.secure or scheme == "https")
+        and (not cookie.port_specified or actual_port in (cookie.port or "").split(","))
+    )
+
+
+def _https_origin(url: str) -> tuple[str, int]:
+    """Require a credential-free HTTPS URL before a redirect request."""
+    try:
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme == "https"
+            and parsed.hostname
+            and parsed.username is None
+            and parsed.password is None
+        ):
+            return parsed.hostname, parsed.port or 443
+    except ValueError:
+        pass
+    msg = "Unsafe HTTP redirect destination."
+    raise ParsingError(msg)
+
+
+def reject_redirect(response: _StatusResponse) -> None:
+    """Reject redirects before interpreting provider-controlled response bodies."""
+    if 300 <= response.status_code < 400:
+        msg = "Unexpected HTTP redirect from provider."
+        raise ParsingError(msg)
 
 
 class ChatDownloaderSession:
@@ -232,9 +320,16 @@ class ChatDownloaderSession:
         """POST with the configured default timeout."""
         self._require_open()
         kwargs.setdefault("timeout", self.timeout)
+        kwargs["allow_redirects"] = False
         started = perf_counter()
         try:
-            return self.session.post(url, **kwargs)
+            try:
+                response = self.session.post(url, **kwargs)
+            except ValueError:
+                msg = "Invalid provider request or redirect URL."
+                raise ParsingError(msg) from None
+            reject_redirect(response)
+            return response
         finally:
             log("debug", f"HTTP POST {url} took {perf_counter() - started:.3f}s")
 
@@ -242,9 +337,37 @@ class ChatDownloaderSession:
         """GET with the configured default timeout."""
         self._require_open()
         kwargs.setdefault("timeout", self.timeout)
+        follow_redirects = kwargs.pop("allow_redirects", False)
+        kwargs["allow_redirects"] = False
+        origin = _https_origin(url) if follow_redirects else None
         started = perf_counter()
         try:
-            return self.session.get(url, **kwargs)
+            for _ in range(6):
+                try:
+                    response = self.session.get(url, **kwargs)
+                except ValueError:
+                    msg = "Invalid provider request or redirect URL."
+                    raise ParsingError(msg) from None
+                if not 300 <= response.status_code < 400:
+                    return response
+                if not follow_redirects:
+                    reject_redirect(response)
+                try:
+                    destination = urljoin(url, response.headers.get("Location", ""))
+                except ValueError:
+                    msg = "Unsafe HTTP redirect destination."
+                    raise ParsingError(msg) from None
+                if not response.headers.get("Location"):
+                    reject_redirect(response)
+                if _https_origin(destination) != origin:
+                    msg = "Cross-origin HTTP redirect from provider."
+                    raise ParsingError(msg)
+                response.close()
+                url = destination
+                # Query parameters belong only to the first request.
+                kwargs.pop("params", None)
+            msg = "Provider HTTP redirect limit exceeded."
+            raise ParsingError(msg)
         finally:
             log("debug", f"HTTP GET {url} took {perf_counter() - started:.3f}s")
 

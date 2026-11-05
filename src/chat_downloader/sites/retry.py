@@ -11,7 +11,6 @@ from chat_downloader.debugging import log
 from chat_downloader.errors import RetriesExceeded
 from chat_downloader.utils.conversion_utils import attempts
 from chat_downloader.utils.retry_utils import RetryPolicy, get_retry_after
-from chat_downloader.utils.string_utils import get_title_of_webpage
 from chat_downloader.utils.timed_generator import polling_sleep
 
 if TYPE_CHECKING:
@@ -70,10 +69,7 @@ def retry(
         retry_text += f" {error} ({error.__class__.__name__})"
 
     if isinstance(error, JSONDecodeError):
-        log("debug", f"JSONDecodeError at pos={error.pos!r}: {error.msg!r}")
-        page_title = get_title_of_webpage(error.doc)
-        if page_title:
-            log("debug", f"Title: {page_title}")
+        log("debug", f"JSONDecodeError at pos={error.pos!r}")
 
     log("warning", [*text, retry_text])
 

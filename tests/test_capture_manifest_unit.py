@@ -24,6 +24,20 @@ from tests.test_capture_checkpoint_unit import (
 )
 
 
+def _intercept_manifest_open(monkeypatch, replacement):
+    original_write = RunManifest.write
+
+    def write(manifest, *args, **kwargs):
+        with monkeypatch.context() as scoped:
+            scoped.setattr(
+                "chat_downloader.runtime.capture_manifest.os",
+                SimpleNamespace(**(vars(os) | {"open": replacement})),
+            )
+            return original_write(manifest, *args, **kwargs)
+
+    monkeypatch.setattr(RunManifest, "write", write)
+
+
 @pytest.fixture
 def chat_state(monkeypatch):
     original = Downloader.get_chat
@@ -109,7 +123,7 @@ def test_checkpoint_lease_excludes_competing_capture_through_manifest(
             boundary == "hash"
             and not entered
             and Path(name) in outputs
-            and flags == os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+            and flags & os.O_ACCMODE == os.O_RDONLY
         ):
             compete()
         return original_open(name, flags, *args, **kwargs)
@@ -119,10 +133,7 @@ def test_checkpoint_lease_excludes_competing_capture_through_manifest(
             compete()
         return original_link(source, destination, *args, **kwargs)
 
-    monkeypatch.setattr(
-        "chat_downloader.runtime.capture_manifest.os",
-        SimpleNamespace(**(vars(os) | {"open": open_artifact})),
-    )
+    _intercept_manifest_open(monkeypatch, open_artifact)
     monkeypatch.setattr(
         atomic_files, "os", SimpleNamespace(**(vars(os) | {"link": publish_report}))
     )
@@ -177,7 +188,7 @@ def test_checkpoint_lease_covers_failed_manifest_and_is_released(
         if (
             boundary == "hash"
             and Path(name) in outputs
-            and flags == os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+            and flags & os.O_ACCMODE == os.O_RDONLY
         ):
             fail_manifest()
         return original_open(name, flags, *args, **kwargs)
@@ -187,10 +198,7 @@ def test_checkpoint_lease_covers_failed_manifest_and_is_released(
             fail_manifest()
         return original_link(source, destination, *args, **kwargs)
 
-    monkeypatch.setattr(
-        "chat_downloader.runtime.capture_manifest.os",
-        SimpleNamespace(**(vars(os) | {"open": open_artifact})),
-    )
+    _intercept_manifest_open(monkeypatch, open_artifact)
     monkeypatch.setattr(
         atomic_files, "os", SimpleNamespace(**(vars(os) | {"link": publish_report}))
     )
@@ -569,6 +577,41 @@ def test_manifest_hash_rejects_replaced_fifo_without_blocking(tmp_path):
     assert not result.success
     assert "regular files" in result.error_message
     assert not manifest.exists()
+
+
+@pytest.mark.parametrize("replacement", ["symlink", "regular", "hardlink"])
+def test_manifest_does_not_certify_replaced_output(tmp_path, replacement):
+    output = tmp_path / "chat.jsonl"
+    victim = tmp_path / "private.txt"
+    victim.write_text("PRIVATE_SENTINEL", encoding="utf-8")
+    original = tmp_path / "original.jsonl"
+
+    class Replaced(Downloader):
+        def close(self):
+            output.rename(original)
+            if replacement == "symlink":
+                output.symlink_to(victim)
+            elif replacement == "hardlink":
+                os.link(victim, output)
+            else:
+                output.write_text("OTHER_CAPTURE", encoding="utf-8")
+
+    manifest = tmp_path / "run.json"
+    result = execute_run(
+        Replaced,
+        output=str(output),
+        run_manifest=str(manifest),
+        format="kick",
+        quiet=True,
+    )
+    assert not result.success
+    assert result.failure_stage == "manifest"
+    assert not manifest.exists()
+    assert victim.read_text(encoding="utf-8") == "PRIVATE_SENTINEL"
+    assert (
+        json.loads(original.read_text(encoding="utf-8").splitlines()[0])
+        == (Downloader.records[0])
+    )
 
 
 @pytest.mark.parametrize(

@@ -328,14 +328,14 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
 
     monkeypatch.setattr(CaptureCheckpoint, "save", save)
 
-    original_signature = capture_checkpoint._file_signature
+    original_signature = capture_checkpoint._file_state
 
-    def signature(path):
+    def signature(path, *args, **kwargs):
         if boundary == "checkpoint_hash" and saving_checkpoint:
             interrupt()
-        return original_signature(path)
+        return original_signature(path, *args, **kwargs)
 
-    monkeypatch.setattr(capture_checkpoint, "_file_signature", signature)
+    monkeypatch.setattr(capture_checkpoint, "_file_state", signature)
     original_manifest = RunManifest.write
 
     def manifest(manifest, *args, **kwargs):

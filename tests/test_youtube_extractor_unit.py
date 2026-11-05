@@ -140,11 +140,7 @@ def test_has_auth_cookies_requires_login_info_and_any_sapisid(
 ) -> None:
     downloader = yt_extractor.YouTubeChatDownloader()
 
-    monkeypatch.setattr(
-        downloader,
-        "get_cookie_value",
-        lambda name: "login" if name == "LOGIN_INFO" else None,
-    )
+    downloader.set_cookie_value(".youtube.com", "LOGIN_INFO", "login", secure=True)
     monkeypatch.setattr(
         yt_extractor,
         "_get_sid_cookies",
@@ -157,7 +153,6 @@ def test_has_auth_cookies_requires_login_info_and_any_sapisid(
 def test_has_auth_cookies_is_false_without_login_info(monkeypatch) -> None:
     downloader = yt_extractor.YouTubeChatDownloader()
 
-    monkeypatch.setattr(downloader, "get_cookie_value", lambda _name: None)
     monkeypatch.setattr(
         yt_extractor,
         "_get_sid_cookies",

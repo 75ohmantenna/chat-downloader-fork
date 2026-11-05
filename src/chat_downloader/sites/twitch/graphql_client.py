@@ -17,6 +17,7 @@ from chat_downloader.errors import (
     VideoUnplayable,
 )
 from chat_downloader.metadata import __version__
+from chat_downloader.sites.session import reject_redirect
 from chat_downloader.utils.json_types import get_list, get_str
 from chat_downloader.utils.retry_utils import parse_retry_after
 from chat_downloader.utils.string_utils import contains_any_hint
@@ -104,9 +105,11 @@ def _download_base_gql(
         GQL_API_URL,
         json=ops,
         headers=headers,
+        allow_redirects=False,
     )
     _check_polling_cancelled()
     status_code = getattr(response, "status_code", 200)
+    reject_redirect(response)
     body_text = getattr(response, "text", "")
     if status_code >= 400 and _contains_challenge_text(body_text):
         msg = (

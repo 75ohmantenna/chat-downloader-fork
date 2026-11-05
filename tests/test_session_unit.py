@@ -37,11 +37,15 @@ class _FakeSession:
 
     def get(self, url: str, **kwargs: Any) -> Any:
         self.get_calls.append((url, kwargs))
-        return SimpleNamespace(json=lambda: {"url": url, "kwargs": kwargs})
+        return SimpleNamespace(
+            status_code=200, json=lambda: {"url": url, "kwargs": kwargs}
+        )
 
     def post(self, url: str, **kwargs: Any) -> Any:
         self.post_calls.append((url, kwargs))
-        return SimpleNamespace(json=lambda: {"url": url, "kwargs": kwargs})
+        return SimpleNamespace(
+            status_code=200, json=lambda: {"url": url, "kwargs": kwargs}
+        )
 
 
 def _http(fake: _FakeSession | None = None, **kwargs: Any) -> ChatDownloaderSession:
@@ -180,13 +184,19 @@ def test_http_session_requests_timeouts_json_and_close() -> None:
     json_response = http.get_json("https://example.com/json")
 
     assert fake.get_calls == [
-        ("https://example.com/data", {"timeout": (2.0, 9.0)}),
-        ("https://example.com/json", {"timeout": (2.0, 9.0)}),
+        (
+            "https://example.com/data",
+            {"timeout": (2.0, 9.0), "allow_redirects": False},
+        ),
+        (
+            "https://example.com/json",
+            {"timeout": (2.0, 9.0), "allow_redirects": False},
+        ),
     ]
     assert fake.post_calls == [
         (
             "https://example.com/post",
-            {"timeout": (1, 1), "json": {"hello": "world"}},
+            {"timeout": (1, 1), "json": {"hello": "world"}, "allow_redirects": False},
         )
     ]
     assert get_response.json()["url"].endswith("/data")

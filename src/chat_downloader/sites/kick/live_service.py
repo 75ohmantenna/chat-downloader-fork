@@ -40,7 +40,12 @@ from .constants import (
     is_numeric_id,
 )
 from .deleted_message_cache import _DeletedMessageCache
-from .errors import KickError, KickRealtimeRejected, KickServerError
+from .errors import (
+    KickError,
+    KickRealtimeRejected,
+    KickResourceLimit,
+    KickServerError,
+)
 from .history import iter_reverse_history
 from .live_iterator import KickLiveIterator
 from .parsing.events import (
@@ -367,12 +372,14 @@ def _fetch_preloaded_state(
     channel_id: str,
     username: str,
 ) -> PreloadedChatState | None:
-    """Fetch recent live state without making a failed refresh fatal."""
+    """Fetch recent live state, tolerating ordinary refresh failures."""
     try:
         return downloader._kick_client.fetch_preloaded_chat_state(
             channel_id,
             username,
         )
+    except KickResourceLimit:
+        raise
     except (
         CaptchaChallengeRequired,
         KickError,
@@ -524,6 +531,8 @@ def _iter_reconnect_backfill(
                 recovered_messages.extend(iter_preloaded_messages((raw_message,)))
         finally:
             raw_history.close()
+    except KickResourceLimit:
+        raise
     except (
         CaptchaChallengeRequired,
         KickError,
@@ -629,14 +638,18 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
         deleted_message_cache.observe(message)
         return msg_filter.should_add(message)
 
-    # 1. Preloaded history (best-effort; non-fatal on failure).
-    yield from _iter_preloaded_chat(
-        downloader,
-        channel_id,
-        username,
-        emit,
-        record_diagnostic=diagnostics.increment,
-    )
+    # Ordinary preload failures are best-effort; resource failures are terminal.
+    try:
+        yield from _iter_preloaded_chat(
+            downloader,
+            channel_id,
+            username,
+            emit,
+            record_diagnostic=diagnostics.increment,
+        )
+    except KickResourceLimit:
+        diagnostics.summary["history_complete"] = False
+        raise
 
     if control is not None and control.stopped.is_set():
         return
@@ -809,7 +822,8 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
                 transport.close()
                 if control is not None and control.stopped.is_set():
                     return
-                if isinstance(error, KickRealtimeRejected):
+                if isinstance(error, (KickRealtimeRejected, KickResourceLimit)):
+                    diagnostics.summary["history_complete"] = False
                     raise
                 force_discover = isinstance(error, KickError)
                 if force_discover:

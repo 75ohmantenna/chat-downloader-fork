@@ -188,13 +188,16 @@ def test_legacy_metadata_checks_declared_video_and_channel_identity() -> None:
 
 
 def test_web_endpoint_rejects_path_injection_and_redirects() -> None:
-    client = KickApiClient(session=FakeKickSession([]))
-    with pytest.raises(ValueError, match="identity"):
+    invalid_session = FakeKickSession([])
+    client = KickApiClient(session=invalid_session)
+    with pytest.raises(ValueError):
         client.fetch_web_video_metadata("../evil", VIDEO)
+    assert invalid_session.calls == []
     session = FakeKickSession([FakeResponse(302, {})])
     client = KickApiClient(session=session, web_session=session)
-    with pytest.raises(KickError, match="302"):
+    with pytest.raises(KickError):
         client.fetch_web_video_metadata("12345", VIDEO)
+    assert len(session.calls) == 1
     assert session.calls[0][1]["allow_redirects"] is False
 
 

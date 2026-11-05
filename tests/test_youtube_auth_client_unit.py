@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+from http.cookiejar import CookieJar
 from json.decoder import JSONDecodeError
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -12,6 +14,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 import chat_downloader.sites.youtube.client_auth as auth
 import chat_downloader.sites.youtube.client_context as context
 from chat_downloader.errors import RetriesExceeded, VideoNotFound
+from chat_downloader.sites.session import CookieSpec, build_cookie
 from chat_downloader.sites.youtube.client_requests_continuation import (
     _get_continuation_info,
 )
@@ -26,6 +29,10 @@ INITIAL_PATTERNS = (r"ytInitialData", r"ytcfg", r"ytInitialPlayerResponse")
 class _FakeSession:
     def __init__(self, cookies=None):
         self.cookies = dict(cookies or {})
+        jar = CookieJar()
+        for name, value in self.cookies.items():
+            jar.set_cookie(build_cookie(CookieSpec(".youtube.com", name, value)))
+        self.session = SimpleNamespace(cookies=jar)
         self.set_calls = []
 
     def get_cookie_value(self, name, default=None):
@@ -94,9 +101,13 @@ def test_sid_header_promotion_and_binding(monkeypatch, cookies, ytcfg, bound):
         assert session.set_calls == []
         assert "SAPISIDHASH" in header
     else:
-        assert session.set_calls == [
-            (".youtube.com", "SAPISID", "threep", {"secure": True, "expire_time": 4834})
-        ]
+        promoted = next(
+            cookie for cookie in session.session.cookies if cookie.name == "SAPISID"
+        )
+        assert promoted.domain == ".youtube.com"
+        assert promoted.value == "threep"
+        assert promoted.secure is True
+        assert promoted.expires == 4834
     if bound:
         assert header == " ".join(
             auth._make_sid_authorization(scheme, sid, HOME, 1234, {"u": "user-session"})

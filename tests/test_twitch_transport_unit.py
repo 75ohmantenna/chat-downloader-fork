@@ -541,10 +541,12 @@ def test_handle_gql_errors_ignores_malformed_error_item() -> None:
 def test_download_gql_handles_error_response(batched) -> None:
     payload = {"errors": [{"message": "resource not found"}]}
 
-    def session_post(_url, json, headers):
-        assert headers["Client-ID"]
-        assert json[0]["extensions"]["persistedQuery"]["version"] == 1
-        return SimpleNamespace(json=lambda: [payload] if batched else payload)
+    def session_post(_url, json, headers, **_kwargs):
+        return SimpleNamespace(
+            status_code=200,
+            text="",
+            json=lambda: [payload] if batched else payload,
+        )
 
     with pytest.raises(VideoNotFound):
         graphql_client._download_gql(

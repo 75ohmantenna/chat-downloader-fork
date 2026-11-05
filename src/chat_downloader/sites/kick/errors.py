@@ -24,6 +24,10 @@ class KickRealtimeRejected(KickError):
     """A permanent anonymous protocol rejection; renegotiation cannot repair it."""
 
 
+class KickResourceLimit(KickError):
+    """A terminal resource-budget rejection leaving the capture incomplete."""
+
+
 class KickServerError(KickError):
     """Raised for transient Kick server problems (HTTP 429/5xx).
 

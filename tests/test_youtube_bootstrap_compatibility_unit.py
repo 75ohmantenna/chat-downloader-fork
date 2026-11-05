@@ -9,6 +9,7 @@ from unittest.mock import Mock
 import pytest
 
 from chat_downloader.errors import ParsingError
+from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.youtube.client_auth import _generate_sapisidhash_header
 from chat_downloader.sites.youtube.client_context import (
     _generate_headers,
@@ -90,10 +91,8 @@ def test_explicit_session_identity_precedes_datasync(monkeypatch, explicit):
         "DELEGATED_SESSION_ID": "explicit-page",
         "DATASYNC_ID": "old-page||old-user",
     }
-    session = Mock()
-    session.get_cookie_value.side_effect = lambda name: (
-        "sid" if name == "SAPISID" else None
-    )
+    session = BaseChatDownloader()
+    session.set_cookie_value(".youtube.com", "SAPISID", "sid", secure=True)
     headers = _generate_headers(config, session, HOME, _generate_sapisidhash_header)
     user = explicit if isinstance(explicit, str) and explicit else "old-user"
     digest = hashlib.sha1(f"{user} 123 sid {HOME}".encode()).hexdigest()
@@ -106,10 +105,8 @@ def test_explicit_user_without_datasync_is_bound(monkeypatch):
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.client_auth.time.time", lambda: 123
     )
-    session = Mock()
-    session.get_cookie_value.side_effect = lambda name: (
-        "sid" if name == "SAPISID" else None
-    )
+    session = BaseChatDownloader()
+    session.set_cookie_value(".youtube.com", "SAPISID", "sid", secure=True)
     header = _generate_sapisidhash_header(session, HOME, {"USER_SESSION_ID": "user"})
     digest = hashlib.sha1(f"user 123 sid {HOME}".encode()).hexdigest()
     assert header == f"SAPISIDHASH 123_{digest}_u"
@@ -154,8 +151,7 @@ def test_browse_refresh_overrides_old_config_token():
     config = {"VISITOR_DATA": "old"}
     params = {"context": _get_innertube_context(config)}
     response = {"responseContext": {"visitorData": "refreshed"}}
-    downloader = Mock()
-    downloader.get_cookie_value.return_value = None
+    downloader = BaseChatDownloader()
     _update_browse_visitor_data(params, response)
     headers = _browse_api_headers(downloader, config, params)
     assert headers["x-goog-visitor-id"] == "refreshed"

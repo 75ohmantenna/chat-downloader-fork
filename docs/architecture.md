@@ -118,16 +118,19 @@ JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing
 record (or adds a missing newline to a valid record) before writing new data;
 text append mode also terminates an existing final line before appending. Output
-path aliases resolving to the same file are attached only once. Writer targets
-are compared after `{title}`/`{id}` expansion; existing hard links are compared
-by device and inode.
+path aliases resolving to the same file are attached only once after metadata
+expansion. Generated destinations use exclusive creation; existing generated
+targets are errors rather than overwrite/append targets. Explicit-path files
+must be regular, singly linked, and identity-verifiable. Writers validate before
+truncation and retain one descriptor for repair and output; checkpoint rollback
+uses held descriptors rather than reopening paths. Manifests reject replaced
+output identities before hashing.
 
-Append initialization creates missing files without a truncating open, preserving
-records created by another writer after the existence check. This is not a
-general concurrent-append guarantee: tail repair and record writes still require
-exclusive ownership of each output file. Checkpointed runs retain their existing
-checkpoint-name lock through manifest artifact hashing and atomic no-overwrite
-report publication, then release it even when publication fails.
+Append initialization creates missing files exclusively without a truncating
+open. This is not a general concurrent-append guarantee: tail repair and record
+writes still require exclusive ownership of each output file. Checkpointed runs
+retain their checkpoint-name lock through manifest artifact hashing and atomic
+no-overwrite report publication, then release it even when publication fails.
 
 Kick VOD and clip replay traverses reverse cursors and buffers the selected
 history in a temporary spool before chronological output. Startup and reconnect
@@ -193,6 +196,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
+| `_secure_file.py` | Non-destructive regular-file acquisition, pinned directory/file identity checks, and exclusive private capture creation |
 | `capture_parity.py` | Internal provider-neutral streaming audit state machine for JSONL/TXT formatting, deduplication, physical-newline, input-identity, and content-safety parity checks |
 | `continuous_write.py` | `ContinuousWriter` factory; re-exports writer types |
 | `writers.py` | `ContinuousFileWriter` ABC; `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
@@ -320,6 +324,8 @@ module names.
 | `deleted_message_cache.py` | Bounded FIFO original-text and author-name cache for live deletion notices |
 | `replay_window.py` | Kick replay bounds, record parsing, and skip-diagnostic updates; reverse cursors are constructed in `history.py` |
 | `replay_service.py` | VOD metadata, reverse history spooling, replay-relative timestamps, filtering, and completion diagnostics |
+| `resource_limits.py` | Finite wire/batch/replay budgets, bounded JSON encoding, incremental page hashing, and individual spool record readback |
+| `history_response.py` | Pre-buffering decoded history-response byte caps across Requests, cloudscraper, and curl-cffi |
 | `vod_metadata.py` | Legacy video lookup and validated, origin-isolated current website metadata fallback |
 | `clip_service.py` | Web/mobile clip metadata validation, clip-relative bounds, and source-VOD or absolute-time replay assembly |
 | `history.py` | Bounded reverse startup/reconnect history, cursor construction, ID deduplication, and page validation |

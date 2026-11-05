@@ -550,10 +550,11 @@ path.
 Capture sanitization recursively removes known cookie, proxy, token, and API
 key fields. It also treats custom header names containing authentication,
 credential, secret, or token markers—and values using common authentication
-schemes—as sensitive. Review remains mandatory because provider payloads can
-introduce new secret-bearing shapes. Successful YouTube samples also retain
-public chat contents after credential sanitization, so review them before
-sharing.
+schemes—as sensitive. Provider `key`/`value` and `name`/`value` entries redact the
+value when either semantic label is sensitive. Review remains mandatory because
+provider payloads can introduce new secret-bearing shapes. Successful YouTube
+samples also retain public chat contents after credential sanitization, so review
+them before sharing.
 
 Twitch supports clean-run IRC inspection with
 `CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES=1`. Combined with the shared capture

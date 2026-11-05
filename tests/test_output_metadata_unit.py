@@ -79,11 +79,15 @@ def test_channel_output_templates_use_discovered_metadata(
             max_messages=1,
         )
         try:
-            assert list(chat) == [message]
+            if append:
+                with pytest.raises(FileExistsError, match="Generated output filename"):
+                    list(chat)
+            else:
+                assert list(chat) == [message]
+                assert chat.diagnostics["termination_reason"] == "message_limit"
+                assert len(chat._output_dispatcher.writers) == len(destinations)
             assert isinstance(chat.site, YouTubeChatDownloader)
-            assert chat.diagnostics["termination_reason"] == "message_limit"
             assert chat.format(message) == "22:13:20 | Alice: hello"
-            assert len(chat._output_dispatcher.writers) == len(destinations)
         finally:
             chat.close()
     finally:
@@ -92,7 +96,8 @@ def test_channel_output_templates_use_discovered_metadata(
     for path in destinations:
         lines = path.read_text(encoding="utf-8").splitlines()
         if append:
-            assert lines.pop(0) == "existing"
+            assert lines == ["existing"]
+            continue
         assert len(lines) == 1
         assert (json.loads(lines[0]) if suffix == "jsonl" else lines[0]) == (
             message if suffix == "jsonl" else "22:13:20 | Alice: hello"

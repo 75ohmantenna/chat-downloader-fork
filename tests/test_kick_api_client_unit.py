@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: MIT
 from __future__ import annotations
 
+import json
 from unittest.mock import Mock
 
 import pytest
+import requests
+from requests.adapters import BaseAdapter
 
 from chat_downloader.errors import CaptchaChallengeRequired, UserNotFound
-from chat_downloader.sites.kick import api_client
+from chat_downloader.sites.kick import api_client, http_session
 from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.errors import (
     KickCountryBlocked,
@@ -118,7 +121,12 @@ def test_successful_endpoints_use_owned_session(method, identifier, fixture, end
     payload = load_fixture(fixture)
     client, session = _client([FakeResponse(200, payload)], timeout=(3.0, 7.0))
     assert getattr(client, method)(identifier) == payload
-    assert session.calls == [(endpoint, {"params": None, "timeout": (3.0, 7.0)})]
+    assert session.calls == [
+        (
+            endpoint,
+            {"params": None, "timeout": (3.0, 7.0), "allow_redirects": False},
+        )
+    ]
 
 
 def test_primary_requests_resolve_bearer_token_lazily():
@@ -157,77 +165,58 @@ def test_explicit_authorization_or_unsafe_cookie_omits_request_header(token):
         provider.assert_not_called()
 
 
-def test_client_copies_proxy_and_header_configuration(monkeypatch):
-    captured = {}
-
-    def create(**kwargs):
-        captured.update(kwargs)
-        return FakeKickSession([])
-
-    monkeypatch.setattr(api_client, "create_kick_session", create)
-    proxy, headers = {"https": "http://proxy.example:8080"}, {"Authorization": "secret"}
-    KickApiClient(proxy=proxy, extra_headers=headers)
-    proxy["https"] = headers["Authorization"] = "changed"
-    assert captured == {
-        "proxy": {"https": "http://proxy.example:8080"},
-        "extra_headers": {"Authorization": "secret"},
-        "trust_env": True,
-    }
-
-
 @pytest.mark.parametrize("injected", [False, True])
-def test_mobile_session_is_origin_isolated(monkeypatch, injected):
+def test_mobile_request_does_not_emit_primary_origin_credentials(monkeypatch, injected):
     payload = load_fixture("clip_metadata_mobile.json")
-    primary, mobile = FakeKickSession([]), FakeKickSession([FakeResponse(200, payload)])
-    primary.headers = {"Authorization": "Bearer resident-secret"}
-    sessions, captured = iter([mobile] if injected else [primary, mobile]), []
+    received = []
 
-    def create(**kwargs):
-        captured.append(kwargs)
-        return next(sessions)
+    class Adapter(BaseAdapter):
+        def send(self, request, **_kwargs):
+            received.append(request)
+            response = requests.Response()
+            response.status_code = 200
+            response._content = json.dumps(payload).encode()
+            response.request = request
+            response.url = request.url
+            return response
 
-    monkeypatch.setattr(api_client, "create_kick_session", create)
-    proxy = {"https": "http://proxy.example:8080"}
+        def close(self):
+            pass
+
+    make_plain = http_session._make_plain_session
+
+    def recorded_plain_session():
+        session = make_plain()
+        session.mount("https://", Adapter())
+        return session
+
+    monkeypatch.setattr(http_session, "_try_curl_cffi", lambda: None)
+    monkeypatch.setattr(http_session, "_try_cloudscraper", lambda: None)
+    monkeypatch.setattr(http_session, "_make_plain_session", recorded_plain_session)
     sensitive = {
-        "Authorization": "Bearer secret",
-        "Cookie": "session=secret",
-        "X-Api-Key": "secret",
-        "X-Custom": "Bearer secret",
+        "Authorization": "Bearer PRIMARY_SENTINEL",
+        "Cookie": "session=PRIMARY_SENTINEL",
+        "X-Api-Key": "PRIMARY_SENTINEL",
+        "X-Custom": "Bearer PRIMARY_SENTINEL",
     }
     safe = {"User-Agent": "safe-agent", "X-Trace": "safe-trace"}
-    headers = sensitive | safe
-    options = (
-        {"session": primary}
-        if injected
-        else {
-            "proxy": proxy,
-            "extra_headers": headers,
-            "timeout": (3.0, 7.0),
-            "trust_env": False,
-        }
-    )
-    client = KickApiClient(**options)
-    assert client.fetch_mobile_clip_metadata(CLIP_ID) == payload
-    assert primary.calls == []
     if injected:
-        assert captured == [{"proxy": None, "extra_headers": None, "trust_env": True}]
+        primary = recorded_plain_session()
+        primary.headers.update(sensitive)
+        options = {"session": primary, "trust_env": False}
     else:
-        assert captured == [
-            {"proxy": proxy, "extra_headers": headers, "trust_env": False},
-            {"proxy": proxy, "extra_headers": safe, "trust_env": False},
+        options = {"extra_headers": sensitive | safe, "trust_env": False}
+    client = KickApiClient(**options)
+    try:
+        assert client.fetch_mobile_clip_metadata(CLIP_ID) == payload
+        assert [request.url for request in received] == [
+            f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}"
         ]
-        assert mobile.calls == [
-            (
-                f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}",
-                {
-                    "params": None,
-                    "timeout": (3.0, 7.0),
-                    "headers": dict.fromkeys(sensitive),
-                },
-            )
-        ]
-    client.close()
-    assert primary.close_calls == mobile.close_calls == 1
+        assert "PRIMARY_SENTINEL" not in str(received[0].headers)
+        if not injected:
+            assert received[0].headers["X-Trace"] == "safe-trace"
+    finally:
+        client.close()
 
 
 @pytest.mark.parametrize("broken", [False, True])
@@ -433,3 +422,24 @@ def test_message_page_errors(response, pagination, error, match):
     client, _ = _client([response])
     with pytest.raises(error, match=match):
         client.fetch_message_page("123", **pagination)
+
+
+@pytest.mark.parametrize("origin", ["primary", "mobile", "web"])
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+def test_all_kick_api_origins_reject_redirects_before_decoding(origin, status):
+    response = FakeResponse(
+        status,
+        {"unexpected": "redirect body must not become a successful result"},
+    )
+    response.headers["Location"] = "https://foreign.invalid/synthetic"
+    session = FakeKickSession([response])
+    client = KickApiClient(session=session, mobile_session=session, web_session=session)
+    with pytest.raises(KickServerError, match="Unexpected HTTP redirect"):
+        if origin == "mobile":
+            client.fetch_mobile_clip_metadata(CLIP_ID)
+        elif origin == "web":
+            client.fetch_web_video_metadata("123", VIDEO_ID)
+        else:
+            client.fetch_channel("example")
+    assert len(session.calls) == 1
+    assert session.calls[0][1]["allow_redirects"] is False

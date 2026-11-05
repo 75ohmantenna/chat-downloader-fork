@@ -15,6 +15,7 @@ from chat_downloader.sites.output_dispatch import (
     _expand_output_file_name,
     _register_output_path,
 )
+from chat_downloader.utils.filename_utils import output_path_identity
 from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import TimedGenerator
 
@@ -160,32 +161,44 @@ def _configure_output_writer(
 
     outputs = request.output if isinstance(request.output, list) else [request.output]
     seen: dict[tuple[object, ...], str] = {}
+    seen_writers: dict[tuple[object, ...], Any] = {}
     for output_file in outputs:
         expanded_path = _expand_output_file_name(
             output_file,
             title=getattr(chat, "title", None),
             video_id=getattr(chat, "id", None),
         )
-        # Unknown lazy metadata cannot establish that different templates will
-        # identify one file. Keep them distinct until real metadata is known.
         fields = {
-            field for _text, field, _spec, _conversion in Formatter().parse(output_file)
+            field
+            for _text, field, _spec, _conversion in Formatter().parse(output_file)
+            if field is not None
         }
+        # Unknown metadata cannot prove that two different templates are aliases.
         unresolved = (
             "title" in fields and (chat.title is None or chat._metadata_pending)
         ) or ("id" in fields and (chat.id is None or chat._metadata_pending))
-        if not _register_output_path(
-            output_file, None if unresolved else expanded_path, seen
-        ):
-            continue
-        chat.attach_writer(
-            writer_factory(
-                output_file,
-                sort_keys=request.sort_keys,
-                overwrite=request.overwrite,
-                lazy_initialise=True,
-            )
+        identity_path = None if unresolved else expanded_path
+        identity = (
+            ("template", output_file)
+            if identity_path is None
+            else output_path_identity(identity_path)
         )
+        if not _register_output_path(output_file, identity, seen):
+            kept = seen_writers[identity]
+            if fields and isinstance(kept, ContinuousWriter):
+                # Never discard a generated alias's no-replacement policy.
+                kept._require_new_file = True
+            continue
+        writer = writer_factory(
+            output_file,
+            sort_keys=request.sort_keys,
+            overwrite=request.overwrite,
+            lazy_initialise=True,
+        )
+        if isinstance(writer, ContinuousWriter):
+            writer._require_new_file = bool(fields)
+        seen_writers[identity] = writer
+        chat.attach_writer(writer)
 
 
 def configure_chat(

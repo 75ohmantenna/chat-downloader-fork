@@ -48,30 +48,18 @@ def test_retry_text_and_typed_policy(retry_events, text, attempt, limit, typed):
     assert sleeps == [0.0]
 
 
-@pytest.mark.parametrize("title", ["Example page", ""])
-def test_retry_json_decode_context_and_optional_title(retry_events, title):
-    html = f"<title>{title}</title>" if title else "<html></html>"
-    error = JSONDecodeError("bad json", html, 4 if title else 0)
+def test_retry_json_decode_does_not_log_response_document(retry_events):
+    error = JSONDecodeError("invalid JSON", "<title>PRIVATE_CHAT_SENTINEL</title>", 4)
     site_retry.retry(
         attempt_number=1,
         max_attempts=2,
         error=error,
         retry_timeout=0,
-        text=["prefix"] if title else None,
         interruptible_retry=False,
     )
     logs, sleeps = retry_events
-    expected = [("debug", f"JSONDecodeError at pos={error.pos!r}: {error.msg!r}")]
-    if title:
-        expected.append(("debug", f"Title: {title}"))
-    expected.append(
-        (
-            "warning",
-            (["prefix"] if title else [])
-            + [f"Retry #1/2 (sleep for 0.0s). {error} (JSONDecodeError)"],
-        )
-    )
-    assert logs == expected
+    assert "PRIVATE_CHAT_SENTINEL" not in str(logs)
+    assert any(level == "warning" for level, _value in logs)
     assert sleeps == [0.0]
 
 

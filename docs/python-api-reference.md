@@ -63,6 +63,13 @@ Important methods:
 Use `ChatDownloader` when you want direct control over lifecycle, cookies, or
 session reuse.
 
+Public `get_cookie_value()` remains name-only introspection. Authentication
+instead selects cookies using provider domain, path, expiry, secure-transport,
+and port scope. Conflicting applicable credential values are not used.
+YouTube SID promotion preserves the selected cookie's scope and does not extend
+its existing expiration. Provider API requests reject HTTP redirects; YouTube
+initial pages permit at most five same-origin HTTPS redirects.
+
 `ChatDownloader.get_chat(...)` still accepts keyword arguments for compatibility
 with upstream-style usage, but those arguments map to `ChatRequest` fields. New
 request options should be added to `ChatRequest` first.
@@ -178,7 +185,7 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `message_groups` | site default | High-level message filtering; `["all"]` accepts every supported provider event type |
 | `message_types` | `None` | Explicit provider message types; unknown names fail, `all` accepts every type; a nonempty list overrides `message_groups`, while `None` or an empty list uses groups |
 | `output` | `None` | Output path or list of paths |
-| `overwrite` | `True` | Replace existing output files |
+| `overwrite` | `True` | Replace existing explicit-path output files; metadata-generated destinations must be new |
 | `sort_keys` | `True` | Sort keys in JSON output |
 | `format` | site default | Text-format template override |
 | `format_file` | `None` | Custom formatter definition |
@@ -403,8 +410,12 @@ Output paths support `{title}` and `{id}` placeholders, with `{{` and `}}` for
 literal braces. Other fields, conversions, and format specifications are
 rejected. The substituted values
 are sanitized as single filename components. Targets are deduplicated after
-placeholder expansion and canonical path resolution; existing hard links are
-also treated as one destination.
+placeholder expansion and canonical path resolution. A name with substituted
+fields must create a new file exclusively, even when `overwrite=False`; existing
+generated targets raise `FileExistsError`. Explicit fixed paths keep their
+overwrite/append behavior. Writers reject symbolic links, hard links, special
+files, and unverifiable identities before changing contents. Repair and writing
+use the same validated descriptor; newly created POSIX files use mode `0600`.
 YouTube channel discovery keeps distinct templates until the selected video's
 metadata is available. Final aliases and format conflicts are checked before
 any lazy output file opens; already resolved outputs retain preflight
@@ -444,6 +455,10 @@ timestamps, these records receive monotonic namespaced IDs and
 Project log handlers sanitize structured values, exception text, stack
 information, URL credentials, sensitive query parameters, and terminal control
 characters before rendering records.
+
+Malformed YouTube continuation bodies and body-derived retry titles are excluded
+from diagnostics and run errors. Semantic provider entries also redact the
+`value` when either `key` or `name` identifies a known sensitive field.
 
 `capture_debug_sample()` writes only when debug logging is enabled and
 `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES` is truthy. The target directory defaults

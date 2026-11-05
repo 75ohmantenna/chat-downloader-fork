@@ -11,6 +11,7 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import RetriesExceeded
+from chat_downloader.sites.session import reject_redirect
 from chat_downloader.utils.retry_utils import (
     RetryPolicy,
     get_retry_after,
@@ -66,6 +67,7 @@ def _get_continuation_info(
         "json_error_count",
     ):
         counters.setdefault(key, 0)
+    post_kwargs["allow_redirects"] = False
     for attempt_number in range(1, max_attempts + 1):
         counters["continuation_request_count"] = (
             cast("int", counters["continuation_request_count"]) + 1
@@ -77,6 +79,7 @@ def _get_continuation_info(
         server_minimum = None
         try:
             response = session_post(continuation_url, **post_kwargs)
+            reject_redirect(response)
             server_minimum = parse_retry_after(getattr(response, "headers", None))
             response_text = getattr(response, "text", "")
             counters["http_error_count"] = cast(
@@ -110,13 +113,14 @@ def _get_continuation_info(
             log(
                 "error",
                 f"Unable to parse JSON (attempt {attempt_number}/"
-                f"{max_attempts}): {response_text}",
+                f"{max_attempts}); response length={len(response_text)} characters.",
             )
             _apply_retry_or_raise(
                 retry_policy,
                 attempt_number,
                 continuation_url,
-                f"Unable to parse JSON: {response_text[:200]}",
+                "Unable to parse JSON; "
+                f"response length={len(response_text)} characters",
                 RetriesExceeded,
                 server_minimum=server_minimum,
             )
