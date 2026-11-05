@@ -235,6 +235,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
     fetch_messages: _FetchMessages | None = None,
     logger_obj: Logger | None = None,
     diagnostics: dict[str, object] | None = None,
+    badge_set: BadgeSet | None = None,
 ) -> Generator[JSONDict, None, None]:
     """Yield replay chat messages for a VOD or clip."""
     fetch_messages = fetch_messages or get_chat_messages_by_vod_id
@@ -246,7 +247,9 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
     message_count = 0
     cursor = ""
     first_iteration = True
-    badge_set = downloader.badge_cache.snapshot()
+    badge_set = (
+        badge_set if badge_set is not None else downloader.badge_cache.snapshot()
+    )
     consecutive_empty_pages = 0
     max_empty_pages = 3
 

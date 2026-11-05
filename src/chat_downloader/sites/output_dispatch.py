@@ -326,11 +326,12 @@ class _ChatOutputDispatcher:
             self._record_snapshots = None
 
     def close(self) -> None:
-        """Close all attached writers once and log any cleanup failures."""
+        """Close every writer once, then propagate the first unexpected error."""
         if self.closed:
             return
 
         self.closed = True
+        first_error: Exception | None = None
         for writer in self.writers:
             try:
                 writer.close()
@@ -341,6 +342,12 @@ class _ChatOutputDispatcher:
                     "Suppressed close() error while finalizing output writer "
                     f"for {self._chat.title!r}: {error}",
                 )
+            except Exception as error:  # noqa: BLE001 - finish all owned cleanup
+                self._write_error_count += 1
+                if first_error is None:
+                    first_error = error
+        if first_error is not None:
+            raise first_error
 
     @property
     def write_error_count(self) -> int:

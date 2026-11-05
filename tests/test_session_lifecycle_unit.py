@@ -145,3 +145,30 @@ def test_close_continues_after_one_site_failure(monkeypatch) -> None:
     bad.close.assert_called_once_with()
     assert downloader.sessions == {}
     assert any("session failed" in message for _, message in logs)
+
+
+@pytest.mark.parametrize("error_type", [ValueError, LookupError])
+def test_pool_closes_later_owners_before_first_unexpected_error(error_type) -> None:
+    downloader = ChatDownloader()
+    owned = downloader.create_session(_FakeSite)
+    first_error = error_type("first unexpected session failure")
+    first = MagicMock()
+    first.close.side_effect = first_error
+    handled = MagicMock()
+    handled.close.side_effect = ConnectionError("handled session failure")
+    later = MagicMock()
+    later.close.side_effect = LookupError("later unexpected session failure")
+    downloader.sessions.clear()
+    downloader.sessions.update(
+        {"first": first, "handled": handled, "later": later, "owned": owned}
+    )
+
+    with pytest.raises(error_type) as caught:
+        downloader.close()
+
+    assert caught.value is first_error
+    assert owned._session_closed
+    assert downloader.sessions == {}
+    downloader.close()
+    for session in (first, handled, later):
+        session.close.assert_called_once_with()

@@ -103,7 +103,9 @@ same nonblocking deadline-aware reader even outside a timed worker, so partial
 terminal input cannot extend a retry delay indefinitely. Cancellation does not
 flush the terminal. Twitch replay checks cancellation around page and fallback
 requests and between filtered edges, so a non-yielding page does not bypass stop
-delivery. An already-running HTTP call still finishes under its transport timeout.
+delivery. Shared Requests reads observe cancellation and one completion budget
+across redirects, with separate decoded-body and wire-byte ceilings. Kick's
+separate HTTP clients retain their own transport timeout and response policies.
 
 The first CLI interrupt is deferred across output dispatch and run/checkpoint
 accounting so a signal cannot split successful writes from their counters.
@@ -130,6 +132,10 @@ must be regular, singly linked, and identity-verifiable. Writers validate before
 truncation and retain one descriptor for repair and output; checkpoint rollback
 uses held descriptors rather than reopening paths. Manifests reject replaced
 output identities before hashing.
+Input inspection and parity reads cap physical record content at 16 MiB,
+excluding LF/CRLF. JSONL append repair applies the same cap to unterminated
+tails before decoding or changing bytes; these are read limits, not a general
+serialized-output record-size guarantee.
 
 Append initialization creates missing files exclusively without a truncating
 open. This is not a general concurrent-append guarantee: tail repair and record
@@ -218,6 +224,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
+| `_bounded_records.py` | Shared 16 MiB physical-record limit and bounded binary-line reads for append repair, capture inspection, and parity auditing |
 | `atomic_files.py` | Private same-directory staging, file synchronization, exclusive hard-link publication, and POSIX directory synchronization for complete JSON artifacts |
 | `capture_reader.py` | Strict UTF-8 JSONL object reading, bounded unambiguous literal run-summary decoding, and nonblocking regular-file ownership shared by provider inspectors |
 | `color_utils.py` | ARGB/RGBA color conversion |
@@ -241,6 +248,11 @@ module names.
 | `base.py` | `BaseChatDownloader` shared base class: URL matching, session setup, cookie handling, and optional provider-selected console state capability |
 | `common.py` | Stateless mapped-key discovery for site remapping tables |
 | `session.py` | `ChatDownloaderSession`: cohesive HTTP adapter, timeout, proxy, header/profile, cookie, and close ownership |
+| `http_policy.py` | Provider-neutral Requests adapters and response consumption with decoded-body byte limits, completion deadlines, and cooperative read cancellation |
+| `http_deadline.py` | Shared monotonic request budgets, bounded wire consumption, and cooperative socket-read ownership |
+| `http_tls.py` | Budget-aware receive boundary beneath HTTPS-proxy nested TLS |
+| `http_socks.py` | Budget-aware SOCKS connection negotiation without process-global socket changes |
+| `http_waits.py` | Cooperative retry delays and bounded pooled-connection acquisition that preserve configured retry and pool policies |
 | `proxy.py` | Shared proxy resolution and TLS tunneling for live transports |
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Canonical message-type/group validation, wildcard selection, and per-message time filtering |

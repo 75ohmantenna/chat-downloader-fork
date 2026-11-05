@@ -25,7 +25,7 @@ from .replay_service import get_chat_by_clip_id as build_clip_chat
 from .replay_service import get_chat_by_vod_id as build_vod_chat
 from .replay_service import iter_vod_chat_messages
 from .replay_transport import get_chat_messages_by_vod_id
-from .types import BadgeCache
+from .types import _BADGE_CHANNEL_LIMIT, BadgeCache
 from .url_generation import generate_urls as generate_twitch_urls
 
 if TYPE_CHECKING:
@@ -78,9 +78,22 @@ class TwitchChatDownloader(BaseChatDownloader):
         """
         channel_ids: dict[str, str] = getattr(self, "_channel_ids", {})
         self._channel_ids = channel_ids
-        if channel_id:
-            channel_ids[channel.lower()] = channel_id
-        effective_channel_id = channel_id or channel_ids.get(channel.lower())
+        login = channel.lower()
+        effective_channel_id = channel_id or channel_ids.get(login)
+        if effective_channel_id:
+            channel_ids.pop(login, None)
+            channel_ids[login] = effective_channel_id
+            while len(channel_ids) > _BADGE_CHANNEL_LIMIT:
+                channel_ids.pop(next(iter(channel_ids)))
+            cached_badges = self.badge_cache.channel_badges.pop(
+                effective_channel_id, None
+            )
+            if cached_badges is not None:
+                self.badge_cache.channel_badges[effective_channel_id] = cached_badges
+            while len(self.badge_cache.channel_badges) > _BADGE_CHANNEL_LIMIT:
+                self.badge_cache.channel_badges.pop(
+                    next(iter(self.badge_cache.channel_badges))
+                )
         badge_kwargs = self._client_id_kwargs()
         if effective_channel_id:
             badge_kwargs["channel_id"] = effective_channel_id
@@ -169,7 +182,7 @@ class TwitchChatDownloader(BaseChatDownloader):
         """
         request = self._coerce_chat_request(params)
 
-        yield from iter_vod_chat_messages(
+        return iter_vod_chat_messages(
             self,
             vod_id,
             request,
@@ -178,6 +191,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             fetch_messages=get_chat_messages_by_vod_id,
             logger_obj=logger,
             diagnostics=diagnostics,
+            badge_set=self.badge_cache.snapshot(),
         )
 
     def _get_chat_by_vod_id(

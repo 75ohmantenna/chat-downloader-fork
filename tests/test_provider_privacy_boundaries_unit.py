@@ -43,6 +43,19 @@ class _RecordingAdapter(BaseAdapter):
         pass
 
 
+def _install_recording_transport(http, adapter):
+    # Isolate manual redirect/privacy policy from the bounded wire transport.
+    # Real-server HTTP-policy tests exercise that separate ownership layer.
+    prepared_session = requests.Session()
+    prepared_session.headers.update(http.session.headers)
+    prepared_session.cookies = http.session.cookies
+    prepared_session.trust_env = False
+    http.session.close()
+    http.session = prepared_session
+    prepared_session.mount("https://", adapter)
+    prepared_session.mount("http://", adapter)
+
+
 def _record_http(responses):
     http = ChatDownloaderSession(
         headers={
@@ -54,8 +67,7 @@ def _record_http(responses):
         proxy="",
     )
     adapter = _RecordingAdapter(responses)
-    http.session.mount("https://", adapter)
-    http.session.mount("http://", adapter)
+    _install_recording_transport(http, adapter)
     return http, adapter
 
 
@@ -112,6 +124,7 @@ def test_unprepared_malformed_redirect_is_redacted_without_forwarding():
     http, _adapter = _record_http([])
     response = requests.Response()
     response.status_code = 302
+    response._content_consumed = True
     response.headers["Location"] = "https://[invalid/PRIVATE_SENTINEL"
     http.session.get = Mock(return_value=response)
     with pytest.raises(ParsingError) as error:
@@ -296,8 +309,7 @@ def test_live_user_shortcut_uses_https_before_sending_auth(monkeypatch, scheme, 
         '{"videoDetails":{"videoId":"LLpNUqHVam8"}};</script>'
     )
     adapter = _RecordingAdapter([(200, {}, html)])
-    downloader.session.mount("https://", adapter)
-    downloader.session.mount("http://", adapter)
+    _install_recording_transport(downloader._http, adapter)
     monkeypatch.setattr(
         downloader, "get_chat_by_video_id", lambda *_args: Chat(iter(()))
     )
@@ -319,7 +331,7 @@ def test_twitch_decoder_retry_does_not_disclose_response_title():
     downloader = TwitchChatDownloader(proxy="")
     body = '{"message":"<title>PRIVATE_CHAT_SENTINEL</title>"'
     adapter = _RecordingAdapter([(200, {}, body)])
-    downloader.session.mount("https://", adapter)
+    _install_recording_transport(downloader._http, adapter)
     with restore_loggers(), captured_logs(safe=True) as stream:
         debugging.set_log_level("debug")
         with pytest.raises(JSONDecodeError) as error:

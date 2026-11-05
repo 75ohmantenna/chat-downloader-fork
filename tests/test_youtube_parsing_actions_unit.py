@@ -450,7 +450,11 @@ def test_unknown_action_captures_debug_sample(diagnostics, content):
         (
             "youtube-unknown-action-someNewAction",
             {"action": action, "parsed_data": {"action_type": "some_new"}},
-            {"sample_limit": 10},
+            {
+                "sample_limit": 10,
+                "sample_group": "youtube-unknown-action",
+                "group_limit": 50,
+            },
         )
     ]
 
@@ -664,5 +668,9 @@ def test_finalize_unknown_renderer_debug_samples(
             "original_message_type": "liveChatMadeUpRenderer",
             **details,
         },
-        {"sample_limit": 10},
+        {
+            "sample_limit": 10,
+            "sample_group": f"youtube-{label}",
+            "group_limit": 50,
+        },
     )

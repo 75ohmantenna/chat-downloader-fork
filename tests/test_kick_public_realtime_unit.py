@@ -4,12 +4,13 @@ from __future__ import annotations
 import json
 import time
 from functools import partial
-from queue import Empty, Queue
-from threading import Event, Thread
+from queue import Empty, Full, Queue
+from threading import Event, Thread, get_ident
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from curl_cffi.requests import session as curl_session
 from requests.exceptions import RequestException
 
 from chat_downloader.errors import CaptchaChallengeRequired
@@ -297,6 +298,7 @@ def test_viewer_poll_failure_preserves_successful_metadata_and_chat():
     transport._state.viewers.side_effect = KickServerError("viewer endpoint offline")
     counters = []
     transport._diagnostic_callback = counters.append
+    transport._poll()
     transport._queue.put({"event": "chat"})
     assert transport.recv()["event"] == "kick:public_state"
     assert transport.recv()["event"] == "chat"
@@ -325,8 +327,10 @@ def test_public_http_redirect_poll_preserves_other_snapshot_and_chat(redirect_at
     transport = public_state_transport()
     transport._state = KickPublicState(session=session)
     transport._channel = channel
+    transport._state._channel = channel
     counters = []
     transport._diagnostic_callback = counters.append
+    transport._poll()
     transport._queue.put({"event": "chat"})
     try:
         snapshot = transport.recv()
@@ -342,6 +346,7 @@ def test_public_http_redirect_poll_preserves_other_snapshot_and_chat(redirect_at
         assert len(session.calls) == 2
     finally:
         transport.close()
+        transport._state.close()
     assert session.close_calls == 1
 
 
@@ -617,10 +622,15 @@ def test_public_transport_owns_independent_connections_and_all_public_feeds(
     monkeypatch, provider
 ):
     channel = {"livestream": {"id": 123, "categories": [{"id": 4}]}}
-    state = MagicMock()
-    state.metadata.return_value = channel
-    state.viewers.return_value = [{"livestream_id": 123, "viewers": 42}]
-    monkeypatch.setattr(pt, "KickPublicState", MagicMock(return_value=state))
+    setup_state = KickPublicState(session=MagicMock())
+    setup_state.metadata = MagicMock(return_value=channel)
+    state = KickPublicState(session=MagicMock())
+    state.metadata = MagicMock(return_value=channel)
+    state.viewers = MagicMock(return_value=[{"livestream_id": 123, "viewers": 42}])
+    state.close = MagicMock(wraps=state.close)
+    monkeypatch.setattr(
+        pt, "KickPublicState", MagicMock(side_effect=[setup_state, state])
+    )
     clients = [MagicMock(), MagicMock()]
     for index, client in enumerate(clients):
         client.negotiate.return_value = rc.RealtimeConnection(
@@ -668,20 +678,30 @@ def test_public_transport_owns_independent_connections_and_all_public_feeds(
     )
     transport.connect(1, force_discover=True)
     transport.subscribe("456")
-    transport.set_timeout(99)
-    frames = []
-    end = time.monotonic() + 2
-    while (
-        len([f for f in frames if f.get("event") == PUSHER_SUBSCRIPTION_SUCCEEDED]) < 7
-        and time.monotonic() < end
-    ):
-        frame = transport.recv()
-        if frame is not None:
-            frames.append(frame)
-    transport.send_pong()
-    transport.close()
+    try:
+        transport.set_timeout(99)
+        transport.set_timeout(99)
+        assert len(transport._workers) == 2
+        frames = []
+        end = time.monotonic() + 2
+        while (
+            len([f for f in frames if f.get("event") == PUSHER_SUBSCRIPTION_SUCCEEDED])
+            < 7
+            or not {"kick:public_state", "kick:viewer_count"}
+            <= {f["event"] for f in frames}
+        ) and time.monotonic() < end:
+            frame = transport.recv()
+            if frame is not None:
+                frames.append(frame)
+        transport.send_pong()
+    finally:
+        transport.close()
     transport.close()
     assert all(not worker.is_alive() for worker in transport._workers)
+    assert not transport._poll_worker.is_alive()
+    setup_state.metadata.assert_called_once_with("slug")
+    setup_state._session.close.assert_called_once()
+    state.metadata.assert_not_called()
     assert {
         f["channel"] for f in frames if f.get("event") == PUSHER_SUBSCRIPTION_SUCCEEDED
     } == {"chatrooms.456.v2", *global_feeds}
@@ -733,6 +753,16 @@ def test_live_opener_retries_public_http_redirect_then_subscribes(
         ),
         FakeKickSession([FakeResponse(200, {})]),
     ]
+    state_sessions.append(FakeKickSession([]))
+    snapshot_created = Event()
+    pending_states = iter(state_sessions)
+
+    def create_state_session(**_kwargs):
+        session = next(pending_states)
+        if session is state_sessions[-1]:
+            snapshot_created.set()
+        return session
+
     realtime_sessions = [
         *(
             []
@@ -751,7 +781,7 @@ def test_live_opener_retries_public_http_redirect_then_subscribes(
         PostSession([FakeResponse(200, descriptor)]),
         PostSession([FakeResponse(200, descriptor)]),
     ]
-    state_factory = MagicMock(side_effect=state_sessions)
+    state_factory = MagicMock(side_effect=create_state_session)
     realtime_factory = MagicMock(side_effect=realtime_sessions)
     monkeypatch.setattr(ps, "create_kick_session", state_factory)
     monkeypatch.setattr(rc, "create_kick_session", realtime_factory)
@@ -780,6 +810,7 @@ def test_live_opener_retries_public_http_redirect_then_subscribes(
         )
         assert len(attempts) == 2
         assert opened is attempts[1]
+        assert snapshot_created.wait(1)
         assert attempts[0]._stopped.is_set()
         assert state_sessions[0].close_calls == 1
         assert all(session.close_calls == 1 for session in realtime_sessions[:-2])
@@ -812,24 +843,386 @@ def test_live_opener_retries_public_http_redirect_then_subscribes(
 def public_state_transport():
     transport = pt.KickPublicTransport(username="slug", channel_id="123")
     transport._receive_timeout = 0.001
-    transport._state = MagicMock()
-    transport._state.metadata.return_value = {}
-    transport._state.viewers.return_value = []
+    transport._state = KickPublicState(session=MagicMock())
+    transport._state.metadata = MagicMock(return_value={})
+    transport._state.viewers = MagicMock(return_value=[])
     return transport
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.parametrize("blocked_resource", ["metadata", "viewers"])
+@pytest.mark.parametrize("stop_reason", ["close", "reconnect"])
+def test_public_poll_cannot_delay_queued_chat_or_close_its_inflight_session(
+    monkeypatch, blocked_resource, stop_reason
+):
+    entered, release = Event(), Event()
+    channel = {"livestream": {"id": 123}}
+
+    class BlockedSession(FakeKickSession):
+        def get(self, url, **kwargs):
+            self.calls.append((url, kwargs))
+            metadata_request = "/api/v2/channels/" in url
+            if metadata_request == (blocked_resource == "metadata"):
+                entered.set()
+                assert release.wait(5)
+                assert self.close_calls == 0
+            return FakeResponse(
+                payload=channel if metadata_request else [{"viewers": 42}]
+            )
+
+    session = BlockedSession([])
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    monkeypatch.setattr(ps, "create_kick_session", lambda **_kwargs: session)
+    transport._channel = channel
+    monkeypatch.setattr(pt, "_PUBLIC_STATE_POLL_INTERVAL", 0)
+    try:
+        transport.set_timeout(0.001)
+        assert entered.wait(1)
+        assert transport._workers == []
+        assert transport._poll_worker.is_alive()
+        transport._put({"event": "chat", "data": {"id": "queued"}})
+        for _ in range(3):
+            frame = transport.recv()
+            if frame["event"] == "chat":
+                break
+        else:
+            pytest.fail("Queued chat waited for the blocked REST request.")
+        assert frame["data"] == {"id": "queued"}
+        assert not release.is_set()
+        if stop_reason == "reconnect":
+            transport._request_reconnect(ConnectionError("socket failed"))
+            with pytest.raises(ConnectionError, match="socket failed"):
+                transport.recv()
+            assert not transport._stopped.is_set()
+        transport.close()
+        assert session.close_calls == 0
+        assert transport._poll_worker.is_alive()
+        assert transport._poll_stopped.is_set()
+    finally:
+        transport.close()
+        release.set()
+        if transport._poll_worker is not None:
+            transport._poll_worker.join(1)
+    assert not transport._poll_worker.is_alive()
+    assert session.close_calls == 1
+    assert transport._pending.empty()
+
+
+@pytest.mark.timeout(5)
+def test_slow_public_consumer_backpressures_at_two_pending_snapshots(monkeypatch):
+    transport = public_state_transport()
+    state = transport._state
+    monkeypatch.setattr(pt, "KickPublicState", MagicMock(return_value=state))
+    state.metadata.return_value = {"followers_count": 1}
+    backpressured = Event()
+
+    class ObservedQueue(Queue):
+        def put(self, item, block=True, timeout=None):
+            try:
+                return super().put(item, block=block, timeout=timeout)
+            except Full:
+                backpressured.set()
+                raise
+
+    transport._pending = ObservedQueue(maxsize=2)
+    monkeypatch.setattr(pt, "_PUBLIC_STATE_POLL_INTERVAL", 0)
+    try:
+        transport.set_timeout(0.001)
+        assert backpressured.wait(1)
+        worker = transport._poll_worker
+        transport.set_timeout(0.001)
+        assert transport._poll_worker is worker
+        assert transport._pending.qsize() == transport._pending.maxsize == 2
+        state.metadata.assert_called_once_with("slug")
+        state.viewers.assert_called_once_with({})
+        transport.close()
+        transport._poll_worker.join(1)
+        assert not transport._poll_worker.is_alive()
+        assert transport._pending.qsize() == 2
+    finally:
+        transport.close()
+    state._session.close.assert_called_once()
+
+
+def test_poll_worker_transfers_access_error_after_queued_snapshots(monkeypatch):
+    session = FakeKickSession([FakeResponse(200, text="<html>challenge</html>")])
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    monkeypatch.setattr(ps, "create_kick_session", lambda **_kwargs: session)
+    monkeypatch.setattr(pt, "_PUBLIC_STATE_POLL_INTERVAL", 0)
+    try:
+        transport.set_timeout(0.001)
+        transport._poll_worker.join(1)
+        assert not transport._poll_worker.is_alive()
+        assert transport.recv()["event"] == "kick:public_state"
+        assert transport.recv()["event"] == "kick:viewer_count"
+        with pytest.raises(CaptchaChallengeRequired):
+            transport.recv()
+    finally:
+        transport.close()
+    assert session.close_calls == 1
+
+
+def test_category_poll_stops_worker_and_drains_snapshots_and_accepted_chat(monkeypatch):
+    transport = public_state_transport()
+    state = transport._state
+    monkeypatch.setattr(pt, "KickPublicState", MagicMock(return_value=state))
+    transport._channel = {"livestream": {"categories": [{"id": 1}]}}
+    polled = Event()
+
+    def metadata(_username):
+        polled.set()
+        return {"livestream": {"categories": [{"id": 2}]}}
+
+    state.metadata.side_effect = metadata
+    transport._put({"event": "accepted chat"})
+    monkeypatch.setattr(pt, "_PUBLIC_STATE_POLL_INTERVAL", 0)
+    try:
+        transport.set_timeout(0.001)
+        assert polled.wait(1)
+        assert transport.recv()["data"]["livestream"]["categories"] == [{"id": 1}]
+        assert transport.recv()["event"] == "kick:viewer_count"
+        transport._poll_worker.join(1)
+        assert not transport._poll_worker.is_alive()
+        assert transport.recv()["data"]["livestream"]["categories"] == [{"id": 2}]
+        assert transport.recv()["event"] == "accepted chat"
+        with pytest.raises(ConnectionError, match="category feeds changed"):
+            transport.recv()
+        assert transport._poll_stopped.is_set()
+        assert not transport._stopped.is_set()
+        state._session.close.assert_called_once()
+    finally:
+        transport.close()
+
+
+def test_cancellation_during_poll_failure_keeps_stop_as_terminal_outcome():
+    transport = public_state_transport()
+
+    def fail(*_args, **_kwargs):
+        transport.request_stop()
+        msg = "request completed after cancellation"
+        raise RuntimeError(msg)
+
+    transport._state.snapshots = fail
+    try:
+        transport._poll()
+        assert transport._reader_errors.empty()
+        with pytest.raises(ConnectionError, match="stopped"):
+            transport.recv()
+    finally:
+        transport.close()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.parametrize("cancel", [False, True])
+def test_poll_session_construction_failure_transfers_error_unless_cancelled(
+    monkeypatch, cancel
+):
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    constructing, release = Event(), Event()
+
+    def create(**_kwargs):
+        constructing.set()
+        assert release.wait(5)
+        if cancel:
+            transport.request_stop()
+        msg = "session initialization failed"
+        raise RequestException(msg)
+
+    monkeypatch.setattr(pt, "KickPublicState", create)
+    try:
+        transport.set_timeout(0.001)
+        assert constructing.wait(1)
+        release.set()
+        transport._poll_worker.join(1)
+        assert not transport._poll_worker.is_alive()
+        if cancel:
+            assert transport._reader_errors.empty()
+            with pytest.raises(ConnectionError, match="stopped"):
+                transport.recv()
+        else:
+            with pytest.raises(RequestException, match="session initialization failed"):
+                transport.recv()
+    finally:
+        release.set()
+        transport.close()
+
+
+@pytest.mark.timeout(5)
+def test_curl_snapshot_handles_close_on_each_creating_thread_before_thread_exit(
+    monkeypatch,
+):
+    handles = []
+    ready, viewers_read, release = Event(), Event(), Event()
+    channel = {"livestream": None}
+
+    class NativeHandle:
+        def __init__(self, *, debug):
+            self.owner = get_ident()
+            self.closed_by = []
+            handles.append(self)
+
+        def close(self):
+            self.closed_by.append(get_ident())
+
+    monkeypatch.setattr(curl_session, "Curl", NativeHandle)
+
+    def metadata(state, _username):
+        assert state._session.curl.owner == get_ident()
+        return channel
+
+    def viewers(state, _channel):
+        assert state._session.curl.owner == get_ident()
+        viewers_read.set()
+        return []
+
+    monkeypatch.setattr(KickPublicState, "metadata", metadata)
+    monkeypatch.setattr(KickPublicState, "viewers", viewers)
+    clients = [MagicMock(), MagicMock()]
+    for client in clients:
+        client.negotiate.return_value = rc.RealtimeConnection(
+            "pusher", "wss://ws-us2.pusher.com/app/key"
+        )
+    monkeypatch.setattr(pt, "KickRealtimeClient", MagicMock(side_effect=clients))
+    sockets = [
+        BlockingSocket([json.dumps({"event": PUSHER_CONNECTION_ESTABLISHED})])
+        for _ in range(2)
+    ]
+    monkeypatch.setattr(pt, "_default_connector", MagicMock(side_effect=sockets))
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    errors = []
+
+    def capture():
+        try:
+            transport.connect(1)
+            transport.subscribe("456")
+            transport.set_timeout(0.001)
+            ready.set()
+            assert release.wait(5)
+        except BaseException as error:
+            errors.append(error)
+            ready.set()
+
+    owner = Thread(target=capture)
+    try:
+        owner.start()
+        assert ready.wait(1)
+        assert viewers_read.wait(1)
+        assert not errors
+        transport.close()
+        transport.close()
+        assert owner.is_alive()
+        assert len(handles) == 2
+        assert len({handle.owner for handle in handles}) == 2
+        assert all(handle.closed_by == [handle.owner] for handle in handles)
+    finally:
+        transport.close()
+        release.set()
+        owner.join(1)
+    assert not owner.is_alive()
+    assert not errors
+
+
+def test_cancelled_poll_worker_never_constructs_snapshot_session(monkeypatch):
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    factory = MagicMock()
+    monkeypatch.setattr(pt, "KickPublicState", factory)
+    transport.request_stop()
+    transport._poll_loop()
+    transport.close()
+    transport.close()
+    factory.assert_not_called()
+    assert transport._pending.empty()
+
+
+def test_poll_worker_start_failure_never_constructs_snapshot_session(monkeypatch):
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    factory = MagicMock()
+    monkeypatch.setattr(pt, "KickPublicState", factory)
+    worker = MagicMock()
+    worker.start.side_effect = RuntimeError("unable to start poller")
+    monkeypatch.setattr(pt, "Thread", MagicMock(return_value=worker))
+    try:
+        with pytest.raises(RuntimeError, match="unable to start poller"):
+            transport.set_timeout(0.001)
+        assert transport._poll_worker is None
+    finally:
+        transport.close()
+    worker.join.assert_not_called()
+    transport.close()
+    factory.assert_not_called()
+
+
+@pytest.mark.timeout(5)
+def test_public_close_does_not_wait_for_inflight_setup_metadata(monkeypatch):
+    entered, release, closed = Event(), Event(), Event()
+
+    class BlockedSession(FakeKickSession):
+        def get(self, url, **kwargs):
+            entered.set()
+            assert release.wait(5)
+            assert self.close_calls == 0
+            return FakeResponse(payload={"livestream": None})
+
+    session = BlockedSession([])
+    monkeypatch.setattr(ps, "create_kick_session", lambda **_kwargs: session)
+    clients = MagicMock()
+    monkeypatch.setattr(pt, "KickRealtimeClient", clients)
+    transport = pt.KickPublicTransport(username="slug", channel_id="123")
+    errors = []
+
+    def connect():
+        try:
+            transport.connect(1)
+        except ConnectionError as error:
+            errors.append(error)
+
+    def close():
+        transport.request_stop()
+        transport.close()
+        transport.close()
+        closed.set()
+
+    request = Thread(target=connect)
+    cleanup = Thread(target=close)
+    try:
+        request.start()
+        assert entered.wait(1)
+        cleanup.start()
+        assert closed.wait(1)
+        assert request.is_alive()
+        assert session.close_calls == 0
+        assert transport._poll_worker is None
+    finally:
+        release.set()
+        request.join(1)
+        if cleanup.ident is not None:
+            cleanup.join(1)
+        transport.close()
+    assert not request.is_alive()
+    assert not cleanup.is_alive()
+    assert len(errors) == 1
+    clients.assert_not_called()
+    assert session.close_calls == 1
 
 
 def test_public_snapshots_only_emit_changed_values_and_restart_changed_categories():
     transport = public_state_transport()
+    transport._poll()
     assert transport.recv()["event"] == "kick:public_state"
     assert transport.recv()["event"] == "kick:viewer_count"
+    transport._poll()
+    transport._state.metadata.assert_called_once_with("slug")
     assert transport.recv() is None
     transport._next_poll = 0
+    transport._poll()
     assert transport.recv() is None
     transport._state.viewers.return_value = [{"viewers": 42}]
     transport._next_poll = 0
+    transport._poll()
     assert transport.recv()["event"] == "kick:viewer_count"
     transport._state.metadata.return_value = {"livestream": {"categories": [{"id": 7}]}}
     transport._next_poll = 0
+    transport._poll()
     assert transport.recv()["event"] == "kick:public_state"
     with pytest.raises(ConnectionError, match="category feeds changed"):
         transport.recv()
@@ -854,6 +1247,7 @@ def test_public_viewer_snapshots_track_offline_transitions_with_empty_counts():
     ]:
         transport._state.metadata.return_value = channel
         transport._next_poll = 0
+        transport._poll()
         assert transport.recv()["event"] == "kick:public_state"
         frame = transport.recv()
         assert frame["event"] == "kick:viewer_count"
@@ -863,6 +1257,7 @@ def test_public_viewer_snapshots_track_offline_transitions_with_empty_counts():
             f"{expected.capitalize()}"
         )
         transport._next_poll = 0
+        transport._poll()
         assert transport.recv() is None
     transport.close()
 
@@ -872,6 +1267,7 @@ def test_public_poll_failure_is_visible_and_does_not_drop_chat():
     transport._state.metadata.side_effect = RequestException("offline")
     counters = []
     transport._diagnostic_callback = counters.append
+    transport._poll()
     transport._queue.put({"event": "chat"})
     assert transport.recv()["event"] == "kick:viewer_count"
     assert transport.recv()["event"] == "chat"
@@ -933,6 +1329,7 @@ def test_category_reconnect_drains_recorded_prediction_before_resuming_live_chat
     first.connect = lambda *_args, **_kwargs: None
     first.subscribe = lambda *_args: None
     first.set_timeout = lambda *_args: None
+    first._poll()
     replacement = MagicMock()
     replacement.recv.side_effect = [
         {"event": PUSHER_SUBSCRIPTION_SUCCEEDED, "channel": "chatrooms.456.v2"},
@@ -1001,6 +1398,7 @@ def test_category_reconnect_drains_full_queue_and_inflight_publication(monkeypat
     worker.start()
     try:
         assert entering_put.wait(5)
+        transport._poll()
         assert transport.recv()["event"] == "kick:public_state"
         assert transport.recv()["event"] == "kick:viewer_count"
         assert transport.recv()["event"] == "first"
@@ -1203,6 +1601,15 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
 ):
     channel = {"id": 123, "chatroom": {"id": 456}, "livestream": None}
     state_session = FakeKickSession([FakeResponse(payload=channel)] * 2)
+    worker_state_session = FakeKickSession([])
+    worker_state_created = Event()
+
+    def create_state_session(**_kwargs):
+        if state_session.close_calls:
+            worker_state_created.set()
+            return worker_state_session
+        return state_session
+
     sessions = [
         PostSession(
             [FakeResponse(payload=connection("pusher", app_key="key", cluster="us2"))]
@@ -1218,7 +1625,7 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
             ]
         ),
     ]
-    monkeypatch.setattr(ps, "create_kick_session", lambda **_: state_session)
+    monkeypatch.setattr(ps, "create_kick_session", create_state_session)
     monkeypatch.setattr(rc, "create_kick_session", MagicMock(side_effect=sessions))
     sockets = [
         BlockingSocket(
@@ -1249,6 +1656,14 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
     ]
     connector = MagicMock(side_effect=sockets)
     monkeypatch.setattr(pt, "_default_connector", connector)
+    opened = []
+
+    def public_transport(**kwargs):
+        transport = pt.KickPublicTransport(**kwargs)
+        opened.append(transport)
+        return transport
+
+    monkeypatch.setattr(live_service, "KickPublicTransport", public_transport)
     downloader = FakeDownloader()
     downloader._kick_api_client = MagicMock()
     downloader._kick_api_client.fetch_channel.return_value = channel
@@ -1267,16 +1682,22 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
                 break
         else:
             pytest.fail("negotiated chat record was not emitted")
+        if public_events:
+            assert worker_state_created.wait(1)
     finally:
         chat.close()
     assert sockets[0].closed
     assert sockets[1].closed is public_events
     assert state_session.close_calls == int(public_events)
+    assert worker_state_session.close_calls == int(public_events)
     assert sessions[0].close_calls == 1
     assert sessions[1].close_calls == int(public_events)
     assert chat.diagnostics["pusher_connection_count"] == 1
     assert chat.diagnostics["centrifugo_connection_count"] == int(public_events)
     assert chat.diagnostics["public_state_poll_count"] == int(public_events)
+    assert len(opened[0]._workers) == (2 if public_events else 1)
+    assert (opened[0]._poll_worker is not None) is public_events
+    assert len(state_session.calls) == int(public_events)
     expected_hosts = ["ws-us2.pusher.com"]
     if public_events:
         expected_hosts.append("realtime.us-east-1.platform.kick.com")

@@ -14,6 +14,10 @@ from typing import IO, TYPE_CHECKING, Protocol, cast
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.sites._message_dedup import _FormattedMessageDeduplicator
+from chat_downloader.utils._bounded_records import (
+    iter_bounded_records,
+    read_bounded_record,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -209,7 +213,7 @@ def _read_txt_line(
     stats: AuditStats,
 ) -> tuple[bool, bytes]:
     """Read, split, and UTF-8 validate one physical TXT line."""
-    raw_line = stream.readline()
+    raw_line = read_bounded_record(stream)
     if not raw_line:
         return False, b""
 
@@ -283,7 +287,11 @@ def audit_capture(  # noqa: C901 - one streaming state machine validates both fi
     max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
     dedup_reset_before_lines: tuple[int, ...] = (),
 ) -> AuditStats:
-    """Stream both artifacts and return content-free parity statistics."""
+    """Stream bounded records, returning content-free parity statistics.
+
+    Oversized physical records raise a content-free input error, closing both
+    streams rather than decoding, truncating, or comparing a partial record.
+    """
     stats = AuditStats()
     deduplicator = _FormattedMessageDeduplicator(max_seen_message_ids)
     next_reset_index = 0
@@ -302,7 +310,9 @@ def audit_capture(  # noqa: C901 - one streaming state machine validates both fi
             msg = "JSONL and TXT inputs resolve to the same file"
             raise InputIdentityError(msg)
 
-        for jsonl_line, raw_line in enumerate(jsonl_stream, start=1):
+        for jsonl_line, raw_line in enumerate(
+            iter_bounded_records(jsonl_stream), start=1
+        ):
             stats.jsonl_lines += 1
             if (
                 next_reset_index < len(dedup_reset_before_lines)

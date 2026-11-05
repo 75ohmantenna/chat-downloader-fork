@@ -10,6 +10,18 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Finish closing all output writers and provider sessions before propagating an
+  unexpected cleanup error, including failures encountered at chat exhaustion.
+- Bound reusable Twitch channel and badge caches while preserving capture-owned
+  badge metadata across delayed iteration, eviction, and reconnects.
+- Poll Kick public snapshots on an independently owned worker so slow REST
+  endpoints do not block queued chat delivery.
+- Bound shared HTTP response bodies and wire reads, and enforce completion
+  budgets and cooperative cancellation through response and proxy reads.
+- Reject oversized capture-input records and unterminated JSONL append tails
+  before decoding or changing existing output.
+- Bound YouTube anomaly samples across changing action, renderer, and
+  continuation names with aggregate diagnostic quotas.
 - Apply the shared `all` message-type wildcard consistently to YouTube requests.
 - Retry rejected Kick HTTP redirects consistently during anonymous live setup,
   without following redirects or inspecting their bodies.

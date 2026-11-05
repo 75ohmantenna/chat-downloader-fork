@@ -82,6 +82,29 @@ YouTube SID promotion preserves the selected cookie's scope and does not extend
 its existing expiration. Provider API requests reject HTTP redirects; YouTube
 initial pages permit at most five same-origin HTTPS redirects.
 
+Shared YouTube/Twitch requests consume at most 16 MiB of decoded HTTP body before
+`.text` or `.json()` can parse it. Gzip and deflate are supported; unsupported
+or stacked content encodings and decoded-body overflow raise `ParsingError`.
+A separate 32 MiB HTTP-wire quota, including headers and framing, also bounds
+compressed decoder input that produces no output.
+Responses are released on every exit, while their owning sessions remain
+reusable. A monotonic completion deadline spans connect, response headers,
+decoded body reads, and any permitted redirect chain; its budget is the
+configured connect plus read timeouts. The configured read timeout remains an
+inactivity limit, not a 0.1-second polling timeout. Timed-worker cancellation is
+checked during socket reads, SOCKS negotiation, nested HTTPS-proxy TLS reads,
+urllib3 retry sleeps, and blocking connection-pool acquisition without spawning
+body-reader threads. Direct exposed-session requests share one budget across
+their complete redirect chain. Unused intermediate retry bodies close without
+being drained into memory. Host-specific adapter mounts retain supported
+Requests TLS, retry, and pool settings under the same bounds; custom senders,
+response builders, connection readers, retry implementations, and pool policies
+that cannot enforce the policy fail explicitly before transport. Short-lived
+custom adapter and pool classes are not strongly cached globally. User-supplied
+callbacks and hooks are not preempted; they must terminate cooperatively.
+Platform DNS resolution is synchronous and cannot be preempted by this policy;
+an expired budget is enforced when resolution returns.
+
 `ChatDownloader.get_chat(...)` still accepts keyword arguments for compatibility
 with upstream-style usage, but those arguments map to `ChatRequest` fields. New
 request options should be added to `ChatRequest` first.
@@ -504,6 +527,15 @@ written for one label and output directory during the current process;
 duplicate payloads continue to resolve to their deterministic existing path.
 Set `sample_group` and `group_limit` together to apply a second aggregate bound
 across related labels.
+
+Dynamic YouTube anomaly labels retain independent ten-payload per-label limits
+and a fixed 50-sample aggregate limit for each family (empty action parse,
+missing keys, untyped action, unknown message type, unknown action, and unknown
+continuation). The aggregate reservation runs first, so exhausted families do
+not accumulate new label keys. Failed writes release aggregate and per-label
+claims, except after a successful publication; an identical prior sample can
+still reuse its deterministic path. These anomaly quotas require the shared
+capture opt-in and debug logging, and are separate from clean-response sampling.
 
 Clean-run provider captures require a second explicit opt-in because they
 contain ordinary public chat data. Set

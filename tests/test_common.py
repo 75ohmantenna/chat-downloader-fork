@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
 import pytest
 
@@ -188,3 +189,40 @@ def test_chat_closes_writers_when_generator_raises(
 
     with open(path, encoding="utf-8") as fh:
         assert json.loads(fh.readline()) == {"message": "first"}
+
+
+@pytest.mark.parametrize("error_type", [ValueError, LookupError])
+def test_chat_close_finishes_owned_writers_before_unexpected_error(
+    tmp_path: pathlib.Path, error_type: type[Exception]
+) -> None:
+    source = Mock()
+    chat = Chat(chat=source)
+    first_error = error_type("first custom close failure")
+    first = Mock()
+    first.close.side_effect = first_error
+    handled = Mock()
+    handled.close.side_effect = OSError("handled close failure")
+    later = Mock()
+    later.close.side_effect = LookupError("later custom close failure")
+    path = tmp_path / "owned.jsonl"
+    owned = ContinuousWriter(str(path))
+    owned.write({"message": "kept"})
+    assert owned.writer is not None
+    stream = owned.writer.file
+    assert stream is not None
+    assert not stream.closed
+    for writer in (first, handled, later, owned):
+        chat.attach_writer(writer)
+
+    with pytest.raises(error_type) as caught:
+        chat.close()
+
+    assert caught.value is first_error
+    assert stream.closed
+    assert owned.writer.file is None
+    assert json.loads(path.read_text(encoding="utf-8")) == {"message": "kept"}
+    assert chat.write_error_count == 3
+    chat.close()
+    source.close.assert_called_once_with()
+    for writer in (first, handled, later):
+        writer.close.assert_called_once_with()

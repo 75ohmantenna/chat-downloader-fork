@@ -14,6 +14,10 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
 from chat_downloader.output._secure_file import _OutputFile
+from chat_downloader.utils._bounded_records import (
+    MAX_CAPTURE_RECORD_BYTES,
+    CaptureRecordLimitError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -46,20 +50,25 @@ def _repair_text_final_line(file: BinaryIO, file_name: str) -> None:
 def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
     r"""Repair a missing or crash-truncated final newline on the same handle.
 
-    Scan backward in fixed-size chunks until a newline is found, then validate
-    only the trailing record. Never reopen an inspected destination by pathname.
+    Scan at most one bounded record plus a preceding newline, then validate only
+    that trailing record. Oversized tails fail without changing existing bytes.
+    Never reopen an inspected destination by pathname.
     """
     end = file.seek(0, os.SEEK_END)
     if not end:
         return
     file.seek(end - 1)
-    if file.read(1) == b"\n":
+    last_byte = file.read(1)
+    if last_byte == b"\n":
         return
 
+    # A terminal CR becomes part of CRLF when repair appends the missing LF.
+    tail_limit = MAX_CAPTURE_RECORD_BYTES + (last_byte == b"\r")
+    scan_start = max(0, end - tail_limit - 1)
     position = end
     truncate_at = 0
-    while position > 0:
-        chunk_start = max(0, position - _TAIL_SCAN_BYTES)
+    while position > scan_start:
+        chunk_start = max(scan_start, position - _TAIL_SCAN_BYTES)
         file.seek(chunk_start)
         chunk = file.read(position - chunk_start)
         newline_index = chunk.rfind(b"\n")
@@ -67,6 +76,9 @@ def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
             truncate_at = chunk_start + newline_index + 1
             break
         position = chunk_start
+
+    if end - truncate_at > tail_limit:
+        raise CaptureRecordLimitError
 
     file.seek(truncate_at)
     tail = file.read(end - truncate_at)

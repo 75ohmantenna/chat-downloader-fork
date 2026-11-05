@@ -11,7 +11,11 @@ from chat_downloader.sites.twitch.parsing.badges import (
     _parse_irc_badges,
 )
 from chat_downloader.sites.twitch.parsing.messages import _parse_item
-from chat_downloader.sites.twitch.types import BadgeCache, BadgeSet
+from chat_downloader.sites.twitch.types import (
+    _BADGE_CHANNEL_LIMIT,
+    BadgeCache,
+    BadgeSet,
+)
 from tests.twitch_third_helpers import (
     badge_record,
     gql_comment,
@@ -123,3 +127,34 @@ def test_unknown_badge_has_no_icons():
     assert result["name"] == "bits"
     assert "icons" not in result
     assert "title" not in result
+
+
+@pytest.mark.parametrize("full", [False, True], ids=["spare-slot", "at-cap"])
+def test_capture_snapshot_reserves_receiving_slot_and_never_unions_new_channels(full):
+    count = _BADGE_CHANNEL_LIMIT if full else 2
+    cache = BadgeCache(
+        channel_badges={
+            str(index): {("subscriber", "12"): {"title": f"Sub {index}"}}
+            for index in range(count)
+        }
+    )
+    capture = cache.snapshot("receiving")
+    assert capture.channel_badges["receiving"] == {}
+    assert len(capture.channel_badges) == min(count + 1, _BADGE_CHANNEL_LIMIT)
+    assert ("0" in capture.channel_badges) is not full
+    assert "receiving" not in cache.channel_badges
+    assert len(cache.channel_badges) == count
+    cache.global_badges = {("moderator", "1"): {"title": "Fresh global"}}
+    cache.channel_badges = {
+        "receiving": {("subscriber", "12"): {"title": "Fresh receiving"}},
+        "unrelated": {("subscriber", "12"): {"title": "New unrelated channel"}},
+    }
+    refreshed = capture.refreshed(cache, "receiving")
+    assert set(refreshed.channel_badges) == set(capture.channel_badges)
+    assert refreshed.channel_badges["receiving"][("subscriber", "12")]["title"] == (
+        "Fresh receiving"
+    )
+    assert refreshed.global_badges[("moderator", "1")]["title"] == "Fresh global"
+    assert capture.channel_badges["receiving"] == {}
+    assert capture.global_badges == {}
+    assert "unrelated" not in capture.refreshed(cache, "unrelated").channel_badges

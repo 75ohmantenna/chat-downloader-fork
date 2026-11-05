@@ -14,6 +14,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, cast
 
+from chat_downloader.utils._bounded_records import iter_bounded_records
+
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
     from pathlib import Path
@@ -114,11 +116,12 @@ def _validate_json(value: object) -> None:
 def read_capture_lines(path: Path) -> Generator[CaptureLine, None, None]:
     """Read strict UTF-8 objects, continuing after invalid physical lines.
 
-    Findings contain no input content. File errors propagate to the caller.
+    Findings contain no input content. File and physical-record-limit errors
+    propagate to the caller before oversized UTF-8 decode or JSON parsing.
     Consumers that stop early must close the iterator to release its input.
     """
     with open_capture_input(path) as source:
-        for line_number, line in enumerate(source, 1):
+        for line_number, line in enumerate(iter_bounded_records(source), 1):
             try:
                 record: object = json.loads(
                     line.decode("utf-8"), object_pairs_hook=_json_object

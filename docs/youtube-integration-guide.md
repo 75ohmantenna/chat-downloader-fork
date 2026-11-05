@@ -183,6 +183,37 @@ before transport. Initial pages follow at most five same-origin HTTPS redirects;
 provider API requests reject redirects. Matched HTTP channel `/live` shortcuts
 are reconstructed as canonical HTTPS requests before credentials are sent.
 
+Shared YouTube/Twitch HTTP requests stream and decode at most 16 MiB before any
+HTML or JSON parsing. Gzip and deflate are advertised; unsupported or stacked
+content encodings fail explicitly before decoding. A second 32 MiB HTTP-wire
+quota, including headers and chunk framing, bounds retained compressed decoder
+input even when a deflate stream produces no output. Oversized decoded bodies
+or wire input raise `ParsingError`, including compressed bodies with a small
+wire size.
+Responses are released on success, redirect rejection, decode errors, deadline
+expiry, and timed-worker cancellation; a failed request does not close its
+reusable session.
+
+Each request has one monotonic completion budget equal to the configured
+connect plus read timeouts, shared across redirects even through the exposed
+Requests session. Socket reads retain the configured inactivity timeout while
+checking completion and worker cancellation at intervals no longer than 0.1
+seconds, including header/chunk framing, SOCKS negotiation, and nested TLS reads
+through HTTPS proxies. Retained urllib3 retry backoff/`Retry-After` waits and
+blocking pooled-connection acquisition use the same budget and cooperative stop
+checks. Unused intermediate retry bodies are closed, not drained into memory.
+No background body-reading helper is spawned. User-supplied callbacks and hooks
+must terminate cooperatively themselves; the transport does not preempt them.
+Platform DNS resolution remains synchronous: deadline expiry and cancellation
+are checked after it returns, not by spawning resolver threads.
+
+The policy covers host-specific adapter mounts as well as scheme defaults.
+Standard Requests adapter TLS contexts, retry configuration, and pool settings
+are preserved. Custom senders, response builders, connection readers, retry
+implementations, or pool policies whose resource bounds cannot be enforced fail
+explicitly before transport. Short-lived custom adapter and pool classes are
+not retained by strong global registries.
+
 Populated unknown discovery renderers produce an aggregate debug diagnostic and
 bounded `youtube-unsupported-discovery-items` samples when capture is enabled,
 so parser drift can be distinguished from an empty list.
@@ -232,9 +263,10 @@ replays may explicitly override that delay with `youtube_replay_poll_interval`;
 the bounded override is opt-in because faster polling can be rate-limited. This
 polling delay is separate from HTTP connect/read timeout settings.
 
-When retrieval runs inside a timed worker, polling waits wake on shutdown and
-unwind the provider before another poll. An HTTP request already in progress
-still uses its connect/read bounds, so deadline accounting can remain incomplete.
+When retrieval runs inside a timed worker, polling waits and in-progress HTTP
+response reads wake on shutdown and unwind the provider before another poll.
+Connection establishment still uses its bounded connect timeout; response-body
+progress cannot keep a stopped worker running indefinitely.
 
 Exact replay pages are remembered under their request and advertised next tokens,
 using up to 128 token/page aliases. Repeated stale responses are suppressed before
@@ -596,7 +628,13 @@ doesn't recognize, the runtime emits a debug sentinel and can save a sanitized
 snapshot. See [Debug sample capture](development-workflow-guide.md#debug-sample-capture)
 for capture configuration. Promote reviewed samples into
 `tests/fixtures/youtube/`. Each YouTube drift label captures at most ten unique
-payloads per process and output directory.
+payloads per process and output directory. Dynamic labels additionally share a
+50-sample aggregate quota within each fixed anomaly family: empty action parses,
+missing keys, untyped actions, unknown message types, unknown actions, and
+unknown continuation keys. Aggregate reservations precede per-label reservations,
+so new provider labels cannot grow reservation maps after a family is full.
+Failed writes release both claims (unless publication already succeeded), and
+duplicate samples retain their deterministic paths without consuming new slots.
 
 Each continuation poll also emits one bounded aggregate debug diagnostic. It
 reports processed and emitted counts, then categorizes non-emitting actions as

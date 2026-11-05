@@ -43,6 +43,7 @@ from .constants_patterns import (
     _YT_HOME,
     _YT_MAX_NO_PROGRESS_POLLS,
     _YT_MAX_PROFILE_FALLBACKS,
+    YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
     YOUTUBE_DEBUG_SAMPLE_LIMIT,
 )
 from .continuation_helpers import (
@@ -225,6 +226,8 @@ def _log_continuation_debug_info(cont_result: ContinuationParseResult) -> None:
                 "payload_summary": payload_summary,
             },
             sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
+            sample_group="youtube-unknown-continuation",
+            group_limit=YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
         )
         debug_log(
             f"Unknown continuation: {cont_key}",

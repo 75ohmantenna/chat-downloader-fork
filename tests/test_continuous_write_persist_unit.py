@@ -12,11 +12,14 @@ from unittest.mock import patch
 
 import pytest
 
+import chat_downloader.output.writers as writers_module
 from chat_downloader.output.continuous_write import (
     JsonLinesContinuousWriter,
     TextContinuousWriter,
 )
 from chat_downloader.output.writers import _FSYNC_INTERVAL_SECONDS
+from chat_downloader.utils import _bounded_records
+from chat_downloader.utils._bounded_records import CaptureRecordLimitError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -126,3 +129,95 @@ def test_jsonl_append_tail_recovery_is_stable_for_large_log(tmp_path: Path) -> N
     writer.close()
     with path.open() as file:
         assert sum(1 for _line in file) == 20_001
+
+
+@pytest.mark.parametrize("prefix", [b"", b"{}\n" * 20_000])
+@pytest.mark.parametrize("terminal_cr", [b"", b"\r"])
+def test_jsonl_append_accepts_exact_record_limit(
+    tmp_path, monkeypatch, prefix, terminal_cr
+):
+    limit = 128
+    monkeypatch.setattr(writers_module, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(_bounded_records, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    header, footer = b'{"message":"', b'"}'
+    tail = header + b"x" * (limit - len(header) - len(footer)) + footer
+    path = tmp_path / "exact.jsonl"
+    path.write_bytes(prefix + tail + terminal_cr)
+
+    writer = JsonLinesContinuousWriter(str(path), overwrite=False)
+    writer.write({"next": True})
+    writer.close()
+
+    assert path.read_bytes() == (prefix + tail + terminal_cr + b'\n{"next": true}\n')
+
+
+@pytest.mark.parametrize("prefix", [b"", b"{}\n" * 20_000])
+@pytest.mark.parametrize("terminal_cr", [b"", b"\r"])
+def test_jsonl_append_rejects_one_byte_excess_without_repair_or_handle_leak(
+    tmp_path, monkeypatch, prefix, terminal_cr
+):
+    limit = 128
+    monkeypatch.setattr(writers_module, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(_bounded_records, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    header, footer = b'{"private":"', b'"}'
+    tail = header + b"x" * (limit + 1 - len(header) - len(footer)) + footer
+    original = prefix + tail + terminal_cr
+    path = tmp_path / "oversized.jsonl"
+    path.write_bytes(original)
+    opened, read_sizes = [], []
+    detach = writers_module._OutputFile.detach
+
+    def track_detach(prepared):
+        stream = detach(prepared)
+        opened.append(stream)
+        read = stream.read
+
+        def bounded_read(size=-1):
+            assert 0 <= size <= 8
+            read_sizes.append(size)
+            return read(size)
+
+        monkeypatch.setattr(stream, "read", bounded_read)
+        return stream
+
+    monkeypatch.setattr(writers_module._OutputFile, "detach", track_detach)
+    with pytest.raises(CaptureRecordLimitError, match="128-byte limit") as caught:
+        JsonLinesContinuousWriter(str(path), overwrite=False)
+
+    assert "private" not in str(caught.value)
+    assert path.read_bytes() == original
+    assert opened
+    assert all(stream.closed for stream in opened)
+    assert sum(read_sizes) <= limit + len(terminal_cr) + 2
+
+
+def test_jsonl_tail_read_error_preserves_records_and_closes_input(
+    tmp_path, monkeypatch
+):
+    path = tmp_path / "unreadable-tail.jsonl"
+    original = b'{"kept":true}\n{"partial":'
+    path.write_bytes(original)
+    opened = []
+    detach = writers_module._OutputFile.detach
+
+    def fail_tail_read(prepared):
+        stream = detach(prepared)
+        opened.append(stream)
+        read = stream.read
+
+        def fail_scan(size=-1):
+            if size != 1:
+                raise OSError("tail read failed")
+            return read(size)
+
+        monkeypatch.setattr(stream, "read", fail_scan)
+        return stream
+
+    monkeypatch.setattr(writers_module._OutputFile, "detach", fail_tail_read)
+    with pytest.raises(OSError, match="tail read failed"):
+        JsonLinesContinuousWriter(str(path), overwrite=False)
+    assert path.read_bytes() == original
+    assert opened
+    assert all(stream.closed for stream in opened)

@@ -105,16 +105,23 @@ paid/ticker semantic deduplication as formatted production outputs, renders
 with `ItemFormatter`, and compares exact physical TXT content. Nonempty JSONL
 and TXT files must end in LF or CRLF, must use one newline style consistently,
 and must agree on the capture-origin style, so a Windows capture audits
-correctly on a POSIX host and vice versa. Memory scales with the largest
-individual input record plus the bounded dedup cache and explicitly supplied
-reset list, rather than with total capture size.
+correctly on a POSIX host and vice versa. Each physical JSONL/TXT input record
+is limited to 16 MiB (16,777,216 bytes), excluding its LF/CRLF terminator.
+The byte read is bounded before UTF-8 decode or JSON parsing; exact-limit
+records are accepted, including a final record without a newline (which still
+fails the separate trailing-newline audit). Memory scales with the largest
+accepted record plus the bounded dedup cache and explicitly supplied reset
+list, rather than with total capture size.
 
 Reports contain only counts, completeness state, and first issue/mismatch
 indices; captured chat and rejected argument values are never printed. A JSON
 parse, deduplication, or formatting error makes exact realignment unsafe, so
 `comparison_complete=no` and `comparison_skipped` report how many JSONL lines
-were not compared from that point onward. The tool still scans every JSONL and
-TXT physical line for bounded diagnostics.
+were not compared from that point onward. The tool still scans subsequent
+JSONL/TXT physical lines for bounded diagnostics unless a record exceeds the
+input limit. Oversized input stops the audit, closes both inputs, and reports
+only `ERROR kind=input_io` with exit status `2`; no partial record is decoded,
+silently skipped, truncated, or included in a passing audit.
 
 Only a truly absent artifact is treated as empty, matching lazy writers that
 retrieve no records. Permission failures, dangling links, nonregular files,
@@ -126,6 +133,14 @@ Exit status `0` means parity passed, `1` means the artifacts failed audit, and
 UTF-8, malformed or blank JSONL lines, non-object JSON, formatting failures,
 line-count differences, mixed/missing/mismatched physical newlines, and invalid
 dedup reset boundaries are audit failures.
+
+The YouTube, Twitch, and Kick JSONL inspectors use the same 16 MiB physical
+record read limit and stop with a content-free input I/O error (exit `2`) on
+excess. Their input descriptors and temporary inspection storage are released
+on that path. The limit applies to reads, not serialized writer output; JSON
+escaping or custom formatting can make a newly written record exceed it.
+JSONL append repair separately bounds its unterminated final-record scan/read
+to this limit and rejects excess without modifying existing capture bytes.
 
 ### YouTube capture inspection
 
@@ -195,8 +210,8 @@ accounting gap, and `2` means input, summary, or temporary-storage failure.
 An empty existing JSONL file reports zero records; missing or nonregular
 input files are I/O errors. Chat contents, IDs, unknown type names, and rejected input values are
 never printed. Exact duplicate detection uses a temporary SQLite database,
-with disk usage proportional to unique IDs; other state is bounded apart
-from the largest input line. Use this on one completed run, with closed files.
+with disk usage proportional to unique IDs; other state scales with at most
+one accepted 16 MiB input record. Use this on one completed run, with closed files.
 The existing parity auditor remains responsible for physical newline checks.
 
 ### Kick capture inspection

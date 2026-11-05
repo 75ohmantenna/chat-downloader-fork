@@ -437,7 +437,11 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(monkeypatch, poll
     assert polling.downloader.session.headers["x-goog-visitor-id"] == "visitor-2"
     polling.sleep.assert_not_called()
     polling.capture.assert_called_once_with(
-        "youtube-unknown-continuation-heartbeat", debug_info, sample_limit=10
+        "youtube-unknown-continuation-heartbeat",
+        debug_info,
+        sample_limit=10,
+        sample_group="youtube-unknown-continuation",
+        group_limit=50,
     )
     assert [entry.args[1:] for entry in debug.call_args_list] == [
         (

@@ -100,8 +100,10 @@ The Kick flow depends on the target type.
 6. Confirm each subscription, answer heartbeats, decode publications, and
    dispatch typed events. Deduplicate recent chat IDs and gift chunk identities,
    filter by message groups/types, and yield. For filters that include events
-   beyond text messages, poll anonymous channel metadata and current viewer
-   counts every 60 seconds; emit only changed snapshots.
+   beyond text messages, one owned worker polls anonymous channel metadata and
+   current viewer counts every 60 seconds; emit only changed snapshots. The
+   metadata fetched for initial feed selection seeds the first snapshot instead
+   of triggering a redundant metadata request.
 7. After the initial primary chat subscription is confirmed, recover setup
    history with bounded reverse pagination, deduplicate it against the preload
    and queued live messages, and refresh the current pin. On temporary failures,
@@ -202,8 +204,9 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
 - `realtime_connection.py`: isolated anonymous negotiation and token requests.
 - `centrifugo_transport.py`: public protocol replies, publications, and lease renewal.
 - `public_transport.py`: independent connections, bounded queues, feed acknowledgements,
-  and snapshot polling.
-- `public_state.py`: anonymous channel/viewer state and category discovery.
+  and polling-worker/session ownership.
+- `public_state.py`: anonymous channel/viewer requests, changed-only snapshots,
+  and category-change detection.
 - `live_iterator.py`: interruptible ownership of the active live transport.
 - `capture_inspection.py`: content-free Kick record validation and live/replay
   ledger reconciliation shared by automatic live verification and the offline
@@ -335,18 +338,23 @@ dispatch; debug logs label these as realtime controls. Ping/pong frames still
 increment control counters without a debug line for every keepalive. Recovery
 logs report the actual UTC history window, clock offset, and page bound.
 
-`public_transport.py` owns the primary chat connection and a bounded publication
-queue. It adds the independent global connection and periodic REST snapshots
-when the selected filters accept events beyond `text_message`. Text-only captures
-retain chat subscription confirmation, heartbeats, cancellation, and reconnect
-history recovery without public-state polling. They do not require public
-lifecycle events for termination; timeout, inactivity, message limits, and user
-interrupts remain available. Other filters keep both connections and snapshots. Each protocol transport receives complete connection
-configuration at construction; the public owner does not change its private
-socket settings. Live orchestration uses the same cancellable iterator for
-production and injected transports. Cancellation during setup closes late
-resources before another connection or subscription can begin, and terminal
-setup failures close the transport without retrying.
+`public_transport.py` owns the primary chat connection, its single reader, and a
+publication queue bounded to 1,024 frames. It adds the independent global
+connection, its reader, and one REST polling worker when the selected filters
+accept events beyond `text_message`. Changed REST snapshots use a separate queue
+bounded to two frames; a slow consumer backpressures polling rather than growing
+pending state. Receiving already queued socket publications never performs or
+waits for a metadata/viewer HTTP request. Text-only captures retain chat
+subscription confirmation, heartbeats, cancellation, and reconnect history
+recovery without a polling worker or public-state requests. They do not require
+public lifecycle events for termination; timeout, inactivity, message limits,
+and user interrupts remain available. Other filters keep both connections and
+snapshots. Each protocol transport receives complete connection configuration at
+construction; the public owner does not change its private socket settings.
+Live orchestration uses the same cancellable iterator for production and
+injected transports. Cancellation during setup closes late resources before
+another connection or subscription can begin, and terminal setup failures close
+the transport without retrying.
 
 The website's primary `chatrooms.{chatroom_id}.v2` feed uses
 its channel-chat connection; the other feeds use the global connection:
@@ -416,11 +424,21 @@ recovers chat and the current pin; the public APIs do not provide equivalent
 history for arbitrary lifecycle events, so transitions during an outage can be
 missed. Category changes and reader failures stop further socket reads and
 drain accepted publications, including frames waiting for queue space, before
-the consumer receives the reconnect or access error. Snapshot polling may miss
-transitions between polls. Long in-flight HTTP requests can delay shutdown;
-incomplete deadline accounting is explicitly
-reported for review by automatic live verification and the offline inspector
-rather than certified.
+the consumer receives the reconnect or access error. A separate polling stop
+signal prevents new observations after reconnect or cancellation without
+interrupting that publication drain. A stalled HTTP poll does not hold terminal
+error delivery after the socket readers finish. Close signals and briefly joins
+the polling worker; if an HTTP request is still in flight, the worker retains
+its session and closes it in its final cleanup after the request returns.
+Setup metadata uses a separate setup-local session, closed by that request's
+owner in `finally`; cancellation never waits for the setup request or closes its
+session from another thread. The polling worker constructs and closes its own
+fresh session on that worker thread, reusing only the channel metadata rather
+than a native HTTP handle. This also releases thread-local curl-cffi handles on
+their creating thread. Snapshot polling may miss transitions between polls.
+Long in-flight HTTP requests can outlive cancellation; incomplete deadline
+accounting is explicitly reported for review by automatic live verification and
+the offline inspector rather than certified.
 
 The live service reports truncated reconnect windows and uncovered time;
 both automatic and offline inspection flag these known gaps for review.

@@ -15,6 +15,7 @@ from chat_downloader.sites.youtube.constants_message import (
     known_keys,
 )
 from chat_downloader.sites.youtube.constants_patterns import (
+    YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
     YOUTUBE_DEBUG_SAMPLE_LIMIT,
 )
 from chat_downloader.utils.json_types import JSONDict, get_dict
@@ -57,6 +58,8 @@ def _emit_parse_diagnostics(
                 "original_action_type": original_action_type,
             },
             sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
+            sample_group="youtube-empty-action-parse",
+            group_limit=YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
         )
         debug_log(
             f"Parse of action returned empty results: {original_action_type}",
@@ -73,6 +76,8 @@ def _emit_parse_diagnostics(
                 "missing_keys": sorted(missing_keys),
             },
             sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
+            sample_group="youtube-missing-keys",
+            group_limit=YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
         )
         debug_log(
             f"Missing keys found: {missing_keys}",
@@ -114,6 +119,8 @@ def validate_and_finalize_message(
                 "original_action_type": original_action_type,
             },
             sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
+            sample_group="youtube-untyped-action",
+            group_limit=YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
         )
         debug_log("No message type", f"Action type: {original_action_type}")
         return None
@@ -144,6 +151,8 @@ def validate_and_finalize_message(
                 "original_message_type": original_message_type,
             },
             sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
+            sample_group="youtube-unknown-message-type",
+            group_limit=YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
         )
         debug_log(
             f'Unknown message type "{original_message_type}" '

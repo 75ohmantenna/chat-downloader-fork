@@ -138,7 +138,11 @@ is not live yet, which allows callers to wait for chat activity.
 ### Badge refresh
 
 Before parsing live traffic, the downloader fetches channel and global badges.
-The result is stored in an instance-owned `BadgeCache`.
+The result is stored in an instance-owned `BadgeCache`. Provider reuse retains
+at most 128 recently used channel badge collections and 128 lowercase
+login-to-channel-ID mappings; a refresh or mapping lookup updates LRU order.
+This fixed internal cap bounds cache growth and snapshot copying independently
+of the number of channels previously captured.
 
 The legacy login-based operations remain primary. If Twitch rejects either
 persisted hash, that badge source retries independently through the Android
@@ -146,10 +150,37 @@ client's current operation. Channel fallback uses the numeric channel ID from
 stream, VOD, or clip metadata; the downloader retains that mapping for IRC
 reconnect refreshes. Mobile `imageUrlNormal`, `imageUrlDouble`, and
 `imageUrlQuadruple` fields are normalized to the existing cache shape without
-discarding legacy click metadata.
+discarding legacy click metadata for badges that remain in the collection.
+Successful refreshes replace each source's badge keys, including clearing an
+explicit empty list, so obsolete versions do not accumulate. Missing or null
+containers do not establish an empty collection. Channel refresh validates
+`user.broadcastBadges` separately from global `badges`; unrelated global
+records cannot mask malformed broadcast records. Legacy and mobile records
+require nonempty badge sets and versions.
 
-The parser consumes a snapshot of badge data rather than mutating module-level
-state. That keeps ownership clearer and testing simpler.
+Successful global collections from the legacy channel and standalone requests
+are combined for the current refresh. Usable channel-response globals remain
+available when the standalone collection is empty or unavailable, without
+letting them establish a successful broadcast refresh. Historical global keys
+absent from the successful collections are removed rather than accumulated.
+Network errors, invalid response
+containers, and collections containing only unusable records preserve that
+source's previous metadata. Channel and global refresh failures remain
+independent.
+
+Each lazy live, VOD, or clip capture owns its badge snapshot when constructed,
+before iteration starts. The parser consumes this copied lookup snapshot
+rather than mutating module-level state. Refreshes replace individual badge
+records instead of mutating them, preserving older snapshots unchanged.
+Live construction also retains the numeric receiving-channel ID for reconnect
+fallback, independent of provider-cache eviction. Reconnect restores evicted
+receiving-channel metadata from the capture before refreshing it. It updates
+only receiving-channel and global metadata in a new capture snapshot while
+retaining the original shared-chat source-channel collections. The capture's
+channel key set remains fixed at at most 128 entries; reconnects do not union
+unrelated newly cached channels. Source-channel metadata is available when
+included in that initial snapshot; evicted channels are fetched again when
+subsequently captured.
 
 ### IRC transport
 

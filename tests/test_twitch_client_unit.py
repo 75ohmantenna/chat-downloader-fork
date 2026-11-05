@@ -246,8 +246,8 @@ def test_update_badge_info_merges_global_and_channel_badges() -> None:
         return [
             {
                 "data": {
-                    "badges": [badges[ops[0]["operationName"]]],
-                    "user": {"broadcastBadges": []},
+                    "badges": [badges["GlobalBadges"]],
+                    "user": {"broadcastBadges": [badges["ChatList_Badges"]]},
                 }
             }
         ]

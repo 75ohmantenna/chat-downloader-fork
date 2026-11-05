@@ -83,6 +83,8 @@ class _TwitchLiveIterator:
         self.stopped = Event()
         self.source: Iterator[JSONDict] = iter(())
         self.irc: TwitchChatIRC | None = None
+        self.channel_id: str | None = None
+        self.badge_set: BadgeSet | None = None
 
     def __iter__(self) -> _TwitchLiveIterator:
         return self
@@ -212,7 +214,11 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
     consecutive_connection_failures = 0
 
     try:
-        badge_set = downloader.badge_cache.snapshot()
+        channel_id = control.channel_id
+        badge_set = control.badge_set
+        if badge_set is None:
+            channel_id = getattr(downloader, "_channel_ids", {}).get(stream_id.lower())
+            badge_set = downloader.badge_cache.snapshot(channel_id)
         while True:
             try:
                 for raw_message in message_generator(
@@ -276,8 +282,16 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     provider="Twitch IRC",
                 )
                 twitch_chat_irc = create_connection()
-                downloader._update_badge_info(stream_id)
-                badge_set = downloader.badge_cache.snapshot()
+                if channel_id:
+                    # Eviction must not turn a failed reconnect refresh into
+                    # metadata loss for this capture's receiving channel.
+                    downloader.badge_cache.channel_badges.setdefault(
+                        channel_id, badge_set.channel_badges[channel_id]
+                    )
+                    downloader._update_badge_info(stream_id, channel_id)
+                else:
+                    downloader._update_badge_info(stream_id)
+                badge_set = badge_set.refreshed(downloader.badge_cache, channel_id)
             else:
                 # The production IRC generator is open-ended. This branch
                 # keeps injected finite generators testable and supports
@@ -357,6 +371,8 @@ def get_chat_by_stream_id(
         downloader._update_badge_info(stream_id)
 
     control = _TwitchLiveIterator()
+    control.channel_id = channel_id or None
+    control.badge_set = downloader.badge_cache.snapshot(control.channel_id)
     control.source = downloader._get_chat_messages_by_stream_id(
         stream_id,
         request,

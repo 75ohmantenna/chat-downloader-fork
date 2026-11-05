@@ -8,13 +8,19 @@ from contextlib import suppress
 from time import monotonic
 from typing import TYPE_CHECKING
 
+from requests.exceptions import RequestException
+
 from chat_downloader.debugging import logger
 from chat_downloader.utils.json_types import get_dict, get_int, get_list
 
 from .api_client import _classify_response, _decode_json
+from .errors import KickError
 from .http_session import create_kick_session
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+    from threading import Event
+
     from chat_downloader.utils.json_types import JSONDict, JSONList
 
     from .http_session import _KickSession
@@ -42,6 +48,9 @@ class KickPublicState:
         self._session = session or create_kick_session(proxy=proxy, trust_env=trust_env)
         self._timeout = timeout
         self._closed = False
+        self._channel: JSONDict = {}
+        self._last_metadata: JSONDict | None = None
+        self._last_viewers: tuple[JSONList, bool] | None = None
 
     def _get(
         self, url: str, *, resource: str, params: dict[str, str] | None = None
@@ -91,8 +100,89 @@ class KickPublicState:
             raise TypeError(msg)
         return payload
 
+    def _poll_metadata(
+        self, username: str, record_diagnostic: Callable[[str], None]
+    ) -> JSONDict | None:
+        try:
+            channel = self.metadata(username)
+        except (RequestException, OSError, KickError, ValueError, TypeError) as error:
+            record_diagnostic("public_state_poll_failure_count")
+            logger.debug("Kick public metadata poll failed (%s).", type(error).__name__)
+            return None
+        record_diagnostic("public_state_poll_count")
+        return channel
+
+    def _metadata_snapshot(self, channel: JSONDict) -> JSONDict | None:
+        metadata: JSONDict = {
+            "livestream": channel.get("livestream"),
+            "followers_count": channel.get("followers_count"),
+            "chatroom": channel.get("chatroom"),
+        }
+        if metadata == self._last_metadata:
+            return None
+        self._last_metadata = metadata
+        return {
+            "event": "kick:public_state",
+            "data": metadata,
+            "source": "public_rest",
+        }
+
+    def _viewer_snapshot(self) -> JSONDict | None:
+        viewers = self.viewers(self._channel)
+        offline = "livestream" in self._channel and self._channel["livestream"] is None
+        viewer_state = (viewers, offline)
+        if viewer_state == self._last_viewers:
+            return None
+        self._last_viewers = viewer_state
+        return {
+            "event": "kick:viewer_count",
+            "data": viewers,
+            "source": "public_rest",
+            "offline": offline,
+        }
+
+    def snapshots(
+        self,
+        username: str,
+        stopped: Event,
+        record_diagnostic: Callable[[str], None],
+        *,
+        initial_channel: JSONDict | None = None,
+    ) -> Iterator[JSONDict]:
+        """Emit changed observations, seeding the first cycle from setup metadata."""
+        channel = (
+            initial_channel
+            if initial_channel is not None
+            else self._poll_metadata(username, record_diagnostic)
+        )
+        if stopped.is_set():
+            return
+        category_changed = (
+            channel is not None
+            and initial_channel is None
+            and category_feeds(channel) != category_feeds(self._channel)
+        )
+        if channel is not None:
+            self._channel = channel
+            if (metadata := self._metadata_snapshot(channel)) is not None:
+                yield metadata
+        if stopped.is_set():
+            return
+        try:
+            viewers = self._viewer_snapshot()
+            if stopped.is_set():
+                return
+            if viewers is not None:
+                yield viewers
+        except (RequestException, OSError, KickError, ValueError, TypeError) as error:
+            record_diagnostic("public_state_poll_failure_count")
+            logger.debug("Kick public viewer poll failed (%s).", type(error).__name__)
+        if category_changed:
+            msg = "Kick public category feeds changed."
+            raise ConnectionError(msg)
+
     def close(self) -> None:
-        """Close the isolated snapshot session."""
+        """Close the isolated session on its request-owning thread."""
         if not self._closed:
             self._closed = True
             with suppress(OSError, RuntimeError):

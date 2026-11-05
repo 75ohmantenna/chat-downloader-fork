@@ -30,6 +30,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+# Bound provider reuse and the work needed to copy a capture's badge snapshot.
+_BADGE_CHANNEL_LIMIT = 128
+
 
 @dataclass
 class BadgeSet:
@@ -47,14 +50,21 @@ class BadgeSet:
     global_badges: dict[tuple[str, str], dict[str, Any]]
     channel_badges: dict[str, dict[tuple[str, str], dict[str, Any]]]
 
+    def refreshed(self, cache: BadgeCache, channel_id: str | None) -> BadgeSet:
+        """Refresh receiving/global metadata without growing capture source keys."""
+        channels = {key: dict(value) for key, value in self.channel_badges.items()}
+        if channel_id and channel_id in channels and channel_id in cache.channel_badges:
+            channels[channel_id] = dict(cache.channel_badges[channel_id])
+        return BadgeSet(dict(cache.global_badges), channels)
+
 
 @dataclass
 class BadgeCache:
     """Mutable badge cache owned by a ``TwitchChatDownloader`` instance.
 
-    Holds badge data fetched from Twitch's GraphQL API.  Use
-    :meth:`snapshot` to obtain a :class:`BadgeSet` for passing into parsing
-    functions.
+    Holds badge data fetched from Twitch's GraphQL API for at most
+    ``_BADGE_CHANNEL_LIMIT`` recently refreshed channels. Use :meth:`snapshot`
+    to obtain a :class:`BadgeSet` for passing into parsing functions.
 
     Attributes:
         global_badges: Global badges keyed by ``(setID, version)`` tuples.
@@ -69,17 +79,24 @@ class BadgeCache:
         default_factory=dict,
     )
 
-    def snapshot(self) -> BadgeSet:
+    def snapshot(self, channel_id: str | None = None) -> BadgeSet:
         """Return a :class:`BadgeSet` snapshot suitable for parsing.
 
-        Copies global and per-channel lookup dictionaries, isolating additions
-        and replacements from an in-progress parse. Individual badge metadata
-        dictionaries remain shared and are treated as read-only by parsing code.
+        Copies global and per-channel lookup dictionaries, isolating refreshes
+        and LRU eviction from an in-progress parse. Individual badge metadata
+        dictionaries remain shared; refreshes replace rather than mutate them.
+        A receiving channel reserves one of the bounded slots even when its
+        initial refresh failed, so later reconnects never enlarge the key set.
 
         Returns:
             :class:`BadgeSet` with shallow copies of the current badge data.
         """
+        channels = {key: dict(value) for key, value in self.channel_badges.items()}
+        if channel_id and channel_id not in channels:
+            if len(channels) >= _BADGE_CHANNEL_LIMIT:
+                channels.pop(next(iter(channels)))
+            channels[channel_id] = {}
         return BadgeSet(
             global_badges=dict(self.global_badges),
-            channel_badges={k: dict(v) for k, v in self.channel_badges.items()},
+            channel_badges=channels,
         )

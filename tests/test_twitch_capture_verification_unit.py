@@ -14,6 +14,7 @@ from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.chat_pipeline import configure_chat
 from chat_downloader.runtime.runner import execute_run
 from chat_downloader.sites.twitch.live_service import get_chat_by_stream_id
+from chat_downloader.sites.twitch.types import BadgeCache
 from tests.test_twitch_capture_inspection_unit import _text
 
 
@@ -39,6 +40,7 @@ class LiveDownloader:
             ]
         )
         self._update_badge_info = Mock()
+        self.badge_cache = BadgeCache()
 
     def _get_chat_messages_by_stream_id(
         self, stream_id, request, *, diagnostics, control

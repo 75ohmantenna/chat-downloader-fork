@@ -186,17 +186,22 @@ def test_http_session_requests_timeouts_json_and_close() -> None:
     assert fake.get_calls == [
         (
             "https://example.com/data",
-            {"timeout": (2.0, 9.0), "allow_redirects": False},
+            {"timeout": (2.0, 9.0), "allow_redirects": False, "stream": True},
         ),
         (
             "https://example.com/json",
-            {"timeout": (2.0, 9.0), "allow_redirects": False},
+            {"timeout": (2.0, 9.0), "allow_redirects": False, "stream": True},
         ),
     ]
     assert fake.post_calls == [
         (
             "https://example.com/post",
-            {"timeout": (1, 1), "json": {"hello": "world"}, "allow_redirects": False},
+            {
+                "timeout": (1, 1),
+                "json": {"hello": "world"},
+                "allow_redirects": False,
+                "stream": True,
+            },
         )
     ]
     assert get_response.json()["url"].endswith("/data")

@@ -14,13 +14,19 @@ from requests.exceptions import RequestException
 from chat_downloader.errors import InvalidParameter, RetriesExceeded
 from chat_downloader.sites.twitch import live_service
 from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
-from tests.twitch_third_helpers import chat_request
+from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
+from chat_downloader.sites.twitch.types import (
+    _BADGE_CHANNEL_LIMIT,
+    BadgeCache,
+    BadgeSet,
+)
+from tests.twitch_third_helpers import chat_request, irc_frame, parse_irc
 
 
 def _downloader(**overrides):
     return SimpleNamespace(
         **{
-            "badge_cache": SimpleNamespace(snapshot=dict),
+            "badge_cache": BadgeCache(),
             "_update_badge_info": Mock(),
             "retry": Mock(),
             **overrides,
@@ -46,6 +52,7 @@ def _stream_downloader(*gql_effects):
         _update_badge_info=Mock(),
         _get_chat_messages_by_stream_id=Mock(return_value=iter(())),
         retry=Mock(),
+        badge_cache=BadgeCache(),
     )
 
 
@@ -186,10 +193,16 @@ def test_live_reconnect_refreshes_badges_and_closes_connections(
     setup_retry, server_reconnect
 ):
     ircs = [Mock(), Mock()]
-    initial_badges, refreshed_badges = {"old": True}, {"old": True, "new": True}
+    cache = BadgeCache(global_badges={("old", "1"): {"title": "Old"}})
+    initial_badges = cache.snapshot()
+    refreshed_badges = BadgeSet(
+        global_badges={("new", "1"): {"title": "New"}}, channel_badges={}
+    )
     snapshots = [initial_badges, refreshed_badges]
-    downloader = _downloader(
-        badge_cache=SimpleNamespace(snapshot=Mock(side_effect=snapshots))
+    downloader = _downloader(badge_cache=cache)
+    downloader._update_badge_info.side_effect = lambda _channel: (
+        cache.global_badges.clear(),
+        cache.global_badges.update(refreshed_badges.global_badges),
     )
     diagnostics = live_service._TwitchLiveDiagnostics()
     kept = {"message_type": "text_message", "message_id": "kept", "extra": "x"}
@@ -231,7 +244,7 @@ def test_live_reconnect_refreshes_badges_and_closes_connections(
         irc.close_connection.assert_called_once()
     debug_log.assert_called_once()
     assert captured == snapshots
-    assert captured[1] is refreshed_badges
+    assert captured[0] is not captured[1]
     downloader._update_badge_info.assert_called_once_with("example")
     _assert_summary(
         diagnostics,
@@ -252,7 +265,7 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
         _FakeIRC(["\r\n".join(first_frames) + "\r\nPING :tmi.twitch.tv\r", ""]),
         _FakeIRC(["\n" + "\r\n".join(second_frames) + "\r\n", ""]),
     ]
-    downloader = _downloader(badge_cache=SimpleNamespace(snapshot=lambda: None))
+    downloader = _downloader()
     diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_FRAMES", "yes")
 
@@ -299,7 +312,7 @@ def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
         _FakeIRC([f"{resub_one}\r\n{text_message}\r\n", ""]),
         _FakeIRC([f"{resub_two}\r\n{milestone}\r\n", ""]),
     ]
-    downloader = _downloader(badge_cache=SimpleNamespace(snapshot=lambda: None))
+    downloader = _downloader()
     diagnostics = live_service._TwitchLiveDiagnostics()
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_TWITCH_IRC_EVENT_FRAMES", "on")
 
@@ -579,3 +592,111 @@ def test_duplicate_live_message_cache(message_ids, duplicates):
     ] == duplicates
     if message_ids[0] is None:
         assert list(cache.message_ids) == []
+
+
+@pytest.mark.parametrize("initial_badges", [True, False], ids=["cached", "unavailable"])
+def test_lazy_capture_and_reconnect_keep_bounded_receiving_and_shared_source_state(
+    monkeypatch, initial_badges
+):
+    failing_ids = set() if initial_badges else {"123"}
+    fallback_ids = []
+    global_refreshes = []
+
+    def download(_session_post, operations, **_kwargs):
+        operation = operations[0]
+        if operation["operationName"] in {"ChatList_Badges", "GlobalBadges"}:
+            raise _PersistedQueryUnavailable("rotated")
+        if operation["operationName"] == "GlobalBadgesMobile":
+            title = f"Global {len(global_refreshes)}"
+            global_refreshes.append(title)
+            return [
+                {
+                    "data": {
+                        "badges": [
+                            {"setID": "moderator", "version": "1", "title": title}
+                        ]
+                    }
+                }
+            ]
+        channel_id = operation["variables"]["userID"]
+        fallback_ids.append(channel_id)
+        if channel_id in failing_ids:
+            raise RequestException("temporary badge failure")
+        return [
+            {
+                "data": {
+                    "user": {
+                        "broadcastBadges": [
+                            {
+                                "setID": "subscriber",
+                                "version": "12",
+                                "title": f"Sub {channel_id}",
+                                "imageUrlNormal": "subscriber.png",
+                            }
+                        ]
+                    }
+                }
+            }
+        ]
+
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.extractor._download_gql", download
+    )
+    downloader = TwitchChatDownloader()
+    downloader._download_gql = Mock(
+        return_value=[{"data": {"user": {"id": "123", "stream": {"type": "live"}}}}]
+    )
+    downloader._update_badge_info("shared-source", "456")
+    snapshots = []
+    ircs = [Mock(), Mock(), Mock()]
+
+    def reuse_provider(round_number):
+        for index in range(_BADGE_CHANNEL_LIMIT + 2):
+            channel_id = str(1000 + round_number * 1000 + index)
+            downloader._update_badge_info(f"other{channel_id}", channel_id)
+        assert "123" not in downloader.badge_cache.channel_badges
+        assert "456" not in downloader.badge_cache.channel_badges
+        assert "example" not in downloader._channel_ids
+
+    def messages(_irc, _channel, _request, badge_set):
+        snapshots.append(badge_set)
+        assert set(badge_set.channel_badges) == {"123", "456"}
+        yield parse_irc(
+            irc_frame(
+                f"id=message-{len(snapshots)};room-id=123;"
+                "badges=subscriber/12,moderator/1;source-room-id=456;"
+                "source-badges=subscriber/12;source-id=shared-message"
+            ),
+            badge_set=badge_set,
+        )
+        if len(snapshots) < len(ircs):
+            reuse_provider(len(snapshots))
+            raise ConnectionError("reconnect after reuse")
+
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.extractor.TwitchChatIRC", Mock(side_effect=ircs)
+    )
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.extractor.get_chat_messages_by_stream_id",
+        messages,
+    )
+    chat = downloader.get_chat_by_stream_id("EXAMPLE", _request(max_attempts=3))
+    reuse_provider(0)
+    failing_ids.add("123")
+    result = list(chat)
+    assert len(result) == len(ircs)
+    for message in result:
+        assert message["author"]["badges"][0].get("title") == (
+            "Sub 123" if initial_badges else None
+        )
+        assert message["shared_chat_source_badges"][0]["title"] == "Sub 456"
+    assert len({message["author"]["badges"][1]["title"] for message in result}) == 3
+    assert all(
+        snapshot.channel_badges == snapshots[0].channel_badges for snapshot in snapshots
+    )
+    assert downloader._channel_ids["example"] == "123"
+    assert fallback_ids.count("123") == len(ircs)
+    assert len(downloader._channel_ids) == _BADGE_CHANNEL_LIMIT
+    assert len(downloader.badge_cache.channel_badges) == _BADGE_CHANNEL_LIMIT
+    for irc in ircs:
+        irc.close_connection.assert_called_once()

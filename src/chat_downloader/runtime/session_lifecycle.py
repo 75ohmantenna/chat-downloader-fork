@@ -139,10 +139,16 @@ class _SiteSessionPool:
         return existing
 
     def close(self) -> None:
-        """Close every cached site downloader and empty the pool."""
+        """Close every cached site downloader, propagating unexpected errors."""
+        first_error: Exception | None = None
         for session in self.sessions.values():
             try:
                 session.close()
             except (OSError, ConnectionError, RuntimeError) as error:
                 log("warning", f"Error closing session: {error}")
+            except Exception as error:  # noqa: BLE001 - finish all owned cleanup
+                if first_error is None:
+                    first_error = error
         self.sessions.clear()
+        if first_error is not None:
+            raise first_error

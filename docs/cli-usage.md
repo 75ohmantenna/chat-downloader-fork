@@ -213,9 +213,29 @@ records written since the last sync. A flush or sync failure is reported as an
 output error instead of allowing the capture to
 appear successful. When appending to JSONL, a crash-truncated final record is
 removed before new records are written; a complete final record missing only
-its newline is kept and terminated. Text append mode similarly terminates an
-existing final line before writing the next record. Equivalent output paths
-that resolve to the same file are deduplicated so each message is written once.
+its newline is kept and terminated. Tail repair scans and reads at most one
+16 MiB record (excluding its LF/CRLF terminator) plus a boundary byte. An
+unterminated tail over that limit raises an input/resource error before any
+existing bytes are changed; preserve the file for inspection rather than
+expecting automatic truncation. Total capture size is not limited by this
+tail-read cap. Text append mode similarly terminates an existing final line
+before writing the next record. Equivalent output paths that resolve to the
+same file are deduplicated so each message is written once.
+
+Writer and cached-provider-session cleanup attempts every owned target even
+when a custom `close()` raises an unexpected ordinary exception. Existing
+handled cleanup errors remain logged; the first unexpected error is propagated
+after the remaining targets are closed. Repeated closes do not retry those
+already-finalized owners.
+Every ordinary writer-close failure is counted, including unexpected failures
+encountered while the chat iterator exhausts, so shutdown cannot report a
+successful run merely because finalization calls `close()` again.
+
+Offline inspectors and the parity auditor also cap each physical JSONL/TXT
+input record at 16 MiB, excluding LF/CRLF, and fail with a content-free input
+I/O/resource error on excess rather than parsing a truncated prefix. This is
+a reader/tail-repair limit, not a cap on serialized output writes: escaping
+or formatting can produce a record too large for these offline readers.
 
 ## Common Flags
 

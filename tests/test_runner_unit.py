@@ -440,6 +440,48 @@ def test_execute_run_detects_write_errors(downloader, logged):
     assert _summary(logged)["success"] is False
 
 
+@pytest.mark.parametrize("error_type", [ValueError, LookupError])
+def test_unexpected_writer_close_during_exhaustion_fails_run(
+    downloader, logged, tmp_path, monkeypatch, error_type
+):
+    message = {"message": "kept"}
+    chat = Chat(iter((message,)))
+    first_path = tmp_path / "first.jsonl"
+    later_path = tmp_path / "later.jsonl"
+    first = ContinuousWriter(str(first_path))
+    later = ContinuousWriter(str(later_path))
+    assert first.writer is not None
+    assert later.writer is not None
+    streams = (first.writer.file, later.writer.file)
+    close = first.close
+    close_calls = []
+
+    def unexpected_close():
+        close_calls.append(True)
+        close()
+        raise error_type("custom writer close failed")
+
+    monkeypatch.setattr(first, "close", unexpected_close)
+    chat.attach_writer(first)
+    chat.attach_writer(later)
+    factory = downloader(chat)
+
+    result = execute_run(factory, quiet=True)
+
+    assert not result.success
+    assert result.message_count == 1
+    assert "1 output writer(s) reported errors during close" in result.error_message
+    assert _summary(logged)["success"] is False
+    assert factory.instance.closed
+    assert chat.write_error_count == 1
+    assert all(stream is not None and stream.closed for stream in streams)
+    assert json.loads(first_path.read_text()) == message
+    assert json.loads(later_path.read_text()) == message
+    chat.close()
+    assert close_calls == [True]
+    assert chat.write_error_count == 1
+
+
 @pytest.mark.parametrize(
     ("options", "expected_modes"),
     [

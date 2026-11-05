@@ -453,6 +453,8 @@ def _finish_debug_samples(
                 del digests[digest]
             elif pending:
                 digests[digest] -= 1
+            if not digests:
+                del _DEBUG_SAMPLE_DIGESTS[_sample_key(sample_dir, label)]
 
 
 def _validate_debug_sample_group(

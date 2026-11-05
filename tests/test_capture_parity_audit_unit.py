@@ -18,6 +18,8 @@ from chat_downloader.formatting import ItemFormatter
 from chat_downloader.output.capture_parity import audit_capture
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.models import Chat
+from chat_downloader.utils import _bounded_records
+from chat_downloader.utils._bounded_records import CaptureRecordLimitError
 from scripts.audit_capture_parity import main
 from tests.core_third_helpers import restore_loggers
 
@@ -515,4 +517,74 @@ def test_auditor_streams_a_large_capture(capture, monkeypatch):
     assert not stats.failed
     assert stats.jsonl_records == stats.txt_lines == count
     assert read_ahead == [True]
+    assert all(stream.closed for stream in streams)
+
+
+@pytest.mark.parametrize("artifact", ["jsonl", "txt"])
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n", b""])
+def test_auditor_accepts_exact_physical_record_limit(
+    capture, monkeypatch, artifact, newline
+):
+    limit = 128
+    monkeypatch.setattr(_bounded_records, "MAX_CAPTURE_RECORD_BYTES", limit)
+    if artifact == "jsonl":
+        capture.format("{message}")
+        record = b'{"message":"x"}'
+        capture.write(record + b" " * (limit - len(record)) + newline, b"x" + newline)
+    else:
+        capture.format("x" * limit)
+        capture.write(b"{}" + newline, b"x" * limit + newline)
+
+    stats = capture.direct()
+
+    assert stats.jsonl_records == stats.expected_txt_lines == stats.txt_lines == 1
+    assert stats.jsonl_errors == stats.text_mismatches == 0
+    assert stats.failed is (not newline)
+    assert stats.jsonl_trailing_newline is bool(newline)
+    assert stats.txt_trailing_newline is bool(newline)
+
+
+@pytest.mark.parametrize("artifact", ["jsonl", "txt"])
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n", b""])
+def test_auditor_excess_record_is_content_free_input_error_and_closes_both(
+    capture, monkeypatch, artifact, newline
+):
+    limit = 128
+    monkeypatch.setattr(_bounded_records, "MAX_CAPTURE_RECORD_BYTES", limit)
+    capture.format("{message}")
+    private = b"PRIVATE_SENTINEL"
+    oversized = private + b"x" * (limit + 1 - len(private))
+    if artifact == "jsonl":
+        capture.write(oversized + newline, b"x\n")
+    else:
+        capture.write([{"message": "x"}], oversized + newline)
+    streams, read_sizes = [], []
+    original_fdopen = parity_module.os.fdopen
+
+    def track_open(*args, **kwargs):
+        stream = original_fdopen(*args, **kwargs)
+        streams.append(stream)
+        readline = stream.readline
+
+        def bounded_readline(size=-1):
+            assert size == limit + 2
+            read_sizes.append(size)
+            return readline(size)
+
+        monkeypatch.setattr(stream, "readline", bounded_readline)
+        return stream
+
+    monkeypatch.setattr(parity_module.os, "fdopen", track_open)
+    with pytest.raises(CaptureRecordLimitError, match="128-byte limit") as caught:
+        capture.direct()
+
+    assert "PRIVATE_SENTINEL" not in str(caught.value)
+    assert len(streams) == 2
+    assert all(stream.closed for stream in streams)
+    assert read_sizes
+    result = capture.run()
+    assert result.returncode == 2
+    assert result.stdout == "ERROR kind=input_io\n"
+    assert result.stderr == ""
+    assert len(streams) == 4
     assert all(stream.closed for stream in streams)

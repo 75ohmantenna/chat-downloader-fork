@@ -5,23 +5,21 @@
 from __future__ import annotations
 
 import time
-from collections import deque
 from contextlib import suppress
 from functools import partial
 from queue import Empty, Full, Queue
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from requests.exceptions import RequestException
 
-from chat_downloader.debugging import logger
 from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.utils.json_types import get_str
 
 from .centrifugo_transport import KickCentrifugoTransport
 from .constants import PUSHER_SUBSCRIPTION_SUCCEEDED
-from .errors import KickError, KickServerError
+from .errors import KickServerError
 from .public_state import KickPublicState, category_feeds
 from .realtime_connection import KickRealtimeClient
 from .websocket_transport import KickPusherTransport, _default_connector, read_frames
@@ -29,9 +27,12 @@ from .websocket_transport import KickPusherTransport, _default_connector, read_f
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from chat_downloader.utils.json_types import JSONDict, JSONList
+    from chat_downloader.utils.json_types import JSONDict
 
     from .websocket_transport import _PusherConnector
+
+
+_PUBLIC_STATE_POLL_INTERVAL = 60.0
 
 
 class _NegotiatedPusherTransport(KickPusherTransport):
@@ -100,16 +101,17 @@ class KickPublicTransport:
         self._reconnect_requested = Event()
         self._reader_errors: Queue[Exception] = Queue()
         self._queue: Queue[JSONDict | Exception] = Queue(maxsize=1024)
+        self._pending: Queue[JSONDict] = Queue(maxsize=2)
         self._workers: list[Thread] = []
+        self._poll_worker: Thread | None = None
+        self._poll_stopped = Event()
+        self._poll_lock = Lock()
         self._transports: list[KickPusherTransport] = []
         self._clients: list[KickRealtimeClient] = []
         self._state: KickPublicState | None = None
         self._channel: JSONDict = {}
-        self._last_metadata: JSONDict | None = None
-        self._last_viewers: tuple[JSONList, bool] | None = None
         self._next_poll = 0.0
         self._receive_timeout = 1.0
-        self._pending: deque[JSONDict] = deque()
 
     def _record_diagnostic(self, name: str) -> None:
         if self._diagnostic_callback is not None:
@@ -124,6 +126,15 @@ class KickPublicTransport:
         while not self._stopped.is_set():
             try:
                 self._queue.put(item, timeout=0.1)
+            except Full:
+                continue
+            else:
+                return
+
+    def _put_state(self, frame: JSONDict) -> None:
+        while not self._poll_stopped.is_set():
+            try:
+                self._pending.put(frame, timeout=0.1)
             except Full:
                 continue
             else:
@@ -156,6 +167,7 @@ class KickPublicTransport:
         """Stop reads while allowing each accepted publication to finish queuing."""
         self._reader_errors.put_nowait(error)
         self._reconnect_requested.set()
+        self._poll_stopped.set()
         for transport in self._transports:
             transport.request_stop()
 
@@ -167,10 +179,14 @@ class KickPublicTransport:
             proxy = self._configured_proxy
             # Explicit arguments keep transport/session ownership typed and isolated.
             if self._public_events:
-                self._state = KickPublicState(
+                state = KickPublicState(
                     proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
                 )
-                self._channel = self._state.metadata(self.username)
+                try:
+                    self._channel = state.metadata(self.username)
+                finally:
+                    state.close()
+                self._record_diagnostic("public_state_poll_count")
                 self._check_stopped()
             scopes = (
                 (self.channel_id, None) if self._public_events else (self.channel_id,)
@@ -244,80 +260,77 @@ class KickPublicTransport:
         )
 
     def set_timeout(self, timeout: float | None) -> None:
-        """Start one bounded reader per connection after subscriptions are sent."""
+        """Start socket readers and, for public events, one owned REST worker."""
         self._check_stopped()
         self._receive_timeout = min(timeout or 1.0, 1.0)
         for index, transport in enumerate(self._transports):
             transport.set_timeout(self._receive_timeout)
             self._check_stopped()
+            if index < len(self._workers):
+                continue
             worker = Thread(
                 target=self._read, args=(transport, self._clients[index]), daemon=True
             )
             worker.start()
             self._workers.append(worker)
             self._check_stopped()
+        with self._poll_lock:
+            self._check_stopped()
+            if self._public_events and self._poll_worker is None:
+                worker = Thread(target=self._poll_loop, daemon=True)
+                worker.start()
+                self._poll_worker = worker
+                self._check_stopped()
 
-    def _poll(self) -> None:
+    def _poll_loop(self) -> None:
+        """Create, use, and release a snapshot session on its worker thread."""
+        state: KickPublicState | None = None
+        try:
+            if self._poll_stopped.is_set():
+                return
+            state = KickPublicState(
+                proxy=self._configured_proxy,
+                trust_env=self._trust_env,
+                timeout=self._http_timeout,
+            )
+            self._state = state
+            self._poll(initial=True)
+            while not self._poll_stopped.wait(
+                max(0.0, self._next_poll - time.monotonic())
+            ):
+                self._poll()
+        except Exception as error:  # noqa: BLE001 — transfer construction failures
+            if not self._stopped.is_set():
+                self._request_reconnect(error)
+        finally:
+            if state is not None:
+                state.close()
+
+    def _poll(self, *, initial: bool = False) -> None:
         if (
             self._state is None
-            or self._reconnect_requested.is_set()
-            or time.monotonic() < self._next_poll
+            or self._poll_stopped.is_set()
+            or (not initial and time.monotonic() < self._next_poll)
         ):
             return
-        self._next_poll = time.monotonic() + 60.0
-        category_changed = False
+        self._next_poll = time.monotonic() + _PUBLIC_STATE_POLL_INTERVAL
         try:
-            channel = self._state.metadata(self.username)
-            metadata: JSONDict = {
-                "livestream": channel.get("livestream"),
-                "followers_count": channel.get("followers_count"),
-                "chatroom": channel.get("chatroom"),
-            }
-            if metadata != self._last_metadata:
-                self._pending.append(
-                    {
-                        "event": "kick:public_state",
-                        "data": metadata,
-                        "source": "public_rest",
-                    }
-                )
-                self._last_metadata = metadata
-            category_changed = category_feeds(channel) != category_feeds(self._channel)
-            self._channel = channel
-            self._record_diagnostic("public_state_poll_count")
-        except (RequestException, OSError, KickError, ValueError, TypeError) as error:
-            self._record_diagnostic("public_state_poll_failure_count")
-            logger.debug("Kick public metadata poll failed (%s).", type(error).__name__)
-        try:
-            viewers = self._state.viewers(self._channel)
-            offline = (
-                "livestream" in self._channel and self._channel["livestream"] is None
-            )
-            viewer_state = (viewers, offline)
-            if viewer_state != self._last_viewers:
-                self._pending.append(
-                    {
-                        "event": "kick:viewer_count",
-                        "data": viewers,
-                        "source": "public_rest",
-                        "offline": offline,
-                    }
-                )
-                self._last_viewers = viewer_state
-        except (RequestException, OSError, KickError, ValueError, TypeError) as error:
-            self._record_diagnostic("public_state_poll_failure_count")
-            logger.debug("Kick public viewer poll failed (%s).", type(error).__name__)
-        if category_changed:
-            self._request_reconnect(
-                ConnectionError("Kick public category feeds changed.")
-            )
+            for frame in self._state.snapshots(
+                self.username,
+                self._poll_stopped,
+                self._record_diagnostic,
+                initial_channel=self._channel if initial else None,
+            ):
+                self._put_state(frame)
+        except Exception as error:  # noqa: BLE001 — transfer worker failures to the consumer
+            if not self._stopped.is_set():
+                self._request_reconnect(error)
 
     def recv(self) -> JSONDict | None:
         """Yield merged events without dropping buffered publications."""
         self._check_stopped()
-        self._poll()
-        if self._pending:
-            return self._pending.popleft()
+        with suppress(Empty):
+            return self._pending.get_nowait()
         try:
             item = self._queue.get(timeout=self._receive_timeout)
         except Empty:
@@ -353,6 +366,7 @@ class KickPublicTransport:
         if self._stopped.is_set():
             return
         self._stopped.set()
+        self._poll_stopped.set()
         with suppress(Full):
             self._queue.put_nowait(
                 ConnectionError("Kick public transport was stopped.")
@@ -365,12 +379,13 @@ class KickPublicTransport:
         self.request_stop()
         for worker in self._workers:
             worker.join(timeout=0.2)
+        with self._poll_lock:
+            poll_worker = self._poll_worker
+        if poll_worker is not None:
+            poll_worker.join(timeout=0.2)
         for transport in self._transports:
             transport.close()
         for index, client in enumerate(self._clients):
             # Started readers own HTTP cleanup, including an in-flight renewal.
             if index >= len(self._workers):
                 client.close()
-        if self._state is not None:
-            self._state.close()
-            self._state = None

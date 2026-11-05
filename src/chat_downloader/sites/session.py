@@ -9,7 +9,7 @@ from http.cookiejar import Cookie, MozillaCookieJar
 from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urljoin, urlparse, urlsplit
+from urllib.parse import urlparse, urlsplit
 
 import requests
 
@@ -22,6 +22,12 @@ from chat_downloader.errors import CookieError, InvalidParameter, ParsingError
 from chat_downloader.request_profiles import (
     get_request_profile_headers,
     normalize_request_profile,
+)
+from chat_downloader.sites.http_deadline import request_budget
+from chat_downloader.sites.http_policy import (
+    configure_bounded_session,
+    https_origin,
+    redirect_destination,
 )
 
 if TYPE_CHECKING:
@@ -179,23 +185,6 @@ def _cookie_applies(
     )
 
 
-def _https_origin(url: str) -> tuple[str, int]:
-    """Require a credential-free HTTPS URL before a redirect request."""
-    try:
-        parsed = urlsplit(url)
-        if (
-            parsed.scheme == "https"
-            and parsed.hostname
-            and parsed.username is None
-            and parsed.password is None
-        ):
-            return parsed.hostname, parsed.port or 443
-    except ValueError:
-        pass
-    msg = "Unsafe HTTP redirect destination."
-    raise ParsingError(msg)
-
-
 def reject_redirect(response: _StatusResponse) -> None:
     """Reject redirects before interpreting provider-controlled response bodies."""
     if 300 <= response.status_code < 400:
@@ -222,6 +211,13 @@ class ChatDownloaderSession:
         """Initialize one requests adapter and all shared HTTP policy state."""
         self.session = (session_factory or requests.Session)()
         self.closed = False
+        try:
+            if isinstance(self.session, requests.sessions.Session):
+                configure_bounded_session(self.session)
+        except BaseException:
+            self.session.close()
+            self.closed = True
+            raise
         self.timeout = (float(connect_timeout), float(read_timeout))
         self.request_profile = normalize_request_profile(request_profile)
         self.auto_profile_fallback = bool(auto_profile_fallback)
@@ -317,57 +313,58 @@ class ChatDownloaderSession:
             raise RuntimeError(msg)
 
     def post(self, url: str, **kwargs: Any) -> requests.Response:
-        """POST with the configured default timeout."""
+        """POST and buffer a bounded response within one completion budget."""
         self._require_open()
         kwargs.setdefault("timeout", self.timeout)
         kwargs["allow_redirects"] = False
+        kwargs["stream"] = True
         started = perf_counter()
         try:
-            try:
-                response = self.session.post(url, **kwargs)
-            except ValueError:
-                msg = "Invalid provider request or redirect URL."
-                raise ParsingError(msg) from None
-            reject_redirect(response)
-            return response
+            with request_budget(kwargs["timeout"]):
+                try:
+                    response = self.session.post(url, **kwargs)
+                except ValueError:
+                    msg = "Invalid provider request or redirect URL."
+                    raise ParsingError(msg) from None
+                try:
+                    reject_redirect(response)
+                except BaseException:
+                    response.close()
+                    raise
+                return response
         finally:
             log("debug", f"HTTP POST {url} took {perf_counter() - started:.3f}s")
 
     def get(self, url: str, **kwargs: Any) -> requests.Response:
-        """GET with the configured default timeout."""
+        """GET a bounded response, sharing its deadline across safe redirects."""
         self._require_open()
         kwargs.setdefault("timeout", self.timeout)
         follow_redirects = kwargs.pop("allow_redirects", False)
         kwargs["allow_redirects"] = False
-        origin = _https_origin(url) if follow_redirects else None
+        kwargs["stream"] = True
+        origin = https_origin(url) if follow_redirects else None
         started = perf_counter()
         try:
-            for _ in range(6):
-                try:
-                    response = self.session.get(url, **kwargs)
-                except ValueError:
-                    msg = "Invalid provider request or redirect URL."
-                    raise ParsingError(msg) from None
-                if not 300 <= response.status_code < 400:
-                    return response
-                if not follow_redirects:
-                    reject_redirect(response)
-                try:
-                    destination = urljoin(url, response.headers.get("Location", ""))
-                except ValueError:
-                    msg = "Unsafe HTTP redirect destination."
-                    raise ParsingError(msg) from None
-                if not response.headers.get("Location"):
-                    reject_redirect(response)
-                if _https_origin(destination) != origin:
-                    msg = "Cross-origin HTTP redirect from provider."
-                    raise ParsingError(msg)
-                response.close()
-                url = destination
-                # Query parameters belong only to the first request.
-                kwargs.pop("params", None)
-            msg = "Provider HTTP redirect limit exceeded."
-            raise ParsingError(msg)
+            with request_budget(kwargs["timeout"]):
+                for _ in range(6):
+                    try:
+                        response = self.session.get(url, **kwargs)
+                    except ValueError:
+                        msg = "Invalid provider request or redirect URL."
+                        raise ParsingError(msg) from None
+                    if not 300 <= response.status_code < 400:
+                        return response
+                    try:
+                        if not follow_redirects:
+                            reject_redirect(response)
+                        destination = redirect_destination(response, url, origin)
+                    finally:
+                        response.close()
+                    url = destination
+                    # Query parameters belong only to the first request.
+                    kwargs.pop("params", None)
+                msg = "Provider HTTP redirect limit exceeded."
+                raise ParsingError(msg)
         finally:
             log("debug", f"HTTP GET {url} took {perf_counter() - started:.3f}s")
 
