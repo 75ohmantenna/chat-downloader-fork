@@ -135,13 +135,15 @@ def _configure_formatter(
 ) -> None:
     """Configure message formatting for chat output."""
     formatter = ItemFormatter(format_file)
-    raw = _resolve_format_name(chat, format_name)
-    # By the time configure_formatter is called, format_name should have been
-    # resolved to a str via resolved_for_site().  SiteDefault.name is the
-    # fallback for any unresolved placeholders.
-    format_str = raw if isinstance(raw, str) else raw.name
 
     def format_callable(item: dict[str, Any]) -> str:
+        # Channel discovery can establish live status after configuration.
+        # Resolve against current metadata without replacing this formatter or
+        # reopening its outputs. Explicit/custom names remain site-controlled.
+        raw = _resolve_format_name(chat, format_name)
+        # resolved_for_site() normally supplies a str; retain the fallback for
+        # callers configuring an unresolved SiteDefault directly.
+        format_str = raw if isinstance(raw, str) else raw.name
         return formatter.format(item, format_name=format_str)
 
     chat.set_formatter(format_callable)

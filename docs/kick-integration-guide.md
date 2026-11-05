@@ -402,6 +402,9 @@ Compact gifts preserve `gifted_total`, `gifter_total`, and `chunk_details` under
 `metadata.kick_event.data`; normalized `quantity` counts recipients in that
 chunk, preventing the overall gift total from being counted once per chunk.
 
+Frames with missing or non-string event names are counted as unsupported and
+skipped before event dispatch; malformed names do not terminate live capture.
+
 Private account, points, notifications, ads, age verification, and
 `private-livestream` update feeds remain outside anonymous coverage. Public
 metadata polling supplies snapshots of livestream changes. Reconnect history
@@ -511,8 +514,9 @@ pages are followed; repeated pages, repeated or non-decreasing cursors, and
 exhausted page/record budgets mark recovery incomplete. HTTP failures also
 increment `history_recovery_failure_count`; automatic and offline inspection
 require review even if output parity passes. Cancellation stops pagination
-between fetches and skips a late pin refresh. The loop carries `# noqa: C901`
-for its intrinsic branchiness.
+between fetches, prevents retries or manual retry prompts after a failed
+in-flight history request, and skips a late pin refresh. The loop carries
+`# noqa: C901` for its intrinsic branchiness.
 
 ## Replay Capture Details
 

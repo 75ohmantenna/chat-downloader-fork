@@ -16,7 +16,10 @@ from chat_downloader.sites.kick.constants import (
     CHAT_MESSAGE_EVENT,
     PUSHER_SUBSCRIPTION_SUCCEEDED,
 )
-from chat_downloader.sites.kick.errors import KickError
+from chat_downloader.sites.kick.errors import KickError, KickServerError
+from chat_downloader.sites.kick.live_iterator import KickLiveIterator
+from chat_downloader.utils.retry_utils import RetryPolicy
+from chat_downloader.utils.timed_generator import TimedGenerator
 from tests.kick_helpers import (
     FakeDownloader,
     FakeKickSession,
@@ -187,6 +190,55 @@ def test_cancelled_recovery_does_not_refresh_or_emit(cancel_before_fetch):
     )
     client.fetch_preloaded_chat_state.assert_not_called()
     assert client.fetch_message_page.call_count == int(not cancel_before_fetch)
+
+
+@pytest.mark.parametrize("retry_timeout", [0, -1])
+@pytest.mark.parametrize("failure", [OSError, KickServerError])
+def test_cancelled_failing_history_request_stops_worker_before_retry(
+    retry_timeout, failure
+):
+    entered, release = Event(), Event()
+    client = MagicMock()
+    control = KickLiveIterator()
+
+    def fetch(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        if client.fetch_message_page.call_count == 1:
+            raise failure("request failed after cancellation")
+        return message_page([raw_message("late", "2026-01-01T00:00:19Z")])
+
+    client.fetch_message_page.side_effect = fetch
+    control.source = live_service._iter_reconnect_backfill(
+        MagicMock(_kick_client=client),
+        "123",
+        "creator",
+        None,
+        1_767_225_620_000_000,
+        request(max_attempts=3, retry_timeout=retry_timeout),
+        cancelled=control.stopped,
+    )
+    with (
+        patch.object(RetryPolicy, "wait") as wait,
+        patch.object(control, "close", wraps=control.close) as close,
+    ):
+        source = TimedGenerator(control)
+        try:
+            assert entered.wait(5)
+            source.close()
+            assert control.stopped.is_set()
+        finally:
+            # Release the in-flight request even when a regression assertion fails.
+            control.request_stop()
+            release.set()
+            source._worker.join(5)
+            source.close()
+        assert not source._worker.is_alive()
+        close.assert_called_once()
+        assert list(source) == []
+        wait.assert_not_called()
+    assert client.fetch_message_page.call_count == 1
+    client.fetch_preloaded_chat_state.assert_not_called()
 
 
 def test_cancellation_during_pin_refresh_discards_late_results():

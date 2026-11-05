@@ -62,10 +62,11 @@ offsets. The CLI exposes these as `--start_time`, `--end_time`, and `--timeout`.
 
 Required GraphQL field service errors retry during replay pagination. Missing
 video/comments or malformed comment edges retry even on the first page; only a
-valid empty edges list establishes an empty replay. If empty pages or an unchanged cursor
-stop pagination, replay diagnostics mark the traversal incomplete. Unexpected
-edge or node shapes count as known record loss for `--require_complete` and
-run manifests.
+valid empty edges list establishes an empty replay. Nonterminal pages that
+supply no new cursor or repeat a historical cursor are withheld from output
+and mark the traversal incomplete. Empty continuing pages retain a bounded retry budget.
+Terminal pages do not require a new cursor. Unexpected edge or node shapes
+count as known record loss for `--require_complete` and run manifests.
 
 ## Module Guide
 

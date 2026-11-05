@@ -342,6 +342,19 @@ def test_frame_without_event_is_captured_and_skipped(captured):
     assert captured[0][0][1]["reason"] == "missing or non-string event name"
 
 
+@pytest.mark.parametrize("event_name", [None, 0, True, 1.5, [], {}, ["pusher:ping"]])
+def test_non_string_event_names_are_captured_and_skipped(event_name, captured):
+    frame = json.loads(json.dumps({"event": event_name, "data": "{}"}))
+    diagnostics = []
+    assert dispatch_event(frame, record_diagnostic=diagnostics.append) is None
+    assert diagnostics == ["unsupported_event_count"]
+    assert captured[0][0] == (
+        "kick-unknown-event",
+        {"raw": frame, "reason": "missing or non-string event name"},
+    )
+    assert captured[0][1] == {"sample_limit": 10}
+
+
 def test_unknown_event_capture_is_sanitized_on_disk(sample_dir):
     frame = {
         "event": "App\\Events\\FutureEvent",

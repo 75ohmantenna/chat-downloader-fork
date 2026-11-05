@@ -213,6 +213,17 @@ def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event ac
     """
     event_name = frame.get("event")
 
+    # Validate the event name before hash-based protocol and parser lookups.
+    if not isinstance(event_name, str):
+        _record_diagnostic(record_diagnostic, "unsupported_event_count")
+        capture_debug_sample(
+            "kick-unknown-event",
+            {"raw": frame, "reason": "missing or non-string event name"},
+            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
+        )
+        logger.debug("Kick Pusher frame has no event name; skipping.")
+        return None
+
     # --- Pusher protocol errors -----------------------------------------------
     if event_name == PUSHER_ERROR:
         _record_diagnostic(record_diagnostic, "pusher_error_count")
@@ -232,15 +243,6 @@ def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event ac
         return None
 
     # --- Resolve the Pusher event name to a normalized message type -----------
-    if not isinstance(event_name, str):
-        _record_diagnostic(record_diagnostic, "unsupported_event_count")
-        capture_debug_sample(
-            "kick-unknown-event",
-            {"raw": frame, "reason": "missing or non-string event name"},
-            sample_limit=KICK_DEBUG_SAMPLE_LIMIT,
-        )
-        logger.debug("Kick Pusher frame has no event name; skipping.")
-        return None
     message_type = EVENT_NAME_MAP.get(event_name)
     if message_type is None:
         _record_diagnostic(record_diagnostic, "unsupported_event_count")

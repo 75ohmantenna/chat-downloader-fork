@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from threading import Event
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock, patch
@@ -20,6 +21,7 @@ from chat_downloader.sites.twitch.extractor import TwitchChatDownloader
 from chat_downloader.sites.twitch.graphql_client import _PersistedQueryUnavailable
 from chat_downloader.sites.twitch.replay_transport import get_chat_messages_by_vod_id
 from chat_downloader.sites.twitch.types import BadgeSet
+from chat_downloader.utils.timed_generator import TimedGenerator
 from tests.twitch_third_helpers import chat_request
 
 
@@ -338,6 +340,166 @@ def test_iter_vod_stops_when_pagination_cannot_advance(
     fetch = Mock(side_effect=[_response(edges, True)] * page_limit)
     assert _run(downloader, fetch) == []
     assert fetch.call_count == expected_calls
+
+
+@pytest.mark.parametrize(
+    ("cursors", "terminal", "expected_ids", "complete"),
+    [
+        (["a", "a"], False, ["message-a"], False),
+        (["a", "b", "a"], False, ["message-a", "message-b"], False),
+        (["a", "a"], True, ["message-a", "terminal"], True),
+    ],
+    ids=["immediate-repeat", "historical-cycle", "terminal-repeated-cursor"],
+)
+def test_replay_cursor_progress_precedes_emission(
+    downloader, cursors, terminal, expected_ids, complete
+):
+    pages = []
+    for index, cursor in enumerate(cursors):
+        is_terminal = terminal and index == len(cursors) - 1
+        message_id = "terminal" if is_terminal else f"message-{cursor}"
+        edge = _edge(message_id, cursor)
+        edge["node"].update(
+            {
+                "createdAt": "2026-08-31T00:00:00Z",
+                "contentOffsetSeconds": index + 1,
+                "commenter": {
+                    "id": "viewer-1",
+                    "login": "viewer",
+                    "displayName": "Viewer",
+                },
+                "message": {"fragments": [{"text": message_id}]},
+            }
+        )
+        # Stalled pages must still account for malformed provider records.
+        edges = [edge]
+        if not terminal and index == len(cursors) - 1:
+            edges = [None, {"node": {"__typename": "UnexpectedNode"}}, edge]
+        comments, _ = _response(edges, has_next=not is_terminal)
+        pages.append([{"data": {"video": {"comments": comments}}}])
+    downloader._download_gql.side_effect = pages
+    diagnostics: dict[str, object] = {}
+
+    result = _run(downloader, get_chat_messages_by_vod_id, diagnostics=diagnostics)
+
+    assert [item["message_id"] for item in result] == expected_ids
+    assert [item["message"] for item in result] == expected_ids
+    assert len({item["message_id"] for item in result}) == len(result)
+    calls = downloader._download_gql.call_args_list
+    assert len(calls) == len(cursors)
+    assert [call.args[0][0]["variables"].get("cursor") for call in calls] == [
+        None,
+        *cursors[:-1],
+    ]
+    if complete:
+        assert "termination_reason" not in diagnostics
+    else:
+        assert diagnostics["termination_reason"] == "pagination_stalled"
+        assert diagnostics["parse_error"] == 2
+    chat = Chat(status="past", diagnostics=diagnostics)
+    chat.site = cast(
+        "Any",
+        SimpleNamespace(is_completed_replay_status=lambda status: status == "past"),
+    )
+    assert (
+        replay_complete(
+            chat,
+            RunResult(
+                success=True,
+                termination_reason=str(
+                    diagnostics.get("termination_reason", "completed")
+                ),
+            ),
+        )
+        is complete
+    )
+
+
+def test_replay_retries_empty_page_without_losing_cursor_progress(downloader):
+    fetch = Mock(
+        side_effect=[
+            _response([_edge("first", "a")], True),
+            _response([], True),
+            _response([_edge("second", "b")], True),
+            _response([], False),
+        ]
+    )
+    diagnostics: dict[str, object] = {}
+    result = _run(downloader, fetch, diagnostics=diagnostics)
+    assert [item["message_id"] for item in result] == ["first", "second"]
+    assert [call.args[3] for call in fetch.call_args_list] == [None, "a", "a", "b"]
+    assert "termination_reason" not in diagnostics
+
+
+def test_replay_detects_old_cycle_after_large_cursor_history(downloader):
+    page_count = 2048
+
+    def pages():
+        for index in [*range(page_count), 0]:
+            cursor = f"{index}:" + "x" * 2048
+            edge = _edge(f"message-{index}", cursor)
+            edge["node"].update(
+                {
+                    "contentOffsetSeconds": 1,
+                    "message": {"fragments": [{"text": f"record {index}"}]},
+                }
+            )
+            comments, _ = _response([edge], has_next=True)
+            yield [{"data": {"video": {"comments": comments}}}]
+
+    downloader._download_gql.side_effect = pages()
+    diagnostics: dict[str, object] = {}
+    result = _run(downloader, get_chat_messages_by_vod_id, diagnostics=diagnostics)
+
+    assert [item["message_id"] for item in result] == [
+        f"message-{index}" for index in range(page_count)
+    ]
+    assert result[-1]["message"] == f"record {page_count - 1}"
+    assert downloader._download_gql.call_count == page_count + 1
+    assert diagnostics["termination_reason"] == "pagination_stalled"
+
+
+def test_timed_replay_closes_suspended_source_from_consumer(downloader, monkeypatch):
+    suspended = Event()
+    release = Event()
+    publish = TimedGenerator._publish_result
+    published = 0
+
+    def pause_second_publish(timed, result):
+        nonlocal published
+        published += 1
+        if published == 2:
+            suspended.set()
+            assert release.wait(timeout=2)
+        return publish(timed, result)
+
+    monkeypatch.setattr(TimedGenerator, "_publish_result", pause_second_publish)
+    fetch = Mock(
+        side_effect=[
+            _response([_edge("first", "a")], True),
+            _response([_edge("second", "b")], True),
+        ]
+    )
+    source = replay_service.iter_vod_chat_messages(
+        cast("Any", downloader),
+        "vod123",
+        _request(),
+        max_duration=120,
+        fetch_messages=cast("replay_service._FetchMessages", fetch),
+    )
+    timed = TimedGenerator(source)
+    try:
+        assert suspended.wait(timeout=2)
+        assert next(timed)["message_id"] == "first"
+        # The replay DB was opened on the worker; this closes it on the caller.
+        timed.close()
+        assert source.gi_frame is None
+    finally:
+        release.set()
+        timed.close()
+        timed._worker.join(timeout=2)
+    assert not timed._worker.is_alive()
+    assert fetch.call_count == 2
 
 
 @pytest.mark.parametrize("edges", [[], [_edge("m1", "")]])

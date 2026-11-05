@@ -146,6 +146,7 @@ def iter_reverse_history(  # noqa: C901 — bounded pagination, cancellation and
                 cursor=cursor,
             ),
             request,
+            cancelled=cancelled,
         )
         if cancelled is not None and cancelled.is_set():
             return

@@ -19,6 +19,7 @@ from typing import Any, cast
 
 import pytest
 
+from chat_downloader.errors import IncompleteContinuationError, NoChatReplay
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.continuation import _ContinuationLoop
 
@@ -39,6 +40,7 @@ class _DummyDownloader:
         self.update_session_headers(headers)
 
     def apply_request_profile(self, profile_name: str) -> bool:
+        self._request_profile = profile_name
         return True
 
 
@@ -51,6 +53,8 @@ def _make_loop(message_groups: list[str] | None = None) -> _ContinuationLoop:
             url="https://www.youtube.com/watch?v=abc",
             chat_type="live",
             message_groups=message_groups or ["messages"],
+            max_attempts=2,
+            retry_timeout=0,
         ),
     )
 
@@ -130,8 +134,6 @@ def test_run_raises_incomplete_when_live_chat_continuation_missing(
     monkeypatch,
 ) -> None:
     """A payload lacking liveChatContinuation surfaces IncompleteContinuationError."""
-    from chat_downloader.errors import IncompleteContinuationError
-
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._get_continuation_info",
         lambda *_a, **_k: {"responseContext": {}},
@@ -161,3 +163,122 @@ def test_real_request_and_action_loop_share_capture_diagnostics():
         "network_error_count": 0,
         "json_error_count": 0,
     }
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        {},
+        {"continuationContents": {"liveChatContinuation": {}}},
+        {"continuationContents": {"liveChatContinuation": []}},
+        {"continuationContents": {"liveChatContinuation": ["invalid"]}},
+        {"continuationContents": {"liveChatContinuation": ""}},
+        {"continuationContents": {"liveChatContinuation": 1}},
+    ],
+    ids=["empty-body", "empty-block", "empty-list", "list", "empty-string", "scalar"],
+)
+def test_real_request_retries_invalid_structure_before_clean_end(
+    make_fake_http_response, invalid
+) -> None:
+    loop = _make_loop(message_groups=["engagement"])
+    responses = iter(
+        [
+            invalid,
+            {"continuationContents": {"liveChatContinuation": {"actions": []}}},
+        ]
+    )
+    profiles = []
+
+    def post(*_args, **_kwargs):
+        profiles.append(loop.downloader._request_profile)
+        return make_fake_http_response(200, next(responses))
+
+    loop.downloader._session_post = post
+
+    assert list(loop.run()) == [
+        {"message_type": "chat_ended", "action_type": "chat_ended", "message": None}
+    ]
+    assert profiles == ["youtube_web", "youtube_web"]
+    assert loop.diagnostics["continuation_retry_count"] == 1
+
+
+def test_real_request_recovers_empty_responses_with_next_profile(
+    make_fake_http_response,
+) -> None:
+    loop = _make_loop(message_groups=["engagement"])
+    profiles = []
+
+    def post(*_args, **_kwargs):
+        profile = loop.downloader._request_profile
+        profiles.append(profile)
+        payload = (
+            {}
+            if profile == "youtube_web"
+            else {"continuationContents": {"liveChatContinuation": {"actions": []}}}
+        )
+        return make_fake_http_response(200, payload)
+
+    loop.downloader._session_post = post
+
+    assert list(loop.run()) == [
+        {"message_type": "chat_ended", "action_type": "chat_ended", "message": None}
+    ]
+    assert profiles == ["youtube_web", "youtube_web", "youtube_android"]
+    assert loop.diagnostics["continuation_profile_switch_count"] == 1
+    assert loop.diagnostics["continuation_retry_count"] == 1
+
+
+@pytest.mark.parametrize("fallback", [False, True])
+def test_real_request_invalid_structure_exhausts_without_false_completion(
+    make_fake_http_response, fallback
+) -> None:
+    loop = _make_loop(message_groups=["engagement"])
+    loop.downloader._auto_profile_fallback = fallback
+    profiles = []
+
+    def post(*_args, **_kwargs):
+        profiles.append(loop.downloader._request_profile)
+        return make_fake_http_response(
+            200, {"continuationContents": {"liveChatContinuation": {}}}
+        )
+
+    loop.downloader._session_post = post
+    messages = []
+    with pytest.raises(IncompleteContinuationError, match="Retries exhausted"):
+        messages.extend(loop.run())
+
+    assert messages == []
+    assert profiles == (
+        [
+            "youtube_web",
+            "youtube_web",
+            "youtube_android",
+            "youtube_android",
+            "youtube_ios",
+            "youtube_ios",
+        ]
+        if fallback
+        else ["youtube_web", "youtube_web"]
+    )
+    assert loop.diagnostics.get("continuation_profile_switch_count", 0) == (
+        2 if fallback else 0
+    )
+
+
+def test_real_request_terminal_api_error_does_not_retry_or_switch_profiles(
+    make_fake_http_response,
+) -> None:
+    loop = _make_loop(message_groups=["engagement"])
+    profiles = []
+
+    def post(*_args, **_kwargs):
+        profiles.append(loop.downloader._request_profile)
+        return make_fake_http_response(
+            200, {"error": {"code": 400, "message": "Replay disabled"}}
+        )
+
+    loop.downloader._session_post = post
+
+    with pytest.raises(NoChatReplay, match="Replay disabled"):
+        list(loop.run())
+    assert profiles == ["youtube_web"]

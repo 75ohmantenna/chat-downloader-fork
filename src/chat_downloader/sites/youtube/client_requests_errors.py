@@ -186,19 +186,15 @@ def _handle_missing_live_chat_continuation(
     retry_policy: RetryPolicy,
     continuation_url: str,
 ) -> bool:
-    """Return True (retry) when the live-chat continuation block is missing.
+    """Retry absent, empty, or wrongly typed required live-chat blocks.
 
-    Returns False when the body is acceptable: the guard is disabled, an error
-    was already handled upstream, the body is empty, or the
-    ``continuationContents.liveChatContinuation`` block is present.
+    Disabled validation and already handled API errors bypass this guard.
+    A nonempty dictionary, including one with ``actions=[]``, is acceptable.
     """
-    if not (
-        require_live_chat_continuation
-        and not error
-        and json_response
-        and multi_get(json_response, "continuationContents", "liveChatContinuation")
-        is None
-    ):
+    if not require_live_chat_continuation or error:
+        return False
+    info = multi_get(json_response, "continuationContents", "liveChatContinuation")
+    if isinstance(info, dict) and info:
         return False
     summary = summarize_continuation_payload(json_response)
     return _retry_or_raise_exhausted(

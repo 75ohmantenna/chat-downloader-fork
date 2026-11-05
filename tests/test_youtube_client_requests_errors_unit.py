@@ -125,13 +125,16 @@ def _missing_continuation(body, *, required=True, error=None, attempts=2):
     [
         ({"continuationContents": {}}, {"required": False}, False),
         ({"continuationContents": {}}, {"error": ValueError("already handled")}, False),
-        ({}, {}, False),
+        ({}, {}, True),
         (
             {"continuationContents": {"liveChatContinuation": {"actions": []}}},
             {},
             False,
         ),
         ({"continuationContents": {"otherContinuation": {}}}, {}, True),
+        ({"continuationContents": {"liveChatContinuation": {}}}, {}, True),
+        ({"continuationContents": {"liveChatContinuation": []}}, {}, True),
+        ({"continuationContents": {"liveChatContinuation": "invalid"}}, {}, True),
     ],
 )
 def test_missing_live_chat_guard(body, kwargs, expected) -> None:

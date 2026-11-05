@@ -269,15 +269,11 @@ def test_request_profile_unknown_leaves_ytcfg_values_copied():
 
 @pytest.mark.parametrize(
     "failure",
-    ["http", "json-retry", "json", "network"],
+    ["json-retry", "json", "network"],
 )
 def test_continuation_errors_and_recovery(failure):
-    reply = http_response(404 if failure == "http" else 200, text="not-json")
-    reply.json.side_effect = (
-        [ValueError("bad json"), {}]
-        if failure == "http"
-        else JSONDecodeError("bad json", "doc", 0)
-    )
+    reply = http_response(200, text="not-json")
+    reply.json.side_effect = JSONDecodeError("bad json", "doc", 0)
     post = Mock(return_value=reply)
     expected = response()
     if failure == "json-retry":
@@ -300,11 +296,8 @@ def test_continuation_errors_and_recovery(failure):
             params,
             json={"continuation": "abc"},
         )
-        assert result == ({} if failure == "http" else expected)
-        if failure == "http":
-            assert reply.json.call_count == 2
-        else:
-            assert post.call_count == 2
+        assert result == expected
+        assert post.call_count == 2
 
 
 @pytest.mark.parametrize("initial", [False, True])

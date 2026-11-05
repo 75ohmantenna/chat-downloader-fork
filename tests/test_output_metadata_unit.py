@@ -16,34 +16,53 @@ from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
 
 
+@pytest.fixture
+def youtube_metadata(monkeypatch):
+    def configure(title, message):
+        monkeypatch.setattr(
+            YouTubeChatDownloader,
+            "get_user_videos",
+            lambda *_args, **_kwargs: iter(
+                [{"video_id": "abcdefghijk", "title": title, "video_type": "LIVE"}]
+            ),
+        )
+        monkeypatch.setattr(
+            YouTubeChatDownloader,
+            "_get_initial_video_info",
+            lambda *_args, **_kwargs: (
+                {"title": title, "status": "live", "video_type": "video"},
+                {},
+            ),
+        )
+        monkeypatch.setattr(
+            YouTubeChatDownloader,
+            "_get_chat_messages",
+            lambda *_args, **_kwargs: iter([message]),
+        )
+        monkeypatch.setattr(
+            "chat_downloader.sites.youtube.chat_users_router._get_initial_info",
+            lambda *_args: ({}, {}, {"videoDetails": {"videoId": "abcdefghijk"}}),
+        )
+
+    return configure
+
+
 @pytest.mark.parametrize("suffix", ["jsonl", "txt"])
 @pytest.mark.parametrize("append", [False, True])
 @pytest.mark.parametrize("title", ["Actual Title", "abcdefghijk"])
 def test_channel_output_templates_use_discovered_metadata(
-    monkeypatch, tmp_path, suffix, append, title
+    youtube_metadata, tmp_path, suffix, append, title
 ):
     video_id = "abcdefghijk"
-    message = {"message_id": "one", "message_type": "text_message", "message": "hello"}
-    monkeypatch.setattr(
-        YouTubeChatDownloader,
-        "get_user_videos",
-        lambda *_args, **_kwargs: iter(
-            [{"video_id": video_id, "title": title, "video_type": "LIVE"}]
-        ),
-    )
-    monkeypatch.setattr(
-        YouTubeChatDownloader,
-        "_get_initial_video_info",
-        lambda *_args, **_kwargs: (
-            {"title": title, "status": "live", "video_type": "video"},
-            {},
-        ),
-    )
-    monkeypatch.setattr(
-        YouTubeChatDownloader,
-        "_get_chat_messages",
-        lambda *_args, **_kwargs: iter([message]),
-    )
+    message = {
+        "message_id": "one",
+        "message_type": "text_message",
+        "message": "hello",
+        "author": {"name": "Alice"},
+        "timestamp": 1_700_000_000_000_000,
+        "time_text": "-0:42",
+    }
+    youtube_metadata(title, message)
     destinations = {tmp_path / f"{value}.{suffix}" for value in (title, video_id)}
     if append:
         for path in destinations:
@@ -61,7 +80,9 @@ def test_channel_output_templates_use_discovered_metadata(
         )
         try:
             assert list(chat) == [message]
-            rendered = chat.format(message)
+            assert isinstance(chat.site, YouTubeChatDownloader)
+            assert chat.diagnostics["termination_reason"] == "message_limit"
+            assert chat.format(message) == "22:13:20 | Alice: hello"
             assert len(chat._output_dispatcher.writers) == len(destinations)
         finally:
             chat.close()
@@ -74,8 +95,122 @@ def test_channel_output_templates_use_discovered_metadata(
             assert lines.pop(0) == "existing"
         assert len(lines) == 1
         assert (json.loads(lines[0]) if suffix == "jsonl" else lines[0]) == (
-            message if suffix == "jsonl" else rendered
+            message if suffix == "jsonl" else "22:13:20 | Alice: hello"
         )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/@audit_channel",
+        "https://www.youtube.com/channel/UCR3TOnFWDeAlT-Ho6LueDmg",
+        "https://www.youtube.com/@audit_channel/live",
+        "https://www.youtube.com/watch?v=abcdefghijk",
+    ],
+)
+@pytest.mark.parametrize("source_timestamp", [False, True])
+@pytest.mark.parametrize(
+    ("format_name", "source_text"),
+    [
+        ("default", "22:13:20 | Alice: hello"),
+        ("youtube", "22:13:20 | Alice: hello"),
+        ("24_hour", "22:13:20 | Alice: hello"),
+        ("12_hour", "10:13 PM | Alice: hello"),
+        ("youtube_live_default", "22:13:20 | Alice: hello"),
+        ("youtube_live_24_hour", "22:13:20 | Alice: hello"),
+        ("youtube_live_12_hour", "10:13 PM | Alice: hello"),
+        ("custom", "CUSTOM Alice: hello"),
+    ],
+)
+def test_public_youtube_chat_formats_discovered_live_metadata(
+    youtube_metadata, tmp_path, url, source_timestamp, format_name, source_text
+):
+    message = {
+        "message_id": "one",
+        "message_type": "text_message",
+        "message": "hello",
+        "author": {"name": "Alice"},
+        "received_timestamp": 1_700_000_000_000_000,
+    }
+    if source_timestamp:
+        message.update(timestamp=1_700_000_000_000_000, time_text="-0:42")
+    youtube_metadata("Actual Title", message)
+    formats = tmp_path / "formats.json"
+    formats.write_text(
+        json.dumps({"custom": {"template": "CUSTOM {author.name}: {message}"}}),
+        encoding="utf-8",
+    )
+    expected = (
+        source_text
+        if source_timestamp or format_name == "custom"
+        else "2023-11-14 22:13:20 [received] | Alice: hello"
+    )
+    output = tmp_path / "Actual Title.txt"
+    downloader = ChatDownloader(proxy="")
+    try:
+        chat = downloader.get_chat(
+            url,
+            format=format_name,
+            format_file=str(formats),
+            output=[str(tmp_path / "{title}.txt"), str(output)],
+            max_messages=1,
+        )
+        site = chat.site
+        try:
+            assert isinstance(site, YouTubeChatDownloader)
+            assert next(chat) == message
+            assert chat.site is site
+            assert chat.format(message) == expected
+            assert chat.diagnostics["termination_reason"] == "message_limit"
+        finally:
+            chat.close()
+    finally:
+        downloader.close()
+    assert output.read_text(encoding="utf-8") == expected + "\n"
+    assert set(tmp_path.iterdir()) == {formats, output}
+
+
+def test_channel_discovery_preserves_user_formatter_and_runtime_diagnostics(
+    youtube_metadata, monkeypatch, tmp_path
+):
+    message = {"message_id": "one", "message_type": "text_message", "message": "hello"}
+    youtube_metadata("Actual Title", message)
+
+    def source(_site, _info, _config, _request, diagnostics):
+        diagnostics["continuation_profile_switch_count"] = 1
+        try:
+            yield message
+        finally:
+            diagnostics["continuation_profile_switch_count"] = 2
+
+    monkeypatch.setattr(YouTubeChatDownloader, "_get_chat_messages", source)
+    output = tmp_path / "Actual Title.txt"
+    downloader = ChatDownloader(proxy="")
+    try:
+        chat = downloader.get_chat(
+            "https://www.youtube.com/@audit_channel",
+            output=[str(tmp_path / "{title}.txt"), str(output)],
+            max_messages=1,
+        )
+        diagnostics = chat.diagnostics
+        try:
+            chat.set_formatter(lambda item: "USER: " + item["message"])
+            assert next(chat) == message
+            assert chat.format(message) == "USER: hello"
+            assert chat.diagnostics is diagnostics
+            assert diagnostics == {
+                "continuation_profile_switch_count": 1,
+                "termination_reason": "message_limit",
+            }
+        finally:
+            chat.close()
+        assert diagnostics == {
+            "continuation_profile_switch_count": 2,
+            "termination_reason": "message_limit",
+        }
+    finally:
+        downloader.close()
+    assert output.read_text(encoding="utf-8") == "USER: hello\n"
 
 
 def test_late_metadata_format_conflicts_preserve_all_files(tmp_path):

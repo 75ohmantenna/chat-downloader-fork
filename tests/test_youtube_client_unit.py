@@ -329,6 +329,17 @@ def test_get_continuation_info_handles_json_decode_before_response() -> None:
             True,
             id="browse",
         ),
+        pytest.param({}, True, id="browse-empty-body"),
+        pytest.param(
+            {"continuationContents": {"liveChatContinuation": {}}},
+            True,
+            id="browse-empty-live-chat-block",
+        ),
+        pytest.param(
+            {"continuationContents": {"liveChatContinuation": []}},
+            True,
+            id="browse-wrong-live-chat-block-type",
+        ),
     ],
 )
 def test_get_continuation_info_returns_payload(

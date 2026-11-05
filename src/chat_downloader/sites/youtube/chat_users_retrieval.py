@@ -24,9 +24,11 @@ if TYPE_CHECKING:
 
 
 def _copy_chat_metadata(chat_item: Chat, chat: Any) -> None:
-    """Copy public chat attributes onto the placeholder chat item."""
+    """Copy discovered metadata without replacing configured runtime state."""
     for key, value in vars(chat).items():
-        if key != "chat" and not key.startswith("_"):
+        if key == "diagnostics":
+            chat_item.diagnostics.update(value)
+        elif key not in {"chat", "site"} and not key.startswith("_"):
             setattr(chat_item, key, value)
     chat_item._metadata_pending = False
 
@@ -100,7 +102,13 @@ class YouTubeChatUsersRetrievalMixin:
                     )
 
                     _copy_chat_metadata(chat_item, chat)
-                    yield from chat
+                    try:
+                        for item in chat:
+                            chat_item.diagnostics.update(chat.diagnostics)
+                            yield item
+                    finally:
+                        chat.close()
+                        chat_item.diagnostics.update(chat.diagnostics)
                     break
 
                 except ChatDownloaderError as e:

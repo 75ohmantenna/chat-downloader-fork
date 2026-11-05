@@ -251,6 +251,11 @@ timestamp is absent, records receive a separate per-batch `received_timestamp`;
 default live formatting marks it `[received]`. This does not invent source
 timing or a capture-relative replay offset.
 
+Channel and handle discovery retain the configured provider and formatter while
+metadata resolves. Live-format selection uses the resolved status at rendering
+time, so discovered streams use the same clock and receipt-time policy as
+direct video URLs. Custom format names and user-installed formatters are retained.
+
 The live and replay action loops retain `poll_count`, `processed_action_count`,
 `emitted_message_count`, and `non_emission_counts` in capture diagnostics.
 `poll_count` includes polls whose action processing started; action totals
@@ -371,9 +376,12 @@ rotation never silently replaces an explicit override.
 The initial InnerTube fallback uses the same request-profile context fields
 when constructing its `player` and `next` payloads. Continuation-loop profile
 fallback remains separate and still handles incomplete chat-poll responses
-after bootstrap has succeeded. Generic unplayability in an InnerTube bootstrap
-is checked even when `next` exposes tokens, so unusable Web replay tokens do not
-bypass profile recovery. A first replay response with HTTP 400
+after bootstrap has succeeded. Empty response objects and absent, empty, or
+non-dictionary live-chat continuation blocks enter the bounded request retry
+and profile-recovery path. A nonempty block with an empty action list is valid.
+Generic unplayability in an InnerTube bootstrap is checked even when `next`
+exposes tokens, so unusable Web replay tokens do not bypass profile recovery.
+A first replay response with HTTP 400
 `INVALID_ARGUMENT` also permits bounded profile fallback, refreshing bootstrap
 tokens and config for the new profile while preserving seek and clip bounds.
 Recovery logs identify the rejected and replacement profiles and announce a

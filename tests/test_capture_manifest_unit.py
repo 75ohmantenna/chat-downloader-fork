@@ -225,6 +225,7 @@ def test_provider_completed_status_enables_resume_and_certification(
         chat.status = "was_live"
         chat.site = SimpleNamespace(
             _NAME="youtube.com",
+            is_live_status=lambda _status: False,
             is_completed_replay_status=lambda status: status in {"past", "was_live"},
         )
         return chat

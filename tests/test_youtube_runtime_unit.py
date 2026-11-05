@@ -257,12 +257,16 @@ def test_resolve_poll_delay_ms_clamps_and_falls_back(raw_delay_ms, expected_dela
     assert _resolve_poll_delay_ms(raw_delay_ms) == expected_delay_ms
 
 
-def test_copy_chat_metadata_skips_chat_generator_and_private_attrs():
+def test_copy_chat_metadata_preserves_runtime_state_and_metadata_extensions():
     chat_item = Chat(title="placeholder", id="placeholder")
+    site = SimpleNamespace(name="configured provider")
+    chat_item.site = cast("Any", site)
+    chat_item.set_formatter(lambda item: "USER: " + item["message"])
     original_generator = chat_item.chat
     source = SimpleNamespace(
         chat=iter(()),
         title="real title",
+        site=None,
         id="real-id",
         _hidden="secret",
         author="example",
@@ -277,6 +281,8 @@ def test_copy_chat_metadata_skips_chat_generator_and_private_attrs():
     )
     assert "_hidden" not in vars(chat_item)
     assert chat_item.chat is original_generator
+    assert chat_item.site is site
+    assert chat_item.format({"message": "hello"}) == "USER: hello"
 
 
 @pytest.mark.parametrize(

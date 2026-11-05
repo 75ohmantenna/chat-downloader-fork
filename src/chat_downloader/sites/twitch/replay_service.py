@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import math
+import sqlite3
+from contextlib import closing
 from json.decoder import JSONDecodeError
 from logging import DEBUG
 from typing import TYPE_CHECKING, Protocol, cast
@@ -229,91 +231,102 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
     consecutive_empty_pages = 0
     max_empty_pages = 3
 
-    while True:
-        comments, info = _fetch_vod_page(
-            downloader,
-            fetch_messages,
-            vod_id,
-            cursor,
-            plan.content_offset_seconds,
-            request,
-        )
-
-        if first_iteration and info:
-            creator_id = multi_get(info, "creator", "id")
-            if creator_id == "":
-                msg = f'Channel for VOD "{vod_id}" not found or has been deleted'
-                raise UserNotFound(
-                    msg,
-                )
-
-        if not comments:
-            state["termination_reason"] = "pagination_stalled"
-            break
-        first_iteration = False
-
-        edges = get_list(comments, "edges")
-        has_next_page = bool(multi_get(comments, "pageInfo", "hasNextPage"))
-
-        if not edges:
-            consecutive_empty_pages += 1
-            page_action = _classify_empty_page(
-                consecutive=consecutive_empty_pages,
-                max_empty=max_empty_pages,
-                has_next_page=has_next_page,
-                vod_id=vod_id,
+    # Exact historical progress belongs on disk, not in replay-sized Python state.
+    # TimedGenerator may close a suspended source from its consumer thread.
+    with closing(sqlite3.connect("", check_same_thread=False)) as seen_cursors:
+        seen_cursors.execute("CREATE TABLE cursors (cursor TEXT PRIMARY KEY)")
+        seen_cursors.execute("INSERT INTO cursors VALUES ('')")
+        while True:
+            comments, info = _fetch_vod_page(
+                downloader,
+                fetch_messages,
+                vod_id,
+                cursor,
+                plan.content_offset_seconds,
+                request,
             )
-            if page_action == "break":
-                if has_next_page:
-                    state["termination_reason"] = "pagination_stalled"
+
+            if first_iteration and info:
+                creator_id = multi_get(info, "creator", "id")
+                if creator_id == "":
+                    msg = f'Channel for VOD "{vod_id}" not found or has been deleted'
+                    raise UserNotFound(
+                        msg,
+                    )
+
+            if not comments:
+                state["termination_reason"] = "pagination_stalled"
                 break
-            continue
+            first_iteration = False
 
-        consecutive_empty_pages = 0
-        creator_channel_id = multi_get(info or {}, "creator", "channel", "id")
-        previous_cursor = cursor
-        for edge_item in edges:
-            if not isinstance(edge_item, dict):
-                state["parse_error"] = cast("int", state.get("parse_error", 0)) + 1
-                continue
-            new_cursor = get_str(edge_item, "cursor")
-            if new_cursor:
-                cursor = new_cursor
-            data, edge_action = _process_vod_edge(
-                edge_item,
-                plan.offset,
-                creator_channel_id,
-                badge_set,
-                plan.time_filter,
-                plan.msg_filter,
-                effective_logger,
-                state,
-            )
-            if edge_action == "stop":
-                return
-            if edge_action == "skip":
+            edges = get_list(comments, "edges")
+            has_next_page = bool(multi_get(comments, "pageInfo", "hasNextPage"))
+
+            if not edges:
+                consecutive_empty_pages += 1
+                page_action = _classify_empty_page(
+                    consecutive=consecutive_empty_pages,
+                    max_empty=max_empty_pages,
+                    has_next_page=has_next_page,
+                    vod_id=vod_id,
+                )
+                if page_action == "break":
+                    if has_next_page:
+                        state["termination_reason"] = "pagination_stalled"
+                    break
                 continue
 
-            message_count += 1
-            if data is None:  # pragma: no cover — _parse_item always returns a dict
-                msg = "Unexpected None data for non-skip edge"
-                raise ValueError(msg)
-            yield data
-
-        log("debug", f"Total number of messages: {message_count}")
-
-        if not has_next_page:
-            break
-        # Cursor must advance on a page that had edges; if Twitch returns
-        # the same cursor we'd loop on identical data.
-        if cursor == previous_cursor:
-            state["termination_reason"] = "pagination_stalled"
-            log(
-                "warning",
-                f"VOD {vod_id}: cursor did not advance after a non-empty "
-                "page; stopping pagination.",
+            consecutive_empty_pages = 0
+            creator_channel_id = multi_get(info or {}, "creator", "channel", "id")
+            next_cursor = cursor
+            for edge_item in edges:
+                if isinstance(edge_item, dict):
+                    next_cursor = get_str(edge_item, "cursor") or next_cursor
+            pagination_stalled = (
+                has_next_page
+                and seen_cursors.execute(
+                    "INSERT OR IGNORE INTO cursors VALUES (?)", (next_cursor,)
+                ).rowcount
+                == 0
             )
-            break
+            if pagination_stalled:
+                state["termination_reason"] = "pagination_stalled"
+                log(
+                    "warning",
+                    f"VOD {vod_id}: cursor did not advance to a new page; "
+                    "stopping pagination.",
+                )
+            cursor = next_cursor
+            for edge_item in edges:
+                if not isinstance(edge_item, dict):
+                    state["parse_error"] = cast("int", state.get("parse_error", 0)) + 1
+                    continue
+                # Still validate stalled pages so malformed records remain diagnosed.
+                data, edge_action = _process_vod_edge(
+                    edge_item,
+                    plan.offset,
+                    creator_channel_id,
+                    badge_set,
+                    plan.time_filter,
+                    plan.msg_filter,
+                    effective_logger,
+                    state,
+                )
+                if edge_action == "stop":
+                    return
+                if edge_action == "skip" or pagination_stalled:
+                    continue
+
+                message_count += 1
+                if data is None:  # pragma: no cover — _parse_item always returns a dict
+                    msg = "Unexpected None data for non-skip edge"
+                    raise ValueError(msg)
+                yield data
+
+            log("debug", f"Total number of messages: {message_count}")
+
+            if not has_next_page or pagination_stalled:
+                break
 
 
 def get_chat_by_vod_id(

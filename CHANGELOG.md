@@ -8,6 +8,15 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+### Fixes
+
+- Stop Twitch replay cursor cycles before emitting repeated pages.
+- Retry empty or malformed YouTube continuation blocks within the configured
+  recovery budget instead of aborting capture immediately.
+- Preserve provider identity and live formatting after YouTube channel discovery.
+- Skip malformed Kick event names without terminating live capture.
+- Stop Kick history retries and manual retry prompts after cancellation.
+
 ## 2.6.0 — 2026-10-30
 
 This release includes the untagged 2.5.2 preparation and subsequent changes
