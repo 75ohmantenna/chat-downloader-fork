@@ -15,6 +15,7 @@ from chat_downloader.runtime.capture_manifest import RunManifest, is_completed_r
 from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.twitch.irc_diagnostics import _TwitchLiveDiagnostics
+from chat_downloader.utils import atomic_files
 from tests.test_capture_checkpoint_unit import (
     Downloader,
     capture_params,  # noqa: F401 - pytest discovers this imported fixture
@@ -69,7 +70,7 @@ def test_manifest_certifies_closed_files_and_completed_run(
     assert "Record 1" not in (tmp_path / "run.json").read_text()
 
 
-@pytest.mark.parametrize("boundary", ["hash", "create"])
+@pytest.mark.parametrize("boundary", ["hash", "publish"])
 @pytest.mark.parametrize(
     "outcome", ["complete", "capture-error", "interrupt", "close-error"]
 )
@@ -81,9 +82,8 @@ def test_checkpoint_lease_excludes_competing_capture_through_manifest(
     attempts = []
     entered = False
     prefixes = {}
-    creation_attempts = []
     original_open = os.open
-    original_path_open = Path.open
+    original_link = os.link
 
     class PrefixDownloader(Downloader):
         records = Downloader.records[:2]
@@ -114,18 +114,18 @@ def test_checkpoint_lease_excludes_competing_capture_through_manifest(
             compete()
         return original_open(name, flags, *args, **kwargs)
 
-    def open_report(self, mode="r", *args, **kwargs):
-        if self == path and mode == "x":
-            creation_attempts.append(self)
-            if boundary == "create":
-                compete()
-        return original_path_open(self, mode, *args, **kwargs)
+    def publish_report(source, destination, *args, **kwargs):
+        if Path(destination).name == path.name and boundary == "publish":
+            compete()
+        return original_link(source, destination, *args, **kwargs)
 
     monkeypatch.setattr(
         "chat_downloader.runtime.capture_manifest.os",
         SimpleNamespace(**(vars(os) | {"open": open_artifact})),
     )
-    monkeypatch.setattr(Path, "open", open_report)
+    monkeypatch.setattr(
+        atomic_files, "os", SimpleNamespace(**(vars(os) | {"link": publish_report}))
+    )
 
     result = execute_run(PrefixDownloader, **params, run_manifest=str(path))
 
@@ -135,7 +135,6 @@ def test_checkpoint_lease_excludes_competing_capture_through_manifest(
     assert not attempts[0].success
     assert attempts[0].message_count == 0
     assert "checkpoint.json.lock" in attempts[0].error_message
-    assert creation_attempts == [path]
     report = load_json(path)
     assert report["message_count"] == 2
     for item in report["outputs"]:
@@ -148,7 +147,7 @@ def test_checkpoint_lease_excludes_competing_capture_through_manifest(
     assert not (tmp_path / "checkpoint.json.lock").exists()
 
 
-@pytest.mark.parametrize("boundary", ["hash", "create"])
+@pytest.mark.parametrize("boundary", ["hash", "publish"])
 @pytest.mark.parametrize(
     "failure",
     [
@@ -166,7 +165,7 @@ def test_checkpoint_lease_covers_failed_manifest_and_is_released(
     outputs = [Path(name) for name in params["output"]]
     attempts = []
     original_open = os.open
-    original_path_open = Path.open
+    original_link = os.link
 
     def fail_manifest():
         attempts.append(boundary)
@@ -183,16 +182,18 @@ def test_checkpoint_lease_covers_failed_manifest_and_is_released(
             fail_manifest()
         return original_open(name, flags, *args, **kwargs)
 
-    def open_report(self, mode="r", *args, **kwargs):
-        if self == path and mode == "x" and boundary == "create":
+    def publish_report(source, destination, *args, **kwargs):
+        if Path(destination).name == path.name and boundary == "publish":
             fail_manifest()
-        return original_path_open(self, mode, *args, **kwargs)
+        return original_link(source, destination, *args, **kwargs)
 
     monkeypatch.setattr(
         "chat_downloader.runtime.capture_manifest.os",
         SimpleNamespace(**(vars(os) | {"open": open_artifact})),
     )
-    monkeypatch.setattr(Path, "open", open_report)
+    monkeypatch.setattr(
+        atomic_files, "os", SimpleNamespace(**(vars(os) | {"link": publish_report}))
+    )
 
     if isinstance(failure, (OSError, ValueError)):
         result = execute_run(Downloader, **params, run_manifest=str(path))
@@ -604,3 +605,17 @@ def test_manifest_preserves_safe_bootstrap_metrics_and_provenance(
     )
     assert report["provider_diagnostics"] == expected
     assert "PRIVATE" not in json.dumps(report)
+
+
+@pytest.mark.parametrize(
+    "counter", ["replay_repeated_page_count", "channel_overlap_suppressed_count"]
+)
+@pytest.mark.parametrize("value", [2, -1, True, "PRIVATE"])
+def test_manifest_retains_only_valid_recovery_counters(
+    manifest, chat_state, params, counter, value
+):
+    chat_state[counter] = value
+    result, report = manifest(**params)
+    assert result.success
+    expected = {counter: value} if type(value) is int and value >= 0 else {}
+    assert report["provider_diagnostics"] == expected

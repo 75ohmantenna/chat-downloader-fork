@@ -16,6 +16,7 @@ from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.sites.output_dispatch import _expand_output_file_name
 from chat_downloader.sites.proxy import TLS_DIAGNOSTIC_CIPHERS, TLS_DIAGNOSTIC_VERSIONS
+from chat_downloader.utils.atomic_files import atomic_text_file
 from chat_downloader.utils.time_utils import ensure_seconds
 
 if TYPE_CHECKING:
@@ -71,6 +72,7 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
             "poll_count",
             "processed_action_count",
             "emitted_message_count",
+            "channel_overlap_suppressed_count",
             "parse_error",
             "continuation_request_count",
             "continuation_retry_count",
@@ -85,6 +87,7 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
             "continuation_profile_switch_count",
             "replay_timestamp_missing_count",
             "replay_zero_offset_without_timestamp_count",
+            "replay_repeated_page_count",
             "initial_replay_recovery_attempt_count",
             "initial_replay_recovery_success_count",
             "websocket_frame_count",
@@ -314,14 +317,14 @@ class RunManifest:
             "outputs": artifacts,
         }
         encoded = json.dumps(sanitize_for_log(payload), allow_nan=False, indent=2)
-        # Exclusive creation protects files created after preflight as well.
-        with self.path.open("x", encoding="utf-8") as target:
+        # Stage privately; publish complete JSON without replacing a late arrival.
+        with atomic_text_file(self.path) as target:
             target.write(encoded)
             target.write("\n")
             target.flush()
             # This outcome comparison commits the report. A first CLI signal
-            # during hashing, encoding, creation, or writing changes the run
-            # outcome synchronously; correct only this exclusively owned file.
+            # during hashing, encoding, staging, or writing changes the run
+            # outcome synchronously; correct only this private staging file.
             # Signals after this point do not revise the committed report.
             if (
                 payload["success"] != result.success

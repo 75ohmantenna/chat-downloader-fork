@@ -104,8 +104,10 @@ The first CLI interrupt is deferred across output dispatch and run/checkpoint
 accounting so a signal cannot split successful writes from their counters.
 It is also deferred across shutdown, checkpoint persistence, and report writing;
 the run records interruption immediately while its owners finish releasing.
-An exclusively created manifest corrects an outcome changed before its
-post-flush commit comparison; signals after that point do not revise the report.
+A privately staged manifest corrects an outcome changed before its post-flush
+commit comparison; signals after that point do not revise the report. Only
+complete, synchronized reports are published, without replacing an existing
+destination.
 `Chat` temporarily enables immediate interruption around provider reads; nested
 record boundaries share one pending interrupt. Other failures retain priority,
 and a second signal can still interrupt protected records or finalization.
@@ -124,8 +126,8 @@ Append initialization creates missing files without a truncating open, preservin
 records created by another writer after the existence check. This is not a
 general concurrent-append guarantee: tail repair and record writes still require
 exclusive ownership of each output file. Checkpointed runs retain their existing
-checkpoint-name lock through manifest artifact hashing and exclusive report
-creation, then release it even when report creation fails.
+checkpoint-name lock through manifest artifact hashing and atomic no-overwrite
+report publication, then release it even when publication fails.
 
 Kick VOD and clip replay traverses reverse cursors and buffers the selected
 history in a temporary spool before chronological output. Startup and reconnect
@@ -207,6 +209,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
+| `atomic_files.py` | Private same-directory staging, file synchronization, exclusive hard-link publication, and POSIX directory synchronization for complete JSON artifacts |
 | `capture_reader.py` | Strict UTF-8 JSONL object reading, physical line findings, and nonblocking regular-file ownership shared by provider inspectors |
 | `color_utils.py` | ARGB/RGBA color conversion |
 | `console_utils.py` | Cross-platform safe console output and pause handling |
@@ -267,6 +270,7 @@ module names.
 | `continuation.py` | The cohesive continuation request loop: `_ContinuationLoop` owns setup (`_build_context`), response handling (`_handle_continuation_response`), and iteration (`run`); delegates action pages to `message_pipeline.py`. `chat_streams.py` constructs the loop directly |
 | `continuation_helpers.py` | Downloader-independent state, timing, request-body, poll-delay, URL, and filter helpers; includes wall-clock observation and in-place message enrichment |
 | `continuations.py` | Continuation token-key definitions and response parser (`parse_continuation_response`, `summarize_continuation_payload`, `ContinuationParseResult`) |
+| `delivery_recovery.py` | Bounded replay-page identity, per-video bootstrap overlap, and accumulated child diagnostics for YouTube recovery |
 
 #### Other YouTube modules
 

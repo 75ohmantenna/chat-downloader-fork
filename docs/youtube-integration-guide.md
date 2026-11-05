@@ -215,6 +215,25 @@ When retrieval runs inside a timed worker, polling waits wake on shutdown and
 unwind the provider before another poll. An HTTP request already in progress
 still uses its connect/read bounds, so deadline accounting can remain incomplete.
 
+Exact replay pages are remembered under their request and advertised next tokens,
+using up to 128 token/page aliases. Repeated stale responses are suppressed before
+action emission; changed payloads at equal replay offsets, repeated occurrences
+within one page, and distinct terminal pages remain deliverable. Suppressed
+responses retain continuation handling and count as no progress even when
+continuation tokens alternate.
+`replay_repeated_page_count` counts these responses; request and poll totals
+still include them.
+
+Channel discovery retains a delivery suffix for up to five videos and 10,000
+accepted event occurrences per video across child failures and reacquisition.
+Matching identified events in a reacquired child's bootstrap prefix are
+suppressed. Message/action kind and substantive payload distinguish events;
+capture-relative presentation timing does not. The first new identified event
+ends overlap suppression, preserving later repeated occurrences and replacement
+revisions. Failed videos are not blacklisted. Child processing, request, and error
+totals accumulate across restarts; `channel_overlap_suppressed_count` records
+bootstrap events withheld from outer capture.
+
 Actions then pass through the message pipeline, which:
 
 - filters by requested message groups and message types
@@ -308,6 +327,16 @@ The end boundary applies to valid timed messages even when their message type
 is excluded. An empty paid-only window therefore stops at `end_time` rather
 than scanning until a paid event appears. Paid-cache enrichment still precedes
 both filters.
+
+Replay wrappers are expanded into every inner action in source order before
+filtering. Each occurrence inherits the wrapper's valid timing and has its own
+filter outcome and diagnostic count; repeated records are not deduplicated.
+Malformed siblings count as parsing loss without discarding later valid siblings.
+Processing does not mutate raw response actions, preserving replay-page identity.
+The singular `process_action` and `process_pipeline_action` helpers reject
+multi-inner wrappers; direct consumers can expand them with
+`parsing.actions_router.iter_action_occurrences`.
+The multi-inner regression fixture is synthetic, not captured provider evidence.
 
 Replay-wrapper offsets are used only when they are finite and nonnegative.
 Positive offsets provide authoritative millisecond precision. Pinned replay

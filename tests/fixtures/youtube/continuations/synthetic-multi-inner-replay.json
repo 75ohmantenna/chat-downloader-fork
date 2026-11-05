@@ -1,0 +1,57 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "clickTrackingParams": "synthetic-wrapper-tracking",
+          "replayChatItemAction": {
+            "videoOffsetTimeMsec": "12345",
+            "actions": [
+              {
+                "clickTrackingParams": "synthetic-inner-tracking",
+                "addChatItemAction": {
+                  "item": {
+                    "liveChatTextMessageRenderer": {
+                      "id": "repeated",
+                      "authorName": {"simpleText": "Synthetic author"},
+                      "message": {"runs": [{"text": "Repeated occurrence"}]},
+                      "timestampText": {"simpleText": "0:01"}
+                    }
+                  }
+                }
+              },
+              {"addInteractivityWidgetAction": {}},
+              {"removeChatItemAction": {"targetItemId": "filtered"}},
+              null,
+              {"addChatItemAction": {"item": {}}},
+              {
+                "addChatItemAction": {
+                  "item": {
+                    "liveChatTextMessageRenderer": {
+                      "id": "repeated",
+                      "authorName": {"simpleText": "Synthetic author"},
+                      "message": {"runs": [{"text": "Repeated occurrence"}]},
+                      "timestampText": {"simpleText": "0:01"}
+                    }
+                  }
+                }
+              },
+              {
+                "addChatItemAction": {
+                  "item": {
+                    "liveChatTextMessageRenderer": {
+                      "id": "last",
+                      "authorName": {"simpleText": "Synthetic author"},
+                      "message": {"runs": [{"text": "Last sibling"}]},
+                      "timestampText": {"simpleText": "0:02"}
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

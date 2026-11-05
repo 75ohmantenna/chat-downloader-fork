@@ -550,6 +550,17 @@ a new path distinct from outputs, checkpoint, and checkpoint lock. Use a new
 manifest filename on every resume. Create its parent directory before running;
 the CLI reports a missing directory before starting capture. Failure to write
 the manifest fails the run.
+The report is staged privately, synchronized, and published atomically without
+replacing an existing destination. A failed pre-publication write leaves
+no final manifest. Publication requires hard-link support on the destination
+filesystem; unsupported filesystems fail rather than expose a partial report.
+On POSIX, the directory is synchronized after publication. A directory-sync
+failure can leave a complete report while still failing the run; Windows has
+no portable directory-sync equivalent.
+POSIX manifests also use a private staging directory and pinned directory
+descriptors to protect the source from replacement by other users with write
+access to the destination parent. Windows retains atomic publication in ordinary
+owned directories, without this hostile shared-directory namespace protection.
 For lazy channel discovery, hashes use the filenames resolved when writers
 open, after video metadata becomes available. A late manifest/output collision
 fails manifest writing and preserves the captured output.

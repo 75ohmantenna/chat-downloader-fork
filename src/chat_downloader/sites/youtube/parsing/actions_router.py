@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import debug_log
 from chat_downloader.redaction import capture_debug_sample
@@ -25,7 +25,6 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
 from chat_downloader.sites.youtube.constants_patterns import (
     YOUTUBE_DEBUG_SAMPLE_LIMIT,
 )
-from chat_downloader.utils.dict_utils import try_get_first_key
 from chat_downloader.utils.json_types import (
     JSONAny,
     JSONDict,
@@ -46,6 +45,9 @@ from .actions_handlers_parser import (
     _handle_replace_action,
     _handle_tooltip_action,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
 
 _ActionHandler = Callable[
     [JSONDict, str, dict[str, Any], float],
@@ -108,11 +110,33 @@ def _get_replay_time_seconds(replay_action: JSONDict) -> float | None:
     return offset_milliseconds / 1000
 
 
+def iter_action_occurrences(actions: Iterable[JSONDict]) -> Iterator[JSONDict]:
+    """Expand replay siblings in order without mutating the provider payload.
+
+    Each view retains the wrapper timing for the singular action parser. Empty
+    or malformed wrappers still reach that parser for record-loss accounting.
+    """
+    for action in actions:
+        replay = get_dict(action, "replayChatItemAction")
+        inner_actions = get_list(replay, "actions")
+        if len(inner_actions) <= 1:
+            yield action
+            continue
+        for inner in inner_actions:
+            yield {"replayChatItemAction": {**replay, "actions": [inner]}}
+
+
 def _unwrap_replay_action(action: JSONDict) -> JSONDict:
-    """Return the first action nested in a replay wrapper, when present."""
+    """Unwrap one occurrence, rejecting cardinality loss in singular callers."""
     replay_action = get_dict(action, "replayChatItemAction")
     actions = get_list(replay_action, "actions")
-    return cast("JSONDict", actions[0]) if actions else action
+    if len(actions) > 1:
+        msg = "Expand replay siblings with iter_action_occurrences before parsing"
+        raise ValueError(msg)
+    if not actions:
+        return action
+    inner = actions[0]
+    return inner if isinstance(inner, dict) else {}
 
 
 def _get_action_type(action: JSONDict) -> str | None:
@@ -136,9 +160,13 @@ def process_action(
     """Process a YouTube chat action and return parsed message data.
 
     Args:
-        action: Raw action object to process. Tracking metadata is removed from
-            the routed inner action.
+        action: One raw action occurrence, optionally in a single-inner replay
+            wrapper. Tracking metadata and the provider payload are not mutated.
         offset: Replay or clip offset in seconds.
+
+    Raises:
+        ValueError: A replay wrapper contains multiple inner actions. Expand it
+            with iter_action_occurrences before calling this singular parser.
     """
     data: dict[str, Any] = {}
 
@@ -150,9 +178,11 @@ def process_action(
             data["time_in_seconds"] = replay_time
         action = _unwrap_replay_action(action)
 
-    # Remove tracking params and get action type
-    action.pop("clickTrackingParams", None)
-    original_action_type = try_get_first_key(action)
+    # Ignore tracking metadata without changing the raw page identity.
+    if "clickTrackingParams" in action:
+        action = action.copy()
+        del action["clickTrackingParams"]
+    original_action_type = next(iter(action), None)
 
     if not original_action_type:
         return None

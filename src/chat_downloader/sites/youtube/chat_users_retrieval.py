@@ -12,8 +12,10 @@ from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.models import coerce_chat_request
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.dict_utils import try_get_first_value
+from chat_downloader.utils.json_types import get_int
 
 from .capture_inspection import inspect_capture
+from .delivery_recovery import ChannelDeliveryHistory, ChildDiagnostics
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -26,9 +28,7 @@ if TYPE_CHECKING:
 def _copy_chat_metadata(chat_item: Chat, chat: Any) -> None:
     """Copy discovered metadata without replacing configured runtime state."""
     for key, value in vars(chat).items():
-        if key == "diagnostics":
-            chat_item.diagnostics.update(value)
-        elif key not in {"chat", "site"} and not key.startswith("_"):
+        if key not in {"chat", "site", "diagnostics"} and not key.startswith("_"):
             setattr(chat_item, key, value)
     chat_item._metadata_pending = False
 
@@ -69,6 +69,7 @@ class YouTubeChatUsersRetrievalMixin:
         sleep_amount = 30
         # Bound each discovery pass before refreshing live/upcoming results.
         max_vids_to_try = 5
+        deliveries = ChannelDeliveryHistory()
 
         while True:
             vids = cast("YouTubeDownloaderProto", self).get_user_videos(
@@ -102,13 +103,24 @@ class YouTubeChatUsersRetrievalMixin:
                     )
 
                     _copy_chat_metadata(chat_item, chat)
+                    overlap = deliveries.begin(video_id)
+                    diagnostics = ChildDiagnostics(chat_item.diagnostics)
+                    diagnostics.update(chat.diagnostics)
                     try:
                         for item in chat:
-                            chat_item.diagnostics.update(chat.diagnostics)
-                            yield item
+                            diagnostics.update(chat.diagnostics)
+                            if overlap.accept(item):
+                                yield item
+                            else:
+                                key = "channel_overlap_suppressed_count"
+                                chat_item.diagnostics[key] = (
+                                    get_int(chat_item.diagnostics, key) + 1
+                                )
                     finally:
-                        chat.close()
-                        chat_item.diagnostics.update(chat.diagnostics)
+                        try:
+                            chat.close()
+                        finally:
+                            diagnostics.update(chat.diagnostics)
                     break
 
                 except ChatDownloaderError as e:

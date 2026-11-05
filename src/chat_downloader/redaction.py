@@ -11,7 +11,6 @@ import os
 import re
 import stat
 import tempfile
-from contextlib import suppress
 from itertools import pairwise
 from pathlib import Path
 from threading import Lock
@@ -19,12 +18,13 @@ from typing import Any
 from urllib.parse import parse_qsl, unquote_plus, urlencode, urlsplit, urlunsplit
 
 from .debug_sample_utils import describe_debug_sample, slugify_debug_label
+from .utils.atomic_files import PublishedFileError, atomic_text_file, sync_directory
 
 REDACTED = "<redacted>"
 _DEBUG_SAMPLE_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES"
 _DEBUG_SAMPLE_DIR_ENV = "CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR"
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
-_DEBUG_SAMPLE_DIGESTS: dict[tuple[str, str], set[str]] = {}
+_DEBUG_SAMPLE_DIGESTS: dict[tuple[str, str], dict[str, int]] = {}
 _DEBUG_SAMPLE_LIMIT_WARNED: set[tuple[str, str]] = set()
 _DEBUG_SAMPLE_LIMIT_LOCK = Lock()
 _SENSITIVE_KEY_COMPONENTS = frozenset(
@@ -328,6 +328,8 @@ def _prepare_sample_directory(sample_dir: Path) -> int:
         and hasattr(os, "O_DIRECTORY")
         and hasattr(os, "O_NOFOLLOW")
         and os.open in os.supports_dir_fd
+        and os.link in os.supports_dir_fd
+        and os.unlink in os.supports_dir_fd
     )
     if not secure_dir_fd:
         message = "Secure debug sample creation is unavailable on this platform"
@@ -349,10 +351,27 @@ def _prepare_sample_directory(sample_dir: Path) -> int:
     return descriptor
 
 
-def _unlink_created_sample(path: Path, directory_fd: int) -> None:
-    """Best-effort removal of a sample created by the current capture call."""
-    with suppress(OSError):
-        os.unlink(path.name, dir_fd=directory_fd)
+def _validate_sample_content(path: Path, serialized: str, directory_fd: int) -> None:
+    """Require the private existing entry to contain exactly the expected bytes."""
+    descriptor = os.open(
+        path.name,
+        os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_NONBLOCK", 0),
+        dir_fd=directory_fd,
+    )
+    try:
+        _require_private_sample_entry(os.fstat(descriptor), path, directory=False)
+        expected = (serialized + "\n").encode("utf-8")
+        with os.fdopen(descriptor, "rb", closefd=False) as source:
+            if source.read(len(expected) + 1) != expected:
+                msg = f"Existing debug sample content does not match: {path}"
+                raise OSError(msg)
+            try:
+                os.fsync(descriptor)
+            except OSError as error:
+                raise PublishedFileError(*error.args) from error
+    finally:
+        os.close(descriptor)
+    sync_directory(path.parent, directory_fd)
 
 
 def _write_or_validate_sample(
@@ -360,29 +379,15 @@ def _write_or_validate_sample(
     serialized: str,
     directory_fd: int,
 ) -> None:
-    """Create a private sample atomically or validate the existing sample."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
+    """Publish a complete private sample or verify an identical existing one."""
     try:
-        descriptor = os.open(path.name, flags, 0o600, dir_fd=directory_fd)
-    except FileExistsError:
-        _require_private_sample_entry(
-            os.stat(path.name, dir_fd=directory_fd, follow_symlinks=False),
-            path,
-            directory=False,
-        )
-        return
-
-    try:
-        _require_private_sample_entry(os.fstat(descriptor), path, directory=False)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as sample_file:
-            descriptor = -1
+        with atomic_text_file(path, directory_fd=directory_fd) as sample_file:
+            _require_private_sample_entry(
+                os.fstat(sample_file.fileno()), path, directory=False
+            )
             sample_file.write(serialized + "\n")
-    except BaseException:
-        if descriptor >= 0:
-            with suppress(OSError):
-                os.close(descriptor)
-        _unlink_created_sample(path, directory_fd)
-        raise
+    except FileExistsError:
+        _validate_sample_content(path, serialized, directory_fd)
 
 
 def _sample_key(sample_dir: Path, label: str) -> tuple[str, str]:
@@ -396,7 +401,7 @@ def _reserve_debug_sample(
     digest: str,
     sample_limit: int | None,
 ) -> tuple[bool, bool]:
-    """Reserve one unique bounded sample and report whether it is new."""
+    """Reserve a bounded sample; positive counts track concurrent attempts."""
     if sample_limit is None:
         return True, False
     if sample_limit < 0:
@@ -405,8 +410,11 @@ def _reserve_debug_sample(
 
     key = _sample_key(sample_dir, label)
     with _DEBUG_SAMPLE_LIMIT_LOCK:
-        digests = _DEBUG_SAMPLE_DIGESTS.setdefault(key, set())
+        digests = _DEBUG_SAMPLE_DIGESTS.setdefault(key, {})
         if digest in digests:
+            if digests[digest]:
+                digests[digest] += 1
+                return True, True
             return True, False
         if len(digests) >= sample_limit:
             if key not in _DEBUG_SAMPLE_LIMIT_WARNED:
@@ -418,17 +426,27 @@ def _reserve_debug_sample(
                     sample_dir,
                 )
             return False, False
-        digests.add(digest)
+        digests[digest] = 1
         return True, True
 
 
-def _release_debug_sample(sample_dir: Path, label: str, digest: str) -> None:
-    """Release a failed bounded-sample reservation so it can be retried."""
-    key = _sample_key(sample_dir, label)
+def _finish_debug_samples(
+    sample_dir: Path,
+    reservations: list[tuple[str, str]],
+    *,
+    succeeded: bool = False,
+) -> None:
+    """Finalize this attempt's label/group claims without releasing other owners."""
     with _DEBUG_SAMPLE_LIMIT_LOCK:
-        digests = _DEBUG_SAMPLE_DIGESTS.get(key)
-        if digests is not None:
-            digests.discard(digest)
+        for label, digest in reservations:
+            digests = _DEBUG_SAMPLE_DIGESTS[_sample_key(sample_dir, label)]
+            pending = digests[digest]
+            if succeeded:
+                digests[digest] = 0
+            elif pending == 1:
+                del digests[digest]
+            elif pending:
+                digests[digest] -= 1
 
 
 def _validate_debug_sample_group(
@@ -498,13 +516,13 @@ def capture_debug_sample(
             if reserved:
                 reservations.append((bound_label, bound_digest))
             if not allowed:
-                for reserved_label, reserved_digest in reservations:
-                    _release_debug_sample(sample_dir, reserved_label, reserved_digest)
+                _finish_debug_samples(sample_dir, reservations)
                 return None
         directory_fd = _prepare_sample_directory(sample_dir)
         try:
             path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
             _write_or_validate_sample(path, serialized, directory_fd)
+            _finish_debug_samples(sample_dir, reservations, succeeded=True)
         finally:
             os.close(directory_fd)
         hint = describe_debug_sample(path)
@@ -519,8 +537,9 @@ def capture_debug_sample(
         return str(path)
     except (OSError, TypeError, ValueError) as exc:
         if sample_dir is not None:
-            for reserved_label, reserved_digest in reservations:
-                _release_debug_sample(sample_dir, reserved_label, reserved_digest)
+            _finish_debug_samples(
+                sample_dir, reservations, succeeded=isinstance(exc, PublishedFileError)
+            )
         logger.warning("Unable to capture debug sample for %r: %s", label, exc)
         return None
 

@@ -28,6 +28,7 @@ from .parsing.actions_handlers_validation import (
 from .parsing.actions_router import (
     ProcessedAction,
     is_known_ignored_action,
+    iter_action_occurrences,
     process_action,
 )
 
@@ -165,11 +166,14 @@ def process_pipeline_action(
     type/group exclusions otherwise retain their diagnostic category.
 
     Args:
-        action: Raw YouTube API action to parse and filter.
+        action: One raw action occurrence; expand multi-inner replay wrappers first.
         offset: Replay offset in seconds, passed to process_action.
         msg_filter: Message type/group inclusion filter.
         time_filter: Optional range filter; None for live streams.
         paid_events: Optional per-run cache enriching sparse paid tickers.
+
+    Raises:
+        ValueError: The replay wrapper contains multiple inner actions.
     """
     known_ignored_action = is_known_ignored_action(action)
     parsed_action = process_action(action, offset)
@@ -307,7 +311,7 @@ def _process_actions(
     timestamps (signed presentation timing preserves backlog ordering).
 
     Args:
-        actions: Raw actions from a ``liveChatContinuation`` response.
+        actions: Raw actions; replay siblings are processed and counted separately.
         offset: Clip/replay offset in seconds, passed to the pipeline.
         msg_filter: Message type/group inclusion filter.
         time_filter: Optional replay time-range filter.
@@ -326,7 +330,7 @@ def _process_actions(
     received_timestamp = time_ns() // 1000
     if diagnostics is not None:
         diagnostics["poll_count"] = cast("int", diagnostics.get("poll_count", 0)) + 1
-    for action in actions:
+    for action in iter_action_occurrences(actions):
         pipeline_result = process_pipeline_action(
             action,
             offset or 0.0,

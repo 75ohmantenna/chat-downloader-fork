@@ -10,6 +10,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Process every inner YouTube replay action with its own filtering and loss
+  accounting instead of silently retaining only the first event.
+- Avoid duplicate YouTube replay-page delivery and overlapping channel-recovery
+  backlog without suppressing distinct event kinds.
+- Publish run manifests and diagnostic samples only after complete JSON writes;
+  reject incomplete or mismatched diagnostic samples on reuse.
 - Stop Twitch replay cursor cycles before emitting repeated pages.
 - Retry empty or malformed YouTube continuation blocks within the configured
   recovery budget instead of aborting capture immediately.

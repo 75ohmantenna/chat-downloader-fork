@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 import signal
-from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -18,7 +18,7 @@ from chat_downloader.runtime import capture_checkpoint, runner
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint
 from chat_downloader.runtime.capture_manifest import RunManifest
 from chat_downloader.runtime.runner import execute_run
-from chat_downloader.utils import interrupts
+from chat_downloader.utils import atomic_files, interrupts
 from chat_downloader.utils.interrupts import (
     defer_interrupts,
     interruptible,
@@ -365,7 +365,8 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
         return value
 
     monkeypatch.setattr(json, "dumps", dumps)
-    original_open = Path.open
+    original_open = os.open
+    original_fdopen = os.fdopen
 
     class InterruptedReport:
         def __init__(self, stream):
@@ -392,17 +393,22 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
             if boundary == "manifest_flush":
                 interrupt()
 
-    def open_report(path, mode="r", *args, **kwargs):
-        if path == report_path and mode == "x":
-            if boundary == "manifest_create":
-                interrupt()
-            stream = original_open(path, mode, *args, **kwargs)
-            if boundary in {"manifest_write", "manifest_flush"}:
-                return InterruptedReport(stream)
-            return stream
-        return original_open(path, mode, *args, **kwargs)
+    def open_report(path, flags, *args, **kwargs):
+        if writing_manifest and flags & os.O_CREAT and boundary == "manifest_create":
+            interrupt()
+        return original_open(path, flags, *args, **kwargs)
 
-    monkeypatch.setattr(Path, "open", open_report)
+    def report_stream(descriptor, *args, **kwargs):
+        stream = original_fdopen(descriptor, *args, **kwargs)
+        if writing_manifest and boundary in {"manifest_write", "manifest_flush"}:
+            return InterruptedReport(stream)
+        return stream
+
+    monkeypatch.setattr(
+        atomic_files,
+        "os",
+        SimpleNamespace(**(vars(os) | {"open": open_report, "fdopen": report_stream})),
+    )
     if boundary == "interrupt_observer":
         callbacks = interrupts._ON_INTERRUPT
 
@@ -623,3 +629,46 @@ def test_second_signal_interrupts_shutdown_without_closing_later_owners(tmp_path
     assert not (tmp_path / "run.json").exists()
     with defer_interrupts():
         pass
+
+
+@pytest.mark.parametrize("boundary", ["file-sync", "publish"])
+def test_signal_after_manifest_commit_does_not_revise_published_report(
+    tmp_path, monkeypatch, boundary
+):
+    report_path = tmp_path / "run.json"
+    original_fsync, original_link = os.fsync, os.link
+    signaled = False
+
+    def interrupt():
+        nonlocal signaled
+        if not signaled:
+            signaled = True
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    def sync(descriptor):
+        if boundary == "file-sync":
+            interrupt()
+        return original_fsync(descriptor)
+
+    def publish(*args, **kwargs):
+        if boundary == "publish":
+            interrupt()
+        return original_link(*args, **kwargs)
+
+    monkeypatch.setattr(
+        atomic_files,
+        "os",
+        SimpleNamespace(**(vars(os) | {"fsync": sync, "link": publish})),
+    )
+    _install_cli_signal_handlers()
+    result = execute_run(Downloader, quiet=True, run_manifest=str(report_path))
+    assert signaled
+    assert result.interrupted
+    assert not result.success
+    assert result.failure_stage == "manifest"
+    report = load_json(report_path)
+    assert report["success"] is True
+    assert report["termination_reason"] == "completed"
+    assert report["failure_stage"] is None
+    assert report["message_count"] == result.message_count == 4
+    assert list(tmp_path.iterdir()) == [report_path]

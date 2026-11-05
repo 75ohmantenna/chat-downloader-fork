@@ -26,8 +26,8 @@ def _restore_logging_state():
         yield
 
 
-@pytest.fixture
-def sample_dir(tmp_path, monkeypatch):
+@pytest.fixture(name="sample_dir")
+def capture_sample_dir(tmp_path, monkeypatch):
     path = tmp_path / "samples"
     monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES", "1")
     monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", str(path))
@@ -179,6 +179,7 @@ def test_render_serialized_values(serialized, expected):
 
 
 def test_logging_filter_redacts_urls_and_visitor_data_and_escapes_controls() -> None:
+    dbg.install_cli_log_handler()
     with captured_logs() as stream:
         dbg.set_log_level("debug")
         child_logger = logging.getLogger("chat_downloader.sites.logging_boundary")
@@ -476,17 +477,25 @@ def test_capture_debug_sample_rechecks_opened_entries(
 def test_capture_debug_sample_removes_failed_write_and_retry_succeeds(
     sample_dir, monkeypatch
 ):
+    original_fdopen = os.fdopen
+
     class FailingSampleFile:
         def __init__(self, descriptor, *args, **kwargs):
-            self.descriptor = descriptor
+            self.stream = original_fdopen(descriptor, *args, **kwargs)
 
         def __enter__(self):
             return self
 
         def __exit__(self, *_):
-            os.close(self.descriptor)
+            self.stream.close()
 
-        def write(self, _value):
+        def __getattr__(self, name):
+            return getattr(self.stream, name)
+
+        def write(self, value):
+            self.stream.write(value[:4])
+            self.stream.flush()
+            assert list(sample_dir.glob("*.json")) == []
             raise OSError("forced sample write failure")
 
     bounds = {"sample_limit": 1, "sample_group": "write-failures", "group_limit": 1}
@@ -531,3 +540,32 @@ def test_preflight_does_not_cache_directory_safety(sample_dir):
     sample_dir.chmod(0o755)
     assert red.capture_debug_sample("unsafe-after-preflight", {"x": 1}) is None
     assert list(sample_dir.iterdir()) == []
+
+
+def test_logging_fixture_restores_logger_and_shared_handler_configuration():
+    logger, handler = dbg.logger, dbg.handler
+    logger_state = (
+        logger.handlers[:],
+        logger.filters[:],
+        logger.level,
+        logger.disabled,
+        logger.propagate,
+    )
+    handler_state = (handler.filters[:], handler.level, handler.formatter)
+    with restore_loggers():
+        logger.handlers = []
+        logger.filters = []
+        logger.setLevel(logging.CRITICAL)
+        logger.disabled = not logger.disabled
+        logger.propagate = not logger.propagate
+        handler.filters = []
+        handler.setLevel(logging.CRITICAL)
+        handler.setFormatter(logging.Formatter("temporary %(message)s"))
+    assert (
+        logger.handlers,
+        logger.filters,
+        logger.level,
+        logger.disabled,
+        logger.propagate,
+    ) == logger_state
+    assert (handler.filters, handler.level, handler.formatter) == handler_state

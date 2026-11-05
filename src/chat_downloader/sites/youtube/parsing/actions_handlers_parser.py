@@ -36,7 +36,7 @@ def _handle_item_action(
     offset: float,
 ) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle add item and ticker actions."""
-    original_item = multi_get(action, original_action_type, _PATH_ITEM)
+    original_item = get_dict(get_dict(action, original_action_type), _PATH_ITEM)
     original_item = normalize_element(original_item)
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(
@@ -146,7 +146,7 @@ def _handle_replace_action(
 ) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle message replacement actions."""
     original_item = normalize_element(
-        multi_get(action, original_action_type, _PATH_REPLACEMENT_ITEM)
+        get_dict(get_dict(action, original_action_type), _PATH_REPLACEMENT_ITEM)
     )
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
@@ -160,7 +160,7 @@ def _handle_tooltip_action(
     offset: float,
 ) -> tuple[JSONDict, JSONDict, str, str]:
     """Handle tooltip display actions."""
-    original_item = multi_get(action, original_action_type, _PATH_TOOLTIP)
+    original_item = get_dict(get_dict(action, original_action_type), _PATH_TOOLTIP)
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)

@@ -535,6 +535,17 @@ links, unexpected file types, foreign ownership, and broader permissions rather
 than risk exposing or redirecting diagnostic data. If secure directory-relative
 no-follow creation is unavailable, capture fails closed and logs a warning
 instead of writing through a path-based fallback.
+Samples are staged privately and published atomically without replacement only
+after the complete file is synchronized. Publication requires same-filesystem
+hard-link support. Reusing a deterministic filename validates the stored bytes
+against the sanitized payload; incomplete or different contents are rejected,
+not reported as a successful capture. Preserve a rejected sample for inspection
+and remove it explicitly before retrying. An abrupt stop can leave a private
+staging file, but not a partially published sample.
+Failures before publication release quota claims for retry. A complete published
+or verified existing sample retains its label and group quota slots even if
+persistence confirmation fails; capture still warns and returns no successful
+path.
 
 Capture sanitization recursively removes known cookie, proxy, token, and API
 key fields. It also treats custom header names containing authentication,

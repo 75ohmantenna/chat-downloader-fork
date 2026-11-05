@@ -62,6 +62,7 @@ from .continuations import (
     parse_continuation_response,
     summarize_continuation_payload,
 )
+from .delivery_recovery import ReplayPageHistory
 from .helpers import require_innertube_api_key
 from .message_pipeline import _process_actions
 from .paid_events import PaidEventCache
@@ -243,9 +244,11 @@ def _log_continuation_debug_info(cont_result: ContinuationParseResult) -> None:
 def _advance_continuation_loop(
     ctx: _ChatContext,
     yt_info: JSONDict,
+    cont_result: ContinuationParseResult | None = None,
 ) -> bool:
     """Advance continuation state and return True when iteration should stop."""
-    cont_result = parse_continuation_response(yt_info)
+    if cont_result is None:
+        cont_result = parse_continuation_response(yt_info)
     _log_continuation_debug_info(cont_result)
     ctx.loop_state = update_state_from_result(ctx.loop_state, cont_result)
 
@@ -290,6 +293,7 @@ class _ContinuationLoop:
         self.params = params
         self.diagnostics = diagnostics if diagnostics is not None else {}
         self.paid_events = PaidEventCache()
+        self.replay_pages = ReplayPageHistory()
         self._accepted_response = False
         self._initial_recovery_pending = False
         self.ctx: _ChatContext
@@ -568,6 +572,22 @@ class _ContinuationLoop:
                 f"{self.downloader._request_profile}",
             )
 
+    def _repeated_replay_page(
+        self,
+        request_token: str,
+        cont_result: ContinuationParseResult,
+        info: JSONDict,
+    ) -> bool:
+        """Recognize stale delivery before action parsing and retain its count."""
+        if not self.ctx.is_replay or not self.replay_pages.repeated(
+            request_token, cont_result.next_continuation, info
+        ):
+            return False
+        self.diagnostics["replay_repeated_page_count"] = (
+            get_int(self.diagnostics, "replay_repeated_page_count") + 1
+        )
+        return True
+
     # -- main loop ----------------------------------------------------------
 
     def run(
@@ -615,8 +635,12 @@ class _ContinuationLoop:
             self._capture.capture("youtube-continuation-response", yt_info)
 
             actions = info.get("actions") or []
+            cont_result = parse_continuation_response(yt_info)
+            repeated_page = self._repeated_replay_page(
+                token_before_request, cont_result, info
+            )
             stop_requested: bool = yield from _process_actions(
-                actions,
+                [] if repeated_page else actions,
                 ctx.offset,
                 ctx.msg_filter,
                 ctx.time_filter,
@@ -629,10 +653,11 @@ class _ContinuationLoop:
             if stop_requested:
                 return
 
-            if _advance_continuation_loop(ctx, yt_info):
+            if _advance_continuation_loop(ctx, yt_info, cont_result):
                 break
 
-            made_progress = self.progress.response_advanced(
+            # Recognized redelivery is not progress, even in a token cycle.
+            made_progress = not repeated_page and self.progress.response_advanced(
                 actions,
                 token_changed=(ctx.loop_state.continuation != token_before_request),
                 is_replay=ctx.is_replay,
