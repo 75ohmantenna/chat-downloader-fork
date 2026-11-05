@@ -19,6 +19,7 @@ from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint, _atomi
 from chat_downloader.runtime.capture_replay_order import ordered_initial_preroll
 from chat_downloader.runtime.capture_verification import capture_paths, verify_capture
 from chat_downloader.runtime.chat_pipeline import configure_chat
+from chat_downloader.runtime.cli_bridge import categorize_parameters
 from chat_downloader.runtime.runner import execute_run
 from chat_downloader.sites.filters import MessageFilter
 from chat_downloader.sites.models import Chat
@@ -861,7 +862,8 @@ def test_verification_rejects_aliased_paths_without_writing(tmp_path, attached, 
     params.pop("resume")
     first, second = tmp_path / "chat.jsonl", tmp_path / "chat.txt"
     if attached:
-        chat = Downloader().get_chat(**params)
+        _, chat_parameters, _ = categorize_parameters(params)
+        chat = Downloader().get_chat(**chat_parameters)
     first.write_text("preserve")
     os.link(first, second)
     if attached:

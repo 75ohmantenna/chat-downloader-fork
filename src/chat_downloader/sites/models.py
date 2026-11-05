@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
@@ -16,6 +16,7 @@ from chat_downloader.utils.interrupts import defer_interrupts, interruptible
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
     from pathlib import Path
+    from types import TracebackType
 
     from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.sites.output_dispatch import (
@@ -122,6 +123,27 @@ class Chat:
     def __iter__(self) -> Chat:
         """Allow the chat object to be iterable."""
         return self
+
+    def __enter__(self) -> Self:
+        """Return this chat without taking ownership of its provider session."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        """Close this chat's source and writers without suppressing body errors."""
+        try:
+            self.close()
+        except Exception as close_error:
+            if exc_type is None:
+                raise
+            log(
+                "debug",
+                f"Suppressed close() error while unwinding chat: {close_error}",
+            )
 
     def attach_writer(self, writer: ChatOutputWriter) -> None:
         """Attach a writer to this chat, creating the dispatcher on demand."""

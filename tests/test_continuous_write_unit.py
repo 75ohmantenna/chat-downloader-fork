@@ -185,7 +185,6 @@ def test_factory_selection_and_initialization(
         assert writer.is_initialised()
         assert writer.output_mode == output_mode
         assert writer.is_default() is (output_mode == "formatted")
-        assert writer.sort_keys is options.get("sort_keys")
     assert path.read_text(encoding="utf-8") == expected
 
 
@@ -213,14 +212,6 @@ def test_factory_lazy_init_recovers_after_validation_failure(tmp_path, operation
     writer.close()
     assert writer.is_initialised()
     assert '"second": 2' in path.read_text(encoding="utf-8")
-
-
-def test_factory_unknown_kwargs_not_accessible_as_attributes(tmp_path) -> None:
-    writer = ContinuousWriter(
-        str(tmp_path / "test.jsonl"), lazy_initialise=True, custom_option="value"
-    )
-    with pytest.raises(AttributeError):
-        _ = writer.custom_option
 
 
 @pytest.mark.parametrize("error_type", [OSError, RuntimeError, ReferenceError])

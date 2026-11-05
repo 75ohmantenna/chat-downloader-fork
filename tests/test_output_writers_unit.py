@@ -14,7 +14,53 @@ import pytest
 from chat_downloader.output.continuous_write import (
     ContinuousWriter,
     JsonLinesContinuousWriter,
+    TextContinuousWriter,
 )
+
+
+@pytest.fixture(
+    params=[
+        (ContinuousWriter, "jsonl", {"lazy_initialise": False}),
+        (ContinuousWriter, "jsonl", {"lazy_initialise": True}),
+        (ContinuousWriter, "txt", {"lazy_initialise": False}),
+        (ContinuousWriter, "txt", {"lazy_initialise": True}),
+        (JsonLinesContinuousWriter, "jsonl", {}),
+        (TextContinuousWriter, "txt", {}),
+    ],
+    ids=["jsonl-eager", "jsonl-lazy", "txt-eager", "txt-lazy", "jsonl", "txt"],
+)
+def writer_configuration(request):
+    return request.param
+
+
+@pytest.mark.parametrize("overwrite", [False, True])
+@pytest.mark.parametrize("tail", [b'{"preserved": true}', b'{"partial":'])
+def test_unknown_writer_option_preserves_existing_output(
+    tmp_path, writer_configuration, overwrite, tail
+):
+    writer_class, extension, options = writer_configuration
+    path = tmp_path / f"capture.{extension}"
+    original = b'{"complete": true}\n' + tail
+    path.write_bytes(original)
+
+    with pytest.raises(TypeError, match="over_write"):
+        writer_class(str(path), overwrite=overwrite, over_write=False, **options)
+
+    assert path.read_bytes() == original
+
+
+def test_unknown_writer_option_creates_no_output_or_parent(
+    tmp_path, writer_configuration
+):
+    writer_class, extension, options = writer_configuration
+    parent = tmp_path / "missing" / "nested"
+    path = parent / f"capture.{extension}"
+
+    with pytest.raises(TypeError, match="over_write"):
+        writer_class(str(path), over_write=False, **options)
+
+    assert not path.exists()
+    assert not parent.parent.exists()
 
 
 @pytest.mark.parametrize(
@@ -44,10 +90,28 @@ def test_jsonl_records_round_trip(jsonl_path: str, writer_class, items) -> None:
     ("sort_keys", "expected"),
     [(True, '{"a": 1, "m": 2, "z": 3}'), (False, '{"z": 3, "a": 1, "m": 2}')],
 )
-def test_jsonl_sort_keys_applied(jsonl_path, sort_keys, expected):
-    with ContinuousWriter(jsonl_path, sort_keys=sort_keys) as writer:
+@pytest.mark.parametrize("writer_class", [ContinuousWriter, JsonLinesContinuousWriter])
+def test_jsonl_sort_keys_applied(jsonl_path, sort_keys, expected, writer_class):
+    writer = writer_class(jsonl_path, sort_keys=sort_keys)
+    try:
         writer.write({"z": 3, "a": 1, "m": 2})
+    finally:
+        writer.close()
     assert Path(jsonl_path).read_text() == expected + "\n"
+
+
+@pytest.mark.parametrize("sort_keys", [False, True])
+@pytest.mark.parametrize("lazy", [False, True])
+def test_factory_text_output_accepts_json_sort_option(tmp_path, sort_keys, lazy):
+    path = tmp_path / "capture.txt"
+    with ContinuousWriter(
+        str(path),
+        sort_keys=sort_keys,
+        format="txt",
+        lazy_initialise=lazy,
+    ) as writer:
+        writer.write("preserved text order")
+    assert path.read_text() == "preserved text order\n"
 
 
 def test_writer_flush_and_periodic_fsync_paths(jsonl_path: str) -> None:

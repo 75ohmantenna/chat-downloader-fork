@@ -121,7 +121,6 @@ class ContinuousFileWriter(ABC):
         overwrite: bool = True,
         _prepared_file: _OutputFile | None = None,
         _defer_initialization: bool = False,
-        **kwargs: Any,  # noqa: ARG002 — base class contract; subclasses consume kwargs
     ) -> None:
         """Initialize the writer for the given file path."""
         self.file_name = file_name
@@ -252,10 +251,17 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
         file_name: str,
         *,
         sort_keys: bool = True,
-        **kwargs: Any,
+        overwrite: bool = True,
+        _prepared_file: _OutputFile | None = None,
+        _defer_initialization: bool = False,
     ) -> None:
         """Initialize a JSON Lines writer."""
-        super().__init__(file_name, **kwargs)
+        super().__init__(
+            file_name,
+            overwrite=overwrite,
+            _prepared_file=_prepared_file,
+            _defer_initialization=_defer_initialization,
+        )
         self.sort_keys = sort_keys
         self._open_file(_repair_jsonl_final_line)
 
@@ -274,9 +280,21 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
 class TextContinuousWriter(ContinuousFileWriter):
     """Write items as plain text, one per line."""
 
-    def __init__(self, file_name: str, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        file_name: str,
+        *,
+        overwrite: bool = True,
+        _prepared_file: _OutputFile | None = None,
+        _defer_initialization: bool = False,
+    ) -> None:
         """Initialize a line-oriented text writer."""
-        super().__init__(file_name, **kwargs)
+        super().__init__(
+            file_name,
+            overwrite=overwrite,
+            _prepared_file=_prepared_file,
+            _defer_initialization=_defer_initialization,
+        )
         self._open_file(_repair_text_final_line)
 
     def write(self, item: Any, *, flush: bool = False) -> None:

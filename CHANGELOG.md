@@ -10,6 +10,10 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Reject unknown request-factory options by default and unknown writer options
+  before filesystem changes, preventing misspellings from enabling overwrite.
+- Support context-managed chat lifetimes so early consumer exits close sources,
+  deadline workers, and outputs while preserving reusable provider sessions.
 - Reject off-origin YouTube playlist requests before using authenticated sessions.
 - Preserve cookie domain, path, expiry, and transport scope when selecting Twitch
   authentication or promoting YouTube SID cookies; do not use ambiguous values.
