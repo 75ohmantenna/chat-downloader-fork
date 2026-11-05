@@ -7,6 +7,7 @@ import io
 import os
 import sys
 import threading
+import time
 from types import SimpleNamespace
 from typing import Any, NoReturn, cast
 
@@ -66,40 +67,23 @@ def test_timed_input_returns_default_on_timeout(monkeypatch) -> None:
     assert timed_utils.timed_input(timeout=0.5, default="fallback") == "fallback"
 
 
-def test_posix_timed_input_returns_line_when_selector_has_event(
-    monkeypatch,
+@pytest.mark.parametrize("timeout", [0, 1.5])
+def test_posix_timed_input_returns_complete_line(
+    monkeypatch, pipe_stdin, timeout
 ) -> None:
+    stream, writer = pipe_stdin
+    writer.write(b"hello world\n")
+    original_attributes = vars(stream.buffer.raw).copy()
     outputs: list[str] = []
-
-    class FakeSelector:
-        def close(self) -> None:
-            pass
-
-        def register(self, *_args) -> None:
-            return None
-
-        def select(self, timeout):
-            assert timeout == 1.5
-            return [
-                (
-                    SimpleNamespace(
-                        fileobj=SimpleNamespace(readline=lambda: "hello world\n"),
-                    ),
-                    None,
-                ),
-            ]
-
     monkeypatch.setattr(timed_utils, "echo", outputs.append)
-    monkeypatch.setattr(
-        timed_utils.selectors,
-        "DefaultSelector",
-        FakeSelector,
-    )
 
     assert (
-        timed_utils.posix_timed_input(1.5, "Prompt: ", newline=False) == "hello world"
+        timed_utils.posix_timed_input(timeout, "Prompt: ", newline=False)
+        == "hello world"
     )
     assert outputs == ["Prompt: "]
+    assert os.get_blocking(stream.fileno())
+    assert vars(stream.buffer.raw) == original_attributes
 
 
 def test_posix_timed_input_register_failure_raises_timeout_and_prints_newline(
@@ -135,30 +119,19 @@ def test_posix_timed_input_handles_regular_file_stdin(monkeypatch) -> None:
             timed_utils.posix_timed_input(0.01, "", newline=False)
 
 
-def test_posix_timed_input_eof_waits_remaining_delay(monkeypatch) -> None:
-    slept: list[float] = []
-
-    class FakeSelector:
-        def close(self) -> None:
-            pass
-
-        def register(self, *_args) -> None:
-            return None
-
-        def select(self, _timeout):
-            return [
-                (SimpleNamespace(fileobj=SimpleNamespace(readline=lambda: "")), None)
-            ]
-
-    monkeypatch.setattr(timed_utils.selectors, "DefaultSelector", FakeSelector)
+def test_posix_timed_input_eof_waits_remaining_delay(monkeypatch, pipe_stdin) -> None:
+    stream, writer = pipe_stdin
+    writer.close()
     monkeypatch.setattr(timed_utils, "echo", lambda _text: None)
-    monkeypatch.setattr(timed_utils.time, "sleep", slept.append)
+    started = time.monotonic()
     with pytest.raises(TimeoutOccurred):
-        timed_utils.posix_timed_input(1.0, "", newline=False)
-    assert slept[0] > 0.9
+        timed_utils.posix_timed_input(0.01, "", newline=False)
+    assert time.monotonic() - started >= 0.01
+    assert os.get_blocking(stream.fileno())
+    assert "readinto" not in vars(stream.buffer.raw)
 
 
-def test_posix_timed_input_timeout_flushes_stdin(monkeypatch) -> None:
+def test_posix_timed_input_timeout_flushes_stdin(monkeypatch, pipe_stdin) -> None:
     outputs: list[str] = []
     tcflush_calls = []
 
@@ -185,13 +158,15 @@ def test_posix_timed_input_timeout_flushes_stdin(monkeypatch) -> None:
     )
 
     with pytest.raises(TimeoutOccurred):
-        timed_utils.posix_timed_input(1.0, "Prompt: ", newline=True)
+        timed_utils.posix_timed_input(0, "Prompt: ", newline=True)
 
     assert outputs == ["Prompt: ", timed_utils.LF]
     assert tcflush_calls == [(timed_utils.sys.stdin, timed_utils.termios.TCIFLUSH)]
 
 
-def test_posix_timed_input_timeout_ignores_tcflush_errors(monkeypatch) -> None:
+def test_posix_timed_input_timeout_ignores_tcflush_errors(
+    monkeypatch, pipe_stdin
+) -> None:
     class FakeSelector:
         def close(self) -> None:
             pass
@@ -215,7 +190,7 @@ def test_posix_timed_input_timeout_ignores_tcflush_errors(monkeypatch) -> None:
     monkeypatch.setattr(timed_utils, "echo", lambda *_args: None)
 
     with pytest.raises(TimeoutOccurred):
-        timed_utils.posix_timed_input(1.0, "Prompt: ", newline=False)
+        timed_utils.posix_timed_input(0, "Prompt: ", newline=False)
 
 
 def test_win_timed_input_handles_backspace_and_newline(monkeypatch) -> None:
@@ -612,11 +587,13 @@ def test_windows_manual_retry_reports_ctrl_z_as_closed_input(monkeypatch):
         _restore_timed_utils(original_msvcrt)
 
 
-@pytest.mark.parametrize("timeout", [None, 1.0])
+@pytest.mark.parametrize(
+    ("timeout", "cancellable"), [(None, True), (1.0, True), (1.0, False)]
+)
 @pytest.mark.parametrize("errors", ["strict", "surrogateescape", "replace", "ignore"])
 @pytest.mark.parametrize("encoding", ["utf-8", "utf-16", "utf-32"])
 def test_terminal_decodes_unicode_split_across_readiness_intervals(
-    monkeypatch, timeout, errors, encoding
+    monkeypatch, timeout, errors, encoding, cancellable
 ):
     import tty
 
@@ -643,7 +620,7 @@ def test_terminal_decodes_unicode_split_across_readiness_intervals(
         monkeypatch.setattr(
             timed_utils.termios, "tcflush", lambda *_args: flushed.append(True)
         )
-        token = _POLLING_STOP_EVENT.set(threading.Event())
+        token = _POLLING_STOP_EVENT.set(threading.Event() if cancellable else None)
         try:
             os.write(master, encoded[:1])
             assert timed_utils.timed_input(timeout) == "\U0001f600 line"
@@ -654,11 +631,12 @@ def test_terminal_decodes_unicode_split_across_readiness_intervals(
             os.close(master)
 
 
+@pytest.mark.parametrize("cancellable", [False, True])
 @pytest.mark.parametrize("timeout", [0, 1])
 @pytest.mark.parametrize("blocking", [False, True])
 @pytest.mark.parametrize("override", [False, True])
-def test_cancellable_input_preserves_prebuffered_text_and_following_line(
-    monkeypatch, pipe_stdin, timeout, blocking, override
+def test_terminal_input_preserves_prebuffered_text_and_following_line(
+    monkeypatch, pipe_stdin, timeout, blocking, override, cancellable
 ):
     from chat_downloader.utils.timed_generator import _POLLING_STOP_EVENT
 
@@ -672,7 +650,7 @@ def test_cancellable_input_preserves_prebuffered_text_and_following_line(
         raw.readinto = original_readinto
     original_attributes = vars(raw).copy()
     monkeypatch.setattr(timed_utils, "echo", lambda _text: None)
-    token = _POLLING_STOP_EVENT.set(threading.Event())
+    token = _POLLING_STOP_EVENT.set(threading.Event() if cancellable else None)
     try:
         assert timed_utils.timed_input(timeout) == "cached line"
         assert stream.readline() == "following line\n"
@@ -682,9 +660,10 @@ def test_cancellable_input_preserves_prebuffered_text_and_following_line(
         _POLLING_STOP_EVENT.reset(token)
 
 
+@pytest.mark.parametrize("cancellable", [False, True])
 @pytest.mark.parametrize("encoded", [b"\xff", b"\xf0", b"\xf0\x9f"])
-def test_cancellable_input_preserves_genuine_decoding_errors(
-    monkeypatch, pipe_stdin, encoded
+def test_terminal_input_preserves_genuine_decoding_errors(
+    monkeypatch, pipe_stdin, encoded, cancellable
 ):
     from chat_downloader.utils.timed_generator import _POLLING_STOP_EVENT
 
@@ -692,7 +671,7 @@ def test_cancellable_input_preserves_genuine_decoding_errors(
     writer.write(encoded)
     writer.close()
     monkeypatch.setattr(timed_utils, "echo", lambda _text: None)
-    token = _POLLING_STOP_EVENT.set(threading.Event())
+    token = _POLLING_STOP_EVENT.set(threading.Event() if cancellable else None)
     try:
         with pytest.raises(UnicodeDecodeError):
             timed_utils.timed_input(1)
@@ -702,8 +681,11 @@ def test_cancellable_input_preserves_genuine_decoding_errors(
         _POLLING_STOP_EVENT.reset(token)
 
 
-def test_cancellable_input_returns_unterminated_text_at_true_eof(
-    monkeypatch, pipe_stdin
+@pytest.mark.parametrize(
+    ("timeout", "cancellable"), [(None, True), (1, True), (1, False)]
+)
+def test_terminal_input_returns_unterminated_text_at_true_eof(
+    monkeypatch, pipe_stdin, timeout, cancellable
 ):
     from chat_downloader.utils.timed_generator import _POLLING_STOP_EVENT
 
@@ -711,9 +693,9 @@ def test_cancellable_input_returns_unterminated_text_at_true_eof(
     writer.write(b"final partial line")
     writer.close()
     monkeypatch.setattr(timed_utils, "echo", lambda _text: None)
-    token = _POLLING_STOP_EVENT.set(threading.Event())
+    token = _POLLING_STOP_EVENT.set(threading.Event() if cancellable else None)
     try:
-        assert timed_utils.timed_input() == "final partial line"
+        assert timed_utils.timed_input(timeout) == "final partial line"
         assert os.get_blocking(stream.fileno())
     finally:
         _POLLING_STOP_EVENT.reset(token)

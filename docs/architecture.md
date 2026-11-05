@@ -93,18 +93,24 @@ are unchanged.
 Timed retry waits observe the owning worker's stop event, including zero-delay
 retries and manual terminal prompts. Console reads serialize ownership with
 cancellable acquisition, preserve decoded and partially entered input between
-polls, and restore descriptor state on exit. Cancellation does not flush the
-terminal. Twitch replay checks cancellation around page and fallback
+polls, and restore descriptor state on exit. Finite POSIX input waits use the
+same nonblocking deadline-aware reader even outside a timed worker, so partial
+terminal input cannot extend a retry delay indefinitely. Cancellation does not
+flush the terminal. Twitch replay checks cancellation around page and fallback
 requests and between filtered edges, so a non-yielding page does not bypass stop
 delivery. An already-running HTTP call still finishes under its transport timeout.
 
 The first CLI interrupt is deferred across output dispatch and run/checkpoint
 accounting so a signal cannot split successful writes from their counters.
+It is also deferred across shutdown, checkpoint persistence, and report writing;
+the run records interruption immediately while its owners finish releasing.
+An exclusively created manifest corrects an outcome changed before its
+post-flush commit comparison; signals after that point do not revise the report.
 `Chat` temporarily enables immediate interruption around provider reads; nested
 record boundaries share one pending interrupt. Other failures retain priority,
-and a second signal can still interrupt the protected record. Closed interrupted
-captures run parity independently of their unsuccessful interruption status;
-cleanup failures prevent verification.
+and a second signal can still interrupt protected records or finalization.
+Closed interrupted captures run parity independently of their unsuccessful
+interruption status; cleanup failures prevent verification.
 
 JSONL and text writers flush each record, periodically sync the file descriptor,
 and perform a final sync at close. JSONL append mode removes a malformed trailing

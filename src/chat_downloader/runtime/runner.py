@@ -323,6 +323,7 @@ def _verify_capture_outputs(
         result.success = False
         if result.error_message is None:
             result.termination_reason = "error"
+            result.failure_stage = "verification"
         result.error_message = result.error_message or str(error)
         result.failure_stage = result.failure_stage or "verification"
         log("error", str(error))
@@ -362,6 +363,9 @@ def _complete_run_record(
         result.failure_stage = result.failure_stage or "manifest"
         message = f"Unable to write run manifest: {error}"
         if result.error_message is None:
+            result.failure_stage = "manifest"
+            if result.interrupted:
+                result.termination_reason = "error"
             result.error_message = message
         log("error", message)
     _log_run_summary(chat, result.message_count, result.message_type_counts, result)
@@ -396,6 +400,17 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     phase = "initialization"
     if run_config.verify_output:
         result.parity_status = "not_run"
+
+    def handle_shutdown_interrupt() -> None:
+        # Record the request before verification or manifest code snapshots the
+        # outcome, without throwing through an owner that is still releasing.
+        result.success = False
+        result.interrupted = True
+        if result.error_message is None:
+            result.termination_reason = "interrupted"
+            result.failure_stage = (
+                phase if phase in {"verification", "manifest"} else "shutdown"
+            )
 
     try:
         if run_config.run_manifest:
@@ -488,7 +503,11 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         log("info", "Capture interrupted by user; outputs finalized on shutdown.")
 
     finally:
-        with checkpoint_resources:
+        with (
+            defer_interrupts(on_interrupt=handle_shutdown_interrupt),
+            checkpoint_resources,
+        ):
+            phase = "shutdown"
             try:
                 suppressed_close_error = _finalize_run(
                     chat, downloader, primary_error=primary_error
@@ -517,6 +536,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
             result.observe_provider(chat, downloader)
             result.observe_shutdown(chat)
             result.elapsed_seconds = monotonic() - started
+            phase = "verification"
             _verify_capture_outputs(
                 chat,
                 run_config,
@@ -527,6 +547,7 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 verify_after_error=verify_after_error,
             )
 
+            phase = "manifest"
             _complete_run_record(
                 chat,
                 run_config,
@@ -535,5 +556,10 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 checkpoint,
                 checkpoint_bound=checkpoint_bound,
             )
+
+    if result.interrupted:
+        result.error_message = result.error_message or "Keyboard Interrupt"
+        if propagate_interrupt:
+            raise KeyboardInterrupt
 
     return result

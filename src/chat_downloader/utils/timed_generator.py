@@ -52,7 +52,9 @@ class TimedGenerator:
 
         self.timer: threading.Timer | None = None
         self.inactivity_timer: threading.Timer | None = None
-        self._inactivity_lock = threading.Lock()
+        self._timer_lock = threading.Lock()
+        self._timeout_generation = 0
+        self._inactivity_generation = 0
         self._closed = False
         self._stop_requested = threading.Event()
         self._worker_state_lock = threading.Lock()
@@ -63,17 +65,10 @@ class TimedGenerator:
         self._outstanding_prefetched_item_count = 0
         self._finish_reason: str | None = None
         self._consumer_finished = False
-        self._start_time = time.monotonic()
         self._timeout_expired = threading.Event()
         self._inactivity_expired = threading.Event()
-        self._timeout_deadline: float | None = (
-            self._start_time + timeout if timeout is not None else None
-        )
-        self._inactivity_deadline: float | None = (
-            self._start_time + inactivity_timeout
-            if inactivity_timeout is not None
-            else None
-        )
+        self._timeout_deadline: float | None = None
+        self._inactivity_deadline: float | None = None
 
         if self.timeout is not None:
             self.start_timer()
@@ -100,15 +95,24 @@ class TimedGenerator:
         if self.timeout is None:
             msg = "start_timer() called without a configured timeout"
             raise RuntimeError(msg)
-        self._timeout_expired.clear()
-        self._timeout_deadline = time.monotonic() + self.timeout
+        with self._timer_lock:
+            if self._closed or self._stop_requested.is_set():
+                return
+            if self.timer is not None:
+                self.timer.cancel()
+            self._timeout_generation += 1
+            epoch = self._timeout_generation
+            self._timeout_expired.clear()
+            self._timeout_deadline = time.monotonic() + self.timeout
 
-        def on_timeout() -> None:
-            self._timeout_expired.set()
+            def on_timeout() -> None:
+                with self._timer_lock:
+                    if self._timer_live(owned=epoch == self._timeout_generation):
+                        self._timeout_expired.set()
 
-        self.timer = threading.Timer(self.timeout, on_timeout)
-        self.timer.daemon = True
-        self.timer.start()
+            self.timer = threading.Timer(self.timeout, on_timeout)
+            self.timer.daemon = True
+            self.timer.start()
 
     def start_inactivity_timer(self) -> None:
         """Start one timer that follows the current inactivity deadline."""
@@ -118,40 +122,44 @@ class TimedGenerator:
                 "inactivity_timeout"
             )
             raise RuntimeError(msg)
-        with self._inactivity_lock:
+        with self._timer_lock:
+            if self._closed or self._stop_requested.is_set():
+                return
             if self.inactivity_timer is not None:
                 self.inactivity_timer.cancel()
+            self._inactivity_generation += 1
+            epoch = self._inactivity_generation
             self._inactivity_expired.clear()
             self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
 
-        def on_inactivity_timeout() -> None:
-            with self._inactivity_lock:
-                if self._closed:
-                    return
-                deadline = self._inactivity_deadline
-                remaining = deadline - time.monotonic() if deadline is not None else 0
-                if remaining <= 0:
-                    self._inactivity_expired.set()
-                    return
-                self.inactivity_timer = threading.Timer(
-                    remaining, on_inactivity_timeout
-                )
-                self.inactivity_timer.daemon = True
-                self.inactivity_timer.start()
+            def on_inactivity_timeout() -> None:
+                with self._timer_lock:
+                    if not self._timer_live(owned=epoch == self._inactivity_generation):
+                        return
+                    end = self._inactivity_deadline
+                    remaining = end - time.monotonic() if end is not None else 0
+                    if remaining <= 0:
+                        self._inactivity_expired.set()
+                        return
+                    self.inactivity_timer = threading.Timer(
+                        remaining, on_inactivity_timeout
+                    )
+                    self.inactivity_timer.daemon = True
+                    self.inactivity_timer.start()
 
-        self.inactivity_timer = threading.Timer(
-            self.inactivity_timeout,
-            on_inactivity_timeout,
-        )
-        self.inactivity_timer.daemon = True
-        self.inactivity_timer.start()
+        on_inactivity_timeout()
 
     def reset_inactivity_timer(self) -> None:
         """Move the deadline without creating another thread per item."""
         if self.inactivity_timeout is not None:
-            with self._inactivity_lock:
+            with self._timer_lock:
+                if self._closed or self._stop_requested.is_set():
+                    return
                 self._inactivity_expired.clear()
                 self._inactivity_deadline = time.monotonic() + self.inactivity_timeout
+
+    def _timer_live(self, *, owned: bool) -> bool:
+        return owned and not self._closed and not self._stop_requested.is_set()
 
     def __iter__(self) -> Self:
         """Return this object as its own iterator."""
@@ -186,16 +194,16 @@ class TimedGenerator:
         )
 
     def _cancel_timers(self) -> None:
-        self._stop_requested.set()
+        with self._timer_lock:
+            self._stop_requested.set()
+            for timer in (self.timer, self.inactivity_timer):
+                if timer is not None:
+                    timer.cancel()
         request_stop = getattr(self.generator, "request_stop", None)
         if callable(request_stop):
             # Cancellation is best-effort; bounded close still follows.
             with suppress(OSError, RuntimeError, ValueError):
                 request_stop()
-        if self.timer is not None:
-            self.timer.cancel()
-        if self.inactivity_timer is not None:
-            self.inactivity_timer.cancel()
         with self._worker_state_lock:
             worker_advancing = self._worker_advancing
         if worker_advancing:
@@ -267,9 +275,10 @@ class TimedGenerator:
         During advancement, return after a bounded join; the worker closes the
         iterator once advancement returns or raises.
         """
-        if self._closed:
-            return
-        self._closed = True
+        with self._timer_lock:
+            if self._closed:
+                return
+            self._closed = True
         self._cancel_timers()
         if threading.current_thread() is not self._worker:
             self._worker.join(timeout=max(POLLING_TIME * 2, 0.2))

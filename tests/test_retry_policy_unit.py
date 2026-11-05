@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+import textwrap
 import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -73,6 +75,99 @@ def test_redirected_stdin_preserves_retry_delay(pipe: bool) -> None:
         **kwargs,
     )
     assert float(result.stdout) >= 0.04
+
+
+def test_redirected_stdin_retry_sleeps_without_consuming_input(monkeypatch) -> None:
+    reader, writer = os.pipe()
+    with (
+        os.fdopen(reader, encoding="utf-8") as stream,
+        os.fdopen(writer, "wb", buffering=0) as output,
+    ):
+        output.write(b"redirected input\n")
+        monkeypatch.setattr(retry_utils.sys, "stdin", stream)
+        delays = []
+
+        RetryPolicy(retry_timeout=0.05).wait(1, sleep_func=delays.append)
+
+        assert delays == [0.05]
+        assert stream.readline() == "redirected input\n"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX terminal regression")
+@pytest.mark.parametrize("raw", [False, True])
+@pytest.mark.parametrize("buffered", [False, True])
+@pytest.mark.parametrize("blocking", [False, True])
+def test_finite_terminal_retry_finishes_without_newline_and_restores_stdin(
+    raw, buffered, blocking
+) -> None:
+    import tty
+
+    script = textwrap.dedent(
+        """\
+        import io
+        import os
+        import selectors
+        import sys
+        import time
+
+        from chat_downloader.utils.retry_utils import RetryPolicy
+        from chat_downloader.utils.timed_generator import _POLLING_STOP_EVENT
+
+        master, buffered, blocking = map(int, sys.argv[1:])
+        raw = io.FileIO(sys.stdin.fileno(), mode="r", closefd=False)
+        binary = io.BufferedReader(raw) if buffered else raw
+        sys.stdin = io.TextIOWrapper(binary, encoding="utf-8")
+        method = "readinto" if buffered else "read"
+        setattr(raw, method, getattr(raw, method))
+        original_attributes = vars(raw).copy()
+        descriptor = sys.stdin.fileno()
+        os.set_blocking(descriptor, bool(blocking))
+        assert sys.stdin.isatty()
+        assert _POLLING_STOP_EVENT.get() is None
+
+        started = time.monotonic()
+        RetryPolicy(retry_timeout=0.05).wait(1)
+        elapsed = time.monotonic() - started
+        assert 0.04 <= elapsed < 1
+        assert os.get_blocking(descriptor) == bool(blocking)
+        assert vars(raw) == original_attributes
+
+        # No newline is supplied until the retry has finished and restored stdin.
+        os.write(master, b"later\\n")
+        with selectors.DefaultSelector() as selector:
+            selector.register(sys.stdin, selectors.EVENT_READ)
+            assert selector.select(1)
+        assert sys.stdin.readline() == "later\\n"
+        assert os.get_blocking(descriptor) == bool(blocking)
+        assert vars(raw) == original_attributes
+        print(elapsed)
+        """
+    )
+    master, slave = os.openpty()
+    try:
+        if raw:
+            tty.setraw(slave)
+        os.write(master, b"partial" if raw else b"partial\x04")
+        result = subprocess.run(  # noqa: S603 — fixed interpreter and script
+            [
+                sys.executable,
+                "-c",
+                script,
+                str(master),
+                str(int(buffered)),
+                str(int(blocking)),
+            ],
+            stdin=slave,
+            pass_fds=(master,),
+            capture_output=True,
+            timeout=3,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr.decode()
+        assert float(result.stdout) >= 0.04
+    finally:
+        os.close(slave)
+        os.close(master)
 
 
 def test_manual_retry_with_closed_stdin_has_actionable_error(monkeypatch) -> None:
