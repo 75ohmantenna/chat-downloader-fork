@@ -10,6 +10,13 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Apply the shared `all` message-type wildcard consistently to YouTube requests.
+- Retry rejected Kick HTTP redirects consistently during anonymous live setup,
+  without following redirects or inspecting their bodies.
+- Recognize YouTube `/sorry/index` challenges consistently across bootstrap,
+  browse, and chat continuation requests.
+- Reject ambiguous duplicate counters in Twitch inspection logs and share bounded
+  debug-summary reading with Kick inspection.
 - Reject unknown request-factory options by default and unknown writer options
   before filesystem changes, preventing misspellings from enabling overwrite.
 - Support context-managed chat lifetimes so early consumer exits close sources,

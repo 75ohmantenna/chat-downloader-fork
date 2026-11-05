@@ -419,7 +419,6 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(monkeypatch, poll
     }
     _returns(monkeypatch, "_generate_headers", {"x-bootstrap": "1"})
     _returns(monkeypatch, "_generate_sapisidhash_header", "AUTH_TOKEN")
-    invalid_types = _patch(monkeypatch, "check_for_invalid_types", Mock())
     _returns(
         monkeypatch,
         "build_continuation_params",
@@ -434,7 +433,6 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(monkeypatch, poll
     )
     debug = _patch(monkeypatch, "debug_log", Mock())
     assert list(_messages(polling.downloader, _video_info())) == []
-    invalid_types.assert_called_once()
     assert polling.downloader.session.headers["authorization"] == "AUTH_TOKEN"
     assert polling.downloader.session.headers["x-goog-visitor-id"] == "visitor-2"
     polling.sleep.assert_not_called()

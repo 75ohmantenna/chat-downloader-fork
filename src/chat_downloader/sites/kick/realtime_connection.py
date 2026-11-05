@@ -17,11 +17,9 @@ from chat_downloader.debugging import logger
 from chat_downloader.utils.json_types import get_dict, get_list, get_str
 
 from .api_client import (
-    _body_looks_like_challenge,
-    _check_status,
+    _classify_response,
     _decode_json,
     _is_safe_bearer_token,
-    _raise_for_challenge,
 )
 from .constants import is_numeric_id
 from .errors import KickError, KickServerError
@@ -142,9 +140,7 @@ class KickRealtimeClient:
                 status,
                 monotonic() - started,
             )
-        if response.status_code != 423 and _body_looks_like_challenge(response):
-            _raise_for_challenge(response, "realtime")
-        _check_status(response, context="realtime", resource="realtime")
+        _classify_response(response, context="realtime", resource="realtime")
         data = _decode_json(response, context="realtime", resource="realtime")
         if not isinstance(data, dict):
             msg = "Kick realtime response was not an object."

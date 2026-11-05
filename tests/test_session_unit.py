@@ -13,7 +13,7 @@ from requests.exceptions import ConnectionError as RequestsConnectionError
 from chat_downloader.errors import CookieError, InvalidParameter
 from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.sites.base import BaseChatDownloader
-from chat_downloader.sites.common import check_for_invalid_types, get_mapped_keys
+from chat_downloader.sites.common import get_mapped_keys
 from chat_downloader.sites.models import SiteDefault
 from chat_downloader.sites.session import ChatDownloaderSession, CookieSpec
 from chat_downloader.sites.youtube import client_context
@@ -320,8 +320,6 @@ def test_base_downloader_misc_helpers(monkeypatch) -> None:
     assert DemoDownloader.matches("https://example.com") is None
     with pytest.raises(NotImplementedError):
         downloader.generate_urls()
-    with pytest.raises(InvalidParameter, match="Invalid types specified"):
-        check_for_invalid_types(["bad"], ["good"])
     assert get_mapped_keys({"a": "x", "b": "y"}) == {"x", "y"}
 
     calls: list[dict[str, Any]] = []

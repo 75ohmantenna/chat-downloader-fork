@@ -240,6 +240,74 @@ def test_get_initial_info_raises_challenge_on_sorry_page(monkeypatch) -> None:
     assert "--request_profile" in str(exc_info.value)
 
 
+@pytest.mark.parametrize("request_path", ["initial", "continuation", "browse"])
+def test_sorry_index_anchor_403_stops_after_one_attempt(
+    make_fake_http_response, request_path
+):
+    response = make_fake_http_response(
+        403, {}, text='<a href="/sorry/index">Continue</a>'
+    )
+    request, calls = _sequence(response, response)
+    with pytest.raises(CaptchaChallengeRequired) as caught:
+        if request_path == "initial":
+            _initial(request, {"max_attempts": 2, "retry_timeout": 0})
+        else:
+            _continuation(
+                request,
+                {"max_attempts": 2, "retry_timeout": 0},
+                browse=request_path == "browse",
+            )
+    assert len(calls) == 1
+    assert "HTTP 403" in str(caught.value)
+    assert "https://www.youtube.com/" in str(caught.value)
+    assert "--request_profile" in str(caught.value)
+
+
+@pytest.mark.parametrize("signal", ["url", "api-message", "http-503-body"])
+def test_continuation_challenge_signals_stop_after_one_attempt(
+    make_fake_http_response, signal
+):
+    response = make_fake_http_response(
+        200 if signal == "api-message" else 503,
+        {"error": {"code": 403, "message": "/sorry/index"}}
+        if signal == "api-message"
+        else {},
+        text="Please verify you are human" if signal == "http-503-body" else "",
+    )
+    if signal == "url":
+        response.url = "https://www.google.com/sorry/index"
+    request, calls = _sequence(response, response)
+    with pytest.raises(CaptchaChallengeRequired) as caught:
+        _continuation(request, {"max_attempts": 2, "retry_timeout": 0})
+    assert len(calls) == 1
+    assert (
+        "Endpoint: https://www.youtube.com/youtubei/v1/live_chat/get_live_chat"
+        in str(caught.value)
+    )
+    assert "--request_profile" in str(caught.value)
+
+
+@pytest.mark.parametrize("request_path", ["initial", "continuation", "browse"])
+def test_ordinary_403_retries_before_success(make_fake_http_response, request_path):
+    request, calls = _sequence(
+        make_fake_http_response(403, {}, text="Forbidden"),
+        make_fake_http_response(
+            200,
+            _SUCCESS_CONTINUATION_PAYLOAD,
+            text='<script id="yt-initial-data">{"contents": {}}</script>',
+        ),
+    )
+    params = {"max_attempts": 2, "retry_timeout": 0}
+    if request_path == "initial":
+        assert _initial(request, params) == ({"contents": {}}, {}, {})
+    else:
+        assert (
+            _continuation(request, params, browse=request_path == "browse")
+            == _SUCCESS_CONTINUATION_PAYLOAD
+        )
+    assert len(calls) == 2
+
+
 def test_get_initial_info_raises_retries_exceeded_when_attempt_loop_exits(monkeypatch):
     request, calls = _sequence()
     monkeypatch.setattr(

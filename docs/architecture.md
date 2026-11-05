@@ -219,7 +219,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `atomic_files.py` | Private same-directory staging, file synchronization, exclusive hard-link publication, and POSIX directory synchronization for complete JSON artifacts |
-| `capture_reader.py` | Strict UTF-8 JSONL object reading, physical line findings, and nonblocking regular-file ownership shared by provider inspectors |
+| `capture_reader.py` | Strict UTF-8 JSONL object reading, bounded unambiguous literal run-summary decoding, and nonblocking regular-file ownership shared by provider inspectors |
 | `color_utils.py` | ARGB/RGBA color conversion |
 | `console_utils.py` | Cross-platform safe console output and pause handling |
 | `conversion_utils.py` | Scalar conversion, retry-attempt, and back-off helpers |
@@ -239,11 +239,11 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `base.py` | `BaseChatDownloader` shared base class: URL matching, session setup, cookie handling, and optional provider-selected console state capability |
-| `common.py` | Stateless site utilities for key validation and mapped-key discovery |
+| `common.py` | Stateless mapped-key discovery for site remapping tables |
 | `session.py` | `ChatDownloaderSession`: cohesive HTTP adapter, timeout, proxy, header/profile, cookie, and close ownership |
 | `proxy.py` | Shared proxy resolution and TLS tunneling for live transports |
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
-| `filters.py` | Message-group validation and per-message filter application |
+| `filters.py` | Canonical message-type/group validation, wildcard selection, and per-message time filtering |
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output and deduplication are delegated to `_ChatOutputDispatcher` |
 | `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted dispatch, record rollback with owned ledgers, completed-record and suppression counts, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
@@ -266,9 +266,10 @@ module names.
 |--------|---------|
 | `client_auth.py` | SAPISIDHASH authentication header generation |
 | `client_context.py` | InnerTube context dict construction and request-profile application |
+| `client_challenges.py` | Shared YouTube challenge vocabulary and response evidence for initial, bootstrap, browse, and chat requests |
 | `client_requests_bootstrap.py` | Direct mobile and fallback InnerTube bootstrap requests (initial video data) |
 | `client_requests_continuation.py` | HTTP continuation polling: request dispatch, retry, error surfacing |
-| `client_requests_errors.py` | HTTP/JSON error classification, CAPTCHA detection, and retry helpers |
+| `client_requests_errors.py` | HTTP/JSON error classification and continuation retry helpers using shared challenge detection |
 | `client_requests_initial.py` | Initial-page HTTP fetch and HTML/JSON extraction |
 
 #### Continuation loop

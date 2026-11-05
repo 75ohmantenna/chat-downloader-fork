@@ -71,7 +71,7 @@ BASELINE: dict[str, int] = {
     # entry points and the _ContinuationLoop constructor.
     "sites/youtube/continuation.py": 3,
     "sites/youtube/parsing/actions_handlers_validation.py": 5,
-    "sites/youtube/client_requests_initial.py": 4,
+    "sites/youtube/client_requests_initial.py": 3,
     "sites/youtube/video_status_helpers.py": 6,
     "sites/youtube/chat_streams.py": 4,
     "sites/youtube/message_pipeline.py": 5,

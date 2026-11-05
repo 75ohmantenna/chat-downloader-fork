@@ -158,6 +158,33 @@ def test_api_challenge_stops_bootstrap_without_retry(endpoint, code):
     assert [name for name, _ in site.posts].count(endpoint) == 1
 
 
+@pytest.mark.parametrize("endpoint", ["player", "next"])
+def test_sorry_index_anchor_403_stops_bootstrap_after_one_attempt(endpoint):
+    site = _FinalFallback(
+        endpoint,
+        [http_response(status_code=403, text='<a href="/sorry/index">Continue</a>')],
+    )
+    with pytest.raises(CaptchaChallengeRequired) as caught:
+        site.get_video_data(_VIDEO, _request())
+    assert [name for name, _ in site.posts].count(endpoint) == 1
+    assert "HTTP 403" in str(caught.value)
+    assert f"/youtubei/v1/{endpoint}" in str(caught.value)
+    assert "--request_profile" in str(caught.value)
+
+
+@pytest.mark.parametrize("endpoint", ["player", "next"])
+def test_sorry_index_api_message_stops_bootstrap_after_one_attempt(endpoint):
+    site = _FinalFallback(
+        endpoint,
+        [http_response(payload={"error": {"code": 403, "message": "/sorry/index"}})],
+    )
+    with pytest.raises(CaptchaChallengeRequired) as caught:
+        site.get_video_data(_VIDEO, _request())
+    assert [name for name, _ in site.posts].count(endpoint) == 1
+    assert "/sorry/index" in str(caught.value)
+    assert f"/youtubei/v1/{endpoint}" in str(caught.value)
+
+
 class _Enrichment(YouTubeVideoInitializationMixin):
     def __init__(self, responses):
         self._request_diagnostics = {}

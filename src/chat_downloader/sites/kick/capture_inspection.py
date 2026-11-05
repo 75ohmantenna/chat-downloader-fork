@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import ast
 import re
 import sqlite3
 import tempfile
@@ -14,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chat_downloader.sites.kick.constants import MESSAGE_GROUPS
-from chat_downloader.utils.capture_reader import open_capture_input, read_capture_lines
+from chat_downloader.utils.capture_reader import read_capture_lines, read_debug_summary
 from chat_downloader.utils.json_types import get_dict, get_str
 
 if TYPE_CHECKING:
@@ -22,11 +21,6 @@ if TYPE_CHECKING:
 
 _KNOWN_TYPES = frozenset(t for group in MESSAGE_GROUPS.values() for t in group)
 _LOCATION = re.compile(r"([0-9]+)-([0-9]+)")
-_SUMMARY_PREFIX = re.compile(
-    rb"(?:\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\] )?"
-    rb"\[DEBUG\] Run summary: "
-)
-_SUMMARY_LIMIT = 65536
 _INVALID_SUMMARY = "invalid_run_summary"
 _FRAME_KEYS = (
     "websocket_frame_count",
@@ -112,38 +106,6 @@ def _emotes_valid(record: Mapping[str, object]) -> bool:
             if message[start : end + 1] not in expected:
                 return False
     return True
-
-
-def _decode_summary(line: bytes) -> dict[str, object]:
-    """Reject ambiguous dictionary keys before evaluating a literal summary."""
-    tree = ast.parse(line.decode("utf-8"), mode="eval")
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Dict):
-            keys = [ast.literal_eval(key) for key in node.keys if key is not None]
-            if len(keys) != len(set(keys)):
-                raise ValueError(_INVALID_SUMMARY)
-    summary: object = ast.literal_eval(tree)
-    if not isinstance(summary, dict):
-        raise TypeError(_INVALID_SUMMARY)
-    return summary
-
-
-def _run_summary(path: Path) -> dict[str, object]:
-    """Read exactly one bounded literal summary, without retaining log content."""
-    result: dict[str, object] | None = None
-    with open_capture_input(path) as source:
-        while line := source.readline(_SUMMARY_LIMIT + 1):
-            prefix = _SUMMARY_PREFIX.match(line)
-            if prefix is not None:
-                if result is not None or len(line) > _SUMMARY_LIMIT:
-                    raise ValueError(_INVALID_SUMMARY)
-                result = _decode_summary(line[prefix.end() :])
-            # Consume long unrelated log lines without treating their tail as a header.
-            while not line.endswith(b"\n") and len(line) == _SUMMARY_LIMIT + 1:
-                line = source.readline(_SUMMARY_LIMIT + 1)
-    if result is None:
-        raise ValueError(_INVALID_SUMMARY)
-    return result
 
 
 def _counter(values: Mapping[str, object], key: str) -> int:
@@ -566,7 +528,7 @@ def inspect_capture(
     summaries = (
         [run_summary]
         if run_summary is not None
-        else [_run_summary(path) for path in paths]
+        else [read_debug_summary(path) for path in paths]
     )
     replay = bool(
         summaries

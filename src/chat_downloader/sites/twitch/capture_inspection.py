@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import ast
 import re
 import sqlite3
 import tempfile
@@ -13,7 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chat_downloader.sites.twitch.constants import MESSAGE_GROUPS
-from chat_downloader.utils.capture_reader import open_capture_input, read_capture_lines
+from chat_downloader.utils.capture_reader import read_capture_lines, read_debug_summary
 from chat_downloader.utils.json_types import get_dict, get_str
 
 if TYPE_CHECKING:
@@ -21,11 +20,6 @@ if TYPE_CHECKING:
 
 _KNOWN_TYPES = frozenset(t for group in MESSAGE_GROUPS.values() for t in group)
 _LOCATION = re.compile(r"([0-9]+)-([0-9]+)")
-_SUMMARY_PREFIX = re.compile(
-    rb"(?:\[\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC\] )?"
-    rb"\[DEBUG\] Run summary: "
-)
-_SUMMARY_LIMIT = 65536
 _INVALID_SUMMARY = "invalid_run_summary"
 _FRAME_KEYS = (
     "received_irc_frame_count",
@@ -72,25 +66,6 @@ def _account_frames(counters: Mapping[str, object]) -> dict[str, int]:
     result["unaccounted_frames"] = result[_FRAME_KEYS[0]] - sum(
         result[key] for key in _FRAME_KEYS[1:]
     )
-    return result
-
-
-def _frame_accounting(path: Path) -> dict[str, int]:
-    """Read exactly one bounded Python-literal run summary from a debug log."""
-    result: dict[str, int] | None = None
-    with open_capture_input(path) as source:
-        for line in source:
-            prefix = _SUMMARY_PREFIX.match(line)
-            if prefix is None:
-                continue
-            if result is not None or len(line) > _SUMMARY_LIMIT:
-                raise ValueError(_INVALID_SUMMARY)
-            summary = ast.literal_eval(line[prefix.end() :].decode("utf-8"))
-            if not isinstance(summary, dict):
-                raise TypeError(_INVALID_SUMMARY)
-            result = _account_frames(get_dict(summary, "provider_diagnostics"))
-    if result is None:
-        raise ValueError(_INVALID_SUMMARY)
     return result
 
 
@@ -201,7 +176,11 @@ def inspect_capture(
         if path is not None:
             inspection.read(path)
         report = inspection.report()
-    accounting = _frame_accounting(debug_log) if debug_log is not None else None
+    accounting = (
+        _account_frames(get_dict(read_debug_summary(debug_log), "provider_diagnostics"))
+        if debug_log is not None
+        else None
+    )
     if diagnostics is not None:
         accounting = _account_frames(diagnostics)
     report["frame_accounting"] = accounting

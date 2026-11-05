@@ -605,8 +605,11 @@ original error remains authoritative. Interrupted and broken-stdout captures
 also run parity after safe cleanup; other retrieval errors leave parity `not_run`.
 
 Kick and Twitch inspection use `utils/capture_reader.py` for strict UTF-8 JSONL
-reading and regular-file ownership. Provider record rules and ledger accounting
-remain in their site packages.
+reading, regular-file ownership, and debug-summary framing. Each supplied log
+must contain exactly one summary, no larger than 65,536 bytes including its
+prefix and line ending. Literal summaries reject duplicate dictionary keys at
+every nesting level; long unrelated physical lines are drained in bounded
+chunks. Provider record rules and ledger accounting remain in their site packages.
 
 The report also records `prefetched_after_deadline_count` and
 `deadline_prefetch_count_complete`. Parsed IRC messages need not equal output

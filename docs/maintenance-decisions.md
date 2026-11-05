@@ -198,8 +198,10 @@ production consumer with a contract that removes shared alignment state.
 JSONL line traversal, duplicate-key rejection, recursive finite-number and
 Unicode validation, and content-free findings. YouTube, Kick, and Twitch
 inspectors share this contract; they retain provider record
-validation, exact ID membership, and ledger accounting. Debug-summary parsers
-share regular-file opening but retain their distinct literal parsing rules.
+validation, exact ID membership, and ledger accounting. Kick and Twitch also
+share bounded, exactly-one debug-summary framing and duplicate-key-safe literal
+decoding in the same input module. Literal summaries remain separate from strict
+JSONL validation and provider-specific accounting.
 
 The parity auditor retains its own artifact identity and JSONL policy. Sharing
 its decoder would change that contract rather than remove duplicate knowledge.

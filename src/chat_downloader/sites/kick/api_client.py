@@ -304,15 +304,14 @@ class KickApiClient:
                 logger.debug("Error closing Kick API session: %s", error)
 
 
-def _interpret_response(
+def _classify_response(
     response: requests.Response,
     *,
     context: str,
     resource: _ResourceKind,
-    forward_history: bool,
-    response_exceeded: bool,
-) -> JSONDict:
-    """Apply status/challenge precedence before parsing a bounded history body."""
+    forward_history: bool = False,
+) -> None:
+    """Apply Kick's shared redirect, access, history, and status precedence."""
     if 300 <= response.status_code < 400:
         msg = "Unexpected HTTP redirect from Kick API."
         raise KickServerError(msg)
@@ -325,6 +324,20 @@ def _interpret_response(
         msg = f"Kick rejected forward message history for {context!r}."
         raise KickForwardHistoryRejected(msg)
     _check_status(response, context=context, resource=resource)
+
+
+def _interpret_response(
+    response: requests.Response,
+    *,
+    context: str,
+    resource: _ResourceKind,
+    forward_history: bool,
+    response_exceeded: bool,
+) -> JSONDict:
+    """Classify a response before parsing a bounded history JSON object."""
+    _classify_response(
+        response, context=context, resource=resource, forward_history=forward_history
+    )
     if response_exceeded:
         msg = (
             "Kick history response byte resource limit exceeded; capture is incomplete."

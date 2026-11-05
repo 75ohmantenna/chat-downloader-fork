@@ -72,6 +72,7 @@ The normal YouTube flow is:
 ### Request construction
 
 - `client_context.py`: request headers and client context construction
+- `client_challenges.py`: shared challenge hints and response classification
 - `client_requests_bootstrap.py`: fallback InnerTube `player` and `next`
   bootstrap requests
 - `client_requests_initial.py`: initial request helpers
@@ -159,6 +160,12 @@ Top/Live filter tokens: its primary renderer can select Top chat, so it cannot
 replace an explicit Live token or supply a missing view. This fallback supports
 live and replay video targets; clips remain on the normal page bootstrap because
 clip time ranges are page-specific.
+
+Initial-page, bootstrap, browse, and chat requests share challenge detection,
+including `/sorry/index` in a response URL, body, or API error message. Recognized
+challenges stop that request's retry loop with `CaptchaChallengeRequired`; the
+watch-page owner can still activate its documented InnerTube fallback. Ordinary
+HTTP retry rules remain endpoint-specific.
 
 Channel and user chat methods accept either `ChatRequest` or a parameter
 dictionary, normalized before lazy retrieval starts. Channel Shorts discovery

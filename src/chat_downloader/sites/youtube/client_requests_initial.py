@@ -12,7 +12,6 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import (
-    CaptchaChallengeRequired,
     ParsingError,
     RetriesExceeded,
     VideoNotFound,
@@ -25,10 +24,11 @@ from chat_downloader.utils.retry_utils import (
     parse_retry_after,
 )
 from chat_downloader.utils.string_utils import (
-    contains_any_hint,
     get_title_of_webpage,
     regex_search,
 )
+
+from .client_challenges import raise_if_initial_challenge_response
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -36,15 +36,6 @@ if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict
 
-
-_CHALLENGE_HINTS: tuple[str, ...] = (
-    "/sorry/index",
-    "captcha",
-    "verify you are human",
-    "unusual traffic",
-    "recaptcha",
-    "challenge",
-)
 
 _INITIAL_PAGE_HOSTS = frozenset(
     {
@@ -83,37 +74,6 @@ class _InitialDataScriptParser(HTMLParser):
             if isinstance(value, dict) and value and not self.result:
                 self.result = value
             self.reading = False
-
-
-def _contains_challenge_text(text: object) -> bool:
-    if not isinstance(text, str):
-        return False
-    return contains_any_hint(text, _CHALLENGE_HINTS)
-
-
-def _raise_if_challenge_response(
-    response: Any,
-    *,
-    url: str,
-    error_message: str,
-) -> None:
-    response_url = getattr(response, "url", "")
-    response_text = getattr(response, "text", "")
-    if not (
-        _contains_challenge_text(response_url)
-        or _contains_challenge_text(response_text)
-        or _contains_challenge_text(error_message)
-    ):
-        return
-
-    msg = (
-        "YouTube is requiring a captcha/challenge before the initial page "
-        "request can continue. "
-        f"{error_message}. URL: {url}. "
-        "Try fresh cookies, reduce request rate, or change request fingerprint "
-        "with --request_profile (youtube_android/youtube_ios)."
-    )
-    raise CaptchaChallengeRequired(msg)
 
 
 def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop are intrinsic
@@ -172,7 +132,7 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                     or response.status_code // 100 == 5
                 ):
                     if response.status_code in (403, 429):
-                        _raise_if_challenge_response(
+                        raise_if_initial_challenge_response(
                             response,
                             url=url,
                             error_message=error_message,

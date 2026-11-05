@@ -66,14 +66,10 @@ class Downloader:
     def __init__(self):
         self.session = SimpleNamespace(headers={})
         self._session_post = object()
-        self.invalid_type_checks = []
         self.header_updates = []
         self.applied_profiles = []
         self._request_profile = "youtube_web"
         self._auto_profile_fallback = True
-
-    def check_for_invalid_types(self, message_types, valid_types):
-        self.invalid_type_checks.append((message_types, valid_types))
 
     def update_session_headers(self, headers):
         self.header_updates.append(headers)

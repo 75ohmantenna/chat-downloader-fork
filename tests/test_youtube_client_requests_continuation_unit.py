@@ -10,10 +10,9 @@ from chat_downloader.errors import (
     IncompleteContinuationError,
     RetriesExceeded,
 )
+from chat_downloader.sites.youtube.client_challenges import contains_challenge_text
 from chat_downloader.sites.youtube.client_requests_errors import (
     _apply_retry_or_raise,
-    _captcha_guidance_message,
-    _contains_challenge_text,
     _is_retryable_status,
     _retry_or_raise_exhausted,
 )
@@ -23,6 +22,7 @@ from chat_downloader.utils.retry_utils import RetryPolicy
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ('<a href="/sorry/index">Continue</a>', True),
         ("contains captcha text", True),
         ("verify you are human now", True),
         ("unusual traffic detected", True),
@@ -38,15 +38,7 @@ from chat_downloader.utils.retry_utils import RetryPolicy
     ],
 )
 def test_contains_challenge_text(text: object, expected: bool) -> None:
-    assert _contains_challenge_text(text) == expected
-
-
-def test_captcha_guidance_message_includes_endpoint_and_detail() -> None:
-    msg = _captcha_guidance_message(
-        endpoint="https://example.com/api", detail="HTTP 429: rate limited"
-    )
-    assert "https://example.com/api" in msg
-    assert "HTTP 429: rate limited" in msg
+    assert contains_challenge_text(text) == expected
 
 
 @pytest.mark.parametrize(

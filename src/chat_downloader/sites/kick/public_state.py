@@ -11,12 +11,7 @@ from typing import TYPE_CHECKING
 from chat_downloader.debugging import logger
 from chat_downloader.utils.json_types import get_dict, get_int, get_list
 
-from .api_client import (
-    _body_looks_like_challenge,
-    _check_status,
-    _decode_json,
-    _raise_for_challenge,
-)
+from .api_client import _classify_response, _decode_json
 from .http_session import create_kick_session
 
 if TYPE_CHECKING:
@@ -68,9 +63,7 @@ class KickPublicState:
                 status,
                 monotonic() - started,
             )
-        if response.status_code != 423 and _body_looks_like_challenge(response):
-            _raise_for_challenge(response, "public state")
-        _check_status(response, context="public state", resource="realtime")
+        _classify_response(response, context="public state", resource="realtime")
         return _decode_json(response, context="public state", resource="realtime")
 
     def metadata(self, username: str) -> JSONDict:

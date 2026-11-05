@@ -37,8 +37,8 @@ from chat_downloader.utils.retry_utils import (
 )
 from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
+from .client_challenges import raise_if_initial_challenge_response
 from .client_context import apply_request_profile_to_innertube_context
-from .client_requests_initial import _raise_if_challenge_response
 from .constants_patterns import _YT_HOME
 from .helpers import extract_chat_submenu_continuations
 
@@ -150,7 +150,7 @@ def request_bootstrap_json(
                 msg = "YouTube bootstrap returned HTTP 404"
                 raise VideoNotFound(msg)
             if status in {403, 429}:
-                _raise_if_challenge_response(
+                raise_if_initial_challenge_response(
                     response, url=url, error_message=f"HTTP {status}"
                 )
             if status >= 400:
@@ -161,7 +161,7 @@ def request_bootstrap_json(
             failed_response = getattr(error, "response", None)
             status = getattr(failed_response, "status_code", 0)
             if status in {403, 429}:
-                _raise_if_challenge_response(
+                raise_if_initial_challenge_response(
                     failed_response, url=url, error_message=str(error)
                 )
             if status >= 400 and status not in {408, 429} and status // 100 != 5:
@@ -191,7 +191,7 @@ def _post_innertube_json(
             raise ParsingError(msg)
         if "error" in data:
             code = get_int(get_dict(data, "error"), "code")
-            _raise_if_challenge_response(
+            raise_if_initial_challenge_response(
                 response,
                 url=f"{_YT_HOME}/youtubei/v1/{endpoint}",
                 error_message=get_str(get_dict(data, "error"), "message"),

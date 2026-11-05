@@ -195,7 +195,7 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `inactivity_timeout` | `None` | Stop when the configured message iterator yields no message within this period; filtered provider traffic does not reset it |
 | `max_messages` | `None` | Stop after this many messages |
 | `message_groups` | site default | High-level message filtering; `["all"]` accepts every supported provider event type |
-| `message_types` | `None` | Explicit provider message types; unknown names fail, `all` accepts every type; a nonempty list overrides `message_groups`, while `None` or an empty list uses groups |
+| `message_types` | `None` | Explicit provider message types; unknown names fail unless the list contains `all`, which accepts every type and overrides other entries; a nonempty list overrides `message_groups`, while `None` or an empty list uses groups |
 | `output` | `None` | Output path or list of paths |
 | `overwrite` | `True` | Replace existing explicit-path output files; metadata-generated destinations must be new |
 | `sort_keys` | `True` | Sort keys in JSON output |

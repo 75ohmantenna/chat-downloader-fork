@@ -48,12 +48,15 @@ def _log(path, received=5, benign=2, parsed=3):
     return path
 
 
-def _run_script(path, timeout):
+def _run_script(path, timeout, debug_log=None):
     script = (
         Path(__file__).resolve().parents[1] / "scripts" / "inspect_twitch_capture.py"
     )
+    arguments = [sys.executable, str(script), str(path)]
+    if debug_log is not None:
+        arguments.extend(["--debug-log", str(debug_log)])
     return subprocess.run(  # noqa: S603 - fixed interpreter and project script
-        [sys.executable, str(script), str(path)],
+        arguments,
         capture_output=True,
         text=True,
         check=False,
@@ -236,3 +239,74 @@ def test_inspection_ignores_unrelated_debug_lines_without_echoing_them(
     output = capsys.readouterr().out
     assert "PRIVATE_SENTINEL" not in output
     assert json.loads(output)["frame_accounting"]["unaccounted_frames"] == 0
+
+
+def test_script_rejects_overflowing_literal_summary_without_echoing_input(tmp_path):
+    capture = _write(tmp_path / "chat.jsonl", [])
+    log = tmp_path / "debug.log"
+    oversized_integer = "1" + "0" * 400
+    log.write_text(
+        "[DEBUG] Run summary: PRIVATE_SENTINEL({" + oversized_integer + " + 1j: 0})\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="invalid_run_summary"):
+        inspect_capture(capture, debug_log=log)
+    result = _run_script(capture, timeout=10, debug_log=log)
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {"error": "invalid_run_summary"}
+    assert result.stderr == ""
+
+
+def test_script_rejects_duplicate_nested_summary_counters(tmp_path):
+    capture = _write(tmp_path / "chat.jsonl", [])
+    log = tmp_path / "debug.log"
+    log.write_text(
+        _summary().replace(
+            "'parsed_irc_message_count': 3",
+            "'parsed_irc_message_count': 99, 'parsed_irc_message_count': 3",
+        ),
+        encoding="utf-8",
+    )
+    result = _run_script(capture, timeout=10, debug_log=log)
+    assert result.returncode == 2
+    assert json.loads(result.stdout) == {"error": "invalid_run_summary"}
+    assert result.stderr == ""
+
+
+@pytest.mark.parametrize("offset", [65536, 65537, 131074])
+def test_summary_framing_ignores_headers_inside_long_physical_lines(
+    tmp_path, capsys, offset
+):
+    capture = _write(tmp_path / "chat.jsonl", [])
+    log = tmp_path / "debug.log"
+    log.write_bytes(
+        b"x" * offset
+        + _summary(received=99).encode()
+        + _summary().encode()
+        + b"PRIVATE_SENTINEL" * 10000
+    )
+    assert main([str(capture), "--debug-log", str(log)]) == 0
+    output = capsys.readouterr().out
+    assert "PRIVATE_SENTINEL" not in output
+    report = json.loads(output)
+    assert report["status"] == "ok"
+    assert report["frame_accounting"]["received_irc_frame_count"] == 5
+    assert report["frame_accounting"]["unaccounted_frames"] == 0
+
+
+@pytest.mark.parametrize("line_size", [65536, 65537])
+def test_summary_line_limit_counts_header_and_newline(tmp_path, capsys, line_size):
+    capture = _write(tmp_path / "chat.jsonl", [])
+    log = tmp_path / "debug.log"
+    summary = _summary().rstrip("\n")
+    log.write_text(
+        summary + " " * (line_size - len(summary) - 1) + "\n", encoding="utf-8"
+    )
+    assert main([str(capture), "--debug-log", str(log)]) == (
+        0 if line_size == 65536 else 2
+    )
+    report = json.loads(capsys.readouterr().out)
+    if line_size == 65536:
+        assert report["frame_accounting"]["unaccounted_frames"] == 0
+    else:
+        assert report == {"error": "invalid_run_summary"}

@@ -15,13 +15,9 @@ from chat_downloader.errors import (
 )
 from chat_downloader.sites.youtube.client_requests_errors import (
     _apply_retry_or_raise,
-    _contains_challenge_text,
     _handle_http_error,
     _handle_json_api_error,
     _is_retryable_status,
-)
-from chat_downloader.sites.youtube.client_requests_initial import (
-    _contains_challenge_text as _initial_contains_challenge_text,
 )
 from chat_downloader.sites.youtube.client_requests_initial import (
     _get_initial_info,
@@ -106,14 +102,6 @@ def test_exhausted_retry_error_includes_reason_and_url(policy) -> None:
         )
     assert "some error" in str(exc.value)
     assert "https://my.endpoint/chat" in str(exc.value)
-
-
-@pytest.mark.parametrize("value", [None, 42, []])
-@pytest.mark.parametrize(
-    "contains_challenge", [_contains_challenge_text, _initial_contains_challenge_text]
-)
-def test_challenge_detection_ignores_non_strings(contains_challenge, value) -> None:
-    assert contains_challenge(value) is False
 
 
 @pytest.mark.parametrize("value", [None, "403"])

@@ -236,7 +236,8 @@ Filtering and output:
   Pass multiple names as one comma-separated argument.
   Use `--message_groups all` for a provider's complete supported event surface.
   Unknown explicit types are rejected with the provider's valid type names;
-  ordinary chat uses `text_message`. The special type `all` accepts every type.
+  ordinary chat uses `text_message`. If the type list contains `all`, it accepts
+  every type and other entries in that list do not restrict or invalidate it.
   In typed API requests, a nonempty `ChatRequest.message_types` list overrides
   `message_groups`, including the `all` group. An empty list uses groups.
 - `--format` or `--format_file` — change rendered text output.

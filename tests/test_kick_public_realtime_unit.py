@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from functools import partial
 from queue import Empty, Queue
 from threading import Event, Thread
 from types import SimpleNamespace
@@ -17,6 +18,7 @@ from chat_downloader.sites.kick import live_service
 from chat_downloader.sites.kick import public_state as ps
 from chat_downloader.sites.kick import public_transport as pt
 from chat_downloader.sites.kick import realtime_connection as rc
+from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.centrifugo_transport import KickCentrifugoTransport
 from chat_downloader.sites.kick.constants import (
     EVENT_NAME_MAP,
@@ -57,6 +59,87 @@ def connection(provider="centrifugo", **credentials):
             "connections": [{"provider": provider, "credentials": credentials}],
         }
     }
+
+
+def http_consumer(endpoint, response):
+    session = PostSession([response])
+    if endpoint == "api":
+        client = KickApiClient(session=session)
+        consume = partial(client.fetch_channel, "slug")
+    elif endpoint == "realtime":
+        client = rc.KickRealtimeClient(session=session)
+        consume = client.negotiate
+    else:
+        client = KickPublicState(session=session)
+        consume = (
+            partial(client.metadata, "slug")
+            if endpoint == "metadata"
+            else partial(client.viewers, {"livestream": {"id": 123}})
+        )
+    return client, session, consume
+
+
+@pytest.mark.parametrize("endpoint", ["api", "metadata", "viewers", "realtime"])
+@pytest.mark.parametrize("status", [300, 302, 399])
+def test_kick_http_redirect_never_inspects_body(endpoint, status):
+    class RedirectResponse:
+        status_code = status
+
+        def __init__(self):
+            self.headers = {"Location": "https://foreign.invalid/redirect"}
+
+        @property
+        def text(self):
+            pytest.fail("Redirect body must not be inspected for challenges.")
+
+        def json(self):
+            pytest.fail("Redirect body must not be decoded.")
+
+    client, session, consume = http_consumer(endpoint, RedirectResponse())
+    try:
+        with pytest.raises(KickServerError, match="Unexpected HTTP redirect"):
+            consume()
+        assert len(session.calls) == 1
+        assert session.calls[0][1]["allow_redirects"] is False
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize("endpoint", ["api", "metadata", "viewers", "realtime"])
+@pytest.mark.parametrize(
+    ("response", "error"),
+    [
+        pytest.param(
+            FakeResponse(423, text="<html>challenge</html>", malformed=True),
+            KickCountryBlocked,
+            id="country-before-challenge",
+        ),
+        pytest.param(
+            FakeResponse(200, text="<html>challenge</html>", malformed=True),
+            CaptchaChallengeRequired,
+            id="successful-status-challenge",
+        ),
+        pytest.param(
+            FakeResponse(503, text="<html>challenge</html>", malformed=True),
+            CaptchaChallengeRequired,
+            id="challenge-before-server-retry",
+        ),
+        pytest.param(FakeResponse(403, {}), CaptchaChallengeRequired, id="forbidden"),
+        pytest.param(FakeResponse(429, {}), KickServerError, id="rate-limited"),
+        pytest.param(FakeResponse(503, {}), KickServerError, id="unavailable"),
+        pytest.param(FakeResponse(418, {}), KickError, id="other-terminal-status"),
+        pytest.param(FakeResponse(200, malformed=True), KickServerError, id="bad-json"),
+    ],
+)
+def test_kick_http_consumer_status_boundaries(endpoint, response, error):
+    client, session, consume = http_consumer(endpoint, response)
+    try:
+        with pytest.raises(error) as failure:
+            consume()
+        assert type(failure.value) is error
+        assert len(session.calls) == 1
+    finally:
+        client.close()
 
 
 @pytest.mark.parametrize(
@@ -226,6 +309,40 @@ def test_public_state_challenge_keeps_access_policy():
     )
     with pytest.raises(CaptchaChallengeRequired):
         state.metadata("slug")
+
+
+@pytest.mark.parametrize("redirect_at", ["metadata", "viewers"])
+def test_public_http_redirect_poll_preserves_other_snapshot_and_chat(redirect_at):
+    channel = {"livestream": {"id": 123}}
+    viewers = [{"livestream_id": 123, "viewers": 42}]
+    redirect = FakeResponse(302, text="<html>redirect, not a challenge</html>")
+    session = FakeKickSession(
+        [
+            redirect if redirect_at == "metadata" else FakeResponse(200, channel),
+            redirect if redirect_at == "viewers" else FakeResponse(200, viewers),
+        ]
+    )
+    transport = public_state_transport()
+    transport._state = KickPublicState(session=session)
+    transport._channel = channel
+    counters = []
+    transport._diagnostic_callback = counters.append
+    transport._queue.put({"event": "chat"})
+    try:
+        snapshot = transport.recv()
+        if redirect_at == "metadata":
+            assert snapshot["event"] == "kick:viewer_count"
+            assert snapshot["data"] == viewers
+        else:
+            assert snapshot["event"] == "kick:public_state"
+            assert snapshot["data"]["livestream"] == channel["livestream"]
+        assert transport.recv() == {"event": "chat"}
+        assert counters.count("public_state_poll_failure_count") == 1
+        assert not transport._reconnect_requested.is_set()
+        assert len(session.calls) == 2
+    finally:
+        transport.close()
+    assert session.close_calls == 1
 
 
 @pytest.mark.parametrize("owner", [KickPublicState, rc.KickRealtimeClient])
@@ -599,6 +716,97 @@ def test_public_setup_failure_releases_partial_sessions(monkeypatch, error, expe
         transport.connect(None)
     client.close.assert_called_once()
     state.close.assert_called_once()
+
+
+@pytest.mark.parametrize("redirect_at", ["metadata", "chat", "global"])
+def test_live_opener_retries_public_http_redirect_then_subscribes(
+    monkeypatch, redirect_at
+):
+    redirect = FakeResponse(
+        302, text="<html>redirect is not a challenge</html>", malformed=True
+    )
+    redirect.headers["Location"] = "https://foreign.invalid/redirect"
+    descriptor = connection("pusher", app_key="publickey", cluster="us2")
+    state_sessions = [
+        FakeKickSession(
+            [redirect if redirect_at == "metadata" else FakeResponse(200, {})]
+        ),
+        FakeKickSession([FakeResponse(200, {})]),
+    ]
+    realtime_sessions = [
+        *(
+            []
+            if redirect_at == "metadata"
+            else [
+                PostSession(
+                    [
+                        redirect
+                        if redirect_at == "chat"
+                        else FakeResponse(200, descriptor)
+                    ]
+                )
+            ]
+        ),
+        *([PostSession([redirect])] if redirect_at == "global" else []),
+        PostSession([FakeResponse(200, descriptor)]),
+        PostSession([FakeResponse(200, descriptor)]),
+    ]
+    state_factory = MagicMock(side_effect=state_sessions)
+    realtime_factory = MagicMock(side_effect=realtime_sessions)
+    monkeypatch.setattr(ps, "create_kick_session", state_factory)
+    monkeypatch.setattr(rc, "create_kick_session", realtime_factory)
+    sockets = [
+        BlockingSocket([json.dumps({"event": PUSHER_CONNECTION_ESTABLISHED})])
+        for _ in range(3 if redirect_at == "global" else 2)
+    ]
+    connector = MagicMock(side_effect=sockets)
+    monkeypatch.setattr(pt, "_default_connector", connector)
+    attempts = []
+
+    def factory():
+        transport = pt.KickPublicTransport(
+            username="slug", channel_id="123", trust_env=False
+        )
+        attempts.append(transport)
+        return transport
+
+    opened = None
+    try:
+        opened = live_service._open_subscribed_transport(
+            FakeDownloader(),
+            "456",
+            ChatRequest(max_attempts=2, retry_timeout=0, interruptible_retry=False),
+            factory,
+        )
+        assert len(attempts) == 2
+        assert opened is attempts[1]
+        assert attempts[0]._stopped.is_set()
+        assert state_sessions[0].close_calls == 1
+        assert all(session.close_calls == 1 for session in realtime_sessions[:-2])
+        assert {
+            json.loads(message)["data"]["channel"]
+            for socket in sockets[-2:]
+            for message in socket.sent
+        } == {
+            "chatrooms.456.v2",
+            "channel.123",
+            "channel_123",
+            "predictions-channel-123",
+            "chatrooms.456",
+            "chatroom_456",
+        }
+        assert all(
+            call[1]["allow_redirects"] is False
+            for session in [*state_sessions, *realtime_sessions]
+            for call in session.calls
+        )
+    finally:
+        if opened is not None:
+            opened.close()
+    assert all(
+        session.close_calls == 1 for session in [*state_sessions, *realtime_sessions]
+    )
+    assert all(socket.closed for socket in sockets)
 
 
 def public_state_transport():

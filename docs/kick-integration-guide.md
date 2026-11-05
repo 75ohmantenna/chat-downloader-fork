@@ -775,8 +775,16 @@ retrieve that resource; backend selection does not retry every installed
 backend. Check endpoint availability and access restrictions as well as
 Cloudflare protection before attributing a denial to IP reputation.
 
-Status mapping in `api_client.py::_check_status`:
+API, anonymous negotiation, and public snapshot requests share response
+classification in `api_client.py::_classify_response`. Redirect rejection comes
+before body inspection; HTTP 423 takes precedence over challenge heuristics.
+During live setup, transient failures enter the configured retry loop. Periodic
+snapshot polls remain best-effort and preserve the live chat stream on ordinary
+request failures.
 
+Status mapping:
+
+- `3xx` → `KickServerError` before body inspection or decoding; never followed
 - channel `404` → `UserNotFound`; video `404` → the internal
   `KickVideoNotFound` signal used by the current website fallback; clip and
   history `404` → `KickError` (the clip service may then try mobile metadata)

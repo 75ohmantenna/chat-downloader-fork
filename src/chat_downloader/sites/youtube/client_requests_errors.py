@@ -17,8 +17,8 @@ from chat_downloader.errors import (
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict
 from chat_downloader.utils.retry_utils import parse_retry_after
-from chat_downloader.utils.string_utils import contains_any_hint
 
+from .client_challenges import contains_challenge_text, is_challenge_response
 from .continuations import summarize_continuation_payload
 
 if TYPE_CHECKING:
@@ -26,20 +26,6 @@ if TYPE_CHECKING:
     from chat_downloader.utils.retry_utils import RetryPolicy
 
 _RETRYABLE_HTTP_STATUS_CODES: frozenset[int] = frozenset({403, 429})
-
-_CHALLENGE_HINTS: tuple[str, ...] = (
-    "captcha",
-    "verify you are human",
-    "unusual traffic",
-    "recaptcha",
-    "challenge",
-)
-
-
-def _contains_challenge_text(text: object) -> bool:
-    if not isinstance(text, str):
-        return False
-    return contains_any_hint(text, _CHALLENGE_HINTS)
 
 
 def _captcha_guidance_message(*, endpoint: str, detail: str) -> str:
@@ -115,7 +101,6 @@ def _handle_http_error(
     allow_terminal_error: bool = True,
 ) -> bool:
     """Retry transient HTTP errors; leave terminal JSON errors to the caller."""
-    response_text = getattr(response, "text", "")
     error_message = f"HTTP {response.status_code}"
     try:
         payload = response.json()
@@ -128,9 +113,7 @@ def _handle_http_error(
             error_message = f"{error_message}: {yt_error}"
     except (JSONDecodeError, ValueError):
         pass
-    if _contains_challenge_text(error_message) or _contains_challenge_text(
-        response_text
-    ):
+    if is_challenge_response(response, error_message=error_message):
         raise CaptchaChallengeRequired(
             _captcha_guidance_message(endpoint=continuation_url, detail=error_message),
         )
@@ -174,7 +157,7 @@ def _handle_json_api_error(
     )
     error_message = error.get("message")
     detail = f"YouTube API error ({error_code}): {error_message}"
-    if _contains_challenge_text(error_message):
+    if contains_challenge_text(error_message):
         raise CaptchaChallengeRequired(
             _captcha_guidance_message(endpoint=continuation_url, detail=detail),
         )

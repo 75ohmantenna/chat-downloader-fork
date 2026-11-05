@@ -11,28 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from chat_downloader.errors import InvalidParameter
-
 from .remap import Remapper
-
-
-def check_for_invalid_types(
-    messages_types_to_add: list[str],
-    allowed_message_types: list[str],
-) -> None:
-    """Raise if any requested message type is not allowed.
-
-    Args:
-        messages_types_to_add: Message type names requested by the caller.
-        allowed_message_types: Valid type names for this site.
-
-    Raises:
-        InvalidParameter: If any requested type is not in the allowed set.
-    """
-    invalid_types = set(messages_types_to_add) - set(allowed_message_types)
-    if invalid_types:
-        msg = f"Invalid types specified: {invalid_types}"
-        raise InvalidParameter(msg)
 
 
 def get_mapped_keys(remapping: dict[str, Any]) -> set[Any]:

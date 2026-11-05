@@ -39,9 +39,6 @@ class _DummyDownloader:
         self._request_profile = "youtube_web"
         self._auto_profile_fallback = True
 
-    def check_for_invalid_types(self, *_a, **_kw) -> None:
-        pass
-
     def update_session_headers(self, headers) -> None:
         self.session.headers.update(headers)
 

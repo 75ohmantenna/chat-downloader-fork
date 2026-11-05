@@ -24,7 +24,6 @@ from chat_downloader.errors import (
 )
 from chat_downloader.redaction import BoundedSampleCapture, capture_debug_sample
 from chat_downloader.request_profiles import get_next_request_profile
-from chat_downloader.sites.common import check_for_invalid_types
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_int, get_str
 from chat_downloader.utils.time_utils import ensure_seconds
@@ -40,7 +39,6 @@ from .client_context import (
 )
 from .client_requests_bootstrap import merge_bootstrap_diagnostics
 from .client_requests_continuation import _get_continuation_info
-from .constants_message import _MESSAGE_TYPES
 from .constants_patterns import (
     _YT_HOME,
     _YT_MAX_NO_PROGRESS_POLLS,
@@ -364,8 +362,6 @@ class _ContinuationLoop:
             continuation, api_key, is_replay=is_replay
         )
 
-        messages_types_to_add = params.message_types or []
-        check_for_invalid_types(messages_types_to_add, _MESSAGE_TYPES)
         msg_filter, time_filter = _build_message_filters(
             params,
             is_replay=is_replay,
