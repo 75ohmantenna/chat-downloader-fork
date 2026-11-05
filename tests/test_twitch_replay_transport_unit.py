@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from functools import partial
 from pathlib import Path
+from threading import Event
 from unittest.mock import Mock
 
 import pytest
@@ -15,6 +16,7 @@ from chat_downloader.sites.twitch.graphql_client import (
     _PersistedQueryUnavailable,
 )
 from chat_downloader.sites.twitch.replay_transport import get_chat_messages_by_vod_id
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 
 def _video_payload(comments, **metadata):
@@ -150,3 +152,41 @@ def test_replay_fallback_composes_persisted_and_full_document_requests() -> None
     assert ["extensions" in request for request in requests] == [True, True, False]
     assert requests[2]["variables"] == {"vodId": "123", "after": "legacy-cursor"}
     assert comments == {"edges": edges, "pageInfo": {"hasNextPage": True}}
+
+
+@pytest.mark.parametrize("blocked_request", [1, 2], ids=["primary", "mobile"])
+def test_timed_replay_does_not_start_fallback_after_close(blocked_request):
+    entered = Event()
+    release = Event()
+    hash_error = [{"errors": [{"message": "PersistedQueryNotFound"}]}]
+
+    def respond(*_args, **_kwargs):
+        if session_post.call_count == blocked_request:
+            entered.set()
+            assert release.wait(timeout=2)
+        payload = (
+            hash_error
+            if session_post.call_count <= blocked_request
+            else _video_payload({"edges": []})
+        )
+        return Mock(status_code=200, text="", json=Mock(return_value=payload))
+
+    session_post = Mock(side_effect=respond)
+
+    def source_items():
+        yield _replay(partial(_download_gql, session_post))
+
+    source = source_items()
+    timed = TimedGenerator(source)
+    try:
+        assert entered.wait(timeout=2)
+        timed.close()
+    finally:
+        release.set()
+        timed.close()
+        timed._worker.join(timeout=2)
+
+    assert not timed._worker.is_alive()
+    assert source.gi_frame is None
+    assert session_post.call_count == blocked_request
+    assert timed._result_queue.empty()

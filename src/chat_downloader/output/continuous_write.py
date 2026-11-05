@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Self
 from chat_downloader.debugging import log
 from chat_downloader.output.writers import (
     _WRITER_CLASSES,
+    MODE_APPEND_TEXT,
     MODE_WRITE_TEXT,
     ContinuousFileWriter,
     JsonLinesContinuousWriter,
@@ -141,7 +142,8 @@ class ContinuousWriter:
             directory = path.parent
             if directory.name:
                 directory.mkdir(parents=True, exist_ok=True)
-            with path.open(MODE_WRITE_TEXT, encoding="utf-8"):
+            file_mode = MODE_WRITE_TEXT if self.overwrite else MODE_APPEND_TEXT
+            with path.open(file_mode, encoding="utf-8"):
                 pass
 
         writer_class = _WRITER_CLASSES[extension]

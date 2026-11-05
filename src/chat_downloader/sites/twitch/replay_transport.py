@@ -14,6 +14,7 @@ from chat_downloader.utils.json_types import (
     get_list,
     get_str,
 )
+from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
 from .graphql_client import _PersistedQueryUnavailable
 
@@ -65,6 +66,7 @@ def get_chat_messages_by_vod_id(
         }
     ]
     try:
+        _check_polling_cancelled()
         result = download_gql_func(query)
     except _PersistedQueryUnavailable:
         fallback_variables: JSONDict = {"vodId": vod_id}
@@ -74,6 +76,7 @@ def get_chat_messages_by_vod_id(
             fallback_variables["contentOffsetSeconds"] = int(
                 content_offset_seconds or 0
             )
+        _check_polling_cancelled()
         result = download_gql_func(
             [
                 {
@@ -82,6 +85,7 @@ def get_chat_messages_by_vod_id(
                 }
             ]
         )
+        _check_polling_cancelled()
         fallback_comments, info = _validated_comments(result)
         edges = get_list(fallback_comments, "edges")
         final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
@@ -92,4 +96,5 @@ def get_chat_messages_by_vod_id(
         }
         return normalized_comments, info
 
+    _check_polling_cancelled()
     return _validated_comments(result)

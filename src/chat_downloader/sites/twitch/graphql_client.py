@@ -18,6 +18,7 @@ from chat_downloader.errors import (
 from chat_downloader.metadata import __version__
 from chat_downloader.utils.json_types import get_list, get_str
 from chat_downloader.utils.string_utils import contains_any_hint
+from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
 from .constants import (
     CLIENT_ID,
@@ -96,11 +97,13 @@ def _download_base_gql(
     }
     if auth_token:
         headers["Authorization"] = "OAuth " + auth_token
+    _check_polling_cancelled()
     response = session_post(
         GQL_API_URL,
         json=ops,
         headers=headers,
     )
+    _check_polling_cancelled()
     status_code = getattr(response, "status_code", 200)
     body_text = getattr(response, "text", "")
     if status_code >= 400 and _contains_challenge_text(body_text):
@@ -114,7 +117,9 @@ def _download_base_gql(
         )
     if status_code >= 400:
         response.raise_for_status()
-    return response.json()
+    result = response.json()
+    _check_polling_cancelled()
+    return result
 
 
 def _describe_operation_names(operation_names: list[str] | None) -> str:

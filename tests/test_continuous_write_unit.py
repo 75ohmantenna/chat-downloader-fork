@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import gc
 import os
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -92,6 +93,49 @@ def test_existing_file_policy(
 
 
 @pytest.mark.parametrize(
+    ("extension", "first", "second", "expected"),
+    [
+        (
+            "jsonl",
+            {"writer": "B"},
+            {"writer": "A"},
+            '{"writer": "B"}\n{"writer": "A"}\n',
+        ),
+        ("txt", "writer B", "writer A", "writer B\nwriter A\n"),
+    ],
+    ids=["jsonl", "txt"],
+)
+@pytest.mark.parametrize("lazy", [False, True], ids=["eager", "lazy"])
+def test_append_initialization_preserves_competing_writer(
+    tmp_path, extension, first, second, expected, lazy
+):
+    path = tmp_path / "nested" / f"test.{extension}"
+    assert not path.exists()
+    original_exists = Path.exists
+    interleaved = False
+
+    def exists_after_competing_write(candidate):
+        nonlocal interleaved
+        exists = original_exists(candidate)
+        if candidate == path and not exists and not interleaved:
+            interleaved = True
+            # A has observed absence; B creates, writes, and closes before A opens.
+            with ContinuousWriter(str(path), overwrite=False) as competing:
+                competing.write(first)
+        return exists
+
+    with (
+        patch.object(Path, "exists", exists_after_competing_write),
+        ContinuousWriter(str(path), overwrite=False, lazy_initialise=lazy) as writer,
+    ):
+        assert writer.is_initialised() is (not lazy)
+        writer.write(second)
+
+    assert interleaved
+    assert path.read_text(encoding="utf-8") == expected
+
+
+@pytest.mark.parametrize(
     ("filename", "options", "message"),
     [
         *[
@@ -125,11 +169,14 @@ def test_factory_rejects_invalid_output_without_creating_file(
 )
 @pytest.mark.parametrize("lazy", [False, True])
 @pytest.mark.parametrize("options", [{"sort_keys": True}, {}])
+@pytest.mark.parametrize("overwrite", [False, True])
 def test_factory_selection_and_initialization(
-    tmp_path, extension, item, expected, output_mode, lazy, options
+    tmp_path, extension, item, expected, output_mode, lazy, options, overwrite
 ) -> None:
     path = tmp_path / "nested" / "deep" / f"test.{extension}"
-    with ContinuousWriter(str(path), lazy_initialise=lazy, **options) as writer:
+    with ContinuousWriter(
+        str(path), overwrite=overwrite, lazy_initialise=lazy, **options
+    ) as writer:
         assert writer.is_initialised() is (not lazy)
         assert path.exists() is (not lazy)
         writer.write(item)

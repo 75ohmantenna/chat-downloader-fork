@@ -16,6 +16,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 - Preserve provider identity and live formatting after YouTube channel discovery.
 - Skip malformed Kick event names without terminating live capture.
 - Stop Kick history retries and manual retry prompts after cancellation.
+- Preserve competing captures when append output is created concurrently.
+- Cancel retry sleeps and terminal prompts with their owning timed capture.
+- Stop Twitch replay page and fallback requests after cancellation, including
+  pages whose messages are all filtered out.
+- Keep checkpoint exclusion through manifest hashing and creation so reports
+  describe the verified capture prefix.
 
 ## 2.6.0 — 2026-10-30
 

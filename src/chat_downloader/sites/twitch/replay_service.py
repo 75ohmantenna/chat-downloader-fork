@@ -27,6 +27,7 @@ from chat_downloader.sites.retry import _attempt_numbers
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_float, get_list, get_str
 from chat_downloader.utils.time_utils import ensure_seconds
+from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
 from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
 from .constants import TWITCH_DEBUG_SAMPLE_LIMIT, build_known_comment_keys
@@ -173,14 +174,19 @@ def _fetch_gql_one[T](
     """Return ``fetch_fn()`` with retries; raise when retries are exhausted."""
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            return fetch_fn()
+            _check_polling_cancelled()
+            result = fetch_fn()
         except (
             JSONDecodeError,
             RequestException,
             KeyError,
             ParsingError,
         ) as error:
+            _check_polling_cancelled()
             downloader.retry(attempt_number, error=error, request=request)
+        else:
+            _check_polling_cancelled()
+            return result
     raise RetriesExceeded(request.max_attempts)  # pragma: no cover
 
 
@@ -195,7 +201,8 @@ def _fetch_vod_page(
     """Return a VOD page's ``(comments, info)`` with retries; raise on exhaustion."""
     for attempt_number in _attempt_numbers(request.max_attempts):
         try:
-            return fetch_fn(
+            _check_polling_cancelled()
+            result = fetch_fn(
                 downloader._session_post,
                 downloader._download_gql,
                 vod_id,
@@ -203,7 +210,11 @@ def _fetch_vod_page(
                 content_offset,
             )
         except (JSONDecodeError, RequestException, ParsingError) as error:
+            _check_polling_cancelled()
             downloader.retry(attempt_number, error=error, request=request)
+        else:
+            _check_polling_cancelled()
+            return result
     raise RetriesExceeded(request.max_attempts)  # pragma: no cover
 
 
@@ -280,6 +291,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
             creator_channel_id = multi_get(info or {}, "creator", "channel", "id")
             next_cursor = cursor
             for edge_item in edges:
+                _check_polling_cancelled()
                 if isinstance(edge_item, dict):
                     next_cursor = get_str(edge_item, "cursor") or next_cursor
             pagination_stalled = (
@@ -298,6 +310,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                 )
             cursor = next_cursor
             for edge_item in edges:
+                _check_polling_cancelled()
                 if not isinstance(edge_item, dict):
                     state["parse_error"] = cast("int", state.get("parse_error", 0)) + 1
                     continue
@@ -312,6 +325,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
                     effective_logger,
                     state,
                 )
+                _check_polling_cancelled()
                 if edge_action == "stop":
                     return
                 if edge_action == "skip" or pagination_stalled:

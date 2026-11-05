@@ -90,6 +90,14 @@ Provider diagnostics remain available on the returned `Chat` and appear in
 debug summaries, including failed runs; normal message output and file formats
 are unchanged.
 
+Timed retry waits observe the owning worker's stop event, including zero-delay
+retries and manual terminal prompts. Console reads serialize ownership with
+cancellable acquisition, preserve decoded and partially entered input between
+polls, and restore descriptor state on exit. Cancellation does not flush the
+terminal. Twitch replay checks cancellation around page and fallback
+requests and between filtered edges, so a non-yielding page does not bypass stop
+delivery. An already-running HTTP call still finishes under its transport timeout.
+
 The first CLI interrupt is deferred across output dispatch and run/checkpoint
 accounting so a signal cannot split successful writes from their counters.
 `Chat` temporarily enables immediate interruption around provider reads; nested
@@ -105,6 +113,13 @@ text append mode also terminates an existing final line before appending. Output
 path aliases resolving to the same file are attached only once. Writer targets
 are compared after `{title}`/`{id}` expansion; existing hard links are compared
 by device and inode.
+
+Append initialization creates missing files without a truncating open, preserving
+records created by another writer after the existence check. This is not a
+general concurrent-append guarantee: tail repair and record writes still require
+exclusive ownership of each output file. Checkpointed runs retain their existing
+checkpoint-name lock through manifest artifact hashing and exclusive report
+creation, then release it even when report creation fails.
 
 Kick VOD and clip replay traverses reverse cursors and buffers the selected
 history in a temporary spool before chronological output. Startup and reconnect

@@ -527,13 +527,13 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
                 verify_after_error=verify_after_error,
             )
 
-        _complete_run_record(
-            chat,
-            run_config,
-            result,
-            manifest,
-            checkpoint,
-            checkpoint_bound=checkpoint_bound,
-        )
+            _complete_run_record(
+                chat,
+                run_config,
+                result,
+                manifest,
+                checkpoint,
+                checkpoint_bound=checkpoint_bound,
+            )
 
     return result

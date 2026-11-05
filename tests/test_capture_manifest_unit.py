@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
+from chat_downloader.runtime.capture_checkpoint import checkpoint_lock
 from chat_downloader.runtime.capture_manifest import RunManifest, is_completed_replay
 from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.models import Chat
@@ -65,6 +67,146 @@ def test_manifest_certifies_closed_files_and_completed_run(
         artifact = tmp_path / item["file_name"].split("/")[-1]
         assert item["sha256"] == hashlib.sha256(artifact.read_bytes()).hexdigest()
     assert "Record 1" not in (tmp_path / "run.json").read_text()
+
+
+@pytest.mark.parametrize("boundary", ["hash", "create"])
+@pytest.mark.parametrize(
+    "outcome", ["complete", "capture-error", "interrupt", "close-error"]
+)
+def test_checkpoint_lease_excludes_competing_capture_through_manifest(
+    tmp_path, monkeypatch, params, boundary, outcome
+):
+    path = tmp_path / "run.json"
+    outputs = [Path(name) for name in params["output"]]
+    attempts = []
+    entered = False
+    prefixes = {}
+    creation_attempts = []
+    original_open = os.open
+    original_path_open = Path.open
+
+    class PrefixDownloader(Downloader):
+        records = Downloader.records[:2]
+
+        def close(self):
+            if outcome == "close-error":
+                raise OSError("close failed")
+            super().close()
+
+    if outcome == "capture-error":
+        monkeypatch.setattr(PrefixDownloader, "failure", ValueError("capture failed"))
+    elif outcome == "interrupt":
+        monkeypatch.setattr(PrefixDownloader, "failure", KeyboardInterrupt())
+
+    def compete():
+        nonlocal entered
+        entered = True
+        prefixes.update((output, output.read_bytes()) for output in outputs)
+        attempts.append(execute_run(Downloader, **params))
+
+    def open_artifact(name, flags, *args, **kwargs):
+        if (
+            boundary == "hash"
+            and not entered
+            and Path(name) in outputs
+            and flags == os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+        ):
+            compete()
+        return original_open(name, flags, *args, **kwargs)
+
+    def open_report(self, mode="r", *args, **kwargs):
+        if self == path and mode == "x":
+            creation_attempts.append(self)
+            if boundary == "create":
+                compete()
+        return original_path_open(self, mode, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "chat_downloader.runtime.capture_manifest.os",
+        SimpleNamespace(**(vars(os) | {"open": open_artifact})),
+    )
+    monkeypatch.setattr(Path, "open", open_report)
+
+    result = execute_run(PrefixDownloader, **params, run_manifest=str(path))
+
+    assert result.success is (outcome == "complete")
+    assert result.message_count == 2
+    assert len(attempts) == 1
+    assert not attempts[0].success
+    assert attempts[0].message_count == 0
+    assert "checkpoint.json.lock" in attempts[0].error_message
+    assert creation_attempts == [path]
+    report = load_json(path)
+    assert report["message_count"] == 2
+    for item in report["outputs"]:
+        output = Path(item["file_name"])
+        assert item["records_written"] == 2
+        assert item["sha256"] == hashlib.sha256(prefixes[output]).hexdigest()
+        assert output.read_bytes() == prefixes[output]
+    with checkpoint_lock(params["resume"]):
+        assert (tmp_path / "checkpoint.json.lock").exists()
+    assert not (tmp_path / "checkpoint.json.lock").exists()
+
+
+@pytest.mark.parametrize("boundary", ["hash", "create"])
+@pytest.mark.parametrize(
+    "failure",
+    [
+        OSError("manifest failed"),
+        ValueError("manifest failed"),
+        RuntimeError("manifest failed"),
+        KeyboardInterrupt(),
+    ],
+    ids=["os-error", "value-error", "unexpected-error", "interrupt"],
+)
+def test_checkpoint_lease_covers_failed_manifest_and_is_released(
+    tmp_path, monkeypatch, params, boundary, failure
+):
+    path = tmp_path / "run.json"
+    outputs = [Path(name) for name in params["output"]]
+    attempts = []
+    original_open = os.open
+    original_path_open = Path.open
+
+    def fail_manifest():
+        attempts.append(boundary)
+        with pytest.raises(FileExistsError), checkpoint_lock(params["resume"]):
+            pass
+        raise failure
+
+    def open_artifact(name, flags, *args, **kwargs):
+        if (
+            boundary == "hash"
+            and Path(name) in outputs
+            and flags == os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)
+        ):
+            fail_manifest()
+        return original_open(name, flags, *args, **kwargs)
+
+    def open_report(self, mode="r", *args, **kwargs):
+        if self == path and mode == "x" and boundary == "create":
+            fail_manifest()
+        return original_path_open(self, mode, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "chat_downloader.runtime.capture_manifest.os",
+        SimpleNamespace(**(vars(os) | {"open": open_artifact})),
+    )
+    monkeypatch.setattr(Path, "open", open_report)
+
+    if isinstance(failure, (OSError, ValueError)):
+        result = execute_run(Downloader, **params, run_manifest=str(path))
+        assert not result.success
+        assert result.failure_stage == "manifest"
+        assert result.error_message == f"Unable to write run manifest: {failure}"
+    else:
+        with pytest.raises(type(failure)):
+            execute_run(Downloader, **params, run_manifest=str(path))
+    assert attempts == [boundary]
+    assert not path.exists()
+    with checkpoint_lock(params["resume"]):
+        assert (tmp_path / "checkpoint.json.lock").exists()
+    assert not (tmp_path / "checkpoint.json.lock").exists()
 
 
 @pytest.mark.parametrize("reasons", [{"invalid messages": 2, "PRIVATE": 1}, "PRIVATE"])

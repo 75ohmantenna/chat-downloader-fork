@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import threading
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -12,23 +13,6 @@ import pytest
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.utils import retry_utils
 from chat_downloader.utils.retry_utils import RetryPolicy
-
-
-def test_negative_retry_timeout_uses_manual_pause(monkeypatch) -> None:
-    pause = Mock()
-    timed_input = Mock()
-
-    monkeypatch.setattr("chat_downloader.utils.retry_utils.pause", pause)
-    monkeypatch.setattr("chat_downloader.utils.retry_utils.timed_input", timed_input)
-    monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: True
-    )
-
-    policy = RetryPolicy(max_attempts=3, retry_timeout=-1, interruptible_retry=True)
-    policy.wait(1)
-
-    pause.assert_called_once_with()
-    timed_input.assert_not_called()
 
 
 def test_negative_retry_timeout_sleep_text_mentions_manual_continue() -> None:
@@ -104,8 +88,8 @@ def test_manual_retry_reports_eof_after_tty_detaches(monkeypatch) -> None:
         "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: True
     )
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils.pause",
-        lambda: (_ for _ in ()).throw(EOFError()),
+        "builtins.input",
+        lambda _prompt: (_ for _ in ()).throw(EOFError()),
     )
     with pytest.raises(ChatDownloaderError, match="input closed"):
         RetryPolicy(retry_timeout=-1).wait(1)
@@ -129,3 +113,52 @@ def test_sleep_text_respects_interruptible_override(attempt) -> None:
         policy.sleep_text(attempt, interruptible=True)
         == "(sleep for 1.0s or press Enter)"
     )
+
+
+def test_default_retry_wait_unwinds_when_stop_arrives_during_sleep(monkeypatch):
+    from chat_downloader.utils.timed_generator import (
+        _POLLING_STOP_EVENT,
+        _PollingCancelled,
+    )
+
+    stopped = threading.Event()
+
+    def cancel_during_wait(_seconds):
+        stopped.set()
+        return True
+
+    monkeypatch.setattr(stopped, "wait", cancel_during_wait)
+    monkeypatch.setattr(retry_utils.time, "sleep", lambda _seconds: None)
+    token = _POLLING_STOP_EVENT.set(stopped)
+    try:
+        with pytest.raises(_PollingCancelled):
+            RetryPolicy(retry_timeout=60, interruptible_retry=False).wait(1)
+    finally:
+        _POLLING_STOP_EVENT.reset(token)
+
+
+def test_retry_wait_checks_stop_after_injected_sleep():
+    from chat_downloader.utils.timed_generator import (
+        _POLLING_STOP_EVENT,
+        _PollingCancelled,
+    )
+
+    stopped = threading.Event()
+    token = _POLLING_STOP_EVENT.set(stopped)
+    try:
+        with pytest.raises(_PollingCancelled):
+            RetryPolicy(retry_timeout=0, interruptible_retry=False).wait(
+                1, sleep_func=lambda _seconds: stopped.set()
+            )
+    finally:
+        _POLLING_STOP_EVENT.reset(token)
+
+
+def test_untimed_manual_retry_keeps_prompt_and_enter_behavior(monkeypatch):
+    prompts = []
+    monkeypatch.setattr(retry_utils, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(
+        "builtins.input", lambda prompt: prompts.append(prompt) or "ready"
+    )
+    RetryPolicy(retry_timeout=-1).wait(1)
+    assert prompts == ["Press Enter to continue..."]

@@ -24,6 +24,13 @@ class _PollingCancelled(BaseException):
     """Unwind a provider wait after its timed worker is stopped."""
 
 
+def _check_polling_cancelled() -> None:
+    """Raise when the current timed worker has been asked to stop."""
+    stop_event = _POLLING_STOP_EVENT.get()
+    if stop_event is not None and stop_event.is_set():
+        raise _PollingCancelled
+
+
 class TimedGenerator:
     """Wrap generators with timers, stopping after the given inactivity period."""
 
@@ -367,6 +374,7 @@ class TimedGenerator:
 
 def polling_sleep(secs: float, poll_time: float = POLLING_TIME) -> None:
     """Sleep in polling intervals, or until the owning timed worker stops."""
+    _check_polling_cancelled()
     if secs <= 0:
         return
 
@@ -374,6 +382,7 @@ def polling_sleep(secs: float, poll_time: float = POLLING_TIME) -> None:
     if stop_event is not None:
         if stop_event.wait(secs):
             raise _PollingCancelled
+        _check_polling_cancelled()
         return
 
     start_time = time.monotonic()

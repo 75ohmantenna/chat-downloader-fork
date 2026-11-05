@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from threading import Event
 from types import SimpleNamespace
 from typing import Any, cast
@@ -500,6 +501,171 @@ def test_timed_replay_closes_suspended_source_from_consumer(downloader, monkeypa
         timed._worker.join(timeout=2)
     assert not timed._worker.is_alive()
     assert fetch.call_count == 2
+
+
+@pytest.mark.parametrize("stop", ["timeout", "close"])
+@pytest.mark.parametrize("offset", [None, 15.0], ids=["vod", "clip"])
+def test_timed_replay_stops_before_filtered_page_advances(
+    downloader, monkeypatch, stop, offset
+):
+    entered = Event()
+    release = Event()
+    connections = []
+    connect = sqlite3.connect
+
+    def track_connection(*args, **kwargs):
+        connection = connect(*args, **kwargs)
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(replay_service.sqlite3, "connect", track_connection)
+    edge = _edge("filtered", "fresh-cursor")
+    edge["node"].update(
+        {
+            "createdAt": "2026-08-31T00:00:00Z",
+            "contentOffsetSeconds": (offset or 0) + 1,
+            "commenter": {"id": "viewer-1", "login": "viewer"},
+            "message": {"fragments": [{"text": "excluded text"}]},
+        }
+    )
+
+    def fetch_page(_post, _download, _vod_id, cursor, _content_offset):
+        if cursor is None:
+            entered.set()
+            assert release.wait(timeout=2)
+            return _response([edge], True)
+        return _response([], False)
+
+    fetch = Mock(side_effect=fetch_page)
+    diagnostics: dict[str, object] = {}
+    source = replay_service.iter_vod_chat_messages(
+        cast("Any", downloader),
+        "vod123",
+        _request(message_groups=["subscriptions"]),
+        max_duration=120,
+        offset=offset,
+        fetch_messages=cast("replay_service._FetchMessages", fetch),
+        diagnostics=diagnostics,
+    )
+    on_timeout = Mock()
+    timed = TimedGenerator(source, timeout=60, on_timeout=on_timeout)
+    try:
+        assert entered.wait(timeout=2)
+        if stop == "timeout":
+            timed._timeout_deadline = 0
+            timed._timeout_expired.set()
+            with pytest.raises(StopIteration):
+                next(timed)
+        else:
+            timed.close()
+        assert timed._stop_requested.is_set()
+        assert source.gi_frame is not None
+    finally:
+        release.set()
+        timed.close()
+        timed._worker.join(timeout=2)
+
+    assert not timed._worker.is_alive()
+    assert source.gi_frame is None
+    assert len(connections) == 1
+    with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+        connections[0].execute("SELECT 1")
+    assert fetch.call_count == 1
+    assert diagnostics == {}
+    assert timed._result_queue.empty()
+    if stop == "timeout":
+        assert timed._finish_reason == "timeout"
+        assert timed.deadline_prefetch_summary() == (0, True)
+        on_timeout.assert_called_once_with()
+    else:
+        on_timeout.assert_not_called()
+
+
+def test_timed_replay_stops_between_filtered_edges(downloader, monkeypatch):
+    entered = Event()
+    release = Event()
+    process_edge = replay_service._process_vod_edge
+    processed = []
+
+    def process_then_pause(*args, **kwargs):
+        result = process_edge(*args, **kwargs)
+        processed.append(args[0]["node"]["id"])
+        if len(processed) == 1:
+            assert result == (None, "skip")
+            entered.set()
+            assert release.wait(timeout=2)
+        return result
+
+    monkeypatch.setattr(replay_service, "_process_vod_edge", process_then_pause)
+    fetch = Mock(
+        side_effect=[
+            _response([_edge("first", "a"), _edge("second", "b")], True),
+            _response([], False),
+        ]
+    )
+    source = replay_service.iter_vod_chat_messages(
+        cast("Any", downloader),
+        "vod123",
+        _request(message_groups=["subscriptions"]),
+        max_duration=120,
+        fetch_messages=cast("replay_service._FetchMessages", fetch),
+    )
+    timed = TimedGenerator(source)
+    try:
+        assert entered.wait(timeout=2)
+        timed.close()
+    finally:
+        release.set()
+        timed.close()
+        timed._worker.join(timeout=2)
+
+    assert not timed._worker.is_alive()
+    assert source.gi_frame is None
+    assert processed == ["first"]
+    assert fetch.call_count == 1
+    assert timed._result_queue.empty()
+
+
+@pytest.mark.parametrize("metadata", [False, True], ids=["page", "metadata"])
+def test_timed_replay_does_not_retry_failed_fetch_after_close(downloader, metadata):
+    entered = Event()
+    release = Event()
+
+    def fail_after_close(*_args):
+        entered.set()
+        assert release.wait(timeout=2)
+        raise RequestException("request failed after cancellation")
+
+    fetch = Mock(side_effect=fail_after_close)
+    request = _request(max_attempts=2)
+    if metadata:
+        downloader._download_gql.side_effect = fail_after_close
+
+        def source_items():
+            yield replay_service.get_chat_by_vod_id(downloader, "vod123", request)
+
+        source = source_items()
+    else:
+        source = replay_service.iter_vod_chat_messages(
+            cast("Any", downloader),
+            "vod123",
+            request,
+            max_duration=120,
+            fetch_messages=cast("replay_service._FetchMessages", fetch),
+        )
+    timed = TimedGenerator(source)
+    try:
+        assert entered.wait(timeout=2)
+        timed.close()
+    finally:
+        release.set()
+        timed.close()
+        timed._worker.join(timeout=2)
+
+    assert not timed._worker.is_alive()
+    assert source.gi_frame is None
+    downloader.retry.assert_not_called()
+    assert (downloader._download_gql if metadata else fetch).call_count == 1
 
 
 @pytest.mark.parametrize("edges", [[], [_edge("m1", "")]])

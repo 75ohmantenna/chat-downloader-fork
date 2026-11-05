@@ -11,8 +11,12 @@ from typing import TYPE_CHECKING
 
 from chat_downloader.errors import ChatDownloaderError
 
-from .console_utils import pause
 from .conversion_utils import backoff_seconds
+from .timed_generator import (
+    _POLLING_STOP_EVENT,
+    _check_polling_cancelled,
+    polling_sleep,
+)
 from .timed_input import timed_input
 
 if TYPE_CHECKING:
@@ -72,16 +76,18 @@ class RetryPolicy:
         sleep_func: Callable[[float], None] | None = None,
     ) -> None:
         """Wait according to the policy before next retry."""
+        _check_polling_cancelled()
         seconds = self.sleep_seconds(attempt_number)
         if seconds is None:
             if not _stdin_is_interactive():
                 msg = "Manual retry requires an interactive terminal."
                 raise ChatDownloaderError(msg)
             try:
-                pause()
+                timed_input(prompt="Press Enter to continue...")
             except EOFError as error:
                 msg = "Manual retry input closed before Enter was pressed."
                 raise ChatDownloaderError(msg) from error
+            _check_polling_cancelled()
             return
 
         use_interruptible = (
@@ -89,7 +95,12 @@ class RetryPolicy:
         )
         if use_interruptible and _stdin_is_interactive():
             timed_input(seconds)
+            _check_polling_cancelled()
             return
 
-        sleep = sleep_func or time.sleep
+        _check_polling_cancelled()
+        sleep = sleep_func or (
+            time.sleep if _POLLING_STOP_EVENT.get() is None else polling_sleep
+        )
         sleep(seconds)
+        _check_polling_cancelled()

@@ -113,3 +113,85 @@ def test_youtube_poll_wait_cancellation_prevents_another_request(monkeypatch):
         assert source.deadline_prefetch_summary() == (0, True)
     finally:
         source.close()
+
+
+@pytest.mark.parametrize("stop_reason", ["timeout", "inactivity_timeout", "close"])
+def test_youtube_retry_cancellation_prevents_second_post_with_open_session(
+    monkeypatch, stop_reason
+):
+    from unittest.mock import Mock
+
+    from chat_downloader.models import ChatRequest
+    from chat_downloader.sites.youtube.client_requests_continuation import (
+        _get_continuation_info,
+    )
+    from chat_downloader.utils import retry_utils
+    from tests.youtube_third_helpers import Downloader, http_response, response
+
+    entered, release = threading.Event(), threading.Event()
+    original_seconds = retry_utils.RetryPolicy.sleep_seconds
+
+    def sleep_seconds(policy, attempt):
+        seconds = original_seconds(policy, attempt)
+        entered.set()
+        assert release.wait(2)
+        return seconds
+
+    monkeypatch.setattr(retry_utils.RetryPolicy, "sleep_seconds", sleep_seconds)
+    monkeypatch.setattr(retry_utils.time, "sleep", lambda _seconds: None)
+    downloader = Downloader()
+    downloader.session.close = Mock()
+    post = Mock(
+        side_effect=[
+            http_response(503, payload={"error": {"message": "unavailable"}}),
+            http_response(payload=response()),
+        ]
+    )
+    downloader._session_post = post
+
+    def provider():
+        yield _get_continuation_info(
+            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
+            downloader._session_post,
+            ChatRequest(max_attempts=2, retry_timeout=60),
+        )
+
+    options = {} if stop_reason == "close" else {stop_reason: 60}
+    source = TimedGenerator(provider(), **options)
+    try:
+        assert entered.wait(1)
+        if stop_reason == "close":
+            source.close()
+        else:
+            if stop_reason == "timeout":
+                source._timeout_deadline = 0
+            else:
+                source._inactivity_deadline = 0
+            assert list(source) == []
+            expected = "timeout" if stop_reason == "timeout" else "inactivity"
+            assert source._finish_reason == expected
+        release.set()
+        source._worker.join(1)
+        assert not source._worker.is_alive()
+        assert post.call_count == 1
+        downloader.session.close.assert_not_called()
+    finally:
+        release.set()
+        source.close()
+
+
+@pytest.mark.parametrize("seconds", [0, -1, 1])
+def test_polling_sleep_checks_cancellation_even_without_positive_delay(seconds):
+    from chat_downloader.utils.timed_generator import (
+        _POLLING_STOP_EVENT,
+        _PollingCancelled,
+    )
+
+    stopped = threading.Event()
+    stopped.set()
+    token = _POLLING_STOP_EVENT.set(stopped)
+    try:
+        with pytest.raises(_PollingCancelled):
+            polling_sleep(seconds)
+    finally:
+        _POLLING_STOP_EVENT.reset(token)
