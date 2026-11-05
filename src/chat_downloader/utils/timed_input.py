@@ -9,7 +9,7 @@ import io
 import sys
 import threading
 import time
-from typing import TYPE_CHECKING, Any, TextIO, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from .timed_generator import (
     _POLLING_STOP_EVENT,
@@ -143,7 +143,7 @@ except ImportError:
     def _read_posix_cancellable(  # noqa: C901 — one decoded input lifetime
         sel: selectors.BaseSelector, timeout: float | None
     ) -> str:
-        """Read through stdin's decoder without blocking on an unfinished line."""
+        """Read through stdin's decoder without blocking past its deadline."""
         descriptor = sys.stdin.fileno()
         was_blocking = os.get_blocking(descriptor)
         started = time.monotonic()
@@ -182,7 +182,11 @@ except ImportError:
                         return "".join(line)
                     if timeout is None:
                         raise EOFError
-                    polling_sleep(max(0.0, timeout - (time.monotonic() - started)))
+                    delay = max(0.0, timeout - (time.monotonic() - started))
+                    if _POLLING_STOP_EVENT.get() is None:
+                        time.sleep(delay)
+                    else:
+                        polling_sleep(delay)
                     raise TimeoutOccurred
                 else:
                     interval = (
@@ -236,18 +240,7 @@ except ImportError:
                     raise TimeoutOccurred from None
 
                 try:
-                    if _POLLING_STOP_EVENT.get() is not None:
-                        return _read_posix_cancellable(sel, timeout)
-                    started = time.monotonic()
-                    events = sel.select(timeout)
-                    if events:
-                        key, _ = events[0]
-                        line = cast("TextIO", key.fileobj).readline()
-                        if line:
-                            return line.rstrip(LF)
-                        if timeout is None:
-                            raise EOFError
-                        time.sleep(max(0.0, timeout - (time.monotonic() - started)))
+                    return _read_posix_cancellable(sel, timeout)
                 except TimeoutOccurred:
                     pass
 

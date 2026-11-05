@@ -26,6 +26,22 @@ class _FakeTimer:
         self.cancelled = True
 
 
+class _ObservedTimerLock:
+    def __init__(self, observed_thread: str) -> None:
+        self._lock = threading.RLock()
+        self._observed_thread = observed_thread
+        self.attempted = threading.Event()
+
+    def __enter__(self):
+        if threading.current_thread().name == self._observed_thread:
+            self.attempted.set()
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        self._lock.release()
+
+
 def test_timed_generator_keyboard_interrupt_no_timers_propagates() -> None:
     def gen():
         raise KeyboardInterrupt
@@ -95,9 +111,10 @@ def test_stopped_timer_uses_deadline_not_thread_liveness(timer_kind, expired):
     assert called == ([kind] if expired else [])
 
 
-def test_timed_generator_delivers_item_generated_before_inactivity_deadline(
-    monkeypatch,
+def test_timed_generator_delivers_item_generated_before_deadline(
+    monkeypatch, timer_kind
 ) -> None:
+    kind, option, _, _ = timer_kind
     published = threading.Event()
     called = []
     clock = [100.0]
@@ -114,14 +131,13 @@ def test_timed_generator_delivers_item_generated_before_inactivity_deadline(
     with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
         tg = TimedGenerator(
             iter(("queued-before-deadline",)),
-            inactivity_timeout=0.1,
-            on_inactivity_timeout=lambda: called.append("inactivity"),
+            **{option: 0.1, f"on_{option}": lambda: called.append(kind)},
         )
         try:
             assert published.wait(timeout=5)
             clock[0] += 0.15
             timer.call_args.args[1]()
-            assert tg._inactivity_expired.is_set()
+            assert getattr(tg, f"_{kind}_expired").is_set()
 
             assert next(tg) == "queued-before-deadline"
             assert called == []
@@ -178,22 +194,197 @@ def test_inactivity_timer_reschedules_at_updated_deadline() -> None:
         tg.close()
 
 
-def test_restarting_inactivity_timer_cancels_previous_timer() -> None:
+def test_restarting_timer_cancels_previous_timer(timer_kind) -> None:
+    _, option, method, _ = timer_kind
     with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
-        tg = TimedGenerator(iter(()), inactivity_timeout=60)
-        tg.start_inactivity_timer()
+        tg = TimedGenerator(iter(()), **{option: 60})
+        getattr(tg, method)()
         timer.return_value.cancel.assert_called_once()
         tg.close()
 
 
-def test_cancelled_inactivity_callback_cannot_reschedule_after_close() -> None:
+def test_restarted_real_timers_stop_after_close(timer_kind) -> None:
+    _, option, method, attribute = timer_kind
+    tg = TimedGenerator(iter(()), **{option: 60})
+    timers = [getattr(tg, attribute)]
+    try:
+        getattr(tg, method)()
+        timers.append(getattr(tg, attribute))
+        assert timers[0] is not timers[1]
+        tg.close()
+        for timer in timers:
+            timer.join(timeout=1)
+            assert not timer.is_alive()
+    finally:
+        tg.close()
+        for timer in timers:
+            timer.cancel()
+            timer.join(timeout=1)
+
+
+@pytest.mark.parametrize("callback_time", [165.0, 175.0])
+def test_cancelled_timer_callback_cannot_affect_restarted_deadline(
+    timer_kind, monkeypatch, callback_time
+) -> None:
+    kind, option, method, attribute = timer_kind
+    clock = [100.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
     with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
-        tg = TimedGenerator(iter(()), inactivity_timeout=60)
+        tg = TimedGenerator(iter(()), **{option: 60})
+        try:
+            old_callback = timer.call_args.args[1]
+            clock[0] = 110.0
+            getattr(tg, method)()
+            current_timer = getattr(tg, attribute)
+            current_callback = timer.call_args.args[1]
+
+            clock[0] = callback_time
+            old_callback()
+
+            assert timer.call_count == 2
+            assert getattr(tg, attribute) is current_timer
+            assert getattr(tg, f"_{kind}_deadline") == 170.0
+            assert not getattr(tg, f"_{kind}_expired").is_set()
+            assert tg._timeout_reason(169.0) is None
+            assert tg._timeout_reason(170.0) == kind
+
+            clock[0] = 170.0
+            current_callback()
+            assert getattr(tg, f"_{kind}_expired").is_set()
+        finally:
+            tg.close()
+
+
+@pytest.mark.parametrize("shutdown", ["close", "_cancel_timers"])
+def test_stopped_timer_cannot_restart_or_reset_expiry(timer_kind, shutdown) -> None:
+    kind, option, method, attribute = timer_kind
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(iter(()), **{option: 60})
+        try:
+            current_timer = getattr(tg, attribute)
+            expired = getattr(tg, f"_{kind}_expired")
+            expired.set()
+            deadline = getattr(tg, f"_{kind}_deadline")
+            getattr(tg, shutdown)()
+
+            getattr(tg, method)()
+            tg.reset_inactivity_timer()
+
+            assert timer.call_count == 1
+            assert getattr(tg, attribute) is current_timer
+            assert getattr(tg, f"_{kind}_deadline") == deadline
+            assert expired.is_set()
+        finally:
+            tg.close()
+
+
+def test_cancelled_timer_callback_cannot_expire_or_reschedule_after_close(
+    timer_kind,
+) -> None:
+    kind, option, _, _ = timer_kind
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(iter(()), **{option: 60})
         callback = timer.call_args.args[1]
         tg.close()
         callback()
         assert timer.call_count == 1
-        assert not tg._inactivity_expired.is_set()
+        assert not getattr(tg, f"_{kind}_expired").is_set()
+
+
+@pytest.mark.parametrize("transition", ["restart", "close", "_cancel_timers"])
+def test_waiting_timer_callback_rechecks_ownership_after_transition(
+    timer_kind, transition
+) -> None:
+    kind, option, method, _ = timer_kind
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(iter(()), **{option: 60})
+        lock = _ObservedTimerLock("waiting-timer-callback")
+        tg._timer_lock = lock
+        callback = timer.call_args.args[1]
+        callback_thread = threading.Thread(
+            target=callback, name="waiting-timer-callback", daemon=True
+        )
+        try:
+            with lock:
+                callback_thread.start()
+                assert lock.attempted.wait(timeout=1)
+                if transition == "restart":
+                    getattr(tg, method)()
+                else:
+                    getattr(tg, transition)()
+            callback_thread.join(timeout=1)
+
+            assert not callback_thread.is_alive()
+            assert not getattr(tg, f"_{kind}_expired").is_set()
+            assert timer.call_count == (2 if transition == "restart" else 1)
+        finally:
+            tg.close()
+            callback_thread.join(timeout=1)
+
+
+@pytest.mark.parametrize(
+    ("option", "operation"),
+    [
+        ("timeout", "start_timer"),
+        ("inactivity_timeout", "start_inactivity_timer"),
+        ("inactivity_timeout", "callback"),
+    ],
+)
+def test_timer_creation_racing_close_leaves_no_live_timer(option, operation) -> None:
+    attribute = "timer" if option == "timeout" else "inactivity_timer"
+    tg = TimedGenerator(iter(()))
+    setattr(tg, option, 60)
+    lock = _ObservedTimerLock("closing-timed-generator")
+    tg._timer_lock = lock
+    if operation == "callback":
+        with patch("chat_downloader.utils.timed_generator.threading.Timer") as initial:
+            tg.start_inactivity_timer()
+            start_operation = initial.call_args.args[1]
+    else:
+        start_operation = getattr(tg, operation)
+    timer = threading.Timer(60, lambda: None)
+    timer.daemon = True
+    constructing_timer = threading.Event()
+    allow_construction = threading.Event()
+
+    def construct_timer(_interval, callback):
+        timer.function = callback
+        constructing_timer.set()
+        allow_construction.wait(timeout=5)
+        return timer
+
+    starter = threading.Thread(target=start_operation, daemon=True)
+    closer = threading.Thread(
+        target=tg.close, name="closing-timed-generator", daemon=True
+    )
+    try:
+        with patch(
+            "chat_downloader.utils.timed_generator.threading.Timer",
+            side_effect=construct_timer,
+        ) as factory:
+            starter.start()
+            assert constructing_timer.wait(timeout=1)
+            closer.start()
+            assert lock.attempted.wait(timeout=1)
+            allow_construction.set()
+            starter.join(timeout=1)
+            closer.join(timeout=1)
+
+            assert not starter.is_alive()
+            assert not closer.is_alive()
+            assert getattr(tg, attribute) is timer
+            assert factory.call_count == 1
+            timer.join(timeout=1)
+            assert not timer.is_alive()
+    finally:
+        allow_construction.set()
+        for thread in (starter, closer):
+            if thread.ident is not None:
+                thread.join(timeout=1)
+        tg.close()
+        timer.cancel()
+        if timer.ident is not None:
+            timer.join(timeout=1)
 
 
 class _FakeQueue:

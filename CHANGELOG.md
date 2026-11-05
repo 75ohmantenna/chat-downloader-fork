@@ -22,6 +22,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   pages whose messages are all filtered out.
 - Keep checkpoint exclusion through manifest hashing and creation so reports
   describe the verified capture prefix.
+- Finish shutdown and checkpoint persistence when the first termination signal
+  arrives during finalization, retaining interrupted outcomes in run reports.
+- Cancel superseded overall timers and ignore stale callbacks and timer starts
+  after closure.
+- Bound finite POSIX retry input waits even when partial terminal input arrives
+  outside a timed capture worker.
 
 ## 2.6.0 — 2026-10-30
 

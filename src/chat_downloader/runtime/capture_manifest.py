@@ -318,6 +318,28 @@ class RunManifest:
         with self.path.open("x", encoding="utf-8") as target:
             target.write(encoded)
             target.write("\n")
+            target.flush()
+            # This outcome comparison commits the report. A first CLI signal
+            # during hashing, encoding, creation, or writing changes the run
+            # outcome synchronously; correct only this exclusively owned file.
+            # Signals after this point do not revise the committed report.
+            if (
+                payload["success"] != result.success
+                or payload["termination_reason"] != result.termination_reason
+                or payload["failure_stage"] != result.failure_stage
+            ):
+                payload.update(
+                    success=result.success,
+                    replay_complete=replay_complete(chat, result),
+                    termination_reason=result.termination_reason,
+                    failure_stage=result.failure_stage,
+                )
+                target.seek(0)
+                target.write(
+                    json.dumps(sanitize_for_log(payload), allow_nan=False, indent=2)
+                )
+                target.write("\n")
+                target.truncate()
 
 
 def validate_complete_request(chat: Chat) -> None:

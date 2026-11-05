@@ -396,9 +396,11 @@ It does not throttle changing updates or change either capture file.
 - On `SIGTERM` (e.g. `systemd` stopping the service, or `kill <pid>`) the CLI
   shuts down gracefully. The first SIGINT or SIGTERM finishes any record already
   being written, including writer, run, and checkpoint counts, before raising
-  `KeyboardInterrupt`. Provider reads remain immediately interruptible. Sending
-  a second signal interrupts cleanup and restores the default handler for that
-  signal, allowing a subsequent signal to force termination.
+  `KeyboardInterrupt`. Provider reads remain immediately interruptible. A first
+  signal during shutdown lets cleanup, checkpoint persistence, and report writing
+  finish while marking the run interrupted. Sending a second signal interrupts
+  cleanup and restores the default handler for that signal, allowing a subsequent
+  signal to force termination.
 - When wrapping `uv run` with GNU `timeout`, use `timeout --foreground` so
   the wrapper and `uv` do not both forward the same termination signal to
   the downloader. For example, `timeout --foreground 60s uv run --locked

@@ -331,6 +331,8 @@ for item in chat:
 `TimedGenerator` transfers source exceptions to the consuming thread, including
 `SystemExit` and `GeneratorExit`. Call `close()` when stopping consumption early
 to request worker shutdown and cancel its timers.
+Restarting an overall timer cancels its predecessor; callbacks from superseded
+timers cannot expire the new deadline. Timer starts after closure do nothing.
 
 Custom `ItemFormatter` field definitions may provide a `template`, an optional
 `singular_template`, and `omit_if_false: true`. The singular template is used

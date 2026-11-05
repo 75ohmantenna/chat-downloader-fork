@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from unittest.mock import patch
 
 from chat_downloader.utils.timed_generator import TimedGenerator
 
@@ -160,3 +161,33 @@ def test_cancel_timers_still_logs_other_close_errors(monkeypatch) -> None:
     tg._cancel_timers()
 
     assert logs == [("debug", "Suppressed generator close() error: boom")]
+
+
+def test_close_releases_timer_lock_before_reentrant_stop_request() -> None:
+    stopped = threading.Event()
+
+    class ReentrantStopIterator:
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            raise StopIteration
+
+        def request_stop(self) -> None:
+            tg.start_timer()
+            tg.start_inactivity_timer()
+            tg.reset_inactivity_timer()
+            tg.close()
+            stopped.set()
+
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(ReentrantStopIterator(), timeout=60, inactivity_timeout=60)
+        closer = threading.Thread(target=tg.close, daemon=True)
+        closer.start()
+        closer.join(timeout=1)
+
+        assert not closer.is_alive()
+        assert stopped.is_set()
+        assert timer.call_count == 2
+        assert not tg._timeout_expired.is_set()
+        assert not tg._inactivity_expired.is_set()
