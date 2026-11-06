@@ -33,62 +33,6 @@ def test_safe_print_writes_to_text_stream() -> None:
     assert out.getvalue() == "a-b!"
 
 
-class _BufferCollector:
-    def __init__(self) -> None:
-        self.data = b""
-
-    def write(self, data) -> None:
-        self.data += data
-
-
-class _BinaryLikeStream:
-    mode = "wb"
-
-    def __init__(self) -> None:
-        self.writes = []
-        self.flushed = False
-
-    def write(self, text) -> None:
-        self.writes.append(text)
-
-    def flush(self) -> None:
-        self.flushed = True
-
-
-class _BufferedTextStream:
-    mode = "w"
-
-    def __init__(self, encoding=None) -> None:
-        self.buffer = _BufferCollector()
-        self.encoding = encoding
-        self.flushed = False
-
-    def flush(self) -> None:
-        self.flushed = True
-
-
-def test_safe_print_writes_to_binary_mode_stream_and_flushes() -> None:
-    out = _BinaryLikeStream()
-
-    console_utils.safe_print("hello", out=out, flush=True)
-
-    assert out.writes == ["hello\n"]
-    assert out.flushed is True
-
-
-def test_safe_print_writes_bytes_via_buffer_with_preferred_encoding(
-    monkeypatch,
-) -> None:
-    out = _BufferedTextStream(encoding=None)
-
-    monkeypatch.setattr(console_utils, "preferredencoding", lambda: "utf-8")
-
-    console_utils.safe_print("\xe9", out=out, flush=True)
-
-    assert out.buffer.data == "\xe9\n".encode()
-    assert out.flushed is True
-
-
 @pytest.mark.parametrize(
     ("encoding", "expected"),
     [
@@ -97,11 +41,59 @@ def test_safe_print_writes_bytes_via_buffer_with_preferred_encoding(
         ("utf-8", "Aé漢😀B\n".encode()),
     ],
 )
-def test_safe_print_preserves_unencodable_characters(encoding, expected) -> None:
+@pytest.mark.parametrize("errors", ["strict", "ignore", "replace"])
+def test_safe_print_preserves_unencodable_characters(
+    encoding, expected, errors
+) -> None:
     buffer = io.BytesIO()
-    out = io.TextIOWrapper(buffer, encoding=encoding)
+    out = io.TextIOWrapper(buffer, encoding=encoding, errors=errors)
     console_utils.safe_print("Aé漢😀B", out=out, flush=True)
     assert buffer.getvalue() == expected
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16", "iso2022_jp"])
+def test_safe_print_preserves_encoder_state_with_other_text_writes(encoding) -> None:
+    buffer = io.BytesIO()
+    out = io.TextIOWrapper(buffer, encoding=encoding)
+    out.write("first\n")
+    console_utils.safe_print("日本語", out=out)
+    out.write("middle\n")
+    console_utils.safe_print("last", out=out, flush=True)
+    assert buffer.getvalue().decode(encoding) == "first\n日本語\nmiddle\nlast\n"
+
+
+def test_safe_print_escapes_before_advancing_a_stateful_encoder() -> None:
+    buffer = io.BytesIO()
+    out = io.TextIOWrapper(buffer, encoding="iso2022_jp")
+    console_utils.safe_print("日本😀", out=out)
+    console_utils.safe_print("語", out=out, flush=True)
+    assert buffer.getvalue().decode("iso2022_jp") == "日本\\U0001f600\n語\n"
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16"])
+def test_safe_print_first_unencodable_record_keeps_stream_signature(encoding) -> None:
+    buffer = io.BytesIO()
+    out = io.TextIOWrapper(buffer, encoding=encoding)
+    console_utils.safe_print("\ud800", out=out, flush=True)
+    assert buffer.getvalue() == "\\ud800\n".encode(encoding)
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16"])
+def test_safe_print_explicit_encoding_preserves_repeated_records(encoding) -> None:
+    buffer = io.BytesIO()
+    out = io.TextIOWrapper(buffer, encoding="ascii")
+    console_utils.safe_print("one", out=out, encoding=encoding)
+    console_utils.safe_print("two", out=out, encoding=encoding, flush=True)
+    assert buffer.getvalue().decode(encoding) == "one\ntwo\n"
+
+
+def test_safe_print_escapes_without_changing_destination_error_policy() -> None:
+    buffer = io.BytesIO()
+    out = io.TextIOWrapper(buffer, encoding="ascii", errors="strict")
+    console_utils.safe_print("猫", out=out, flush=True)
+    assert buffer.getvalue() == b"\\u732b\n"
+    with pytest.raises(UnicodeEncodeError):
+        out.write("é")
 
 
 def test_safe_print_uses_windows_console_short_circuit(monkeypatch) -> None:

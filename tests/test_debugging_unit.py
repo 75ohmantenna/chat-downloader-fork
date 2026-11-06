@@ -84,8 +84,8 @@ def test_cli_log_timestamp_uses_utc_clock_time():
     ],
 )
 def test_supports_colour(monkeypatch, tty, platform, colorama, environment, expected):
-    stdout = object() if tty is None else SimpleNamespace(isatty=lambda: tty)
-    monkeypatch.setattr(dbg.sys, "stdout", stdout)
+    stream = object() if tty is None else SimpleNamespace(isatty=lambda: tty)
+    monkeypatch.setattr(dbg.sys, "stderr", stream)
     monkeypatch.setattr(dbg.sys, "platform", platform)
     monkeypatch.setattr(dbg, "HAS_COLORAMA", colorama)
     monkeypatch.setattr(dbg.os, "environ", environment)

@@ -108,6 +108,9 @@ for lossless downstream processing.
 When redirected stdout uses a non-UTF-8 encoding, characters it cannot represent
 are rendered as visible Python-style escapes rather than discarded. Real Windows
 consoles use the Unicode console API; JSONL and TXT files remain UTF-8.
+Redirected stdout preserves its text encoder across records, including UTF-8
+with a signature and UTF-16. JSONL rejects nonfinite numbers such as NaN and
+infinity before writing the affected record; earlier records remain intact.
 
 Output writers initialize lazily on the first record. When a successful run
 retrieves zero records, configured `.jsonl` and `.txt` files are not created.
@@ -282,6 +285,8 @@ Filtering and output:
   limits, and output parity are unaffected. `--quiet` suppresses stdout entirely.
 - `--max_messages`, `--start_time`, `--end_time` — bound the capture.
   Time bounds accept seconds or `hh:mm:ss`; an end before the start is rejected.
+  An optional leading `+` or `-` applies to the whole offset, and surrounding
+  whitespace is ignored. Signs inside colon-separated components are rejected.
   Twitch and Kick channel URLs reject time bounds because live chat cannot
   seek; use a VOD or clip URL for replay offsets, or `--timeout` to limit how
   long a live capture runs. This also applies to offline Twitch channels.
@@ -329,6 +334,8 @@ Debug and automation:
   CLI logs include UTC dates and clock times. HTTP GET and POST debug records
   report monotonic request duration, including failed requests. With streamed
   HTTP responses, duration ends when response headers are received.
+  Log color follows stderr's terminal capability independently of stdout.
+  Redirected stderr stays plain text so offline inspectors can read its summaries.
 - With `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`, Kick captures bounded,
   sanitized samples for unknown or malformed REST/Pusher payloads; see the
   Kick integration guide for storage and review guidance.

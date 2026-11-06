@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 import chat_downloader.debugging as dbg
+from chat_downloader.utils.capture_reader import read_debug_summary
 from tests.core_third_helpers import restore_loggers
 
 
@@ -22,11 +23,17 @@ def logging_state():
 
 
 @contextmanager
-def _reload_debugging(monkeypatch, *, colorama, tty=False):
+def _reload_debugging(
+    monkeypatch, *, colorama, tty=False, stdout_tty=None, environment=None
+):
     stream = io.StringIO()
     stream.isatty = lambda: tty
     with restore_loggers(), monkeypatch.context() as isolated:
-        isolated.setattr(sys, "stdout", SimpleNamespace(isatty=lambda: tty))
+        isolated.setattr(
+            sys,
+            "stdout",
+            SimpleNamespace(isatty=lambda: tty if stdout_tty is None else stdout_tty),
+        )
         isolated.setattr(sys, "stderr", stream)
         isolated.setattr(
             dbg.os,
@@ -37,6 +44,8 @@ def _reload_debugging(monkeypatch, *, colorama, tty=False):
                 if k not in {"NO_COLOR", "FORCE_COLOR"}
             },
         )
+        if environment:
+            isolated.setattr(dbg.os, "environ", {**dbg.os.environ, **environment})
         isolated.setitem(sys.modules, "colorama", colorama)
         try:
             module = importlib.reload(dbg)
@@ -56,7 +65,7 @@ def test_supports_colour_windows_registry(monkeypatch, registry):
 
     monkeypatch.setattr(dbg.sys, "platform", "win32")
     monkeypatch.setattr(dbg, "HAS_COLORAMA", False)
-    monkeypatch.setattr(dbg.sys, "stdout", SimpleNamespace(isatty=lambda: True))
+    monkeypatch.setattr(dbg.sys, "stderr", SimpleNamespace(isatty=lambda: True))
     monkeypatch.setattr(dbg.os, "environ", {})
     monkeypatch.setitem(
         sys.modules,
@@ -89,6 +98,44 @@ def test_debugging_import_renders_with_available_colour(monkeypatch, colour):
         assert "PRIVATE" not in output
         assert ("\x1b[" in output) is colour
         assert module.supports_colour() is colour
+
+
+@pytest.mark.parametrize(("stdout_tty", "stderr_tty"), [(True, False), (False, True)])
+def test_logging_colour_follows_stderr(monkeypatch, tmp_path, stdout_tty, stderr_tty):
+    summary = {"termination_reason": "completed", "message_count": 3}
+    with _reload_debugging(
+        monkeypatch,
+        colorama=SimpleNamespace(init=lambda: None),
+        tty=stderr_tty,
+        stdout_tty=stdout_tty,
+    ) as (module, stream):
+        module.install_cli_log_handler()
+        module.log("debug", f"Run summary: {summary!r}")
+        output = stream.getvalue()
+        assert ("\x1b[" in output) is stderr_tty
+        if not stderr_tty:
+            path = tmp_path / "debug.log"
+            path.write_text(output, encoding="utf-8")
+            assert read_debug_summary(path) == summary
+
+
+@pytest.mark.parametrize("no_color", [False, True])
+def test_colour_formatter_respects_stream_and_no_color(monkeypatch, no_color):
+    with _reload_debugging(
+        monkeypatch,
+        colorama=SimpleNamespace(init=lambda: None),
+        tty=True,
+        environment={"NO_COLOR": "1"} if no_color else {},
+    ) as (module, stream):
+        module.install_cli_log_handler()
+        module.log("warning", "terminal output")
+        assert ("\x1b[" in stream.getvalue()) is (not no_color)
+        stream.seek(0)
+        stream.truncate()
+        stream.isatty = lambda: False
+        module.log("warning", "redirected output")
+        assert "redirected output" in stream.getvalue()
+        assert "\x1b[" not in stream.getvalue()
 
 
 def test_debug_log_applies_testing_controls(caplog, logging_state):

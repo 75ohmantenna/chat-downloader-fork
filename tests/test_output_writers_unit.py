@@ -72,6 +72,7 @@ def test_unknown_writer_option_creates_no_output_or_parent(
     [
         [{"message": "test", "id": 99}],
         [{"a": 1, "b": "hello"}, {"x": [1, 2, 3]}, {"z": None}],
+        [{"finite": [0, -1, 1.5, 1e308, -1e-308]}, [0, {"nested": 2.5}]],
     ],
 )
 def test_jsonl_records_round_trip(jsonl_path: str, writer_class, items) -> None:
@@ -84,6 +85,44 @@ def test_jsonl_records_round_trip(jsonl_path: str, writer_class, items) -> None:
     assert [
         json.loads(line) for line in Path(jsonl_path).read_text().splitlines()
     ] == items
+
+
+@pytest.mark.parametrize("writer_class", [ContinuousWriter, JsonLinesContinuousWriter])
+@pytest.mark.parametrize("nonfinite", [float("nan"), float("inf"), float("-inf")])
+@pytest.mark.parametrize("list_root", [False, True])
+def test_jsonl_rejects_nested_nonfinite_without_writing_record(
+    tmp_path, writer_class, nonfinite, list_root
+):
+    path = tmp_path / "capture.jsonl"
+    original = '{"existing": "café"}\n'.encode()
+    path.write_bytes(original)
+    valid = {"finite": [0, -2.5, 1e308]}
+    invalid = {"nested": [{"value": nonfinite}]}
+    if list_root:
+        invalid = [invalid]
+
+    writer = writer_class(str(path), overwrite=False)
+    try:
+        writer.write(valid)
+        preserved = path.read_bytes()
+        assert preserved == original + (
+            json.dumps(valid, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        with pytest.raises(ValueError):
+            writer.write(invalid)
+        assert path.read_bytes() == preserved
+        writer.write({"after": 3.25})
+    finally:
+        writer.close()
+
+    assert path.read_bytes() == preserved + b'{"after": 3.25}\n'
+    assert [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+    ] == [
+        {"existing": "café"},
+        valid,
+        {"after": 3.25},
+    ]
 
 
 @pytest.mark.parametrize(

@@ -84,6 +84,14 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   after closure.
 - Bound finite POSIX retry input waits even when partial terminal input arrives
   outside a timed capture worker.
+- Reject nonfinite JSONL numbers before writing the affected record.
+- Preserve stdout encoder state across records, including signature encodings,
+  and retain failure status for closed help/version pipes with unbuffered output.
+- Preserve whole-offset replay-time signs around whitespace and reject signs
+  inside colon-separated components.
+- Select CLI log colors from stderr so redirected debug summaries stay readable.
+- Decode history-check output as UTF-8 independently of locale and Git settings,
+  reject malformed bytes cleanly, and escape unencodable violation subjects.
 
 ## 2.6.0 — 2026-10-30
 

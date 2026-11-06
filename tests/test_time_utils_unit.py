@@ -66,6 +66,13 @@ def test_timestamp_to_microseconds_without_fractional_part() -> None:
         ("-1:30", -90),
         ("-5:00", -300),
         ("-1:00:00", -3600),
+        (" \t-1:30\n", -90),
+        (" +1:30 ", 90),
+        ("-0:01:30", -90),
+        ("+0:01:30", 90),
+        ("1:90", 150),
+        ("1:00:00:00", 216000),
+        ("-1,000:00", -60000),
         ("1,30", 130),
         ("2,30,45", 23045),
         ("45", 45),
@@ -76,6 +83,25 @@ def test_timestamp_to_microseconds_without_fractional_part() -> None:
 )
 def test_time_to_seconds(text: str | None, expected: int) -> None:
     assert time_to_seconds(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["00:-01:00", "1:-30", "1:+30", "-1:-30", "+1:+30", "--1:30", "+-1:30"],
+)
+def test_time_offsets_reject_component_signs(text: str) -> None:
+    with pytest.raises(ValueError):
+        time_to_seconds(text)
+    sentinel = object()
+    assert ensure_seconds(text, default=sentinel) is sentinel
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [(" \t-1:30\n", -90), (" +1:30 ", 90), ("-120.5", -120.5), (" +120 ", 120)],
+)
+def test_ensure_seconds_preserves_signed_offsets(text: str, expected: float) -> None:
+    assert ensure_seconds(text) == expected
 
 
 def test_timestamp_to_microseconds_comma_decimal_matches_dot() -> None:

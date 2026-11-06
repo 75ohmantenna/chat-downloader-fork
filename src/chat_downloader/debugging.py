@@ -10,7 +10,7 @@ import sys
 import time
 from contextvars import ContextVar
 from enum import Enum
-from typing import Any, cast
+from typing import Any, TextIO, cast
 
 from .metadata import __program__ as logger_name
 from .redaction import render_for_log, sanitize_for_log
@@ -102,8 +102,8 @@ else:
     HAS_COLORAMA = True
 
 
-def supports_colour() -> bool:
-    """Return True if the running system's terminal supports color.
+def supports_colour(stream: TextIO | None = None) -> bool:
+    """Return whether the logging stream (stderr by default) supports color.
 
     Returns False otherwise.
 
@@ -137,7 +137,9 @@ def supports_colour() -> bool:
                 return bool(reg_key_value == 1)
 
     # Some stream objects do not implement isatty().
-    is_a_tty = hasattr(sys.stdout, "isatty") and sys.stdout.isatty()
+    if stream is None:
+        stream = sys.stderr
+    is_a_tty = hasattr(stream, "isatty") and stream.isatty()
 
     return is_a_tty and (
         sys.platform != "win32"
@@ -173,14 +175,15 @@ class _SafeLogFilter(logging.Filter):
         return True
 
 
-if supports_colour():
+handler = logging.StreamHandler()
+if supports_colour(handler.stream):
     import colorlog
 
-    handler = colorlog.StreamHandler()
     handler.setFormatter(
         colorlog.ColoredFormatter(
             "[%(asctime)s UTC] [%(log_color)s%(levelname)s%(reset)s] %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
+            stream=handler.stream,
             log_colors={
                 "DEBUG": "cyan",
                 "INFO": "green",
@@ -192,7 +195,6 @@ if supports_colour():
     )
 
 else:  # fallback support
-    handler = logging.StreamHandler()
     handler.setFormatter(
         logging.Formatter(
             "[%(asctime)s UTC] [%(levelname)s] %(message)s",

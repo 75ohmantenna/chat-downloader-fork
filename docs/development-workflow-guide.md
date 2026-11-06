@@ -45,6 +45,10 @@ messages that could notify an upstream issue tracker. Avoid bare issue-number
 syntax in commit subjects and bodies; describe the local change without an
 issue reference instead. Hooks use `uv run --locked` so they match the
 committed lockfile.
+The history guard requests and strictly decodes UTF-8 independently of the locale
+and Git's configured log-output encoding. Invalid UTF-8 fails the check with an
+ASCII diagnostic. Violation subjects preserve Unicode on compatible stdout
+streams and escape characters that the destination cannot encode.
 
 ## Daily workflow
 

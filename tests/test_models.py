@@ -321,7 +321,14 @@ def test_downloader_config_valid_timeouts():
 
 @pytest.mark.parametrize(
     ("start", "end"),
-    [(100, 50), ("01:00:00", 3599), (61, "0:01:00")],
+    [
+        (100, 50),
+        ("01:00:00", 3599),
+        (61, "0:01:00"),
+        (" -1:30 ", -91),
+        (-89, " -1:30 "),
+        (" +1:30 ", 89),
+    ],
 )
 def test_request_rejects_inverted_replay_window(start, end):
     with pytest.raises(
@@ -332,8 +339,24 @@ def test_request_rejects_inverted_replay_window(start, end):
 
 @pytest.mark.parametrize(
     ("start", "end"),
-    [(None, 0), (0, None), ("1:00:00", 3605), (-10, "0:00:00"), (60, "0:01:00")],
+    [
+        (None, 0),
+        (0, None),
+        ("1:00:00", 3605),
+        (-10, "0:00:00"),
+        (60, "0:01:00"),
+        (" -1:30 ", -90),
+        (-90, " -1:30 "),
+        (" -1:30 ", " +1:30 "),
+    ],
 )
 def test_request_accepts_open_and_mixed_format_windows(start, end):
     request = ChatRequest(start_time=start, end_time=end)
     assert (request.start_time, request.end_time) == (start, end)
+
+
+@pytest.mark.parametrize("field_name", ["start_time", "end_time"])
+@pytest.mark.parametrize("value", ["00:-01:00", "1:-30", "1:+30", "-1:-30"])
+def test_request_rejects_signed_time_components(field_name, value):
+    with pytest.raises(ValueError, match=field_name):
+        ChatRequest(**{field_name: value})

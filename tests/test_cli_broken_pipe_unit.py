@@ -113,12 +113,16 @@ def test_closed_pipe_preserves_subprocess_status_and_capture_cleanup(
 
 
 @pytest.mark.parametrize("arguments", [["--help"], ["--version"]])
-def test_closed_pipe_during_argument_output_exits_without_shutdown_error(arguments):
+@pytest.mark.parametrize("unbuffered", ["0", "1"])
+def test_closed_pipe_during_argument_output_exits_without_shutdown_error(
+    arguments, unbuffered
+):
     read_fd, write_fd = os.pipe()
     os.close(read_fd)
     try:
         result = subprocess.run(  # noqa: S603 - fixed local module and CLI arguments
             [sys.executable, "-m", "chat_downloader", *arguments],
+            env=dict(os.environ, PYTHONUNBUFFERED=unbuffered),
             stdout=write_fd,
             stderr=subprocess.PIPE,
             text=True,

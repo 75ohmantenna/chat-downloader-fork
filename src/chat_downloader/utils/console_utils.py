@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import codecs
 import io
 import locale
 import sys
@@ -216,7 +217,8 @@ def safe_print(
     """Print objects to stdout safely across platforms.
 
     Handles Windows encoding issues that arise with emoji and non-UTF-8
-    characters by routing output through the Windows console API when needed.
+    characters while preserving the destination's text encoder state.
+    An explicit encoding reconfigures a buffered text destination when needed.
     """
     output_string = sep.join(str(x) for x in objects) + end
 
@@ -227,12 +229,17 @@ def safe_print(
         if _windows_write_string(output_string, out):
             return
 
-    if "b" in getattr(out, "mode", "") or not hasattr(out, "buffer"):
-        out.write(output_string)
-    else:
-        enc = encoding or getattr(out, "encoding", None) or preferredencoding()
-        byt = output_string.encode(enc, "backslashreplace")
-        out.buffer.write(byt)
+    if hasattr(out, "buffer"):
+        current_encoding = getattr(out, "encoding", None) or preferredencoding()
+        enc = encoding or current_encoding
+        if encoding is not None and (
+            codecs.lookup(enc).name != codecs.lookup(current_encoding).name
+        ):
+            out.reconfigure(encoding=enc)
+        # A failed write can advance a stateful encoder without emitting bytes.
+        # Escape first, then let the destination own its single encoder lifetime.
+        output_string = output_string.encode(enc, "backslashreplace").decode(enc)
+    out.write(output_string)
 
     if flush and hasattr(out, "flush"):
         out.flush()

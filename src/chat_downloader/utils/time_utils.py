@@ -72,19 +72,24 @@ def timestamp_to_microseconds(timestamp: str) -> int:
 
 
 def time_to_seconds(time: str) -> int:
-    """Convert an 'hh:mm:ss' timestamp to seconds."""
+    """Convert a colon-separated offset with an optional whole-offset sign."""
     if not time:
         return 0
 
-    is_negative = time[0] == "-"
-    clean_time = time.replace(",", "")
+    clean_time = time.strip()
+    is_negative = clean_time.startswith("-")
+    if clean_time.startswith(("+", "-")):
+        clean_time = clean_time[1:]
+    clean_time = clean_time.replace(",", "")
 
     parts = clean_time.split(":")
+    if any("+" in part or "-" in part for part in parts):
+        msg = "Time components must be unsigned"
+        raise ValueError(msg)
     reversed_parts = reversed(parts)
 
     total: int = sum(
-        abs(int(part)) * (SECONDS_PER_MINUTE**i)
-        for i, part in enumerate(reversed_parts)
+        int(part) * (SECONDS_PER_MINUTE**i) for i, part in enumerate(reversed_parts)
     )
 
     return -total if is_negative else total

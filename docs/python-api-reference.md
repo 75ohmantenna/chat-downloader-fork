@@ -271,6 +271,9 @@ or non-finite `timeout` or `inactivity_timeout` when set; and a non-positive or
 non-finite `message_receive_timeout`. A non-finite
 `youtube_replay_poll_interval` or a value outside `0.5` through `8` also raises
 `ValueError`.
+Time offsets accept an optional leading `+` or `-` applying to the whole value.
+Surrounding whitespace is ignored; signs inside colon-separated components are
+rejected.
 
 Helpers:
 
@@ -451,8 +454,9 @@ surrogates in the final text are escaped so it can be written as UTF-8. These
 controls support natural event notices without adding presentation-only fields
 to normalized JSONL records.
 Redirected stdout uses its destination encoding and visibly escapes characters
-that encoding cannot represent, rather than silently discarding them. File
-writers always use UTF-8.
+that encoding cannot represent, rather than silently discarding them. The
+destination's text encoder is preserved across records, including encodings that
+write an initial signature. File writers always use UTF-8.
 
 The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
@@ -487,6 +491,9 @@ is synchronized to disk periodically (about every 60 seconds). JSONL accepts
 JSON-compatible values, so callers must convert `datetime` objects to UTC
 integer microseconds or ISO 8601 strings. A top-level naive `datetime` receives
 a specific `ValueError`; other raw datetimes are rejected by the JSON encoder.
+Nonfinite floats, including nested NaN and infinity values, raise `ValueError`
+before the affected record is written. Earlier records in the capture remain
+intact.
 Kick pin records reserve the top-level `timestamp` for the pin event time.
 Startup pin state has no event time and omits it; the original chat message time
 is available as `metadata.original_message_created_at`, with

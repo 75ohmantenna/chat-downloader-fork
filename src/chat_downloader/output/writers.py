@@ -317,7 +317,9 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
             msg = "File must be initialized before use"
             raise RuntimeError(msg)
         _assert_utc_aware(item)
-        self.file.write(json.dumps(item, sort_keys=self.sort_keys) + "\n")
+        self.file.write(
+            json.dumps(item, sort_keys=self.sort_keys, allow_nan=False) + "\n"
+        )
         self._persist_after_write()
         if flush:
             self.file.flush()

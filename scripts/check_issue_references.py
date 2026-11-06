@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,16 +26,21 @@ def main() -> int:
         [
             git,
             "log",
+            "--encoding=UTF-8",
             f"{FORK_HISTORY_BASE}..HEAD",
             "--format=%H%x1f%B%x1e",
         ],
         cwd=ROOT,
         check=True,
         capture_output=True,
-        text=True,
     )
+    try:
+        history = result.stdout.decode("utf-8", errors="strict")
+    except UnicodeDecodeError:
+        print("Git history output is not valid UTF-8")
+        return 2
     violations: list[str] = []
-    for raw_record in result.stdout.split("\x1e"):
+    for raw_record in history.split("\x1e"):
         record = raw_record.strip()
         if not record:
             continue
@@ -45,7 +51,9 @@ def main() -> int:
 
     if violations:
         print("issue references found in fork history:")
-        print("\n".join(violations))
+        details = "\n".join(violations)
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        print(details.encode(encoding, errors="backslashreplace").decode(encoding))
         return 1
     return 0
 

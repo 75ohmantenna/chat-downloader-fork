@@ -31,6 +31,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from types import FrameType
 
+    from _typeshed import SupportsWrite
+
 
 def _install_cli_signal_handlers() -> None:
     """Finish the active record before interrupting and flushing CLI output.
@@ -60,9 +62,19 @@ def _install_cli_signal_handlers() -> None:
             signal.signal(sig, handler)
 
 
+class _ArgumentParser(argparse.ArgumentParser):
+    """Let the CLI handle output failures, including unbuffered help/version."""
+
+    def _print_message(
+        self, message: str, file: SupportsWrite[str] | None = None
+    ) -> None:
+        if message:
+            (file or sys.stderr).write(message)
+
+
 def _build_arg_parser() -> argparse.ArgumentParser:
     """Build the fully-configured argparse parser for the CLI."""
-    parser = argparse.ArgumentParser(description=__summary__)
+    parser = _ArgumentParser(description=__summary__)
     parser.prog = __program__
     parser.add_argument("--version", action="version", version=__version__)
 
