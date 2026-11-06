@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
@@ -81,9 +82,17 @@ def _run_site_integration(
     *,
     downloader_factory: Callable[[], Any] = ChatDownloader,
 ) -> None:
-    """Run one scenario and require its declared observable outcome."""
+    """Check discovery via metadata; delivery additionally requires messages."""
+    required_env = test.get("requires_env")
+    selected_channel = os.environ.get(required_env) if required_env else None
+    if required_env and not selected_channel:
+        pytest.skip(
+            f"Set {required_env} to an active public channel for live delivery."
+        )
     params = dict(test["params"])
     assert params, "Network scenario must specify parameters."
+    if required_env:
+        params["url"] = params["url"].format(channel=selected_channel)
     expected_result = test.get("expected_result")
     assert expected_result, "Network scenario must declare an expected result."
     params.update({"max_attempts": 2, "interruptible_retry": False})
@@ -109,7 +118,7 @@ def _run_site_integration(
         chat_condition = expected_result.get("chat_condition")
         if chat_condition is not None:
             assert callable(chat_condition), "Chat check must be callable."
-            assert chat_condition(chat)
+            assert chat_condition(chat), "Scenario metadata check failed."
 
         messages = list(chat)
         for message in messages:
@@ -122,7 +131,9 @@ def _run_site_integration(
         messages_condition = expected_result.get("messages_condition")
         if messages_condition is not None:
             assert callable(messages_condition), "Message check must be callable."
-            assert messages_condition(messages)
+            assert messages_condition(messages), (
+                "Scenario message delivery check failed."
+            )
 
         actual_types = {
             "message_types": {message.get("message_type") for message in messages},
@@ -153,7 +164,8 @@ class _SuccessfulDownloader:
     def __init__(self) -> None:
         self.closed = False
 
-    def get_chat(self, **_params: Any) -> Chat:
+    def get_chat(self, **params: Any) -> Chat:
+        self.params = params
         return Chat(iter(()), id="test", title="Test chat")
 
     def close(self) -> None:
@@ -192,3 +204,72 @@ def test_network_runner_requires_positive_outcome_check() -> None:
         )
 
     assert downloader.closed
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        BASE_EXTRACTOR_TESTS[0],
+        TWITCH_EXTRACTOR_TESTS[0],
+        *YOUTUBE_EXTRACTOR_TESTS[:4],
+    ],
+    ids=lambda scenario: scenario["name"],
+)
+def test_network_runner_keeps_discovery_and_inactivity_empty_stream_contracts(
+    scenario,
+):
+    downloader = _SuccessfulDownloader()
+    _run_site_integration(
+        BaseChatDownloader,
+        scenario,
+        downloader_factory=lambda: downloader,
+    )
+    assert downloader.closed
+
+
+@pytest.mark.parametrize(
+    ("scenario", "expected_url"),
+    [
+        (TWITCH_EXTRACTOR_TESTS[1], "https://www.twitch.tv/active-channel"),
+        (
+            YOUTUBE_EXTRACTOR_TESTS[4],
+            "https://www.youtube.com/channel/active-channel",
+        ),
+    ],
+    ids=["twitch", "youtube"],
+)
+def test_network_runner_rejects_empty_delivery_stream(
+    scenario, expected_url, monkeypatch
+):
+    monkeypatch.setenv(scenario["requires_env"], "active-channel")
+    downloader = _SuccessfulDownloader()
+
+    def create_downloader():
+        monkeypatch.setenv(scenario["requires_env"], "changed-after-selection")
+        return downloader
+
+    with pytest.raises(AssertionError, match="message delivery check failed"):
+        _run_site_integration(
+            BaseChatDownloader,
+            scenario,
+            downloader_factory=create_downloader,
+        )
+    assert downloader.closed
+    assert downloader.params["url"] == expected_url
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [TWITCH_EXTRACTOR_TESTS[1], YOUTUBE_EXTRACTOR_TESTS[4]],
+    ids=lambda scenario: scenario["name"],
+)
+def test_network_runner_skips_delivery_without_an_operator_selected_channel(
+    scenario, monkeypatch
+):
+    monkeypatch.delenv(scenario["requires_env"], raising=False)
+    with pytest.raises(pytest.skip.Exception, match="active public channel"):
+        _run_site_integration(
+            BaseChatDownloader,
+            scenario,
+            downloader_factory=lambda: pytest.fail("Missing channel must skip setup."),
+        )

@@ -46,7 +46,9 @@ def test_live_stream_start_time_reaches_manifest(tmp_path, timestamp, expected):
         chat = build_live_chat(FakeDownloader())
     assert chat.start_time == expected
     path = tmp_path / "run.json"
-    RunManifest(str(path), None).write(chat, RunResult(success=True))
+    result = RunResult(success=True)
+    result.observe_provider(chat, None)
+    RunManifest(str(path), None).write(chat, result)
     assert json.loads(path.read_text())["recording"]["start_time"] == expected
 
 

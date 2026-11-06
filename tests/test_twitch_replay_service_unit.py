@@ -516,18 +516,12 @@ def test_replay_cursor_progress_precedes_emission(
         "Any",
         SimpleNamespace(is_completed_replay_status=lambda status: status == "past"),
     )
-    assert (
-        replay_complete(
-            chat,
-            RunResult(
-                success=True,
-                termination_reason=str(
-                    diagnostics.get("termination_reason", "completed")
-                ),
-            ),
-        )
-        is complete
+    run_result = RunResult(
+        success=True,
+        termination_reason=str(diagnostics.get("termination_reason", "completed")),
     )
+    run_result.observe_provider(chat, None)
+    assert replay_complete(chat, run_result) is complete
 
 
 def test_replay_retries_empty_page_without_losing_cursor_progress(downloader):
@@ -797,12 +791,11 @@ def test_stalled_twitch_replay_is_not_certified_complete(downloader, edges):
     )
     chat.site = cast("Any", classifier)
     assert diagnostics["termination_reason"] == "pagination_stalled"
-    assert not replay_complete(
-        chat,
-        RunResult(
-            success=True, termination_reason=str(diagnostics["termination_reason"])
-        ),
+    result = RunResult(
+        success=True, termination_reason=str(diagnostics["termination_reason"])
     )
+    result.observe_provider(chat, None)
+    assert not replay_complete(chat, result)
 
 
 def test_missing_comments_mid_pagination_is_retryable(downloader):

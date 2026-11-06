@@ -30,6 +30,7 @@ from chat_downloader.sites._message_dedup import (
     _ConsoleStateDeduplicator,
     _FormattedMessageDeduplicator,
 )
+from chat_downloader.utils.dict_utils import copy_containers
 from chat_downloader.utils.interrupts import defer_interrupts
 
 from .capture_checkpoint import CaptureCheckpoint, checkpoint_lock
@@ -149,16 +150,17 @@ class RunResult:
     failure_stage: str | None = None
 
     def observe_provider(self, chat: Chat | None, downloader: object) -> None:
-        """Freeze finalized chat counters and the surviving request setup ledger."""
+        """Freeze provider counters after bounded cleanup, including nested ledgers."""
         setup = getattr(downloader, "_request_diagnostics", {})
         if not isinstance(setup, dict):
             setup = {}
-        self.provider_diagnostics = {**setup, **getattr(chat, "diagnostics", {})}
+        diagnostics = {**setup, **getattr(chat, "diagnostics", {})}
         # Request-scoped setup counters include unsuccessful fresh bootstraps
         # after a Chat already exists. They supersede the older chat snapshot.
-        self.provider_diagnostics.update(
+        diagnostics.update(
             (key, value) for key, value in setup.items() if type(value) is int
         )
+        self.provider_diagnostics = copy_containers(diagnostics)
 
     def observe_shutdown(self, chat: Chat | None) -> None:
         """Freeze one deadline observation after bounded capture cleanup.

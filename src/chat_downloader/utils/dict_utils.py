@@ -4,7 +4,38 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
+
+
+def copy_containers[T](value: T) -> T:
+    """Detach built-in container graphs without iterating live mutable views."""
+    memo: dict[int, object] = {}
+
+    def copy_item(item: object) -> object:
+        identity = id(item)
+        if identity in memo:
+            return memo[identity]
+        if type(item) is dict:
+            snapshot = item.copy()
+            copied_dict: dict[object, object] = {}
+            memo[identity] = copied_dict
+            for key, child in snapshot.items():
+                copied_dict[copy_item(key)] = copy_item(child)
+            return copied_dict
+        if type(item) is list:
+            snapshot_items = item.copy()
+            copied_list: list[object] = []
+            memo[identity] = copied_list
+            copied_list.extend(copy_item(child) for child in snapshot_items)
+            return copied_list
+        if type(item) is tuple:
+            copied_tuple = tuple(copy_item(child) for child in item)
+            # A tuple/list cycle can have completed this tuple recursively.
+            return memo.setdefault(identity, copied_tuple)
+        # Adapter values may be uncopyable or implement arbitrary copy hooks.
+        return item
+
+    return cast("T", copy_item(value))
 
 
 def multi_get(

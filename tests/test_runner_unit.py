@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import json
 import threading
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -18,6 +19,9 @@ from requests.exceptions import (
 from chat_downloader.debugging import TestingException as RuntimeTestingException
 from chat_downloader.errors import ChatGeneratorError, ParsingError, SiteNotSupported
 from chat_downloader.output.continuous_write import ContinuousWriter
+from chat_downloader.runtime.capture_manifest import RunManifest
+from chat_downloader.runtime.capture_verification import inspect_provider_capture
+from chat_downloader.runtime.chat_pipeline import _configure_timeouts
 from chat_downloader.runtime.runner import (
     SITE_CHANGE_ERROR_HINT,
     RunResult,
@@ -26,6 +30,9 @@ from chat_downloader.runtime.runner import (
     execute_run,
 )
 from chat_downloader.sites.models import Chat
+from chat_downloader.sites.youtube.capture_inspection import (
+    inspect_capture as inspect_youtube_capture,
+)
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 
@@ -242,17 +249,27 @@ def test_execute_run_logs_final_message_and_writer_counts(
 def test_execute_run_marks_deadline_prefetch_summary_incomplete(downloader, logged):
     advance_started = threading.Event()
     allow_item = threading.Event()
-    diagnostics: dict[str, object] = {"live_emitted_count": 0}
+    non_emission_counts = {"invalid messages": 0}
+    malformed_event_type_counts = {"text_message": 0}
+    diagnostics: dict[str, object] = {
+        "live_emitted_count": 0,
+        "non_emission_counts": non_emission_counts,
+        "malformed_event_type_counts": malformed_event_type_counts,
+    }
+    observed = deepcopy(diagnostics)
 
     def blocked_source():
         advance_started.set()
         allow_item.wait()
         diagnostics["live_emitted_count"] = 1
+        non_emission_counts["invalid messages"] = 1
+        malformed_event_type_counts["text_message"] = 1
         yield {"message_type": "text_message", "message_id": "late"}
 
-    timed_source = TimedGenerator(blocked_source(), timeout=0.01)
+    timed_source = TimedGenerator(blocked_source())
     try:
-        assert advance_started.wait(timeout=1)
+        assert advance_started.wait(timeout=5)
+        timed_source._timeout_deadline = 0.0
         result = execute_run(
             downloader(Chat(timed_source, diagnostics=diagnostics)), quiet=True
         )
@@ -261,13 +278,353 @@ def test_execute_run_marks_deadline_prefetch_summary_incomplete(downloader, logg
         summary = _summary(logged)
         assert summary["prefetched_after_deadline_count"] == 0
         assert summary["deadline_prefetch_count_complete"] is False
-        assert summary["provider_diagnostics"] == {"live_emitted_count": 0}
+        assert summary["provider_diagnostics"] == observed
     finally:
         allow_item.set()
-        timed_source._worker.join(timeout=1)
+        timed_source._worker.join(timeout=5)
 
+    assert not timed_source._worker.is_alive()
     assert timed_source.deadline_prefetch_summary() == (1, True)
-    assert diagnostics == {"live_emitted_count": 1}
+    assert diagnostics == {
+        "live_emitted_count": 1,
+        "non_emission_counts": {"invalid messages": 1},
+        "malformed_event_type_counts": {"text_message": 1},
+    }
+    assert result.provider_diagnostics == observed
+    assert result.prefetched_after_deadline_count == 0
+    assert result.deadline_prefetch_count_complete is False
+    assert _summary(logged)["provider_diagnostics"] == observed
+
+
+@pytest.mark.parametrize("release_at", ["inspection", "manifest"])
+def test_run_reports_preserve_provider_observation_after_late_source_completion(
+    downloader, logged, tmp_path, monkeypatch, release_at
+):
+    advance_started = threading.Event()
+    allow_item = threading.Event()
+    diagnostics_changed = threading.Event()
+    non_emission_counts = {"invalid messages": 0}
+    malformed_event_type_counts = {"text_message": 0}
+    diagnostics = {
+        "parse_error": 0,
+        "prior_message_count": 0,
+        "history_complete": True,
+        "non_emission_counts": non_emission_counts,
+        "malformed_event_type_counts": malformed_event_type_counts,
+    }
+    observed = deepcopy(diagnostics)
+    observed["termination_reason"] = "timeout"
+
+    def blocked_source():
+        advance_started.set()
+        allow_item.wait()
+        non_emission_counts["invalid messages"] = 1
+        malformed_event_type_counts["text_message"] = 1
+        diagnostics.update(
+            parse_error=1,
+            prior_message_count=7,
+            history_complete=False,
+            non_emission_counts=non_emission_counts,
+            malformed_event_type_counts=malformed_event_type_counts,
+        )
+        diagnostics_changed.set()
+        yield {"message_type": "text_message", "message_id": "late"}
+
+    chat = Chat(blocked_source(), status="completed", diagnostics=diagnostics)
+    _configure_timeouts(chat, timeout=60, inactivity_timeout=None)
+    timed_source = chat.chat
+    paths = [tmp_path / "chat.jsonl", tmp_path / "chat.txt"]
+    for path in paths:
+        chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
+    chat._capture_inspector = lambda path, summary: inspect_youtube_capture(
+        path, run_summary=summary
+    )
+    original_write = RunManifest.write
+
+    def release_source():
+        allow_item.set()
+        assert diagnostics_changed.wait(timeout=5)
+
+    def inspect(*args, **kwargs):
+        if release_at == "inspection":
+            release_source()
+        return inspect_provider_capture(*args, **kwargs)
+
+    def write(manifest, *args, **kwargs):
+        if release_at == "manifest":
+            release_source()
+        return original_write(manifest, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.inspect_provider_capture", inspect
+    )
+    monkeypatch.setattr(RunManifest, "write", write)
+    manifest_path = tmp_path / "run.json"
+    try:
+        assert advance_started.wait(timeout=5)
+        timed_source._timeout_deadline = 0.0
+        result = execute_run(
+            downloader(chat),
+            quiet=True,
+            output=[str(path) for path in paths],
+            verify_output=True,
+            run_manifest=str(manifest_path),
+        )
+    finally:
+        allow_item.set()
+        timed_source.close()
+        timed_source._worker.join(timeout=5)
+
+    assert not timed_source._worker.is_alive()
+    assert timed_source.deadline_prefetch_summary() == (1, True)
+    assert result.success is True
+    assert result.termination_reason == "timeout"
+    assert result.parity_status == "passed"
+    assert result.provider_diagnostics == observed
+    assert diagnostics["parse_error"] == 1
+    manifest = json.loads(manifest_path.read_text())
+    summary = _summary(logged)
+    assert manifest["replay_complete"] is False
+    assert manifest["prior_message_count"] == 0
+    assert manifest["provider_diagnostics"] == {
+        "parse_error": 0,
+        "non_emission_counts": {"invalid messages": 0},
+    }
+    assert summary["provider_diagnostics"] == observed
+    inspection = result.provider_inspection
+    assert inspection["status"] == "ok"
+    assert inspection["run_accounting"]["counters"]["parse_error"] == 0
+    assert inspection["run_accounting"]["summary_minus_records"] == 0
+    assert (
+        manifest["provider_inspection"] == summary["provider_inspection"] == inspection
+    )
+    for report in (inspection, manifest, summary):
+        assert report["prefetched_after_deadline_count"] == 0
+        assert report["deadline_prefetch_count_complete"] is False
+
+
+def test_run_reports_preserve_an_empty_provider_observation(
+    downloader, logged, tmp_path, monkeypatch
+):
+    allow_update = threading.Event()
+    diagnostics_changed = threading.Event()
+    diagnostics = {}
+    chat = Chat(iter(()), diagnostics=diagnostics)
+    paths = [tmp_path / "chat.jsonl", tmp_path / "chat.txt"]
+    for path in paths:
+        chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
+    chat._capture_inspector = lambda path, summary: inspect_youtube_capture(
+        path, run_summary=summary
+    )
+
+    def late_diagnostics():
+        allow_update.wait()
+        diagnostics.update(parse_error=1, prior_message_count=7)
+        diagnostics_changed.set()
+
+    def inspect(*args, **kwargs):
+        allow_update.set()
+        assert diagnostics_changed.wait(timeout=5)
+        return inspect_provider_capture(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "chat_downloader.runtime.runner.inspect_provider_capture", inspect
+    )
+    worker = threading.Thread(target=late_diagnostics)
+    worker.start()
+    manifest_path = tmp_path / "run.json"
+    try:
+        result = execute_run(
+            downloader(chat),
+            quiet=True,
+            output=[str(path) for path in paths],
+            verify_output=True,
+            run_manifest=str(manifest_path),
+        )
+    finally:
+        allow_update.set()
+        worker.join(timeout=5)
+
+    assert not worker.is_alive()
+    assert result.success is True
+    assert result.parity_status == "passed"
+    assert result.provider_diagnostics == {}
+    assert diagnostics == {"parse_error": 1, "prior_message_count": 7}
+    manifest = json.loads(manifest_path.read_text())
+    summary = _summary(logged)
+    assert manifest["prior_message_count"] == 0
+    assert manifest["provider_diagnostics"] == summary["provider_diagnostics"] == {}
+    inspection = result.provider_inspection
+    assert inspection["status"] == "ok"
+    assert inspection["run_accounting"]["counters"]["parse_error"] == 0
+    assert inspection["run_accounting"]["summary_minus_records"] == 0
+    assert (
+        manifest["provider_inspection"] == summary["provider_inspection"] == inspection
+    )
+
+
+def test_provider_inspector_cannot_mutate_the_observed_nested_diagnostics(
+    downloader, logged, tmp_path
+):
+    observed = {
+        "live_emitted_count": 0,
+        "non_emission_counts": {"invalid messages": 0},
+        "malformed_event_type_counts": {"text_message": 0},
+    }
+    chat = Chat(iter(()), diagnostics=deepcopy(observed))
+    paths = [tmp_path / "chat.jsonl", tmp_path / "chat.txt"]
+    for path in paths:
+        chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
+
+    def inspect(_path, summary):
+        diagnostics = summary["provider_diagnostics"]
+        diagnostics["live_emitted_count"] = 99
+        diagnostics["non_emission_counts"]["invalid messages"] = 99
+        diagnostics["malformed_event_type_counts"]["text_message"] = 99
+        return {"status": "ok"}
+
+    chat._capture_inspector = inspect
+    manifest_path = tmp_path / "run.json"
+    result = execute_run(
+        downloader(chat),
+        quiet=True,
+        output=[str(path) for path in paths],
+        verify_output=True,
+        run_manifest=str(manifest_path),
+    )
+
+    assert result.success is True
+    assert result.provider_diagnostics == observed
+    assert chat.diagnostics == observed
+    assert _summary(logged)["provider_diagnostics"] == observed
+    assert json.loads(manifest_path.read_text())["provider_diagnostics"] == {
+        "live_emitted_count": 0,
+        "non_emission_counts": {"invalid messages": 0},
+    }
+
+
+@pytest.mark.parametrize(
+    ("failure", "error_message", "parity"),
+    [
+        (None, None, "passed"),
+        (ValueError("primary"), "primary", "not_run"),
+        (KeyboardInterrupt(), "Keyboard Interrupt", "passed"),
+    ],
+)
+def test_provider_observation_preserves_opaque_adapter_values_and_run_outcomes(
+    downloader, logged, tmp_path, failure, error_message, parity
+):
+    class CopyProtected:
+        def __deepcopy__(self, _memo):
+            raise AssertionError("Opaque adapter value must not be copied")
+
+    opaque = CopyProtected()
+    lock = threading.Lock()
+    containers = {
+        "list": [{"count": 0, "opaque": opaque}],
+        "tuple": ({"count": 0},),
+    }
+    chat = Chat(
+        _FakeChat(error=failure),
+        diagnostics={"lock": lock, "opaque": opaque, "containers": containers},
+    )
+    paths = [tmp_path / "chat.jsonl", tmp_path / "chat.txt"]
+    for path in paths:
+        chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
+
+    def inspect(_path, summary):
+        state = summary["provider_diagnostics"]
+        assert state["lock"] is lock
+        assert state["opaque"] is opaque
+        assert state["containers"]["list"][0]["opaque"] is opaque
+        state["containers"]["list"][0]["count"] = 99
+        state["containers"]["tuple"][0]["count"] = 99
+        return {"status": "ok"}
+
+    chat._capture_inspector = inspect
+    manifest_path = tmp_path / "run.json"
+    result = execute_run(
+        downloader(chat),
+        quiet=True,
+        output=[str(path) for path in paths],
+        verify_output=True,
+        run_manifest=str(manifest_path),
+    )
+
+    assert result.success is (failure is None)
+    assert result.interrupted is isinstance(failure, KeyboardInterrupt)
+    assert result.error_message == error_message
+    assert result.parity_status == parity
+    assert result.provider_inspection["status"] == "ok"
+    assert containers["list"][0]["count"] == containers["tuple"][0]["count"] == 0
+    containers["list"][0]["count"] = 1
+    containers["tuple"][0]["count"] = 1
+    state = result.provider_diagnostics
+    assert state["lock"] is lock
+    assert state["opaque"] is opaque
+    assert state["containers"]["list"][0]["opaque"] is opaque
+    assert state["containers"]["list"][0]["count"] == 0
+    assert state["containers"]["tuple"][0]["count"] == 0
+    manifest = json.loads(manifest_path.read_text())
+    assert manifest["success"] is result.success
+    assert manifest["parity_status"] == parity
+    assert manifest["provider_diagnostics"] == {}
+    assert any(message.startswith("Run summary: ") for _level, message in logged)
+
+
+def test_provider_observation_survives_dictionary_growth_during_copy(
+    downloader, logged, tmp_path
+):
+    advance_started = threading.Event()
+    copying = threading.Event()
+    changed = threading.Event()
+    armed = False
+
+    class ObservedKey(str):
+        def __hash__(self):
+            if armed and not copying.is_set():
+                copying.set()
+                assert changed.wait(timeout=5)
+            return super().__hash__()
+
+    # Hashing into the detached destination pauses copying while the source
+    # inserts a new reason. A live items() iterator would be invalidated.
+    reasons = {ObservedKey("invalid messages"): 0, "time-range stop": 0}
+    diagnostics = {"parse_error": 0, "non_emission_counts": reasons}
+
+    def source():
+        advance_started.set()
+        assert copying.wait(timeout=5)
+        reasons["time-range filtered"] = 1
+        changed.set()
+        yield {"message_type": "text_message", "message_id": "late"}
+
+    chat = Chat(source(), diagnostics=diagnostics)
+    _configure_timeouts(chat, timeout=60, inactivity_timeout=None)
+    timed = chat.chat
+    manifest_path = tmp_path / "run.json"
+    try:
+        assert advance_started.wait(timeout=5)
+        timed._timeout_deadline = 0.0
+        armed = True
+        result = execute_run(
+            downloader(chat), quiet=True, run_manifest=str(manifest_path)
+        )
+    finally:
+        copying.set()
+        changed.set()
+        timed.close()
+        timed._worker.join(timeout=5)
+
+    assert not timed._worker.is_alive()
+    assert reasons["time-range filtered"] == 1
+    expected = {"invalid messages": 0, "time-range stop": 0}
+    assert result.success
+    assert result.termination_reason == "timeout"
+    assert result.provider_diagnostics["non_emission_counts"] == expected
+    report = json.loads(manifest_path.read_text())
+    assert report["provider_diagnostics"]["non_emission_counts"] == expected
+    assert _summary(logged)["provider_diagnostics"]["non_emission_counts"] == expected
 
 
 def test_log_run_summary_redacts_credentials(logged):

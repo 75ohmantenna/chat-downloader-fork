@@ -66,6 +66,14 @@ workflow schedules stable `network_replay` contracts weekly and on manual
 dispatch; volatile live and environment checks do not gate pushes or pull
 requests.
 
+Live discovery and inactivity scenarios may succeed without chat messages.
+Separate Twitch and YouTube delivery scenarios require `TWITCH_TEST_CHANNEL`
+and `YOUTUBE_TEST_CHANNEL_ID`, respectively, naming active public channels.
+Missing settings explicitly skip those delivery scenarios; configured scenarios
+fail if no messages arrive within their thirty-second capture window. The Kick
+live check uses `KICK_TEST_CHANNEL` (default `xqc`) and requires a confirmed
+subscription plus an application record from the default negotiated transport.
+
 ## Commands
 
 Focused tests:
@@ -277,15 +285,15 @@ uv run python scripts/smoke_kick_live.py --run-network --channel xqc \
 ```
 
 The artifact directory must not exist. The runner creates it with mode `0700`,
-runs an eight-minute all-groups capture by default, then checks help/version,
-quiet and compact output, text filtering, custom headers, inactivity shutdown,
-and rejection of unsupported output extensions and live replay-only options.
-Each capture writes JSONL, TXT, and a manifest with output verification. Child
-processes have independent wall-clock limits and cannot wait for stdin. Short
-cases default to ten seconds; `--case-duration` changes that limit. Very short
-durations can expire during connection setup and correctly require review for
-incomplete deadline accounting. Live availability and event delivery can also
-cause the smoke run to fail.
+runs an all-groups capture and a separate messages-only `realtime` capture, each
+for eight minutes by default, then checks help/version, quiet and compact output,
+text filtering, custom headers, inactivity shutdown, and rejection of unsupported
+output extensions and live replay-only options. Each capture writes JSONL, TXT,
+and a manifest with output verification. Child processes have independent
+wall-clock limits and cannot wait for stdin. Short cases default to ten seconds;
+`--case-duration` changes that limit. Very short durations can expire during
+connection setup and correctly require review for incomplete deadline accounting.
+Live availability and event delivery can also cause the smoke run to fail.
 
 Repeat `--proxy socks5://host:port` to add bounded all-groups proxy captures.
 Proxy arguments apply only to those extra cases; other cases use the normal
@@ -293,10 +301,18 @@ environment proxy policy. The runner does not read a proxy config or persist
 proxy arguments in its aggregate report. Shell arguments and history can still
 contain credentials. Raw child logs and chat captures stay in the private
 directory. Stdout and `report.json` contain only case names, exit codes, fixed
-statuses, and counts. Exit zero means every case passed; exit one means at
-least one case failed or required review. A nonempty capture is required except
-for the inactivity case. This is observational live coverage; it cannot prove
-server-side completeness or exercise every rare event.
+statuses, and validated aggregate counts. Exit zero means every case passed;
+exit one means at least one case failed or required review. A nonempty capture
+is required except for quiet and inactivity cases.
+
+The `realtime` case additionally requires a negotiated connection, confirmed
+subscription, complete deadline accounting, and consistent provider/inspection
+counters. Its conservative lower bound subtracts every synthetic REST frame and
+discarded deadline prefetch from live emissions; the result must be positive.
+Preload, startup/reconnect history, and protocol controls alone cannot satisfy
+this gate. The report includes `realtime_delivery`, `confirmed_subscriptions`,
+and `socket_records_min`. These observations cannot prove server-side
+completeness or exercise every rare event.
 
 `tests/test_kick_connection_drop_unit.py` supplements live observation with
 real loopback WebSocket connections. Abrupt TCP closure and a WebSocket close

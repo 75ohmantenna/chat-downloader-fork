@@ -70,9 +70,9 @@ def test_clip_malformed_timestamp_prevents_complete_certification() -> None:
     )
     assert [item["message_id"] for item in chat] == ["inside"]
     assert chat.diagnostics["malformed_timestamp"] == 1
-    assert not replay_complete(
-        chat, RunResult(success=True, termination_reason="completed")
-    )
+    result = RunResult(success=True, termination_reason="completed")
+    result.observe_provider(chat, None)
+    assert not replay_complete(chat, result)
 
 
 def _client():
@@ -122,9 +122,9 @@ def test_subscriber_only_source_vod_uses_public_mobile_clip_replay():
     assert [item["message_id"] for item in messages] == ["start", "end"]
     assert [item["time_in_seconds"] for item in messages] == [0, 60]
     assert chat.diagnostics["transport"]["http_status_counts"] == {"200": 3, "403": 1}
-    assert replay_complete(
-        chat, RunResult(success=True, termination_reason="completed")
-    )
+    result = RunResult(success=True, termination_reason="completed")
+    result.observe_provider(chat, None)
+    assert replay_complete(chat, result)
     assert mobile.requested_urls == [f"https://mobile.kick.com/api/v1/clips/{CLIP_ID}"]
 
 

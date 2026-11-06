@@ -10,6 +10,12 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Freeze nested provider diagnostics after bounded shutdown so late worker
+  completion cannot revise returned counters or change the observation used by
+  capture inspection, manifests, and debug summaries.
+- Require confirmed socket delivery in the dedicated Kick realtime smoke case;
+  distinguish live discovery from operator-selected Twitch and YouTube delivery
+  checks instead of treating metadata or history alone as delivery proof.
 - Finish closing all output writers and provider sessions before propagating an
   unexpected cleanup error, including failures encountered at chat exhaustion.
 - Bound reusable Twitch channel and badge caches while preserving capture-owned

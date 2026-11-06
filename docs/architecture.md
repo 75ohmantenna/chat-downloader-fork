@@ -200,7 +200,7 @@ module names.
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
 | `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
 | `config_guards.py` | Explicit/environment proxy and cookie-authentication safety validation |
-| `runner.py` | Top-level run loop, optional bounded console state compaction, structured `RunResult`, one shutdown deadline observation for every report, final diagnostics, testing-mode selection, and cleanup |
+| `runner.py` | Top-level run loop, optional bounded console state compaction, structured `RunResult`, shared shutdown provider/deadline observations for every report, testing-mode selection, and cleanup |
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
 
 ### `output/`
@@ -230,7 +230,7 @@ module names.
 | `color_utils.py` | ARGB/RGBA color conversion |
 | `console_utils.py` | Cross-platform safe console output and pause handling |
 | `conversion_utils.py` | Scalar conversion, retry-attempt, and back-off helpers |
-| `dict_utils.py` | Nested dictionary lookup, mutation, and first-item helpers |
+| `dict_utils.py` | Nested dictionary lookup, mutation, first-item helpers, and built-in container snapshots preserving opaque adapter values |
 | `filename_utils.py` | Safe single-component filename sanitization |
 | `interrupts.py` | Cooperative CLI interrupt deferral across record persistence and accounting, with immediately interruptible provider reads |
 | `json_types.py` | JSON aliases plus typed accessors (`get_str`, `get_int`, `get_dict`, `get_list`, `dig`) |

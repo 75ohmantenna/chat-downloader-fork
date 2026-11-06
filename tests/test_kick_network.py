@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import os
-from functools import partial
 
 import pytest
 from websocket import WebSocketBadStatusException
@@ -15,14 +14,8 @@ from chat_downloader.errors import (
     UserNotFound,
 )
 from chat_downloader.sites.kick.extractor import KickChatDownloader
-from chat_downloader.sites.kick.live_service import (
-    _fetch_channel_with_retry,
-    _open_subscribed_transport,
-    _resolve_channel,
-)
-from chat_downloader.sites.kick.websocket_transport import KickPusherTransport
-from chat_downloader.sites.proxy import resolve_session_proxy
-from tests.kick_helpers import request
+from chat_downloader.sites.kick.live_service import get_chat_by_channel
+from tests.kick_helpers import assert_live_delivery, request
 
 pytestmark = [pytest.mark.network, pytest.mark.network_live, pytest.mark.timeout(45)]
 # Override with a currently live public channel.
@@ -40,37 +33,30 @@ def _caused_by_websocket_http(error, status):
     return False
 
 
-def test_live_channel_connects_and_subscribes():
-    downloader, transport = KickChatDownloader(), None
+def test_live_channel_receives_confirmed_realtime_delivery():
+    downloader = KickChatDownloader(connect_timeout=5, read_timeout=5)
+    chat = None
     options = request(
-        url=f"https://kick.com/{_CHANNEL}", max_attempts=1, message_receive_timeout=1
+        url=f"https://kick.com/{_CHANNEL}",
+        max_attempts=1,
+        message_receive_timeout=1,
+        message_groups=["messages"],
     )
     try:
-        channel = _fetch_channel_with_retry(downloader, _CHANNEL, options)
-        channel_id, chatroom_id, title = _resolve_channel(channel, _CHANNEL)
-        assert channel_id.isdigit()
-        assert chatroom_id.isdigit()
-        assert title
-        transport = _open_subscribed_transport(
-            downloader,
-            chatroom_id,
-            options,
-            partial(
-                KickPusherTransport,
-                proxy_url=resolve_session_proxy(
-                    getattr(downloader, "session", None), "https://ws-us2.pusher.com"
-                ),
-            ),
-        )
+        # No injected factory: use the production negotiated KickPublicTransport.
+        chat = get_chat_by_channel(downloader, _CHANNEL, options)
+        assert chat.id == _CHANNEL
+        assert chat.title
+        assert_live_delivery(chat)
     except CaptchaChallengeRequired as error:
         pytest.skip(f"Kick challenge block: try a fresh VPN/proxy endpoint. ({error})")
     except RetriesExceeded as error:
         if _caused_by_websocket_http(error, 403):
-            pytest.skip("Kick Pusher HTTP 403: try a different network or --proxy.")
+            pytest.skip("Kick realtime HTTP 403: try a different network or --proxy.")
         raise
     except UserNotFound:
         pytest.skip(f"Kick channel {_CHANNEL!r} not found; set KICK_TEST_CHANNEL.")
     finally:
-        if transport is not None:
-            transport.close()
+        if chat is not None:
+            chat.close()
         downloader.close()

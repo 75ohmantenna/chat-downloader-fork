@@ -43,6 +43,7 @@ from tests.kick_helpers import (
     FakeKickSession,
     FakeResponse,
     FakeWebSocket,
+    assert_live_delivery,
     load_fixture,
     pusher_frame,
     raw_message,
@@ -1594,10 +1595,19 @@ def test_public_subscription_cancellation_prevents_other_feed_and_readers():
     transport.close()
 
 
-@pytest.mark.parametrize("public_events", [False, True])
+@pytest.mark.parametrize(
+    ("public_events", "delivery"),
+    [
+        (False, "confirmed"),
+        (True, "confirmed"),
+        (False, "missing_ack"),
+        (False, "missing_publication"),
+    ],
+)
 def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
     monkeypatch,
     public_events,
+    delivery,
 ):
     channel = {"id": 123, "chatroom": {"id": 456}, "livestream": None}
     state_session = FakeKickSession([FakeResponse(payload=channel)] * 2)
@@ -1631,16 +1641,28 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
         BlockingSocket(
             [
                 json.dumps({"event": PUSHER_CONNECTION_ESTABLISHED}),
-                json.dumps(
-                    {
-                        "event": PUSHER_SUBSCRIPTION_SUCCEEDED,
-                        "channel": "chatrooms.456.v2",
-                    }
+                *(
+                    [
+                        json.dumps(
+                            {
+                                "event": PUSHER_SUBSCRIPTION_SUCCEEDED,
+                                "channel": "chatrooms.456.v2",
+                            }
+                        )
+                    ]
+                    if delivery != "missing_ack"
+                    else []
                 ),
-                json.dumps(
-                    pusher_frame(
-                        "App\\Events\\ChatMessageEvent", raw_message("composed")
-                    )
+                *(
+                    [
+                        json.dumps(
+                            pusher_frame(
+                                "App\\Events\\ChatMessageEvent", raw_message("composed")
+                            )
+                        )
+                    ]
+                    if delivery != "missing_publication"
+                    else []
                 ),
             ]
         ),
@@ -1660,6 +1682,15 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
 
     def public_transport(**kwargs):
         transport = pt.KickPublicTransport(**kwargs)
+        start_readers = transport.set_timeout
+
+        def start_and_wait(timeout):
+            start_readers(timeout)
+            if public_events:
+                # Keep delivery cancellation behind REST session construction.
+                assert worker_state_created.wait(timeout=5)
+
+        transport.set_timeout = start_and_wait
         opened.append(transport)
         return transport
 
@@ -1677,13 +1708,16 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
         ChatRequest(message_groups=["all" if public_events else "messages"]),
     )
     try:
-        for message in chat:
-            if message.get("message_id") == "composed":
-                break
+        if delivery == "confirmed":
+            assert_live_delivery(chat, timeout=2)
         else:
-            pytest.fail("negotiated chat record was not emitted")
-        if public_events:
-            assert worker_state_created.wait(1)
+            expected = (
+                "subscription was not confirmed"
+                if delivery == "missing_ack"
+                else "publication was not received"
+            )
+            with pytest.raises(AssertionError, match=expected):
+                assert_live_delivery(chat, timeout=1)
     finally:
         chat.close()
     assert sockets[0].closed

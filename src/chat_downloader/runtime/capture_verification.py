@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.output.capture_parity import audit_capture
+from chat_downloader.utils.dict_utils import copy_containers
 from chat_downloader.utils.filename_utils import output_path_identity
 
 from .capture_manifest import _capture_outputs
@@ -107,7 +108,7 @@ def validate_verification(parameters: dict[str, Any], *, resume: bool) -> None:
 def inspect_provider_capture(
     chat: Chat, result: RunResult, *, allow_existing: bool = False
 ) -> dict[str, object] | None:
-    """Run the provider's optional closed-artifact inspector without log contents."""
+    """Inspect closed artifacts using an inspector-owned copy of the observation."""
     if chat._capture_inspector is None:
         return None
     try:
@@ -124,9 +125,11 @@ def inspect_provider_capture(
             {
                 "success": result.success,
                 "message_count": result.message_count,
-                "prior_message_count": chat.diagnostics.get("prior_message_count", 0),
+                "prior_message_count": result.provider_diagnostics.get(
+                    "prior_message_count", 0
+                ),
                 "message_type_counts": dict(result.message_type_counts),
-                "provider_diagnostics": dict(chat.diagnostics),
+                "provider_diagnostics": copy_containers(result.provider_diagnostics),
                 "prefetched_after_deadline_count": count,
                 "deadline_prefetch_count_complete": complete,
             },

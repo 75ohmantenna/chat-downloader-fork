@@ -30,6 +30,11 @@ def _cases(duration: float) -> list[tuple[str, list[str], bool]]:
         ("help", ["--help"], True),
         ("version", ["--version"], True),
         ("capture", ["--message_groups", "all", "--timeout", str(duration)], True),
+        (
+            "realtime",
+            ["--message_groups", "messages", "--timeout", str(duration)],
+            True,
+        ),
         ("quiet", ["--quiet", "--max_messages", "5"], True),
         ("compact", ["--message_groups", "all", "--compact_console"], True),
         ("filtered", ["--message_types", "text_message", "--sort_keys", "true"], True),
@@ -69,6 +74,105 @@ def _aggregate_fields(manifest: object) -> dict[str, object]:
     ):
         raise ValueError(msg)
     return {"records": count, "parity_status": parity, "inspection_status": status}
+
+
+def _realtime_fields(manifest: dict[str, object]) -> dict[str, object]:
+    """Prove recorded socket delivery conservatively from frozen accounting."""
+    msg = "Invalid realtime accounting."
+    diagnostics = manifest["provider_diagnostics"]
+    inspection = manifest["provider_inspection"]
+    if not isinstance(diagnostics, dict) or not isinstance(inspection, dict):
+        raise TypeError(msg)
+    accounting = inspection["frame_accounting"]
+    if not isinstance(accounting, dict):
+        raise TypeError(msg)
+    keys = (
+        "websocket_frame_count",
+        "control_frame_count",
+        "parsed_event_count",
+        "unsupported_event_count",
+        "malformed_event_count",
+        "pusher_error_count",
+        "pusher_connection_count",
+        "centrifugo_connection_count",
+        "public_subscription_count",
+        "synthetic_frame_count",
+        "preloaded_emitted_count",
+        "startup_backfill_emitted_count",
+        "live_emitted_count",
+        "reconnect_backfill_emitted_count",
+    )
+    counts = {key: diagnostics[key] for key in keys}
+    prefetched = manifest["prefetched_after_deadline_count"]
+    records = inspection["records"]
+    if (
+        any(type(value) is not int or value < 0 for value in counts.values())
+        or type(prefetched) is not int
+        or prefetched < 0
+        or type(records) is not int
+        or records != manifest["message_count"]
+        or manifest["deadline_prefetch_count_complete"] is not True
+        or any(
+            type(accounting[key]) is not int or accounting[key] != value
+            for key, value in counts.items()
+        )
+        or any(
+            type(accounting[key]) is not int or accounting[key] != 0
+            for key in (
+                "unaccounted_frames",
+                "emitted_minus_records",
+                "summary_minus_records",
+                "malformed_type_count_gap",
+                "message_type_count_mismatches",
+                "deadline_accounting_incomplete",
+                "run_failed",
+            )
+        )
+    ):
+        raise ValueError(msg)
+    if (
+        counts["websocket_frame_count"] + counts["synthetic_frame_count"]
+        != sum(
+            counts[key]
+            for key in (
+                "control_frame_count",
+                "parsed_event_count",
+                "unsupported_event_count",
+                "malformed_event_count",
+                "pusher_error_count",
+            )
+        )
+        or sum(
+            counts[key]
+            for key in (
+                "preloaded_emitted_count",
+                "startup_backfill_emitted_count",
+                "live_emitted_count",
+                "reconnect_backfill_emitted_count",
+            )
+        )
+        != records + prefetched
+        or counts["live_emitted_count"] > counts["parsed_event_count"]
+        or counts["public_subscription_count"] > counts["control_frame_count"]
+        or counts["control_frame_count"] > counts["websocket_frame_count"]
+    ):
+        raise ValueError(msg)
+    # Each REST frame can emit at most one live record. Subtract all of them,
+    # plus every discarded deadline prefetch, even when they were not emitted.
+    socket_records_min = max(
+        0, counts["live_emitted_count"] - counts["synthetic_frame_count"] - prefetched
+    )
+    return {
+        "realtime_delivery": (
+            counts["public_subscription_count"] > 0
+            and counts["pusher_connection_count"]
+            + counts["centrifugo_connection_count"]
+            > 0
+            and socket_records_min > 0
+        ),
+        "confirmed_subscriptions": counts["public_subscription_count"],
+        "socket_records_min": socket_records_min,
+    }
 
 
 def _run_case(
@@ -112,9 +216,12 @@ def _run_case(
                 and manifest["success"] is True
                 and manifest["parity_status"] == "passed"
                 and inspection["status"] == "ok"
-                and (name == "inactivity" or manifest["message_count"] > 0)
+                and (name in {"quiet", "inactivity"} or manifest["message_count"] > 0)
                 and (name != "quiet" or (directory / "stdout.log").stat().st_size == 0)
             )
+            if name == "realtime":
+                result.update(_realtime_fields(manifest))
+                result["passed"] = result["passed"] and result["realtime_delivery"]
         except (OSError, ValueError, KeyError, TypeError):
             result.update(passed=False, error="invalid_or_missing_manifest")
     elif not expected_success:
@@ -180,7 +287,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ],
                 expected_success=success,
                 timeout=max(
-                    args.duration if name == "capture" else 0, args.case_duration
+                    args.duration if name in {"capture", "realtime"} else 0,
+                    args.case_duration,
                 )
                 + 45,
             )

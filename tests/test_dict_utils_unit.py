@@ -6,11 +6,45 @@ from __future__ import annotations
 import pytest
 
 from chat_downloader.utils.dict_utils import (
+    copy_containers,
     move_to_dict,
     multi_get,
     try_get_first_key,
     try_get_first_value,
 )
+
+
+def test_copy_containers_preserves_shared_nodes_and_cycles():
+    items = []
+    pair = (items,)
+    items.append(pair)
+    shared = {"pair": pair}
+    original = {"first": shared, "second": shared}
+
+    copied = copy_containers(original)
+
+    assert copied is not original
+    assert copied["first"] is copied["second"]
+    assert copied["first"] is not shared
+    copied_pair = copied["first"]["pair"]
+    assert copied_pair is not pair
+    assert copied_pair[0] is not items
+    assert copied_pair[0][0] is copied_pair
+
+
+def test_copy_containers_preserves_opaque_container_subclasses():
+    class AdapterState(dict):
+        def __deepcopy__(self, _memo):
+            raise AssertionError("Adapter container must remain opaque")
+
+    adapter = AdapterState(counter=1)
+    original = {"items": [adapter]}
+
+    copied = copy_containers(original)
+
+    assert copied is not original
+    assert copied["items"] is not original["items"]
+    assert copied["items"][0] is adapter
 
 
 @pytest.mark.parametrize(

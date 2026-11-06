@@ -252,15 +252,49 @@ def test_manifest_keeps_bounded_metrics_and_measured_duration(
 def test_manifest_preserves_incomplete_deadline_accounting(tmp_path):
     chat = Chat()
     path = tmp_path / "run.json"
-    RunManifest(str(path), None).write(
-        chat,
-        RunResult(
-            prefetched_after_deadline_count=2, deadline_prefetch_count_complete=False
-        ),
+    result = RunResult(
+        prefetched_after_deadline_count=2, deadline_prefetch_count_complete=False
     )
+    result.observe_provider(chat, None)
+    RunManifest(str(path), None).write(chat, result)
     report = load_json(path)
     assert report["prefetched_after_deadline_count"] == 2
     assert report["deadline_prefetch_count_complete"] is False
+
+
+@pytest.mark.parametrize("observe", [False, True], ids=["empty-result", "observed"])
+def test_direct_manifest_write_uses_only_the_result_provider_observation(
+    tmp_path, observe
+):
+    reasons = {"invalid messages": 0}
+    chat = Chat(
+        status="completed",
+        diagnostics={
+            "parse_error": 0,
+            "prior_message_count": 3,
+            "history_complete": True,
+            "non_emission_counts": reasons,
+        },
+    )
+    result = RunResult(success=True, termination_reason="completed")
+    if observe:
+        result.observe_provider(chat, None)
+    reasons["invalid messages"] = 1
+    chat.diagnostics.update(
+        parse_error=1, prior_message_count=9, history_complete=False
+    )
+    path = tmp_path / "run.json"
+
+    RunManifest(str(path), None).write(chat, result)
+
+    report = load_json(path)
+    assert report["replay_complete"] is True
+    assert report["prior_message_count"] == (3 if observe else 0)
+    assert report["provider_diagnostics"] == (
+        {"parse_error": 0, "non_emission_counts": {"invalid messages": 0}}
+        if observe
+        else {}
+    )
 
 
 @pytest.mark.parametrize("failure", [None, KeyboardInterrupt(), ValueError("failed")])

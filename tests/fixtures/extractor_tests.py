@@ -68,10 +68,21 @@ BASE_EXTRACTOR_TESTS: list[dict[str, Any]] = [
 
 TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     {
-        "name": "Livestream",
+        "name": "Discover livestream metadata.",
         "params": {"url": "https://www.twitch.tv/xenova", "timeout": 5},
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
+        },
+    },
+    {
+        "name": "Deliver chat messages from a livestream.",
+        "requires_env": "TWITCH_TEST_CHANNEL",
+        "params": {
+            "url": "https://www.twitch.tv/{channel}",
+            "timeout": 30,
+        },
+        "expected_result": {
+            "messages_condition": lambda messages: len(messages) > 0,
         },
     },
     {

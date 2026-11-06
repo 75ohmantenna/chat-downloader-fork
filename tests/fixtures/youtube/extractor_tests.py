@@ -26,7 +26,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     # https://youtu.be/y5ih7nqEoc4
     # TESTING FOR CORRECT FUNCTIONALITY
     {
-        "name": "Get chat messages from livestream, using channel id.",
+        "name": "Discover livestream metadata using channel id.",
         "params": {
             "url": "https://www.youtube.com/channel/UCSJ4gkVC6NrvII8umztf0Ow",
             "timeout": 5,
@@ -36,27 +36,38 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
     },
     {
-        "name": "Get chat messages from livestream, using custom url (1).",
+        "name": "Discover livestream metadata using custom url (1).",
         "params": {"url": "https://www.youtube.com/c/lofigirl", "timeout": 5},
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
         },
     },
     {
-        "name": "Get chat messages from livestream, using custom url (2).",
+        "name": "Discover livestream metadata using custom url (2).",
         "params": {"url": "https://www.youtube.com/lofigirl", "timeout": 5},
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
         },
     },
     {
-        "name": "Get chat messages from livestream, using user id.",
+        "name": "Discover livestream metadata using user id.",
         "params": {
             "url": "https://www.youtube.com/user/YellowBrickCinema",
             "timeout": 5,
         },
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
+        },
+    },
+    {
+        "name": "Deliver chat messages from a discovered livestream.",
+        "requires_env": "YOUTUBE_TEST_CHANNEL_ID",
+        "params": {
+            "url": "https://www.youtube.com/channel/{channel}",
+            "timeout": 30,
+        },
+        "expected_result": {
+            "messages_condition": lambda messages: len(messages) > 0,
         },
     },
     {

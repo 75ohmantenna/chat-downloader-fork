@@ -12,13 +12,13 @@ from unittest.mock import patch
 
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import live_service
+from chat_downloader.sites.retry import retry as _perform_retry
+from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
 
     from chat_downloader.sites.kick.websocket_transport import _KickTransport
-
-from chat_downloader.sites.retry import retry as _perform_retry
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "kick"
 
@@ -50,6 +50,34 @@ def assert_replay_contract(messages, expected):
         message = by_id[message_id]
         assert message["message_type"] == "text_message"
         assert {key: message[key] for key in fields} == fields
+
+
+def assert_live_delivery(chat, *, timeout=20):
+    """Receive a confirmed socket application record, not just setup or history."""
+    received = 0
+    stream = TimedGenerator(chat.chat, timeout=timeout)
+    try:
+        for message in stream:
+            assert isinstance(message.get("message_type"), str)
+            received += 1
+            state = chat.diagnostics
+            keys = (
+                "preloaded_emitted_count",
+                "startup_backfill_emitted_count",
+                "reconnect_backfill_emitted_count",
+                "synthetic_frame_count",
+                "public_subscription_count",
+            )
+            assert all(type(state[key]) is int and state[key] >= 0 for key in keys)
+            non_socket = sum(state[key] for key in keys[:-1])
+            if state["public_subscription_count"] > 0 and received > non_socket:
+                return
+    finally:
+        stream.close()
+    subscriptions = chat.diagnostics["public_subscription_count"]
+    assert type(subscriptions) is int, "Kick realtime subscription count was invalid."
+    assert subscriptions > 0, "Kick realtime subscription was not confirmed."
+    raise AssertionError("Kick socket application publication was not received.")
 
 
 class FakeResponse:

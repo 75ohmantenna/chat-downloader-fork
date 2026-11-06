@@ -42,10 +42,10 @@ def is_completed_replay(chat: Chat | None) -> bool:
 
 
 def replay_complete(chat: Chat | None, result: RunResult) -> bool:
-    """Require successful exhaustion, excluding known provider parsing loss."""
+    """Require successful exhaustion with no loss in the provider observation."""
     if chat is None or not is_completed_replay(chat) or not result.success:
         return False
-    state = chat.diagnostics
+    state = result.provider_diagnostics
     return (
         result.termination_reason in {"completed", "empty_window"}
         and state.get("history_complete", True) is True
@@ -291,7 +291,7 @@ class RunManifest:
         *,
         verified_artifacts: Mapping[Path, _ArtifactSignature] | None = None,
     ) -> None:
-        """Write final outcome and full artifact hashes after writers close."""
+        """Write closed artifacts and outcome using the observed provider counters."""
         if not self.valid:
             msg = "Run manifest output paths were not validated."
             raise ValueError(msg)
@@ -335,14 +335,12 @@ class RunManifest:
             "parity_status": result.parity_status,
             "provider_inspection": result.provider_inspection,
             "message_count": result.message_count,
-            "prior_message_count": getattr(chat, "diagnostics", {}).get(
+            "prior_message_count": result.provider_diagnostics.get(
                 "prior_message_count", 0
             ),
             "message_type_counts": result.message_type_counts,
             "elapsed_seconds": result.elapsed_seconds,
-            "provider_diagnostics": _manifest_diagnostics(
-                result.provider_diagnostics or getattr(chat, "diagnostics", {})
-            ),
+            "provider_diagnostics": _manifest_diagnostics(result.provider_diagnostics),
             "prefetched_after_deadline_count": result.prefetched_after_deadline_count,
             "deadline_prefetch_count_complete": result.deadline_prefetch_count_complete,
             "recording": {

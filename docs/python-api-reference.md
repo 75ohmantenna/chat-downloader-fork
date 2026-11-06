@@ -151,11 +151,18 @@ these fields:
 | `elapsed_seconds` | Monotonic duration from initialization through capture shutdown, excluding output verification and manifest writing |
 | `prefetched_after_deadline_count` | One observation after bounded capture shutdown; an incomplete count is a lower bound |
 | `deadline_prefetch_count_complete` | Whether deadline accounting had finished when observed; inspection, manifest, and debug summary use the same observation |
-| `provider_diagnostics` | Snapshot of finalized chat diagnostics and the surviving request-scoped setup ledger; bootstrap counters survive failures before a chat exists |
+| `provider_diagnostics` | Detached snapshot of finalized chat diagnostics, including nested counters, and the surviving request-scoped setup ledger; inspection, manifests, and debug summaries use this observation even when empty |
 | `failure_stage` | Failed lifecycle phase, or `None` on success; see the CLI manifest reference for phase names |
 
 `RunResult` is available from `chat_downloader.runtime`; it is not a top-level
 `chat_downloader` export.
+
+Bounded shutdown can return while a source worker is still unwinding. Built-in
+dictionary, list, and tuple containers are detached; opaque adapter values
+retain their identity without invoking adapter copy hooks. Later updates to
+provider counters do not revise the returned observation. An incomplete deadline
+count remains the observed lower bound; it does not imply that cleanup has
+finished.
 
 ## Typed Configuration Objects
 

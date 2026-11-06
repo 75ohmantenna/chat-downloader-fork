@@ -100,7 +100,10 @@ def test_manifest_snapshots_requested_bounds_before_resume_mutation(
     path = tmp_path / "window.json"
     manifest = RunManifest(str(path), None, parameters=parameters)
     parameters["start_time"] = 599
-    manifest.write(Chat(), RunResult())
+    chat = Chat()
+    result = RunResult()
+    result.observe_provider(chat, None)
+    manifest.write(chat, result)
     report = json.loads(path.read_text())
     assert report["selected_window"] == expected
     assert report["effective_window"]["start_time"] == 599
@@ -132,7 +135,9 @@ def test_manifest_never_serializes_arbitrary_effective_window_fields(tmp_path):
         "private_message": "PRIVATE CHAT CONTENT",
     }
     path = tmp_path / "window.json"
-    RunManifest(str(path), None).write(chat, RunResult())
+    result = RunResult()
+    result.observe_provider(chat, None)
+    RunManifest(str(path), None).write(chat, result)
     report = json.loads(path.read_text())
     assert report["effective_window"] == {
         "start_time": 600,
