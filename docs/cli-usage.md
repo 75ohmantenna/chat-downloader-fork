@@ -105,6 +105,9 @@ render visibly as `\r`, `\n`, `\u0085`, `\u2028`, or `\u2029`, preserving the
 one-record-per-line boundary. Horizontal tabs remain intact; other terminal
 control characters are removed. JSONL retains the original message characters
 for lossless downstream processing.
+When redirected stdout uses a non-UTF-8 encoding, characters it cannot represent
+are rendered as visible Python-style escapes rather than discarded. Real Windows
+consoles use the Unicode console API; JSONL and TXT files remain UTF-8.
 
 Output writers initialize lazily on the first record. When a successful run
 retrieves zero records, configured `.jsonl` and `.txt` files are not created.
@@ -213,14 +216,20 @@ records written since the last sync. A flush or sync failure is reported as an
 output error instead of allowing the capture to
 appear successful. When appending to JSONL, a crash-truncated final record is
 removed before new records are written; a complete final record missing only
-its newline is kept and terminated. Tail repair scans and reads at most one
-16 MiB record (excluding its LF/CRLF terminator) plus a boundary byte. An
-unterminated tail over that limit raises an input/resource error before any
-existing bytes are changed; preserve the file for inspection rather than
-expecting automatic truncation. Total capture size is not limited by this
-tail-read cap. Text append mode similarly terminates an existing final line
-before writing the next record. Equivalent output paths that resolve to the
-same file are deduplicated so each message is written once.
+its newline is kept and terminated. JSONL tail repair bounds its backward search
+to one 16 MiB record, an optional trailing CR, and a preceding LF boundary byte.
+It additionally inspects up to two bytes at that boundary to identify LF or
+CRLF, then rereads only the bounded final record for validation. An unterminated
+tail over that limit raises an input/resource error before any existing bytes
+are changed; preserve the file for inspection rather than expecting automatic
+truncation. Total capture size is not limited by this tail-read cap. Text append
+mode similarly terminates an existing final line
+before writing the next record. Append retains the last existing LF or CRLF
+terminator for both repair and new records, even on a host with different native
+line endings. Without an existing terminator, the host convention is used; a
+trailing CR establishes CRLF. A partial trailing CR is replaced by the selected
+terminator. Existing mixed endings are not normalized. Equivalent output paths
+that resolve to the same file are deduplicated so each message is written once.
 
 Writer and cached-provider-session cleanup attempts every owned target even
 when a custom `close()` raises an unexpected ordinary exception. Existing

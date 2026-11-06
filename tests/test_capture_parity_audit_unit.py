@@ -149,6 +149,32 @@ def test_auditor_matches_real_writer_composition_and_semantic_dedup(capture):
     assert stats.suppressed_duplicates == 1
 
 
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+def test_appended_foreign_newline_capture_retains_parity(capture, monkeypatch, newline):
+    monkeypatch.setattr(os, "linesep", "\n" if newline == b"\r\n" else "\r\n")
+    capture.format("{message}")
+    initial = [_message("first"), _message("second")]
+    capture.jsonl.write_bytes(
+        newline.join(json.dumps(item).encode() for item in initial)
+    )
+    capture.txt.write_bytes(b"first" + newline + b"second")
+    formatter = ItemFormatter(str(capture.format_file))
+    chat = Chat(chat=iter([_message("third")]))
+    chat.set_formatter(lambda item: formatter.format(item, format_name="audit"))
+    for path in (capture.jsonl, capture.txt):
+        chat.attach_writer(
+            ContinuousWriter(str(path), overwrite=False, lazy_initialise=True)
+        )
+    list(chat)
+    chat.close()
+    stats = capture.direct()
+    assert not stats.failed
+    assert stats.jsonl_records == stats.txt_lines == 3
+    assert capture.txt.read_bytes() == newline.join(
+        [b"first", b"second", b"third", b""]
+    )
+
+
 @pytest.mark.parametrize(
     ("raw", "reason"),
     [

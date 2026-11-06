@@ -149,7 +149,68 @@ def test_jsonl_append_accepts_exact_record_limit(
     writer.write({"next": True})
     writer.close()
 
-    assert path.read_bytes() == (prefix + tail + terminal_cr + b'\n{"next": true}\n')
+    newline = b"\n" if prefix else b"\r\n" if terminal_cr else os.linesep.encode()
+    assert path.read_bytes() == prefix + tail + newline + b'{"next": true}' + newline
+
+
+@pytest.mark.parametrize("host_newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("origin_newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("tail", ["terminated", "unterminated", "partial_cr"])
+@pytest.mark.parametrize("kind", ["jsonl", "txt"])
+def test_append_preserves_origin_newlines(
+    tmp_path, monkeypatch, host_newline, origin_newline, tail, kind
+):
+    monkeypatch.setattr(os, "linesep", host_newline)
+    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    records = [{"message": word} for word in ("first", "second", "third")]
+    lines = [
+        json.dumps(record) if kind == "jsonl" else record["message"]
+        for record in records
+    ]
+    newline = origin_newline.encode()
+    ending = newline if tail == "terminated" else b"\r" if tail == "partial_cr" else b""
+    path = tmp_path / f"capture.{kind}"
+    path.write_bytes(lines[0].encode() + newline + lines[1].encode() + ending)
+    factory = JsonLinesContinuousWriter if kind == "jsonl" else TextContinuousWriter
+    writer = factory(str(path), overwrite=False)
+    try:
+        writer.write(records[2] if kind == "jsonl" else lines[2])
+    finally:
+        writer.close()
+    assert path.read_bytes() == newline.join(line.encode() for line in lines) + newline
+
+
+@pytest.mark.parametrize("host_newline", ["\n", "\r\n"])
+@pytest.mark.parametrize("kind", ["jsonl", "txt"])
+def test_first_unterminated_record_uses_host_newline(
+    tmp_path, monkeypatch, host_newline, kind
+):
+    monkeypatch.setattr(os, "linesep", host_newline)
+    path = tmp_path / f"capture.{kind}"
+    initial = '{"message": "first"}' if kind == "jsonl" else "first"
+    appended = {"message": "second"} if kind == "jsonl" else "second"
+    path.write_bytes(initial.encode())
+    factory = JsonLinesContinuousWriter if kind == "jsonl" else TextContinuousWriter
+    writer = factory(str(path), overwrite=False)
+    try:
+        writer.write(appended)
+    finally:
+        writer.close()
+    final = json.dumps(appended) if kind == "jsonl" else appended
+    assert path.read_bytes() == (initial + host_newline + final + host_newline).encode()
+
+
+@pytest.mark.parametrize("origin_newline", [b"\n", b"\r\n"])
+def test_truncated_jsonl_tail_keeps_prefix_newline(tmp_path, origin_newline):
+    path = tmp_path / "capture.jsonl"
+    prefix = b'{"message": "first"}' + origin_newline
+    path.write_bytes(prefix + b'{"message": "truncated')
+    writer = JsonLinesContinuousWriter(str(path), overwrite=False)
+    try:
+        writer.write({"message": "second"})
+    finally:
+        writer.close()
+    assert path.read_bytes() == prefix + b'{"message": "second"}' + origin_newline
 
 
 @pytest.mark.parametrize("prefix", [b"", b"{}\n" * 20_000])

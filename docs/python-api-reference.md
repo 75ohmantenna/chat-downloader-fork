@@ -450,6 +450,9 @@ one physical line per record while JSONL remains lossless. Lone Unicode
 surrogates in the final text are escaped so it can be written as UTF-8. These
 controls support natural event notices without adding presentation-only fields
 to normalized JSONL records.
+Redirected stdout uses its destination encoding and visibly escapes characters
+that encoding cannot represent, rather than silently discarding them. File
+writers always use UTF-8.
 
 The runtime can attach multiple output writers when `output` is a list or when
 the CLI receives repeated `--output` flags. Use `.jsonl` for structured chat
@@ -474,6 +477,10 @@ YouTube channel discovery keeps distinct templates until the selected video's
 metadata is available. Final aliases and format conflicts are checked before
 any lazy output file opens; already resolved outputs retain preflight
 deduplication for verification.
+Append preserves the last existing LF or CRLF newline style for tail repair and
+new records. Without an existing terminator it uses the host convention, except
+that a trailing CR establishes CRLF. A partial trailing CR is replaced by the
+selected terminator; existing mixed endings are not normalized.
 
 File writers are crash-resilient: each record is flushed on write and the file
 is synchronized to disk periodically (about every 60 seconds). JSONL accepts

@@ -231,7 +231,7 @@ def safe_print(
         out.write(output_string)
     else:
         enc = encoding or getattr(out, "encoding", None) or preferredencoding()
-        byt = output_string.encode(enc, "ignore")
+        byt = output_string.encode(enc, "backslashreplace")
         out.buffer.write(byt)
 
     if flush and hasattr(out, "flush"):

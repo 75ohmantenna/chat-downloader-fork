@@ -29,25 +29,51 @@ _FSYNC_INTERVAL_SECONDS = 60.0
 _TAIL_SCAN_BYTES = 8192
 
 
-def _repair_text_final_line(file: BinaryIO, file_name: str) -> None:
-    """Terminate the validated file's final line before appending."""
+def _newline_at(file: BinaryIO, end: int) -> str:
+    """Identify the terminator ending at this byte offset."""
+    file.seek(max(0, end - 2))
+    return "\r\n" if file.read(min(2, end)) == b"\r\n" else "\n"
+
+
+def _terminate_final_line(file: BinaryIO, end: int, newline: str) -> None:
+    """Replace a partial CR terminator rather than duplicating it."""
+    file.seek(end - 1)
+    if file.read(1) == b"\r":
+        file.truncate(end - 1)
+    file.seek(0, os.SEEK_END)
+    file.write(newline.encode("ascii"))
+
+
+def _repair_text_final_line(file: BinaryIO, file_name: str) -> str:
+    """Terminate the final line and retain the last existing newline style."""
     end = file.seek(0, os.SEEK_END)
     if not end:
-        return
+        return os.linesep
     file.seek(end - 1)
-    if file.read(1) == b"\n":
-        return
-    file.seek(0, os.SEEK_END)
-    file.write(b"\n")
+    last_byte = file.read(1)
+    if last_byte == b"\n":
+        return _newline_at(file, end)
+    newline: str = "\r\n" if last_byte == b"\r" else os.linesep
+    position = end
+    while position:
+        start = max(0, position - _TAIL_SCAN_BYTES)
+        file.seek(start)
+        index = file.read(position - start).rfind(b"\n")
+        if index >= 0:
+            newline = _newline_at(file, start + index + 1)
+            break
+        position = start
+    _terminate_final_line(file, end, newline)
     file.flush()
     os.fsync(file.fileno())
     log(
         "warning",
         f"Terminated the final text line in {file_name} before append.",
     )
+    return newline
 
 
-def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
+def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> str:
     r"""Repair a missing or crash-truncated final newline on the same handle.
 
     Scan at most one bounded record plus a preceding newline, then validate only
@@ -56,13 +82,13 @@ def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
     """
     end = file.seek(0, os.SEEK_END)
     if not end:
-        return
+        return os.linesep
     file.seek(end - 1)
     last_byte = file.read(1)
     if last_byte == b"\n":
-        return
+        return _newline_at(file, end)
 
-    # A terminal CR becomes part of CRLF when repair appends the missing LF.
+    # Allow a partial CR terminator outside the record's content-byte limit.
     tail_limit = MAX_CAPTURE_RECORD_BYTES + (last_byte == b"\r")
     scan_start = max(0, end - tail_limit - 1)
     position = end
@@ -79,6 +105,13 @@ def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
 
     if end - truncate_at > tail_limit:
         raise CaptureRecordLimitError
+    newline = (
+        _newline_at(file, truncate_at)
+        if truncate_at
+        else "\r\n"
+        if last_byte == b"\r"
+        else os.linesep
+    )
 
     file.seek(truncate_at)
     tail = file.read(end - truncate_at)
@@ -88,8 +121,7 @@ def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
         file.truncate(truncate_at)
         action = "Removed an incomplete trailing JSONL record from"
     else:
-        file.seek(0, os.SEEK_END)
-        file.write(b"\n")
+        _terminate_final_line(file, end, newline)
         action = "Terminated the final JSONL record in"
     file.flush()
     os.fsync(file.fileno())
@@ -97,6 +129,7 @@ def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> None:
         "warning",
         f"{action} {file_name} before append.",
     )
+    return newline
 
 
 def _assert_utc_aware(item: Any) -> None:
@@ -142,9 +175,9 @@ class ContinuousFileWriter(ABC):
         self._prepared_file = _prepared_file
         self._defer_initialization = _defer_initialization
         self._pending_file: BinaryIO | None = None
-        self._repair_final_line: Callable[[BinaryIO, str], None] | None = None
+        self._repair_final_line: Callable[[BinaryIO, str], str] | None = None
 
-    def _open_file(self, repair: Callable[[BinaryIO, str], None]) -> None:
+    def _open_file(self, repair: Callable[[BinaryIO, str], str]) -> None:
         """Transfer a validated stream, optionally deferring destructive setup."""
         prepared = self._prepared_file or _OutputFile(
             self.file_name, append=not self.overwrite, exclusive=False
@@ -173,13 +206,14 @@ class ContinuousFileWriter(ABC):
         self._prepared_file = None
         self._repair_final_line = None
         try:
+            newline: str = os.linesep
             if self.overwrite:
                 stream.truncate(0)
                 stream.seek(0)
             else:
-                repair(stream, self.file_name)
+                newline = repair(stream, self.file_name)
                 stream.seek(0, os.SEEK_END)
-            self.file = io.TextIOWrapper(stream, encoding="utf-8")
+            self.file = io.TextIOWrapper(stream, encoding="utf-8", newline=newline)
         except BaseException:
             stream.close()
             raise

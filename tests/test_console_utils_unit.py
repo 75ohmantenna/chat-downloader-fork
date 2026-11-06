@@ -89,6 +89,21 @@ def test_safe_print_writes_bytes_via_buffer_with_preferred_encoding(
     assert out.flushed is True
 
 
+@pytest.mark.parametrize(
+    ("encoding", "expected"),
+    [
+        ("ascii", b"A\\xe9\\u6f22\\U0001f600B\n"),
+        ("cp1252", b"A\xe9\\u6f22\\U0001f600B\n"),
+        ("utf-8", "Aé漢😀B\n".encode()),
+    ],
+)
+def test_safe_print_preserves_unencodable_characters(encoding, expected) -> None:
+    buffer = io.BytesIO()
+    out = io.TextIOWrapper(buffer, encoding=encoding)
+    console_utils.safe_print("Aé漢😀B", out=out, flush=True)
+    assert buffer.getvalue() == expected
+
+
 def test_safe_print_uses_windows_console_short_circuit(monkeypatch) -> None:
     out = SimpleNamespace(fileno=lambda: 1)
     writes = []
