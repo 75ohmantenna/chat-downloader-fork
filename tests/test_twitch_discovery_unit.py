@@ -23,6 +23,14 @@ def _page(kind, edges, more=False):
     return [{"data": data}]
 
 
+def _discover(kind, download, limit):
+    if kind == "streams":
+        return discovery.get_top_livestreams(Mock(), download, limit=limit)
+    return getattr(discovery, f"get_user_{kind}")(
+        Mock(), download, "streamer", limit=limit
+    )
+
+
 def _edge(node, cursor="cursor-1"):
     return {"cursor": cursor, "node": node}
 
@@ -147,21 +155,22 @@ def test_stream_discovery_accounts_for_returned_edges_on_short_pages():
     assert [query["cursor"] for query in queries] == ["", "next"]
 
 
+@pytest.mark.parametrize("kind", ["clips", "videos", "streams"])
 @pytest.mark.parametrize("cursors", [[None], [""], ["next", "next"], ["a", "b", "a"]])
-def test_stream_discovery_rejects_missing_repeated_or_cyclic_cursors(cursors):
+def test_discovery_validates_required_cursor_before_emitting_page(kind, cursors):
     pages = []
     for index, cursor in enumerate(cursors):
         edge = {"node": {"id": str(index)}}
         if cursor is not None:
             edge["cursor"] = cursor
-        pages.append(_page("streams", [edge], True))
+        pages.append(_page(kind, [edge], True))
     download = Mock(side_effect=pages)
-    streams = discovery.get_top_livestreams(Mock(), download, limit=31)
-    assert [next(streams)["id"] for _ in cursors[:-1]] == [
+    records = _discover(kind, download, 31)
+    assert [next(records)["id"] for _ in cursors[:-1]] == [
         str(index) for index in range(len(cursors) - 1)
     ]
     with pytest.raises(ParsingError, match="pagination cursor"):
-        next(streams)
+        next(records)
     assert download.call_count == len(cursors)
 
 
@@ -223,32 +232,36 @@ def test_stream_discovery_missing_page_info_terminates():
     download.assert_called_once()
 
 
-def test_stream_discovery_skips_non_object_edges():
-    download = Mock(side_effect=[_page("streams", ["malformed", _edge({"id": "one"})])])
-    assert list(discovery.get_top_livestreams(Mock(), download, limit=2)) == [
-        {"id": "one"}
-    ]
-    download.assert_called_once()
-
-
-def test_discovery_get_user_videos_paginates_with_cursor_and_skips_empty_nodes():
+@pytest.mark.parametrize("kind", ["clips", "videos", "streams"])
+def test_discovery_quota_counts_malformed_edges_and_empty_nodes(kind):
     download = Mock(
         side_effect=[
             _page(
-                "videos",
-                ["not-a-dict", _edge(None), _edge(_video(7), "cursor-2")],
-                True,
+                kind, ["not-a-dict", _edge(None), _edge(_video(7), "cursor-2")], True
             ),
-            _page("videos", [_edge(_video(8, "restricted"), "cursor-3")]),
+            _page(kind, [_edge(_video(8, "restricted"), "")], True),
         ]
     )
-    result = list(discovery.get_user_videos(Mock(), download, "streamer", limit=4))
+    result = list(_discover(kind, download, 4))
     queries = [call.args[1][0]["variables"] for call in download.call_args_list]
-    assert len(queries) == 2
-    assert "cursor" not in queries[0]
+    assert [query["limit"] for query in queries] == [4, 1]
     assert queries[1]["cursor"] == "cursor-2"
-    assert [item["id"] for item in result] == ["7", "8"]
-    assert result[1]["resource_restriction"] == "restricted"
+    assert [item.get("id") for item in result] == (
+        ["7", "8"] if kind == "videos" else [None, "7", "8"]
+    )
+    if kind == "videos":
+        assert "cursor" not in queries[0]
+        assert result[1]["resource_restriction"] == "restricted"
+
+
+@pytest.mark.parametrize("kind", ["clips", "videos", "streams"])
+def test_discovery_preserves_server_overdelivery_without_another_page(kind):
+    download = Mock(
+        return_value=_page(kind, [_edge({"id": "one"}), _edge({"id": "two"}, "")], True)
+    )
+    assert list(_discover(kind, download, 1)) == [{"id": "one"}, {"id": "two"}]
+    download.assert_called_once()
+    assert download.call_args.args[1][0]["variables"]["limit"] == 1
 
 
 def test_clip_discovery_uses_returned_cursor_beyond_first_hundred():
@@ -267,17 +280,11 @@ def test_clip_discovery_uses_returned_cursor_beyond_first_hundred():
     assert [query["limit"] for query in queries] == [100, 100]
 
 
-@pytest.mark.parametrize("cursors", [[""], ["MA=="], ["next", "next"], ["a", "b", "a"]])
-def test_clip_discovery_rejects_missing_repeated_or_cyclic_cursors(cursors):
-    download = Mock(
-        side_effect=[
-            _page("clips", [_edge({"id": str(index)}, cursor)], True)
-            for index, cursor in enumerate(cursors)
-        ]
-    )
+def test_clip_discovery_rejects_a_return_to_the_initial_cursor():
+    download = Mock(return_value=_page("clips", [_edge({"id": "one"}, "MA==")], True))
     with pytest.raises(ParsingError, match="pagination cursor"):
-        list(discovery.get_user_clips(Mock(), download, "streamer", limit=100))
-    assert download.call_count == len(cursors)
+        next(_discover("clips", download, 100))
+    download.assert_called_once()
 
 
 @pytest.mark.parametrize("more", [False, True])
@@ -297,26 +304,6 @@ def test_clip_limit_does_not_require_an_unused_continuation():
         {"id": "one"}
     ]
     download.assert_called_once()
-
-
-def test_clip_discovery_skips_non_object_edges():
-    download = Mock(return_value=_page("clips", ["malformed", _edge({"id": "one"})]))
-    assert list(discovery.get_user_clips(Mock(), download, "streamer")) == [
-        {"id": "one"}
-    ]
-
-
-@pytest.mark.parametrize("cursors", [[""], ["next", "next"], ["a", "b", "a"]])
-def test_video_discovery_rejects_missing_repeated_or_cyclic_cursors(cursors):
-    download = Mock(
-        side_effect=[
-            _page("videos", [_edge({"id": str(index)}, cursor)], True)
-            for index, cursor in enumerate(cursors)
-        ]
-    )
-    with pytest.raises(ParsingError, match="pagination cursor"):
-        list(discovery.get_user_videos(Mock(), download, "streamer"))
-    assert download.call_count == len(cursors)
 
 
 @pytest.mark.parametrize("limit", [1, None])

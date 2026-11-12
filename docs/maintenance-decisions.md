@@ -81,6 +81,24 @@ than split into request phases that would obscure cursor and creator-ID state.
 **Revisit when:** creator identity or edge validation becomes a pure component
 with another real consumer, or a new boundary removes replay-loop coupling.
 
+## Share Twitch discovery cursor progression
+
+**Decision:** The private edge iterator in `sites/twitch/discovery.py` owns
+page sizing, returned-edge quotas, cursor progress, and validation before page
+emission for clip, video, and livestream discovery. Query construction,
+connection lookup, missing-user errors, missing-stream warnings, and remapping
+remain endpoint-specific in the same module.
+
+Quotas count returned edges even when endpoint mapping skips a malformed edge
+or empty node. Terminal pages and pages satisfying the quota require no fresh
+cursor; overdelivered pages retain all returned edges. Initial cursors and page
+sizes remain operation-specific inputs. Tests exercise the existing discovery
+functions through the injected GraphQL transport rather than the iterator.
+
+**Revisit when:** an actual discovery protocol change requires different quota
+or continuation semantics. Do not generalize this iterator across providers
+based only on similar response shapes.
+
 ## Distinguish raw JSON from assembled output
 
 **Decision:** Incoming platform payloads use `utils/json_types` aliases and

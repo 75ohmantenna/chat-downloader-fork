@@ -318,7 +318,7 @@ module names.
 |--------|---------|
 | `_protocols.py` | Twitch transport and downloader structural interfaces |
 | `constants.py` | URL/IRC constants, Client-ID, GraphQL operations, and message group/remapping tables |
-| `discovery.py` | Twitch URL discovery and GraphQL query construction |
+| `discovery.py` | Twitch discovery queries and remapping with one private edge-pagination iterator owning quotas and cursor progress |
 | `extractor.py` | Twitch site extractor class |
 | `graphql_client.py` | Persisted-query GraphQL client and error handling |
 | `badge_client.py` | Badge retrieval, operation fallback, and normalization |

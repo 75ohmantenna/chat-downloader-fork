@@ -1,7 +1,8 @@
 # Twitch discovery deepening plan
 
-**Status: unimplemented proposal.** Commit this reviewed plan separately before
-implementation and after the output-target implementation is complete.
+**Status: implemented and verified.** This reviewed plan was committed after
+the output-target implementation and before discovery changes. The sections
+below preserve the intended design; the outcome records the completed work.
 
 ## Evidence and intended depth
 
@@ -89,8 +90,8 @@ decision without new evidence.
 
 Independent adversarial review accepted the private iterator after checking
 edge-based quota accounting, server overdelivery, validation timing, initial
-cursor differences, and endpoint-specific errors. No source changes are
-authorized by this plan until the prior implementation is committed.
+cursor differences, and endpoint-specific errors. Implementation followed the
+required separate plan and prior implementation commits.
 
 Read-only reassessment found no additional justified deepening:
 
@@ -112,3 +113,22 @@ Read-only reassessment found no additional justified deepening:
 Revisit these choices only when an independent consumer or a concrete sequencing
 defect demonstrates an interface that removes obligations. Their size alone
 does not justify further restructuring.
+
+## Outcome
+
+One private iterator now owns discovery pagination in the existing module.
+Endpoint query construction, response selection, and remapping remain local.
+Duplicated cursor tests were replaced with a cross-endpoint matrix at the
+existing discovery interfaces; quota and overdelivery regressions preserve
+the reviewed behavior. No direct iterator test or new adapter was introduced.
+
+Independent final source, test, and documentation review found no blocking
+issues. All 727 scoped Twitch tests passed. Canonical `make ci` passed with
+6,193 offline tests, two skips, 56 network deselections, and 100% coverage of
+14,352 source lines. Lint, import contracts, formatting, spelling, typing,
+package build, and smoke checks passed without ratchet exceptions.
+
+The adjacent reassessment above remains the stopping decision: no further
+examined change concentrates knowledge enough to justify its interface and
+regression cost. The two implemented plans resolve the concrete opportunities
+found in this review; no speculative cleanup round is scheduled.

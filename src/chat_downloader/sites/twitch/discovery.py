@@ -21,11 +21,46 @@ from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_list, get_str
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Callable, Generator
 
-    from chat_downloader.utils.json_types import JSONDict, JSONList
+    from chat_downloader.utils.json_types import JSONAny, JSONDict, JSONList
 
     from ._protocols import _DownloadGQL, _SessionPost
+
+
+def _iter_discovery_edges(
+    fetch_page: Callable[[str | None, int], JSONDict | None],
+    *,
+    limit: int | None,
+    page_size: int,
+    initial_cursor: str | None,
+    kind: str,
+) -> Generator[JSONAny, None, None]:
+    """Own edge quota and validate required cursor progress before page emission."""
+    remaining: float = float("inf") if limit is None else limit
+    cursor = initial_cursor
+    seen_cursors = {cursor} if cursor is not None else set()
+    while True:
+        num_to_get = int(max(min(remaining, page_size), 0))
+        if num_to_get <= 0:
+            return
+        page = fetch_page(cursor, num_to_get)
+        if not page:
+            return
+        edges = get_list(page, "edges")
+        has_next_page = bool(multi_get(page, "pageInfo", "hasNextPage"))
+        if has_next_page and len(edges) < remaining:
+            final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
+            next_cursor = get_str(final_edge, "cursor")
+            if not next_cursor or next_cursor in seen_cursors:
+                msg = f"Twitch {kind} discovery did not advance its pagination cursor."
+                raise ParsingError(msg)
+            cursor = next_cursor
+            seen_cursors.add(cursor)
+        remaining -= len(edges)
+        yield from edges
+        if not has_next_page:
+            return
 
 
 def get_user_clips(
@@ -38,14 +73,7 @@ def get_user_clips(
     """Get clips for a user."""
     clip_remapping = build_clip_remapping()
 
-    remaining_count = limit
-    cursor = base64.b64encode(b"0").decode()
-    seen_cursors = {cursor}
-    while True:
-        num_to_get = max(min(remaining_count, 100), 0)
-        if num_to_get <= 0:
-            break
-
+    def fetch_page(cursor: str | None, num_to_get: int) -> JSONDict | None:
         query: JSONList = [
             {
                 "operationName": "ClipsCards__User",
@@ -59,31 +87,21 @@ def get_user_clips(
         ]
         info = download_gql_func(session_post, query)
         if not info:
-            break
+            return None
+        clips: JSONDict | None = multi_get(info, 0, "data", "user", "clips")
+        return clips
 
-        clips = multi_get(info, 0, "data", "user", "clips")
-        if not clips:
-            break
-        edges = get_list(clips, "edges")
-        has_next_page = bool(multi_get(clips, "pageInfo", "hasNextPage"))
-        if has_next_page and len(edges) < remaining_count:
-            final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
-            next_cursor = get_str(final_edge, "cursor")
-            if not next_cursor or next_cursor in seen_cursors:
-                msg = "Twitch clip discovery did not advance its pagination cursor."
-                raise ParsingError(msg)
-            cursor = next_cursor
-            seen_cursors.add(cursor)
-        remaining_count -= len(edges)
-
-        for edge in edges:
-            if not isinstance(edge, dict):
-                continue
-            node = get_dict(edge, "node")
-            yield r.remap_dict(node, clip_remapping)
-
-        if not has_next_page:
-            break
+    for edge in _iter_discovery_edges(
+        fetch_page,
+        limit=limit,
+        page_size=100,
+        initial_cursor=base64.b64encode(b"0").decode(),
+        kind="clip",
+    ):
+        if not isinstance(edge, dict):
+            continue
+        node = get_dict(edge, "node")
+        yield r.remap_dict(node, clip_remapping)
 
 
 def _build_user_videos_query(
@@ -132,43 +150,24 @@ def get_user_videos(
     """Get videos for a user."""
     video_remapping = build_video_remapping()
 
-    remaining_count: float = float("inf") if limit is None else limit
-    cursor: str | None = None
-    seen_cursors: set[str] = set()
-
-    while True:
-        num_to_get = int(max(min(remaining_count, 30), 0))
-        if num_to_get <= 0:
-            break
-
+    def fetch_page(cursor: str | None, num_to_get: int) -> JSONDict | None:
         query = _build_user_videos_query(username, num_to_get, video_type, sort, cursor)
         info = download_gql_func(session_post, query)
-        videos = _extract_user_videos(info, username)
-        if not videos:
-            break
+        return _extract_user_videos(info, username)
 
-        edges = get_list(videos, "edges")
-        has_next_page = bool(multi_get(videos, "pageInfo", "hasNextPage"))
-        if has_next_page and len(edges) < remaining_count:
-            final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
-            next_cursor = get_str(final_edge, "cursor")
-            if not next_cursor or next_cursor in seen_cursors:
-                msg = "Twitch video discovery did not advance its pagination cursor."
-                raise ParsingError(msg)
-            cursor = next_cursor
-            seen_cursors.add(cursor)
-        remaining_count -= len(edges)
-
-        for edge in edges:
-            if not isinstance(edge, dict):
-                continue
-            node = get_dict(edge, "node")
-            if not node:
-                continue
-            yield r.remap_dict(node, video_remapping)
-
-        if not has_next_page:
-            break
+    for edge in _iter_discovery_edges(
+        fetch_page,
+        limit=limit,
+        page_size=30,
+        initial_cursor=None,
+        kind="video",
+    ):
+        if not isinstance(edge, dict):
+            continue
+        node = get_dict(edge, "node")
+        if not node:
+            continue
+        yield r.remap_dict(node, video_remapping)
 
 
 def get_top_livestreams(
@@ -179,15 +178,7 @@ def get_top_livestreams(
     """Get top live streams on Twitch."""
     livestream_remapping = build_livestream_remapping()
 
-    remaining_count = limit
-    cursor = ""
-    seen_cursors = {cursor}
-
-    while True:
-        num_to_get = max(min(remaining_count, 30), 0)
-        if num_to_get <= 0:
-            break
-
+    def fetch_page(cursor: str | None, num_to_get: int) -> JSONDict | None:
         query: JSONList = [
             {
                 "operationName": "BrowsePage_Popular",
@@ -203,33 +194,22 @@ def get_top_livestreams(
         ]
 
         info = download_gql_func(session_post, query)
-        streams_info = multi_get(info, 0, "data", "streams")
+        streams_info: JSONDict | None = multi_get(info, 0, "data", "streams")
         if not streams_info:
             log(
                 "warning",
                 "Could not retrieve Twitch livestream data from GraphQL response.",
             )
-            break
+        return streams_info
 
-        edges = get_list(streams_info, "edges")
-        has_next_page = bool(multi_get(streams_info, "pageInfo", "hasNextPage"))
-        if has_next_page and len(edges) < remaining_count:
-            final_edge = edges[-1] if edges and isinstance(edges[-1], dict) else {}
-            next_cursor = get_str(final_edge, "cursor")
-            if not next_cursor or next_cursor in seen_cursors:
-                msg = (
-                    "Twitch livestream discovery did not advance its pagination cursor."
-                )
-                raise ParsingError(msg)
-            cursor = next_cursor
-            seen_cursors.add(cursor)
-        remaining_count -= len(edges)
-
-        for edge in edges:
-            if not isinstance(edge, dict):
-                continue
-            node = get_dict(edge, "node")
-            yield r.remap_dict(node, livestream_remapping)
-
-        if not has_next_page:
-            break
+    for edge in _iter_discovery_edges(
+        fetch_page,
+        limit=limit,
+        page_size=30,
+        initial_cursor="",
+        kind="livestream",
+    ):
+        if not isinstance(edge, dict):
+            continue
+        node = get_dict(edge, "node")
+        yield r.remap_dict(node, livestream_remapping)
