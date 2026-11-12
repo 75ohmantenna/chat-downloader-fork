@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 from chat_downloader.metadata import __version__
 from chat_downloader.redaction import sanitize_for_log
 from chat_downloader.request_profiles import REQUEST_PROFILES
-from chat_downloader.sites.output_dispatch import _expand_output_file_name
 from chat_downloader.sites.proxy import TLS_DIAGNOSTIC_CIPHERS, TLS_DIAGNOSTIC_VERSIONS
 from chat_downloader.utils.atomic_files import atomic_text_file
 from chat_downloader.utils.time_utils import ensure_seconds
@@ -178,23 +177,6 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
     return counters
 
 
-def _capture_outputs(chat: Chat, *, keep_created: bool = False) -> list[Path]:
-    """Expand lazy paths while retaining opened artifact names when requested."""
-    dispatcher = chat._output_dispatcher
-    if dispatcher is None:
-        return []
-    return [
-        Path(
-            item["file_name"]
-            if keep_created and item["file_created"]
-            else _expand_output_file_name(
-                item["file_name"], title=chat.title, video_id=chat.id
-            )
-        )
-        for item in dispatcher.writer_summaries
-    ]
-
-
 def _time_window(parameters: Mapping[str, object]) -> dict[str, float | None]:
     """Normalize request bounds without persisting invalid or arbitrary values."""
     return {
@@ -276,7 +258,8 @@ class RunManifest:
     def bind(self, chat: Chat) -> None:
         """Resolve lazy names before any output writer can open its file."""
         self.valid = False
-        outputs = _capture_outputs(chat)
+        dispatcher = chat._output_dispatcher
+        outputs = dispatcher.output_paths() if dispatcher is not None else []
         destination = self.path.resolve()
         if any(path.resolve() == destination for path in outputs):
             msg = "Run manifest must be distinct from chat outputs."
@@ -299,7 +282,7 @@ class RunManifest:
         writers = dispatcher.writer_summaries if dispatcher else []
         # Lazy channel discovery can change metadata after preflight. Opened
         # writers retain the actual path, including literal braces in titles.
-        outputs = _capture_outputs(chat, keep_created=True) if chat is not None else []
+        outputs = dispatcher.output_paths() if dispatcher is not None else []
         if any(path.resolve() == self.path.resolve() for path in outputs):
             msg = "Run manifest must be distinct from chat outputs."
             raise ValueError(msg)

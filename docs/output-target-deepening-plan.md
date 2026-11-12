@@ -1,7 +1,8 @@
 # Output target deepening plan
 
-**Status: unimplemented proposal.** This document describes intended work,
-not current behavior. Review and commit this plan before implementation.
+**Status: implemented and verified.** The original plan was committed before
+implementation. The sections below preserve its reviewed design; the outcome
+records the completed work and verification.
 
 ## Evidence and scope
 
@@ -127,3 +128,22 @@ existing attachments, and read-only observation. A local reproduction confirmed
 that manifest binding rejects an already opened literal `literal-{field}.jsonl`
 filename as an unsupported template. Cover this concrete defect at the manifest
 interface as part of concentrating filename ownership.
+
+## Outcome
+
+The private collection in `output/targets.py` now owns target selection and
+provenance. Configuration and dispatch share that policy, while manifest and
+verification observe filenames through the dispatcher. The pipeline output
+helper and manifest expansion helper were removed. Existing attachments and
+lazy metadata behavior remain intact; interface regressions cover literal
+filenames both for eager writers and after initialization fails.
+
+The independent final review found no blocking issues. Focused verification
+passed 326 tests. Canonical `make ci` passed with 6,188 offline tests, two skips,
+56 network deselections, and 100% coverage of 14,387 source lines; build and
+smoke checks passed. Typing caps were tightened and no size exception was added.
+
+Reassessment rejected further writer-activation and runner extraction because
+the proposed seams would retain their sequencing obligations. The repeated
+Twitch discovery pagination recipe remains a concrete opportunity and has a
+separate reviewed plan; it does not expand this implementation's scope.

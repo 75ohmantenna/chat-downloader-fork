@@ -13,8 +13,6 @@ from chat_downloader.output.capture_parity import audit_capture
 from chat_downloader.utils.dict_utils import copy_containers
 from chat_downloader.utils.filename_utils import output_path_identity
 
-from .capture_manifest import _capture_outputs
-
 if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
     from chat_downloader.utils.json_types import JSONDict
@@ -40,7 +38,8 @@ def _verification_pair(paths: list[Path]) -> dict[str, Path]:
 
 def capture_paths(chat: Chat) -> dict[str, Path]:
     """Resolve a distinct pair before output starts and after it closes."""
-    paths = _capture_outputs(chat, keep_created=True)
+    dispatcher = chat._output_dispatcher
+    paths = dispatcher.output_paths() if dispatcher is not None else []
     by_suffix = _verification_pair(paths)
     first, second = paths
     if first.resolve() == second.resolve() or (

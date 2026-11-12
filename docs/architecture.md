@@ -198,7 +198,7 @@ module names.
 | `capture_verification.py` | Optional post-shutdown verification using the resolved production formatter |
 | `cli_bridge.py` | Categorize `run()` kwargs into init / chat / run param groups |
 | `site_dispatch.py` | `dispatch_chat`: HTTPS normalization (including protocol-relative inputs), site resolution, defaults, provider invocation, and configured-chat assembly |
-| `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, expanded-output identity checks, and output routing |
+| `chat_pipeline.py` | `configure_chat`: close-propagating limits, timeouts, formatting, and output configuration |
 | `config_guards.py` | Explicit/environment proxy and cookie-authentication safety validation |
 | `runner.py` | Top-level run loop, optional bounded console state compaction, structured `RunResult`, shared shutdown provider/deadline observations for every report, testing-mode selection, and cleanup |
 | `session_lifecycle.py` | `_SiteSessionPool`: site-instance cache, shared explicit cookies, replacement, and shutdown |
@@ -210,6 +210,7 @@ module names.
 | `_secure_file.py` | Non-destructive regular-file acquisition, pinned directory/file identity checks, and exclusive private capture creation |
 | `capture_parity.py` | Internal provider-neutral streaming audit state machine for JSONL/TXT formatting, deduplication, physical-newline, input-identity, and content-safety parity checks |
 | `continuous_write.py` | `ContinuousWriter` factory; re-exports writer types |
+| `targets.py` | `ChatOutputWriter` protocol and private target collection: provisional/final alias selection, generated provenance, and read-only filename observation |
 | `writers.py` | `ContinuousFileWriter` ABC; `JsonLinesContinuousWriter`, `TextContinuousWriter`; `_WRITER_CLASSES` dispatch dict |
 
 ### `formatting/`
@@ -257,7 +258,7 @@ module names.
 | `retry.py` | Shared retry and debug-only bounded reconnect back-off orchestration |
 | `filters.py` | Canonical message-type/group validation, wildcard selection, and per-message time filtering |
 | `models.py` | `Chat` (result model: metadata, iteration, close facade), `Image`; compatibility re-export of `models.SiteDefault`. Output and deduplication are delegated to `_ChatOutputDispatcher` |
-| `output_dispatch.py` | `ChatOutputWriter` Protocol and `_ChatOutputDispatcher`: safe `{title}`/`{id}` expansion, writer setup, grouped raw/formatted dispatch, record rollback with owned ledgers, completed-record and suppression counts, and shutdown |
+| `output_dispatch.py` | `configure_outputs` and `_ChatOutputDispatcher`: lazy output configuration, collective writer setup, grouped raw/formatted dispatch, record rollback with owned ledgers, completed-record and suppression counts, and shutdown |
 | `remap.py` | `Remapper`: field-rename and transform machinery |
 | `_message_dedup.py` | Paid/ticker semantic deduplication for formatted sinks, plus bounded fingerprint-only latest-state compaction used exclusively by stdout |
 | `_seen_cache.py` | `_SeenMessageCache`: bounded FIFO deduplication cache |

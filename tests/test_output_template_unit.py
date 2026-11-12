@@ -8,7 +8,8 @@ import pytest
 
 from chat_downloader.errors import InvalidParameter
 from chat_downloader.models import ChatRequest
-from chat_downloader.sites.output_dispatch import _expand_output_file_name
+from chat_downloader.output.continuous_write import ContinuousWriter
+from chat_downloader.sites.models import Chat
 
 
 @pytest.mark.parametrize(
@@ -28,9 +29,11 @@ def test_invalid_output_template_is_rejected_at_request_boundary(path: str) -> N
         ChatRequest(output=path)
 
 
-def test_literal_braces_and_supported_fields_expand() -> None:
-    path = "{{archive}}_{title}_{id}.txt"
+def test_literal_braces_and_supported_fields_expand(tmp_path) -> None:
+    path = str(tmp_path / "{{archive}}_{title}_{id}.txt")
     ChatRequest(output=path)
-    assert _expand_output_file_name(path, title="Example", video_id="123") == (
-        "{archive}_Example_123.txt"
-    )
+    with Chat(iter([{}]), title="Example", id="123") as chat:
+        chat.set_formatter(lambda _: "hello")
+        chat.attach_writer(ContinuousWriter(path, lazy_initialise=True))
+        assert list(chat) == [{}]
+    assert (tmp_path / "{archive}_Example_123.txt").read_text() == "hello\n"

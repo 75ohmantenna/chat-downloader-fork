@@ -171,6 +171,13 @@ Validated regular files must have exactly one link; symlinks, hard links, and
 unverifiable identities fail closed. Repair, writes, and interrupted rollback
 use validated descriptors, never pathname reopens.
 
+The private output-target collection owns template provenance, alias selection,
+and filename observation. Runtime configuration uses that selection before
+attachment; dispatch uses the same policy when metadata is final. Manifest and
+verification readers observe target-owned paths without freezing templates or
+re-expanding finalized names, including after writer initialization fails.
+Already opened writers retain their literal filenames.
+
 Channel discovery marks its initial metadata as provisional. Distinct templates
 remain attached until real video metadata is available; the dispatcher checks
 the entire resolved set before opening lazy writers. Already resolved targets

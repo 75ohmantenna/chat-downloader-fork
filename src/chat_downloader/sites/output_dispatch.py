@@ -6,58 +6,20 @@ from __future__ import annotations
 
 import os
 from contextlib import contextmanager, suppress
-from string import Formatter
 from typing import TYPE_CHECKING, Any, Protocol, TypedDict
 
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
-from chat_downloader.output._secure_file import _check_output_path
 from chat_downloader.output.continuous_write import ContinuousWriter
-from chat_downloader.utils.filename_utils import (
-    output_path_identity,
-    sanitize_filename_component,
-    validate_output_template,
-)
+from chat_downloader.output.targets import ChatOutputWriter, _OutputTargets
 
 from ._message_dedup import _FormattedMessageDeduplicator
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+    from pathlib import Path
 
-
-class ChatOutputWriter(Protocol):
-    """Structural writer interface used by the chat output dispatcher."""
-
-    @property
-    def file_name(self) -> str | None:
-        """Return the configured name, which may await lazy configuration."""
-        ...  # pragma: no cover — structural typing declaration
-
-    @file_name.setter
-    def file_name(self, value: str) -> None:
-        """Set the resolved output path before opening the writer."""
-        ...  # pragma: no cover — structural typing declaration
-
-    @property
-    def output_mode(self) -> str:
-        """Return the writer's resolved file format."""
-        ...  # pragma: no cover — structural typing declaration
-
-    def is_initialised(self) -> bool:
-        """Return True if the writer has been initialized."""
-        ...  # pragma: no cover — structural typing declaration
-
-    def initialize(self) -> None:
-        """Initialize the writer, creating files and resources as needed."""
-        ...  # pragma: no cover — structural typing declaration
-
-    def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
-        """Write a chat item to the output target."""
-        ...  # pragma: no cover — structural typing declaration
-
-    def close(self) -> None:
-        """Close the writer and release any held resources."""
-        ...  # pragma: no cover — structural typing declaration
+    from chat_downloader.sites.models import Chat
 
 
 class _ChatHost(Protocol):
@@ -79,36 +41,6 @@ class _WriterSummary(TypedDict):
     records_written: int
 
 
-def _expand_output_file_name(
-    file_name: str,
-    *,
-    title: str | None,
-    video_id: str | None,
-) -> str:
-    """Expand output placeholders with safe single-component metadata."""
-    validate_output_template(file_name)
-    safe_title = sanitize_filename_component(title).replace("..", "_")
-    safe_id = sanitize_filename_component(video_id).replace("..", "_")
-    return file_name.format(title=safe_title, id=safe_id)
-
-
-def _register_output_path(
-    file_name: str,
-    identity: tuple[object, ...],
-    seen: dict[tuple[object, ...], str],
-) -> bool:
-    """Register one captured identity for both alias grouping and policy."""
-    suffix = file_name.rsplit(".", 1)[-1].lower()
-    if identity in seen:
-        if seen[identity] != suffix:
-            msg = "Different output formats require distinct files."
-            raise ValueError(msg)
-        log("warning", f"Duplicate output path '{file_name}' — skipping.")
-        return False
-    seen[identity] = suffix
-    return True
-
-
 class _ChatOutputDispatcher:
     """Manage writer setup, callback dispatch, deduplication, and chat shutdown.
 
@@ -123,12 +55,10 @@ class _ChatOutputDispatcher:
         max_seen_message_ids: int = DEFAULT_MAX_SEEN_MESSAGE_IDS,
     ) -> None:
         self._chat = chat
-        self.writers: list[ChatOutputWriter] = []
-        self._attached_writer_ids: set[int] = set()
+        self._targets = _OutputTargets()
+        self.writers = self._targets.writers
         self._initialised_writer_ids: set[int] = set()
         self._records_written_by_writer: dict[int, int] = {}
-        self._resolved_writer_ids: set[int] = set()
-        self._generated_writer_ids: set[int] = set()
         self._record_snapshots: dict[int, tuple[int, int]] | None = None
         self._formatted_duplicates_suppressed = 0
         self._write_error_count: int = 0
@@ -140,7 +70,7 @@ class _ChatOutputDispatcher:
 
     def _initialise_writers(self) -> None:
         """Initialize each attached writer once before dispatch begins."""
-        self._resolve_writer_paths()
+        self._targets.resolve(title=self._chat.title, video_id=self._chat.id)
         pending = [
             writer
             for writer in self.writers
@@ -180,69 +110,15 @@ class _ChatOutputDispatcher:
                 if concrete._prepared_file is not None:
                     concrete._prepared_file.validate(concrete._pending_file)
 
-    @staticmethod
-    def _writer_name(writer: ChatOutputWriter) -> str:
-        """Require a configured name without assuming factory initialization."""
-        file_name = writer.file_name
-        if file_name is None:
-            msg = "File name not set"
-            raise ValueError(msg)
-        return file_name
-
-    def _writer_path(self, writer: ChatOutputWriter) -> str:
-        """Expand each original template once, distinguishing escaped braces."""
-        writer_id = id(writer)
-        file_name = self._writer_name(writer)
-        if writer.is_initialised() or writer_id in self._resolved_writer_ids:
-            return file_name
-        path = _expand_output_file_name(
-            file_name, title=self._chat.title, video_id=self._chat.id
-        )
-        if (isinstance(writer, ContinuousWriter) and writer._require_new_file) or any(
-            field is not None
-            for _literal, field, _spec, _conversion in Formatter().parse(file_name)
-        ):
-            self._generated_writer_ids.add(writer_id)
-        return path
-
-    def _resolve_writer_paths(self) -> None:
-        """Preflight every final path and propagate exclusive alias policies."""
-        if all(writer.is_initialised() for writer in self.writers):
-            return
-        paths = [(writer, self._writer_path(writer)) for writer in self.writers]
-        identities = {id(writer): output_path_identity(path) for writer, path in paths}
-        generated = {
-            identities[id(writer)]
-            for writer, _path in paths
-            if id(writer) in self._generated_writer_ids
-        }
-        seen: dict[tuple[object, ...], str] = {}
-        resolved = []
-        for writer, path in paths:
-            unique = _register_output_path(path, identities[id(writer)], seen)
-            if writer.is_initialised() or unique:
-                resolved.append((writer, path))
-        for writer, path in paths:
-            if not writer.is_initialised() and isinstance(writer, ContinuousWriter):
-                _check_output_path(
-                    path, exclusive=id(writer) in self._generated_writer_ids
-                )
-        self.writers = [writer for writer, _path in resolved]
-        for writer, path in resolved:
-            writer.file_name = path
-            self._resolved_writer_ids.add(id(writer))
-            if isinstance(writer, ContinuousWriter):
-                writer._require_new_file = (
-                    writer._require_new_file or identities[id(writer)] in generated
-                )
+    def output_paths(self) -> list[Path]:
+        """Observe selected output paths without opening files or freezing metadata."""
+        return self._targets.paths(title=self._chat.title, video_id=self._chat.id)
 
     def attach_writer(self, writer: ChatOutputWriter) -> None:
         """Attach a writer to the chat, ignoring repeated object attachment."""
         writer_id = id(writer)
-        if writer_id in self._attached_writer_ids:
+        if not self._targets.attach(writer):
             return
-        self.writers.append(writer)
-        self._attached_writer_ids.add(writer_id)
         self._records_written_by_writer[writer_id] = 0
 
     def emit(self, item: dict[str, Any]) -> None:
@@ -376,9 +252,36 @@ class _ChatOutputDispatcher:
         """Return successful record counts for attached output writers."""
         return [
             {
-                "file_name": self._writer_name(writer),
+                "file_name": self._targets.name(writer),
                 "file_created": writer.is_initialised(),
                 "records_written": self._records_written_by_writer[id(writer)],
             }
             for writer in self.writers
         ]
+
+
+def configure_outputs(
+    chat: Chat,
+    outputs: str | list[str] | None,
+    *,
+    overwrite: bool,
+    sort_keys: bool,
+) -> None:
+    """Attach a provisionally selected lazy group without changing existing writers."""
+    if not outputs:
+        return
+    targets = _OutputTargets()
+    for name in outputs if isinstance(outputs, list) else [outputs]:
+        targets.attach(
+            ContinuousWriter(
+                name, overwrite=overwrite, sort_keys=sort_keys, lazy_initialise=True
+            )
+        )
+    targets.resolve(
+        title=chat.title,
+        video_id=chat.id,
+        provisional=True,
+        metadata_pending=chat._metadata_pending,
+    )
+    for writer in targets.writers:
+        chat.attach_writer(writer)

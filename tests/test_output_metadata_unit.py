@@ -10,6 +10,7 @@ import pytest
 
 from chat_downloader import ChatDownloader
 from chat_downloader.models import ChatRequest
+from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime.capture_verification import capture_paths
 from chat_downloader.runtime.chat_pipeline import configure_chat
 from chat_downloader.sites.models import Chat
@@ -291,3 +292,47 @@ def test_escaped_fields_are_resolved_before_verification_despite_pending_metadat
         ".txt": tmp_path / "chat.txt",
     }
     chat.close()
+
+
+def test_path_observation_does_not_freeze_provisional_metadata(tmp_path):
+    message = {"message": "hello"}
+    with Chat(iter([message]), title="First", id="first") as chat:
+        chat._metadata_pending = True
+        configure_chat(
+            chat,
+            ChatRequest(
+                output=[str(tmp_path / "{title}.jsonl"), str(tmp_path / "{id}.txt")],
+                format="default",
+            ),
+            SimpleNamespace(is_live_status=lambda _: False),
+        )
+        assert capture_paths(chat) == {
+            ".jsonl": tmp_path / "First.jsonl",
+            ".txt": tmp_path / "first.txt",
+        }
+        assert not list(tmp_path.iterdir())
+        chat.title, chat.id = "Final", "final"
+        assert capture_paths(chat) == {
+            ".jsonl": tmp_path / "Final.jsonl",
+            ".txt": tmp_path / "final.txt",
+        }
+        assert not list(tmp_path.iterdir())
+        assert list(chat) == [message]
+    assert {path.name for path in tmp_path.iterdir()} == {"Final.jsonl", "final.txt"}
+
+
+@pytest.mark.parametrize("configured", [False, True])
+def test_output_configuration_retains_previously_attached_writers(tmp_path, configured):
+    existing = tmp_path / "existing.jsonl"
+    extra = tmp_path / "extra.jsonl"
+    with Chat(iter([{"message": "hello"}])) as chat:
+        chat.attach_writer(ContinuousWriter(str(existing), lazy_initialise=True))
+        configure_chat(
+            chat,
+            ChatRequest(output=[str(existing), str(extra)] if configured else None),
+            SimpleNamespace(is_live_status=lambda _: False),
+        )
+        assert not list(tmp_path.iterdir())
+        assert list(chat) == [{"message": "hello"}]
+    assert existing.read_text().count("hello") == 1
+    assert extra.exists() is configured

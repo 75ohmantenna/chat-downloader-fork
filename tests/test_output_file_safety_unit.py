@@ -13,14 +13,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from chat_downloader.output import _secure_file
+from chat_downloader.output import _secure_file, targets
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.output.writers import (
     ContinuousFileWriter,
     JsonLinesContinuousWriter,
 )
 from chat_downloader.runtime.runner import execute_run
-from chat_downloader.sites import output_dispatch
 from chat_downloader.sites.models import Chat
 from tests.test_capture_checkpoint_unit import Downloader, parameters
 
@@ -680,7 +679,7 @@ def test_generated_policy_survives_arrival_after_path_preflight(
         outputs = [output, template]
     elif aliases == "generated_first":
         outputs = [template, output]
-    original_check = output_dispatch._check_output_path
+    original_check = targets._check_output_path
     planted = False
 
     def create_after_check(file_name, *, exclusive):
@@ -690,7 +689,7 @@ def test_generated_policy_survives_arrival_after_path_preflight(
             planted = True
             output.write_text(_SECRET)
 
-    monkeypatch.setattr(output_dispatch, "_check_output_path", create_after_check)
+    monkeypatch.setattr(targets, "_check_output_path", create_after_check)
     result = execute_run(downloader, **_options(outputs, overwrite=overwrite))
     assert planted
     assert not result.success
@@ -729,8 +728,8 @@ def test_alias_grouping_uses_the_same_snapshot_as_generated_policy(
             lazy_initialise=True,
         )
     )
-    original_identity = output_dispatch.output_path_identity
-    original_check = output_dispatch._check_output_path
+    original_identity = targets.output_path_identity
+    original_check = targets._check_output_path
     snapshots = 0
     temporary_observed = False
     planted = False
@@ -753,12 +752,8 @@ def test_alias_grouping_uses_the_same_snapshot_as_generated_policy(
             planted = True
             output.write_text(_SECRET)
 
-    monkeypatch.setattr(
-        output_dispatch, "output_path_identity", snapshot_with_transient_inode
-    )
-    monkeypatch.setattr(
-        output_dispatch, "_check_output_path", arrive_after_generated_preflight
-    )
+    monkeypatch.setattr(targets, "output_path_identity", snapshot_with_transient_inode)
+    monkeypatch.setattr(targets, "_check_output_path", arrive_after_generated_preflight)
     with pytest.raises(FileExistsError, match="Generated output filename"):
         list(chat)
     assert temporary_observed

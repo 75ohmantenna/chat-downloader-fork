@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime.capture_checkpoint import checkpoint_lock
 from chat_downloader.runtime.capture_manifest import RunManifest, is_completed_replay
 from chat_downloader.runtime.runner import RunResult, execute_run
@@ -696,3 +697,46 @@ def test_manifest_retains_only_valid_recovery_counters(
     assert result.success
     expected = {counter: value} if type(value) is int and value >= 0 else {}
     assert report["provider_diagnostics"] == expected
+
+
+def test_manifest_observes_eager_literal_filename(tmp_path):
+    output = tmp_path / "literal-{field}.jsonl"
+    manifest = RunManifest(str(tmp_path / "run.json"), None)
+    with Chat(iter([{"message": "hello"}])) as chat:
+        chat.attach_writer(ContinuousWriter(str(output)))
+        manifest.bind(chat)
+        assert list(chat) == [{"message": "hello"}]
+    manifest.write(chat, RunResult())
+    report = load_json(tmp_path / "run.json")
+    assert report["outputs"][0]["file_name"] == str(output)
+    assert (
+        report["outputs"][0]["sha256"]
+        == hashlib.sha256(output.read_bytes()).hexdigest()
+    )
+
+
+def test_manifest_observes_final_name_after_writer_open_fails(tmp_path, monkeypatch):
+    output = tmp_path / "literal-{field}.jsonl"
+    manifest = RunManifest(str(tmp_path / "run.json"), None)
+    with Chat(iter([{}]), title="literal-{field}") as chat:
+        chat.attach_writer(
+            ContinuousWriter(str(tmp_path / "{title}.jsonl"), lazy_initialise=True)
+        )
+        manifest.bind(chat)
+
+        def fail_open(_writer):
+            raise OSError("unavailable output")
+
+        monkeypatch.setattr(ContinuousWriter, "_prepare_output", fail_open)
+        with pytest.raises(OSError, match="unavailable output"):
+            list(chat)
+    manifest.write(chat, RunResult())
+    assert load_json(tmp_path / "run.json")["outputs"] == [
+        {
+            "file_name": str(output),
+            "file_created": False,
+            "records_written": 0,
+            "sha256": None,
+        }
+    ]
+    assert not output.exists()

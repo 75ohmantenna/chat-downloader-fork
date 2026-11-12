@@ -10,6 +10,9 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ### Fixes
 
+- Preserve literal braces in manifest output paths for already opened writers
+  and for finalized filenames whose writer initialization fails.
+
 - Freeze nested provider diagnostics after bounded shutdown so late worker
   completion cannot revise returned counters or change the observation used by
   capture inspection, manifests, and debug summaries.

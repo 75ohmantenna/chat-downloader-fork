@@ -487,7 +487,8 @@ use the same validated descriptor; newly created POSIX files use mode `0600`.
 YouTube channel discovery keeps distinct templates until the selected video's
 metadata is available. Final aliases and format conflicts are checked before
 any lazy output file opens; already resolved outputs retain preflight
-deduplication for verification.
+deduplication for verification. Manifest and verification path observations do
+not freeze pending metadata or reinterpret already opened filenames as templates.
 Append preserves the last existing LF or CRLF newline style for tail repair and
 new records. Without an existing terminator it uses the host convention, except
 that a trailing CR establishes CRLF. A partial trailing CR is replaced by the

@@ -22,7 +22,6 @@ from chat_downloader.utils.timed_generator import TimedGenerator
 apply_message_limit = chat_pipeline._apply_message_limit
 configure_chat = chat_pipeline.configure_chat
 configure_formatter = chat_pipeline._configure_formatter
-configure_output_writer = chat_pipeline._configure_output_writer
 configure_timeouts = chat_pipeline._configure_timeouts
 
 
@@ -150,12 +149,18 @@ def test_output_options_preserve_append_sort_order_and_multiple_formats(
     raw.write_text('{"existing": true}\n')
     formatted.write_text("existing\n")
     message = {"z": 1, "a": 2}
-    chat = Chat(iter([message]))
-    chat.set_formatter(lambda _: "hello")
-    request = ChatRequest(
-        output=[str(raw), str(formatted)], sort_keys=False, overwrite=False
+    (tmp_path / "formats.json").write_text(
+        json.dumps({"custom": {"template": "hello"}})
     )
-    configure_output_writer(chat, request)
+    chat = Chat(iter([message]))
+    request = ChatRequest(
+        output=[str(raw), str(formatted)],
+        sort_keys=False,
+        overwrite=False,
+        format="custom",
+        format_file=str(tmp_path / "formats.json"),
+    )
+    configure_chat(chat, request, cast("Any", _FakeSite()))
     assert list(chat) == [message]
     assert raw.read_text() == '{"existing": true}\n{"z": 1, "a": 2}\n'
     assert formatted.read_text() == "existing\nhello\n"
@@ -177,11 +182,18 @@ def test_output_aliases_write_each_item_once(tmp_path, suffix, template, existin
     alias = (
         str(tmp_path / "{title}.jsonl") if template else f"{tmp_path}/./same.{suffix}"
     )
-    request = ChatRequest(output=[alias, str(output)], overwrite=False)
+    (tmp_path / "formats.json").write_text(
+        json.dumps({"custom": {"template": "hello"}})
+    )
+    request = ChatRequest(
+        output=[alias, str(output)],
+        overwrite=False,
+        format="custom",
+        format_file=str(tmp_path / "formats.json"),
+    )
     message = {"message_type": "text_message", "message": "hello"}
     chat = Chat(iter([message]), title="same", status="live")
-    chat.set_formatter(lambda _: "hello")
-    configure_output_writer(chat, request)
+    configure_chat(chat, request, cast("Any", _FakeSite()))
     if template and existing:
         with pytest.raises(FileExistsError, match="Generated output filename"):
             list(chat)
@@ -197,10 +209,12 @@ def test_output_aliases_write_each_item_once(tmp_path, suffix, template, existin
     )
 
 
-def test_configure_output_writer_rejects_json_output(tmp_path):
+def test_configuration_rejects_json_output(tmp_path):
     with pytest.raises(ValueError, match=r"Use a \.jsonl or \.txt output path"):
-        configure_output_writer(
-            Chat(status="live"), ChatRequest(output=str(tmp_path / "out.json"))
+        configure_chat(
+            Chat(status="live"),
+            ChatRequest(output=str(tmp_path / "out.json")),
+            cast("Any", _FakeSite()),
         )
 
 

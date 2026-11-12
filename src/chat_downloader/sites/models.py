@@ -18,11 +18,9 @@ if TYPE_CHECKING:
     from pathlib import Path
     from types import TracebackType
 
+    from chat_downloader.output.targets import ChatOutputWriter
     from chat_downloader.sites.base import BaseChatDownloader
-    from chat_downloader.sites.output_dispatch import (
-        ChatOutputWriter,
-        _ChatOutputDispatcher,
-    )
+    from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 
 
 __all__ = ["Chat", "Image", "SiteDefault"]

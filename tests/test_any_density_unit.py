@@ -27,8 +27,8 @@ BASELINE: dict[str, int] = {
     "sites/base.py": 12,
     "sites/common.py": 3,
     "sites/models.py": 13,
-    # Dispatcher writer protocol — dict[str,Any] is the chat-item boundary.
-    "sites/output_dispatch.py": 4,
+    # Dispatcher formatting and emission retain heterogeneous chat items.
+    "sites/output_dispatch.py": 3,
     "sites/session.py": 7,
     "sites/remap.py": 10,
     "sites/filters.py": 3,
@@ -97,7 +97,7 @@ BASELINE: dict[str, int] = {
     "runtime/session_lifecycle.py": 4,
     "runtime/runner.py": 4,
     "runtime/cli_bridge.py": 5,
-    "runtime/chat_pipeline.py": 5,
+    "runtime/chat_pipeline.py": 2,
     "runtime/site_dispatch.py": 4,
     # Models layer.
     "models/_request.py": 5,
