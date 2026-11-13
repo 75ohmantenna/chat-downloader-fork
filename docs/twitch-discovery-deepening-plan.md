@@ -3,6 +3,9 @@
 **Status: implemented and verified.** This reviewed plan was committed after
 the output-target implementation and before discovery changes. The sections
 below preserve the intended design; the outcome records the completed work.
+The evidence below describes the pre-implementation code. For the current
+module responsibilities, use [`architecture.md`](architecture.md) and verify
+them against the source tree.
 
 ## Evidence and intended depth
 

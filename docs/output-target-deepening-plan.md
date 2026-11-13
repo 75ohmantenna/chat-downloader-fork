@@ -3,6 +3,9 @@
 **Status: implemented and verified.** The original plan was committed before
 implementation. The sections below preserve its reviewed design; the outcome
 records the completed work and verification.
+The evidence below describes the pre-implementation code. For the current
+module responsibilities, use [`architecture.md`](architecture.md) and verify
+them against the source tree.
 
 ## Evidence and scope
 

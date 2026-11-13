@@ -71,8 +71,8 @@ def _configure_testing_mode(run_config: RunConfig) -> None:
 def _classify_run_error(e: Exception) -> str:
     """Return the user-facing error string for a run-loop exception.
 
-    ChatGeneratorError/ParsingError are ChatDownloaderError subclasses, so
-    they must be tested before the parent class.
+    Parser, dispatch, and testing failures include site-change guidance;
+    connection failures use connection guidance. Other errors keep their text.
     """
     if isinstance(e, (ChatGeneratorError, ParsingError, TestingException)):
         return f"{e}. {SITE_CHANGE_ERROR_HINT}"

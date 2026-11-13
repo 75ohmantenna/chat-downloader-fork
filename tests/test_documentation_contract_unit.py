@@ -19,6 +19,7 @@ from chat_downloader.output.continuous_write import SUPPORTED_OUTPUT_FORMATS
 from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.runtime import RunResult
 from chat_downloader.sites import get_all_sites
+from chat_downloader.sites.kick import resource_limits as kick_limits
 from chat_downloader.sites.kick.constants import MESSAGE_GROUPS as KICK_MESSAGE_GROUPS
 from chat_downloader.sites.kick.live_service import _KickLiveDiagnostics
 from chat_downloader.sites.twitch.irc_diagnostics import (
@@ -342,6 +343,40 @@ def test_kick_reference_lists_exact_message_groups() -> None:
     }
 
     assert documented == KICK_MESSAGE_GROUPS
+
+
+def test_kick_guide_resource_limits_match_runtime_budgets() -> None:
+    """Keep operator-visible collection and wire bounds derived from code."""
+    section = _section(
+        KICK_REFERENCE.read_text(encoding="utf-8"), "### Resource limits"
+    )
+    rows = re.findall(r"^\| ([^|]+) \| ([^|]+) \|$", section, re.MULTILINE)
+    documented = dict(rows[2:])
+    byte_limits = {
+        "WebSocket payload per completed data message, including interleaved controls": (
+            kick_limits.MAX_WEBSOCKET_MESSAGE_BYTES
+        ),
+        "Decoded history HTTP response": kick_limits.MAX_HISTORY_RESPONSE_BYTES,
+        "Serialized replay record, including newline": kick_limits.MAX_REPLAY_RECORD_BYTES,
+        "Serialized replay page": kick_limits.MAX_REPLAY_PAGE_BYTES,
+        "Total replay spool": kick_limits.MAX_REPLAY_SPOOL_BYTES,
+        "Cumulative retained cursor bytes": kick_limits.MAX_REPLAY_CURSOR_BYTES,
+    }
+    count_limits = {
+        "WebSocket frames per completed data message": (
+            kick_limits.MAX_WEBSOCKET_MESSAGE_FRAMES
+        ),
+        "Centrifugo entries per batch": kick_limits.MAX_CENTRIFUGO_BATCH_ENTRIES,
+        "Centrifugo queued publications": kick_limits.MAX_CENTRIFUGO_QUEUED_FRAMES,
+        "Replay pages": kick_limits.MAX_REPLAY_PAGES,
+        "Raw replay records": kick_limits.MAX_REPLAY_RECORDS,
+        "Characters per replay cursor": kick_limits.MAX_REPLAY_CURSOR_CHARS,
+    }
+    expected = {
+        label: f"{limit // (1024 * 1024)} MiB" for label, limit in byte_limits.items()
+    }
+    expected.update({label: f"{limit:,}" for label, limit in count_limits.items()})
+    assert documented == expected
 
 
 def test_python_api_reference_lists_exact_debug_capture_environment_variables() -> None:

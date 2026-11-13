@@ -132,8 +132,9 @@ Pass `propagate_interrupt=True` to re-raise `KeyboardInterrupt` instead of
 swallowing it — useful when `run()` is called from within a larger
 application that needs to handle interrupts itself.
 
-Unlike `ChatRequest.from_kwargs()`, `run()` rejects unknown keyword arguments.
-That keeps CLI/API drift visible when parameters move between dataclasses.
+Both `run()` and `ChatRequest.from_kwargs()` reject unknown keyword arguments
+by default. `run()` accepts the combined init, request, and runtime field names;
+`ChatRequest.from_kwargs(strict=False, ...)` explicitly filters a mixed mapping.
 
 `run()` returns `chat_downloader.runtime.RunResult`, a structured summary with
 these fields:
@@ -494,9 +495,11 @@ new records. Without an existing terminator it uses the host convention, except
 that a trailing CR establishes CRLF. A partial trailing CR is replaced by the
 selected terminator; existing mixed endings are not normalized.
 
-File writers are crash-resilient: each record is flushed on write and the file
-is synchronized to disk periodically (about every 60 seconds). JSONL accepts
-JSON-compatible values, so callers must convert `datetime` objects to UTC
+File writers flush each successful record and check whether about 60 seconds
+have elapsed before synchronizing to disk. Close flushes and synchronizes again.
+A crash or power failure can still leave an incomplete tail or output newer
+than a shutdown checkpoint. JSONL writers accept JSON-compatible values, so
+callers must convert `datetime` objects to UTC
 integer microseconds or ISO 8601 strings. A top-level naive `datetime` receives
 a specific `ValueError`; other raw datetimes are rejected by the JSON encoder.
 Nonfinite floats, including nested NaN and infinity values, raise `ValueError`

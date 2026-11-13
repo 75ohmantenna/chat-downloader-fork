@@ -267,10 +267,9 @@ class ContinuousFileWriter(ABC):
     def _persist_after_write(self) -> None:
         """Flush after every record; fsync at most once per interval.
 
-        Per-message flush moves bytes from Python buffers into the OS,
-        protecting against SIGKILL. fsync forces the OS to commit them
-        to disk, protecting against power events. fsync per record is
-        too expensive on long live streams, so each write checks elapsed time.
+        Flush transfers Python-buffered bytes to the OS; fsync requests durable
+        storage. Each write checks elapsed time before synchronizing, and close
+        synchronizes again. An interruption can still tear an in-progress record.
         """
         if self.file is None:
             return
@@ -290,7 +289,7 @@ class ContinuousFileWriter(ABC):
 
 
 class JsonLinesContinuousWriter(ContinuousFileWriter):
-    """Write one JSON object per line (JSONL), crash-safe for live streams."""
+    """Write UTF-8 JSON values as flushed lines with periodic synchronization."""
 
     def __init__(
         self,
@@ -326,7 +325,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
 
 
 class TextContinuousWriter(ContinuousFileWriter):
-    """Write items as plain text, one per line."""
+    """Write stringified items followed by a newline."""
 
     def __init__(
         self,

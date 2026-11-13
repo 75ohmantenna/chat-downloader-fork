@@ -568,7 +568,8 @@ spool checks expansion limits before writing.
 | --- | --- |
 | WebSocket payload per completed data message, including interleaved controls | 8 MiB |
 | WebSocket frames per completed data message | 4,096 |
-| Centrifugo entries per batch / queued publications | 4,096 each |
+| Centrifugo entries per batch | 4,096 |
+| Centrifugo queued publications | 4,096 |
 | Decoded history HTTP response | 8 MiB |
 | Serialized replay record, including newline | 16 MiB |
 | Serialized replay page | 64 MiB |

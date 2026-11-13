@@ -502,7 +502,8 @@ than establish runtime behavior.
 Documentation contract tests keep module
 inventories, literal repository paths, typed field/default tables, CLI flags
 and retrieval examples, request profiles, output formats, public exports, and
-provider message-group and live-diagnostic tables aligned with those sources.
+provider message-group, live-diagnostic, and Kick resource-limit tables aligned
+with those sources.
 Run the documentation and release contracts listed under Commands, plus
 `make spell`, after documentation changes. Passing these checks covers their
 specific assertions; review narrative claims against code as well.
@@ -654,9 +655,12 @@ Provider-specific diagnosis and fixture-promotion steps live in the
 
 ## Release procedure
 
-1. Confirm `master` is clean and synchronized with `origin/master`. Check local
-   and remote release tags; a version in metadata or a changelog heading alone
-   does not establish that it was released.
+1. Confirm `master` is clean and synchronized with `origin/master`. Resolve the
+   publication repository from `pyproject.toml`'s `Repository` URL and confirm
+   it agrees with `metadata.py::__url__`. A development checkout's `origin`
+   can point to a different repository. Check local tags and remote tags and
+   releases in the publication repository; metadata or a changelog heading
+   alone does not establish that a version was released.
 2. Select the next semantic version from the user-visible changes since the
    latest `v*` tag.
 3. Move relevant `Unreleased` entries under a new numbered release heading,
@@ -664,19 +668,20 @@ Provider-specific diagnosis and fixture-promotion steps live in the
    as the topmost numbered `CHANGELOG.md` heading. Leave `pyproject.toml`
    unchanged; setuptools reads the version dynamically.
 4. Run `uv lock`, `uv lock --check`, `uv sync --locked`, and `make ci`.
-5. Inspect the built wheel metadata and confirm the expected version. Confirm
-   validation for the release commit across Python 3.12–3.14. Workflow files
-   alone do not prove execution: GitHub Actions must be enabled, and the runs
-   must cover the intended commit. Record any local matrix or opt-in network
-   validation separately from hosted results.
-6. Create and verify the signed release commit, then create and verify the
-   signed annotated `v<version>` tag at that commit.
+5. Inspect the built wheel metadata and confirm the expected version, then
+   create and verify the signed release commit.
+6. Validate that exact commit across Python 3.12–3.14. Workflow files alone do
+   not prove execution: GitHub Actions must be enabled in the validation
+   repository, and successful runs must cover the release commit. A candidate
+   branch can run hosted checks before publication. Record local matrix and
+   opt-in network validation separately from hosted results. After validation,
+   create and verify the signed annotated `v<version>` tag at that commit.
 7. If the release was prepared in a second checkout, fetch its branch into the
    target checkout, prove the target `master` is an ancestor, and merge with
    `--ff-only`. A fast-forward preserves the reviewed commit identities and is
    preferable to replaying a linearly related branch through cherry-picks.
-8. Push `master` and the new tag, then confirm both remote refs resolve to the
-   expected commits.
+8. Push `master` and the new tag to the verified publication repository, then
+   confirm both remote refs resolve to the expected commits.
 
 `tests/test_release_metadata_unit.py` enforces agreement between the package
 version and the topmost numbered changelog release.

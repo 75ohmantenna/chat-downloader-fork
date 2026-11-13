@@ -67,9 +67,9 @@ class ChatDownloader:
             connect_timeout: TCP connect timeout in seconds (default 10).
             read_timeout: HTTP read timeout in seconds (default 30).
             request_profile: Preset: youtube_web/youtube_android/youtube_ios/twitch_web.
-            auto_profile_fallback: Rotate YouTube profiles after generic initial
-                playability failures, repeated incomplete continuation responses,
-                or an initial chat INVALID_ARGUMENT rejection.
+            auto_profile_fallback: Rotate YouTube profiles after unknown broadcast
+                status, generic initial playability failures, repeated incomplete
+                continuation responses, or an initial chat INVALID_ARGUMENT rejection.
             twitch_client_id: Twitch Client-ID override.
         """
         check_proxy_cookie_safety(proxy, cookies)

@@ -33,7 +33,7 @@ class ChatOutputWriter(Protocol):
 
     @property
     def output_mode(self) -> str:
-        """Return the writer's resolved file format."""
+        """Return 'formatted' for rendered text or 'raw' for structured records."""
         ...  # pragma: no cover — structural typing declaration
 
     def is_initialised(self) -> bool:

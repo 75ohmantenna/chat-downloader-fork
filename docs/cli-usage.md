@@ -332,8 +332,9 @@ Debug and automation:
 
 - `--logging debug`, `--verbose` — transport and parser debugging.
   CLI logs include UTC dates and clock times. HTTP GET and POST debug records
-  report monotonic request duration, including failed requests. With streamed
-  HTTP responses, duration ends when response headers are received.
+  report monotonic request duration, including failed requests. Shared
+  YouTube/Twitch HTTP durations include bounded response-body reads and any
+  permitted redirects, ending before HTML or JSON parsing.
   Log color follows stderr's terminal capability independently of stdout.
   Redirected stderr stays plain text so offline inspectors can read its summaries.
 - With `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES=1`, Kick captures bounded,
