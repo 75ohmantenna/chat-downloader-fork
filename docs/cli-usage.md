@@ -310,7 +310,7 @@ Request control:
   configuration.
 - `--auto_profile_fallback` — rotate YouTube request profiles when initial
   broadcast status is unknown, playability is generically unavailable, continuation payloads are
-  repeatedly incomplete, or an initial replay request receives
+  repeatedly incomplete, or an initial live, upcoming, or replay chat request receives
   `INVALID_ARGUMENT`. Explicit `--user-agent` and `--header` values remain
   authoritative during rotation. Inconsistent User-Agent or client-header
   overrides can cause HTTP 400; retry with profile defaults to isolate them.
@@ -584,7 +584,7 @@ YouTube, Twitch live, and Kick live inspection reports remain in
 `provider_inspection` when requested.
 YouTube bootstrap counters survive failures before a chat is created. Replay
 diagnostics also count records missing source timestamps, ambiguous zero
-offsets, and attempted/successful initial replay profile recovery. A recovered
+offsets, and attempted/successful initial live or replay profile recovery. A recovered
 HTTP error remains counted even though the run succeeds.
 `prefetched_after_deadline_count` and `deadline_prefetch_count_complete` report
 one deadline observation after bounded shutdown, shared with provider inspection

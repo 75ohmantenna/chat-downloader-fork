@@ -133,7 +133,7 @@ def _handle_http_error(
             f"Endpoint: {continuation_url}"
         )
         raise ChatDownloaderError(msg)
-    # The continuation owner may recover a rejected initial replay through a
+    # The continuation owner may recover a rejected initial chat request through a
     # fresh profile. Terminal errors are reported by the run error boundary.
     log("debug", error_message)
     return False

@@ -229,6 +229,8 @@ def test_manifest_keeps_bounded_metrics_and_measured_duration(
         poll_count=3,
         continuation_request_count=4,
         continuation_retry_count=1,
+        initial_live_recovery_attempt_count=1,
+        initial_live_recovery_success_count=1,
         non_emission_counts=reasons,
         json_error_count="PRIVATE",
         http_error_count=False,
@@ -241,6 +243,8 @@ def test_manifest_keeps_bounded_metrics_and_measured_duration(
         "poll_count": 3,
         "continuation_request_count": 4,
         "continuation_retry_count": 1,
+        "initial_live_recovery_attempt_count": 1,
+        "initial_live_recovery_success_count": 1,
     }
     if isinstance(reasons, dict):
         expected["non_emission_counts"] = {"invalid messages": 2}

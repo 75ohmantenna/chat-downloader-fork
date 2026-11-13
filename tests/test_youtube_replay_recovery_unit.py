@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Bounded initial replay profile recovery and content-free visitor logging."""
+"""Bounded initial chat profile recovery and content-free visitor logging."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from chat_downloader.errors import ChatDownloaderError, NoChatReplay
+from chat_downloader.errors import ChatDownloaderError, NoChatReplay, NoContinuation
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.youtube.continuation import _ContinuationLoop
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
@@ -97,9 +97,17 @@ def test_initial_replay_400_refreshes_token_preserving_seek_and_headers(
 
 @pytest.mark.parametrize(
     ("fallback", "status", "expected_calls"),
-    [(True, "was_live", 3), (False, "was_live", 1), (True, "live", 1)],
+    [
+        (True, "was_live", 3),
+        (False, "was_live", 1),
+        (True, "live", 3),
+        (False, "live", 1),
+        (True, "upcoming", 3),
+        (False, "upcoming", 1),
+        (True, "unknown", 1),
+    ],
 )
-def test_initial_400_recovery_is_bounded_optional_and_replay_only(
+def test_initial_400_recovery_is_bounded_optional_and_requires_known_status(
     monkeypatch, fallback, status, expected_calls
 ):
     provider = YouTubeChatDownloader(
@@ -133,7 +141,8 @@ def test_initial_400_recovery_is_bounded_optional_and_replay_only(
     assert len(calls) == expected_calls
 
 
-def test_400_after_accepted_response_never_restarts_replay(monkeypatch):
+@pytest.mark.parametrize("status", ["was_live", "live", "upcoming"])
+def test_400_after_accepted_response_never_restarts_chat(monkeypatch, status):
     provider = YouTubeChatDownloader(request_profile="youtube_web")
     responses = iter(
         [
@@ -164,7 +173,7 @@ def test_400_after_accepted_response_never_restarts_replay(monkeypatch):
     )
     try:
         with pytest.raises(ChatDownloaderError, match="rejected the chat continuation"):
-            list(_loop(provider).run())
+            list(_loop(provider, status=status).run())
         assert provider._request_profile == "youtube_web"
     finally:
         provider.close()
@@ -189,8 +198,9 @@ def test_visitor_state_is_updated_without_logging_its_value(monkeypatch):
 
 
 @pytest.mark.parametrize("view", ["live", "top"])
+@pytest.mark.parametrize("status", ["was_live", "live", "upcoming"])
 def test_http_400_recovery_keeps_error_ledger_and_reports_success(
-    monkeypatch, caplog, view
+    monkeypatch, caplog, view, status
 ):
     caplog.set_level("INFO", logger="chat_downloader")
     provider = YouTubeChatDownloader(
@@ -200,6 +210,15 @@ def test_http_400_recovery_keeps_error_ledger_and_reports_success(
     payload = json.loads(
         (FIXTURES / "live_events/mobile-replay-elements.json").read_text()
     )
+    if status != "was_live":
+        payload = json.loads(
+            (
+                FIXTURES / "live_events/youtube-IzopCEgh2G8-live-chat-first.json"
+            ).read_text()
+        )
+        info = payload["continuationContents"]["liveChatContinuation"]
+        info["actions"] = info["actions"][:2]
+        del info["continuations"]
     post = Mock(
         side_effect=[
             http_response(status_code=400, payload=_error()),
@@ -214,7 +233,12 @@ def test_http_400_recovery_keeps_error_ledger_and_reports_success(
         )
     )
     monkeypatch.setattr(provider, "_get_initial_video_info", refresh)
-    loop = _loop(provider)
+    ticks = iter([1000, 2000])
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation.get_live_start_time_ms",
+        lambda: next(ticks),
+    )
+    loop = _loop(provider, status=status)
     loop.params = loop.params.with_updates(chat_type=view)
     loop.initial_info["continuation_info"]["Top chat"] = "first-top"
     try:
@@ -225,18 +249,28 @@ def test_http_400_recovery_keeps_error_ledger_and_reports_success(
         provider.close()
     assert post.call_count == 2
     assert post.call_args.kwargs["json"]["continuation"] == f"fresh-{view}"
+    assert "fresh-key" in post.call_args.args[0]
+    assert post.call_args.kwargs["json"]["context"]["client"]["clientName"] == "ANDROID"
     assert refresh.call_args.args[1].end_time == 8400
     assert loop.diagnostics["http_error_count"] == 1
     assert loop.diagnostics["continuation_request_count"] == 2
-    assert loop.diagnostics["initial_replay_recovery_attempt_count"] == 1
-    assert loop.diagnostics["initial_replay_recovery_success_count"] == 1
-    assert loop.diagnostics["chat_view"] == f"{view.title()} chat replay"
+    kind = "replay" if status == "was_live" else "live"
+    assert loop.diagnostics[f"initial_{kind}_recovery_attempt_count"] == 1
+    assert loop.diagnostics[f"initial_{kind}_recovery_success_count"] == 1
+    assert loop.diagnostics["chat_view"] == f"{view.title()} chat" + (
+        " replay" if kind == "replay" else ""
+    )
+    assert loop.ctx.live_start_time_ms == 1000
+    assert loop.diagnostics.get("parse_error", 0) == 0
     assert "youtube_web was rejected" in caplog.text
     assert "recovery succeeded with profile: youtube_android" in caplog.text
     assert not [r for r in caplog.records if r.levelname == "ERROR"]
 
 
-def test_malformed_replacement_response_never_counts_as_recovery_success(monkeypatch):
+@pytest.mark.parametrize("status", ["was_live", "live"])
+def test_malformed_replacement_response_never_counts_as_recovery_success(
+    monkeypatch, status
+):
     from chat_downloader.errors import IncompleteContinuationError
 
     provider = YouTubeChatDownloader(request_profile="youtube_web")
@@ -255,11 +289,100 @@ def test_malformed_replacement_response_never_counts_as_recovery_success(monkeyp
             {"INNERTUBE_API_KEY": "fixture"},
         ),
     )
-    loop = _loop(provider)
+    loop = _loop(provider, status=status)
     try:
         with pytest.raises(IncompleteContinuationError):
             list(loop.run())
-        assert loop.diagnostics["initial_replay_recovery_attempt_count"] == 1
-        assert loop.diagnostics.get("initial_replay_recovery_success_count", 0) == 0
+        kind = "replay" if status == "was_live" else "live"
+        assert loop.diagnostics[f"initial_{kind}_recovery_attempt_count"] == 1
+        assert loop.diagnostics.get(f"initial_{kind}_recovery_success_count", 0) == 0
     finally:
         provider.close()
+
+
+@pytest.mark.parametrize("status", ["was_live", "live"])
+@pytest.mark.parametrize("view", ["live", "top"])
+def test_initial_recovery_never_substitutes_another_chat_view(
+    monkeypatch, status, view
+):
+    provider = YouTubeChatDownloader(request_profile="youtube_web")
+    post = Mock(return_value=http_response(status_code=400, payload=_error()))
+    monkeypatch.setattr(provider, "_session_post", post)
+    other_view = "Live chat" if view == "top" else "Top chat"
+    monkeypatch.setattr(
+        provider,
+        "_get_initial_video_info",
+        lambda *_: (
+            {"continuation_info": {other_view: "wrong-view"}},
+            {"INNERTUBE_API_KEY": "fixture"},
+        ),
+    )
+    loop = _loop(provider, status=status)
+    loop.params = loop.params.with_updates(chat_type=view)
+    loop.initial_info["continuation_info"]["Top chat"] = "first-top"
+    try:
+        with pytest.raises(NoContinuation, match=f"Initial {view} chat continuation"):
+            list(loop.run())
+    finally:
+        provider.close()
+    assert post.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("status", "replacement_status"),
+    [("live", "was_live"), ("upcoming", "past"), ("was_live", "live")],
+)
+def test_initial_recovery_rejects_live_replay_mode_changes(
+    monkeypatch, status, replacement_status
+):
+    provider = YouTubeChatDownloader(request_profile="youtube_web")
+    post = Mock(return_value=http_response(status_code=400, payload=_error()))
+    monkeypatch.setattr(provider, "_session_post", post)
+    monkeypatch.setattr(
+        provider,
+        "_get_initial_video_info",
+        lambda *_: (
+            {
+                "status": replacement_status,
+                "continuation_info": {"Live chat": "replacement"},
+            },
+            {"INNERTUBE_API_KEY": "fixture"},
+        ),
+    )
+    try:
+        with pytest.raises(ChatDownloaderError, match="broadcast changed"):
+            list(_loop(provider, status=status).run())
+    finally:
+        provider.close()
+    assert post.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("code", "error_status", "video_id"),
+    [
+        (403, "INVALID_ARGUMENT", "fixture"),
+        (400, "OTHER", "fixture"),
+        (400, "INVALID_ARGUMENT", ""),
+    ],
+)
+def test_initial_live_recovery_requires_exact_rejection_and_video_identity(
+    monkeypatch, code, error_status, video_id
+):
+    provider = YouTubeChatDownloader(request_profile="youtube_web")
+    error = _error()
+    error["error"].update(code=code, status=error_status)
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation._get_continuation_info",
+        lambda *a, **kw: error,
+    )
+    refresh = Mock()
+    monkeypatch.setattr(provider, "_get_initial_video_info", refresh)
+    loop = _loop(provider, status="live")
+    loop.initial_info["original_video_id"] = video_id
+    try:
+        with pytest.raises(ChatDownloaderError):
+            list(loop.run())
+        assert provider._request_profile == "youtube_web"
+    finally:
+        provider.close()
+    refresh.assert_not_called()

@@ -179,7 +179,7 @@ finished.
 | `connect_timeout` | `10.0` | TCP connect timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `read_timeout` | `30.0` | HTTP read timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `request_profile` | `None` | Optional request-header preset (`youtube_web`, `youtube_android`, `youtube_ios`, `twitch_web`); any other value raises `ValueError` during configuration |
-| `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after unknown broadcast status, generic initial playability, repeated incomplete continuation responses, or an initial replay `INVALID_ARGUMENT` rejection |
+| `auto_profile_fallback` | `True` | Auto-rotate YouTube request profiles after unknown broadcast status, generic initial playability, repeated incomplete continuation responses, or an initial live, upcoming, or replay chat `INVALID_ARGUMENT` rejection |
 | `twitch_client_id` | `None` | Optional Twitch Client-ID override for GraphQL and VOD comment requests |
 
 Helper:

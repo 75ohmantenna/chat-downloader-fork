@@ -513,8 +513,8 @@ class _ContinuationLoop:
         )
         return True
 
-    def _retry_rejected_initial_replay(self, response: JSONDict) -> bool:
-        """Try the next profile for an initial replay INVALID_ARGUMENT error.
+    def _retry_rejected_initial_request(self, response: JSONDict) -> bool:
+        """Try the next profile for an initial chat INVALID_ARGUMENT error.
 
         Obtain a fresh token for the new profile, preserving seek bounds. Never
         restart or switch on this terminal error after an accepted response.
@@ -522,24 +522,27 @@ class _ContinuationLoop:
         error = get_dict(response, "error")
         if (
             self._accepted_response
-            or not self.ctx.is_replay
+            or (
+                not self.ctx.is_replay
+                and self.initial_info.get("status") not in {"live", "upcoming"}
+            )
             or str(error.get("code")) != "400"
             or get_str(error, "status") != "INVALID_ARGUMENT"
             or not get_str(self.initial_info, "original_video_id")
         ):
             return False
+        kind = "replay" if self.ctx.is_replay else "live"
         rejected_profile = self.downloader._request_profile or "youtube_web"
         if not self._recover_incomplete_continuation(
-            "a rejected initial replay request"
+            f"a rejected initial {kind} request"
         ):
             return False
         self._initial_recovery_pending = True
-        self.diagnostics["initial_replay_recovery_attempt_count"] = (
-            get_int(self.diagnostics, "initial_replay_recovery_attempt_count") + 1
-        )
+        counter = f"initial_{kind}_recovery_attempt_count"
+        self.diagnostics[counter] = get_int(self.diagnostics, counter) + 1
         log(
             "info",
-            f"Initial YouTube replay profile {rejected_profile} was rejected "
+            f"Initial YouTube {kind} profile {rejected_profile} was rejected "
             "(HTTP 400); refreshing with profile: "
             f"{self.downloader._request_profile}",
         )
@@ -549,12 +552,23 @@ class _ContinuationLoop:
         merge_bootstrap_diagnostics(
             self.diagnostics, get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
         )
+        status = details.get("status")
+        if status in REPLAY_STATUSES | {"live", "upcoming"} and (
+            (status in REPLAY_STATUSES) != self.ctx.is_replay
+        ):
+            msg = (
+                "YouTube broadcast changed between live and replay during "
+                "initial profile recovery; start a fresh retrieval."
+            )
+            raise ChatDownloaderError(msg)
         self.initial_info = {
             **self.initial_info,
             "continuation_info": details["continuation_info"],
         }
         self.ytcfg = ytcfg
+        live_start_time_ms = self.ctx.live_start_time_ms
         self.ctx = self._build_context()
+        self.ctx.live_start_time_ms = live_start_time_ms
         return True
 
     def _record_accepted_response(self) -> None:
@@ -562,12 +576,12 @@ class _ContinuationLoop:
         self._accepted_response = True
         if self._initial_recovery_pending:
             self._initial_recovery_pending = False
-            self.diagnostics["initial_replay_recovery_success_count"] = (
-                get_int(self.diagnostics, "initial_replay_recovery_success_count") + 1
-            )
+            kind = "replay" if self.ctx.is_replay else "live"
+            counter = f"initial_{kind}_recovery_success_count"
+            self.diagnostics[counter] = get_int(self.diagnostics, counter) + 1
             log(
                 "info",
-                "YouTube initial replay recovery succeeded with profile: "
+                f"YouTube initial {kind} recovery succeeded with profile: "
                 f"{self.downloader._request_profile}",
             )
 
@@ -616,7 +630,7 @@ class _ContinuationLoop:
                     raise
                 continue
 
-            if self._retry_rejected_initial_replay(yt_info):
+            if self._retry_rejected_initial_request(yt_info):
                 continue
             self._handle_continuation_response(yt_info, continuation_params)
 

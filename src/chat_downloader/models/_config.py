@@ -67,7 +67,7 @@ class DownloaderConfig:
         metadata=_cli_metadata(
             "Auto-switch YouTube request profiles after unknown broadcast status, "
             "generic initial playability, repeated incomplete "
-            "continuation responses, or an initial replay INVALID_ARGUMENT rejection",
+            "continuation responses, or an initial chat INVALID_ARGUMENT rejection",
             group="init",
         ),
     )

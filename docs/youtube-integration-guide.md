@@ -468,14 +468,19 @@ exposes tokens, so unusable Web replay tokens do not bypass profile recovery.
 Channel and playlist browse continuations surface terminal HTTP/API errors;
 an error response is not treated as successful exhaustion of the listing.
 
-A first replay response with HTTP 400
+A first live, upcoming, or replay chat response with HTTP 400
 `INVALID_ARGUMENT` also permits bounded profile fallback, refreshing bootstrap
-tokens and config for the new profile while preserving seek and clip bounds.
+tokens and config for the new profile while preserving the selected Top or Live
+chat view, seek and clip bounds, and the original live capture clock. Recovery
+rejects a broadcast changing between live and replay; start a fresh retrieval
+instead. Set `auto_profile_fallback=False` to disable profile rotation.
 Recovery logs identify the rejected and replacement profiles and announce a
 structurally accepted replacement response. The manifest and run diagnostics
 retain `initial_replay_recovery_attempt_count` and
 `initial_replay_recovery_success_count`; recovered HTTP errors remain in
-`http_error_count`. An intermediate rejection is logged at debug level, while
+`http_error_count`. Live and upcoming chat use the corresponding
+`initial_live_recovery_attempt_count` and `initial_live_recovery_success_count`.
+An intermediate rejection is logged at debug level, while
 an unrecovered terminal failure still produces an error and nonzero CLI status.
 Once any response is accepted, this error
 is terminal; retrieval does not restart and duplicate earlier messages. A

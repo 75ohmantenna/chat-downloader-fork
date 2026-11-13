@@ -91,6 +91,8 @@ def _manifest_diagnostics(state: Mapping[str, object]) -> dict[str, object]:
             "replay_repeated_page_count",
             "initial_replay_recovery_attempt_count",
             "initial_replay_recovery_success_count",
+            "initial_live_recovery_attempt_count",
+            "initial_live_recovery_success_count",
             "websocket_frame_count",
             "control_frame_count",
             "parsed_event_count",
