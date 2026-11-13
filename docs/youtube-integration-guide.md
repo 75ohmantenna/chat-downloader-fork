@@ -161,6 +161,10 @@ replace an explicit Live token or supply a missing view. This fallback supports
 live and replay video targets; clips remain on the normal page bootstrap because
 clip time ranges are page-specific.
 
+Unavailable clips can return a confirmation popup without player metadata.
+That popup raises `VideoUnavailable` before status inference or profile
+rotation; it is a terminal provider result rather than an incomplete bootstrap.
+
 Initial-page, bootstrap, browse, and chat requests share challenge detection,
 including `/sorry/index` in a response URL, body, or API error message. Recognized
 challenges stop that request's retry loop with `CaptchaChallengeRequired`; the

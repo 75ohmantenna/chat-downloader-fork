@@ -21,6 +21,7 @@ from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
+from .playability import _raise_for_popup
 from .video_status import parse_video_details, video_details_to_dict
 
 if TYPE_CHECKING:
@@ -104,6 +105,10 @@ class YouTubeVideoMetadataCoreMixin:
                 )
 
         yt_initial_data, ytcfg, player_response_info = initial
+
+        if video_type == "clip":
+            # Unavailable clips can supply a terminal popup without a player.
+            _raise_for_popup(yt_initial_data)
 
         if not player_response_info:
             log("debug", yt_initial_data)

@@ -1,0 +1,21 @@
+{
+  "onResponseReceivedActions": [
+    {
+      "openPopupAction": {
+        "popup": {
+          "confirmDialogRenderer": {
+            "title": {
+              "simpleText": "Clip not available"
+            },
+            "dialogMessages": [
+              {
+                "simpleText": "The clip can be unavailable if it was deleted, or if the video it's based on was removed or edited."
+              }
+            ]
+          }
+        },
+        "popupType": "DIALOG"
+      }
+    }
+  ]
+}

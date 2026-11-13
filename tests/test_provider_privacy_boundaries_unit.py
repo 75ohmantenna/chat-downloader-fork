@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import closing
 from json import JSONDecodeError
+from pathlib import Path
 from time import time
 from unittest.mock import Mock
 
@@ -12,7 +13,7 @@ import requests
 from requests.adapters import BaseAdapter
 
 import chat_downloader.debugging as debugging
-from chat_downloader.errors import InvalidParameter, ParsingError
+from chat_downloader.errors import InvalidParameter, ParsingError, VideoUnavailable
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.session import ChatDownloaderSession
@@ -148,6 +149,30 @@ def test_initial_page_allows_bounded_same_origin_https_redirects():
         "https://www.youtube.com/watch?v=old",
         "https://www.youtube.com/watch?v=canonical",
     ]
+
+
+@pytest.mark.parametrize("profile", ["youtube_web", "youtube_android", "youtube_ios"])
+def test_unavailable_clip_popup_stops_before_profile_rotation_and_mobile_redirect(
+    profile,
+):
+    fixture = Path(__file__).parent / "fixtures/youtube/unavailable_clip.json"
+    html = f'<script id="yt-initial-data">{fixture.read_text()}</script>'
+    with closing(YouTubeChatDownloader(proxy="", request_profile=profile)) as site:
+        adapter = _RecordingAdapter(
+            [
+                (200, {}, html),
+                (302, {"Location": "https://m.youtube.com/clip/fixture"}, ""),
+            ]
+        )
+        _install_recording_transport(site._http, adapter)
+        with pytest.raises(VideoUnavailable, match="Clip not available"):
+            site.get_chat_by_clip_id(
+                "fixture", ChatRequest(url="https://www.youtube.com/clip/fixture")
+            )
+        assert [request.url for request in adapter.requests] == [
+            "https://www.youtube.com/clip/fixture"
+        ]
+        assert site._request_profile == profile
 
 
 @pytest.mark.parametrize("location", ["/loop", None])
