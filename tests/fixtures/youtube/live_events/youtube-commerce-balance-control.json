@@ -1,0 +1,20 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "clickTrackingParams": "<redacted>",
+          "elementsCommand": {
+            "executeJsFunctionCommand": {
+              "data": {
+                "functionArguments": "<redacted>"
+              },
+              "functionName": "updateCommerceTokenBalance|7d546428e27fca8a",
+              "moduleIdentifier": "update_token_balance_command|76b9c5a70d918300"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

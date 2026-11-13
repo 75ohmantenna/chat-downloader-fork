@@ -4,7 +4,15 @@
 
 from __future__ import annotations
 
-from chat_downloader.utils.json_types import JSONDict, dig, get_dict, get_str
+from chat_downloader.utils.json_types import (
+    JSONDict,
+    JSONList,
+    dig,
+    get_dict,
+    get_int,
+    get_list,
+    get_str,
+)
 
 from .modern_text import attributed_text, author_badges, image_thumbnails
 
@@ -95,6 +103,73 @@ def _engagement(model: JSONDict) -> JSONDict:
     return {"message": message} if message else {}
 
 
+def _wrapped_gift_message(model: JSONDict) -> JSONDict:
+    """Unwrap the captured gift view model while preserving its native fields."""
+    if model.keys() - {"context", "viewModel"} or (
+        "context" in model and not isinstance(dig(model, "context"), dict)
+    ):
+        return {}
+    views = get_dict(model, "viewModel")
+    if views.keys() != {"giftMessageViewModel"}:
+        return {}
+    gift = get_dict(views, "giftMessageViewModel")
+    if not (
+        get_str(gift, "id").strip()
+        and get_str(get_dict(gift, "authorName"), "content").strip()
+        and get_str(get_dict(gift, "text"), "content").strip()
+    ):
+        return {}
+    return gift.copy()
+
+
+def _membership_badges(header: JSONDict) -> JSONList:
+    """Keep supported badge metadata without passing malformed native fields."""
+    badges: JSONList = []
+    for item in get_list(header, "authorBadges"):
+        if not isinstance(item, dict):
+            continue
+        badge = get_dict(item, "liveChatAuthorBadgeRenderer")
+        fields: JSONDict = {}
+        title = get_str(badge, "tooltip")
+        if title:
+            fields["tooltip"] = title
+        icon = get_str(get_dict(badge, "icon"), "iconType")
+        if icon:
+            fields["icon"] = {"iconType": icon}
+        thumbnails = image_thumbnails(
+            get_dict(get_dict(badge, "customThumbnail"), "elementsImage")
+        )
+        if thumbnails:
+            fields["customThumbnail"] = thumbnails
+        if fields:
+            badges.append({"liveChatAuthorBadgeRenderer": fields})
+    return badges
+
+
+def _new_membership(model: JSONDict) -> JSONDict:
+    header = get_dict(model, "headerRenderer")
+    author = get_dict(get_dict(header, "authorName"), "elementsAttributedString")
+    welcome = get_dict(get_dict(header, "primaryText"), "elementsAttributedString")
+    if (
+        not get_str(author, "content").strip()
+        or not get_str(welcome, "content").strip()
+    ):
+        return {}
+    fields: JSONDict = {
+        "authorName": {"simpleText": get_str(author, "content")},
+        "headerSubtext": attributed_text(welcome),
+        "authorPhoto": image_thumbnails(
+            get_dict(get_dict(header, "authorPhoto"), "elementsImage")
+        ),
+        "authorBadges": _membership_badges(header),
+    }
+    renderer: JSONDict = {key: value for key, value in fields.items() if value}
+    color = get_int(model, "backgroundColor", -1)
+    if 0 <= color <= 0xFFFFFFFF:
+        renderer["backgroundColor"] = color
+    return renderer
+
+
 _MODELS = {
     "liveChatTextMessageModel": ("liveChatTextMessageRenderer", _text_message),
     "liveChatTextMessageBannerModel": ("liveChatTextMessageRenderer", _banner_message),
@@ -108,7 +183,14 @@ _MODELS = {
         "liveChatViewerEngagementMessageRenderer",
         _engagement,
     ),
+    "youtubeModel": ("giftMessageViewModel", _wrapped_gift_message),
+    "liveChatSponsorshipsNewMemberAnnouncementModel": (
+        "liveChatMembershipItemRenderer",
+        _new_membership,
+    ),
 }
+
+_STRICT_RENDERERS = {"giftMessageViewModel", "liveChatMembershipItemRenderer"}
 
 
 def normalize_element(item: JSONDict) -> JSONDict:
@@ -130,6 +212,8 @@ def normalize_element(item: JSONDict) -> JSONDict:
     renderer = adapt(get_dict(models, model_name))
     if not renderer:
         return item
+    if renderer_name in _STRICT_RENDERERS and item.keys() != {"elementRenderer"}:
+        return item
     compatibility = get_dict(element, "compatibilityOptions")
     for source, target in (
         ("liveChatId", "id"),
@@ -137,5 +221,10 @@ def normalize_element(item: JSONDict) -> JSONDict:
     ):
         value = get_str(compatibility, source)
         if value:
+            if renderer_name in _STRICT_RENDERERS and get_str(renderer, target) not in {
+                "",
+                value,
+            }:
+                return item
             renderer[target] = value
     return {renderer_name: renderer}

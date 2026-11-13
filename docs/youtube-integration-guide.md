@@ -339,6 +339,18 @@ Unparsed actions and invalid messages increment `parse_error` for live chats
 as well as replays. Known control actions and intentional filtering are
 counted separately from parsing loss.
 
+The commerce-balance UI control uses an `elementsCommand` containing only
+`executeJsFunctionCommand`, with the `updateCommerceTokenBalance` function and
+`update_token_balance_command` module. Both identifiers must have the captured
+16-character lowercase hexadecimal version suffix, and the only data field
+must be a nonempty `functionArguments` string. This recognized control is counted
+as a known ignored action; its opaque arguments remain uninterpreted. Other
+elements commands, malformed controls, and mixed command envelopes retain
+unknown-action diagnostics and parsing-loss accounting.
+The curated `youtube-commerce-balance-control.json` fixture preserves the
+captured command shape and identifier hashes, with tracking and opaque argument
+values replaced by placeholders and unrelated response actions removed.
+
 Continuation diagnostics count requests, actual retry attempts after the
 first attempt of each poll, HTTP error responses, network errors, and JSON
 decoding errors. These exclude bootstrap requests and profile switches; a
@@ -585,9 +597,26 @@ message types:
 
 `gift_message_view_model` covers both regular `giftMessageViewModel` chat items
 and Jewels-powered `updateOrAddInteractivityWidgetAction` gift attributions.
+It also covers the captured mobile
+`elementRenderer` → `youtubeModel.viewModel.giftMessageViewModel` wrapper.
+This form preserves the native gift fields and uses compatible wrapper metadata
+for the author channel ID. Conflicting message or author IDs and ambiguous or
+malformed view models remain diagnosable. Response-generation logging IDs do
+not supply message timestamps. The curated `youtube-mobile-wrapped-gift.json`
+fixture retains this wrapper with anonymized identity and tracking values and
+unrelated experiment context removed.
 The widget form preserves the gifter identity, gift image and accessibility
 label, and `combo_count`; repeated widget updates keep their shared message ID
 so consumers can track a growing gift combo.
+
+The mobile `liveChatSponsorshipsNewMemberAnnouncementModel` maps to
+`membership_item`. It preserves the author, badge icons and labels, avatar,
+and welcome text as `header_secondary_text`, matching the native membership
+contract where `message` may be `None`. Invalid optional badge/photo metadata
+and non-integer or out-of-range ARGB colors are omitted while required content
+is retained. Missing required author or welcome text remains diagnosable.
+The curated `youtube-mobile-new-member.json` fixture preserves this observed
+shape with anonymized identities, image URLs, and tracking values.
 
 `ban_user` is the normalized `message_type` for three distinct wire actions:
 `remove_chat_item`, `remove_chat_item_by_author`, and

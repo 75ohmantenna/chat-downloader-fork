@@ -1,0 +1,423 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "elementRenderer": {
+                "compatibilityOptions": {
+                  "liveChatAuthorExternalChannelId": "UCfixture-member",
+                  "liveChatId": "mobile-membership-1"
+                },
+                "newElement": {
+                  "properties": {
+                    "identifierProperties": {
+                      "identifier": "live_chat_sponsorships_new_member_announcement.eml-fe|eec647a5531370c8",
+                      "uniqueLoggingIdentifier": "1889485735158894512"
+                    }
+                  },
+                  "type": {
+                    "componentType": {
+                      "model": {
+                        "liveChatSponsorshipsNewMemberAnnouncementModel": {
+                          "authorNameData": {
+                            "a11yLabel": "@FixtureMember Member",
+                            "authorName": {
+                              "attachmentRuns": [
+                                {
+                                  "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                  "element": {
+                                    "type": {
+                                      "imageType": {
+                                        "image": {
+                                          "sources": [
+                                            {
+                                              "height": 16,
+                                              "url": "https://example.invalid/member-badge=s48-c-k",
+                                              "width": 16
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "length": 1,
+                                  "startIndex": 15
+                                }
+                              ],
+                              "content": "@FixtureMember  ",
+                              "styleRuns": [
+                                {
+                                  "fontColor": 3019898879,
+                                  "fontName": "sans-serif-medium",
+                                  "fontSize": 14,
+                                  "length": 16,
+                                  "startIndex": 0
+                                }
+                              ]
+                            },
+                            "authorNameDark": {
+                              "attachmentRuns": [
+                                {
+                                  "alignment": "ALIGNMENT_VERTICAL_CENTER",
+                                  "element": {
+                                    "type": {
+                                      "imageType": {
+                                        "image": {
+                                          "sources": [
+                                            {
+                                              "height": 16,
+                                              "url": "https://example.invalid/member-badge=s48-c-k",
+                                              "width": 16
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "length": 1,
+                                  "startIndex": 15
+                                }
+                              ],
+                              "content": "@FixtureMember  ",
+                              "styleRuns": [
+                                {
+                                  "fontColor": 3019898879,
+                                  "fontName": "sans-serif-medium",
+                                  "fontSize": 14,
+                                  "length": 16,
+                                  "startIndex": 0
+                                }
+                              ]
+                            },
+                            "authorNameUtf16Length": 16
+                          },
+                          "backgroundColor": 4279278936,
+                          "context": {
+                            "adsContext": {
+                              "experimentFlags": {
+                                "darkCompanionInLightMode": true,
+                                "enableAiDisclosureForAdTextImageInnertube": true,
+                                "enableCardifiedBasicImmersive": true,
+                                "enableCompactSurveyA11yFix": true,
+                                "enableConditionalRenderingForDelayedDescription": true,
+                                "enableDarkInstreamCompactSurveyInLightMode": true,
+                                "enableEngagementHeaderBackgroundColorForMusicMobile": true,
+                                "enableEngagementHeaderFocusableA11yFix": true,
+                                "enableFeedAdMetadataHeadlineInteractionForAppendedHeadline": true,
+                                "enableFeedAdMetadataHeadlineInteractionForResponsiveHeadline": true,
+                                "enableFeedCompactSurvey": true,
+                                "enableFeedCompactSurveyA11yFix": true,
+                                "enableFeedCompactSurveyColorSampling": true,
+                                "enableFixAdAvatarMonogramFontSize": true,
+                                "enableLandingPagePreviewSaturatedBackground": true,
+                                "enableLidaIosFix": true,
+                                "enableOverlayButtonForTextImage": true,
+                                "enablePanelCarouselAdAvatarLockupRtlFix": true,
+                                "enablePanelCarouselCardPortraitVodResponsiveFix": true,
+                                "enablePartnershipAdsInStream": true,
+                                "enablePivotButtonAndKeepRhsAndThreeDotsPositionOnElements": true,
+                                "enablePivotButtonOnElements": true,
+                                "enableResponsiveAdsOnMobileHome": true,
+                                "enableResponsiveTextImageButtonGroupMobile": true,
+                                "enableRtlFlipForImageAdsOnIos": true,
+                                "enableSfsPlaGridAdsOnTabletInnertube": true,
+                                "enableSfsResponsiveConfig": true,
+                                "enableShortsCompactSurveyFollowUp": true,
+                                "enableShortsUxFixForVideoAds": true,
+                                "enableVerticalPaddingForEngagementFooter": true,
+                                "enableWrappedSponsoredBadgeFoldable": true,
+                                "fixAdDisclosureBannerTextEndPadding": true,
+                                "forceDarkModeForLandscapeEp": true,
+                                "removeAdBadgeForMusicEpHeader": true,
+                                "shortsCompactSurveyAnimationOutDurationSeconds": 0.4
+                              }
+                            },
+                            "channelsContext": {
+                              "experimentFlags": {
+                                "enableViewPronounsOnMainApp": true
+                              }
+                            },
+                            "clientCapabilitiesKey": "capabilities|e42b5fab86acc61e",
+                            "mainAppAdaptiveContext": {
+                              "animationDecisions": [
+                                {
+                                  "key": 5,
+                                  "value": "ANIMATION_DECISION_ON"
+                                },
+                                {
+                                  "key": 4,
+                                  "value": "ANIMATION_DECISION_ON"
+                                },
+                                {
+                                  "key": 3,
+                                  "value": "ANIMATION_DECISION_ON"
+                                },
+                                {
+                                  "key": 1,
+                                  "value": "ANIMATION_DECISION_ON"
+                                }
+                              ],
+                              "experiments": {
+                                "adaptiveAnimatedLikePosts": true
+                              }
+                            },
+                            "mainAppContext": {
+                              "clientName": "ANDROID",
+                              "experiments": {
+                                "androidEnableSectionsForegroundChangeSets": true,
+                                "androidEnableUseReliableWorkingRange": true,
+                                "androidOfflinePlaylistHeader": true,
+                                "bannerTextIconDarkThemeBackgroundColor": "BANNER_TEXT_ICON_DARK_THEME_BACKGROUND_COLOR_CLEAR",
+                                "enableA11yFixForThreeDotMenuButton": true,
+                                "enableAccountLinkIconMobileWatch": true,
+                                "enableAmsterdamFitAndFinish": true,
+                                "enableAvatarStackStandardizedBorderWidth": true,
+                                "enableBlockDataSourceInitialElements": true,
+                                "enableBlocksErrorRecoveryForElementsPlaylistPicker": true,
+                                "enableBookmarkSaveIcon": true,
+                                "enableBuenosAiresListOptionPattern": true,
+                                "enableBuenosAiresPlayerOverflowMenuItemElementStyle": true,
+                                "enableButtonIconDelhiSize": true,
+                                "enableButtonProtoToButtonViewModelMigration": true,
+                                "enableChevronOnShelfHeader": true,
+                                "enableCinematicContainer": true,
+                                "enableCollabAvatarStackMasking": true,
+                                "enableControllerEagerInit": true,
+                                "enableCreatorDetailsShelfM2": true,
+                                "enableDescriptionVerticalFadedScrim": true,
+                                "enableEffectsSectionInLiveStructuredDescription": true,
+                                "enableEntityBasedEngagementPanelHeader": true,
+                                "enableIconButtonMigration": true,
+                                "enableIconButtonMigrationPhase2": true,
+                                "enableIconCustomImageMigrationBatch1": true,
+                                "enableIconCustomImageMigrationBatch10": true,
+                                "enableIconCustomImageMigrationBatch2": true,
+                                "enableIconCustomImageMigrationBatch3": true,
+                                "enableIconCustomImageMigrationBatch4": true,
+                                "enableIconCustomImageMigrationBatch5": true,
+                                "enableIconCustomImageMigrationBatch6": true,
+                                "enableIconCustomImageMigrationBatch7": true,
+                                "enableIconCustomImageMigrationBatch8": true,
+                                "enableIconCustomImageMigrationBatch9": true,
+                                "enableLearningConceptContextualDefinitions": true,
+                                "enableLearningConceptGfeedback": true,
+                                "enableListItemIconContentRefactor": true,
+                                "enableListItemVerticalAlignmentFix": true,
+                                "enableLocalThumbnailForVideoUploadLockups": true,
+                                "enableLocalThumbnailInThumbnailOverlay": true,
+                                "enableModernButtons": true,
+                                "enableModernChipsV1": true,
+                                "enableModernDialog": true,
+                                "enableModernListItem": true,
+                                "enableModernPlayerControlsMetadataUpdate": true,
+                                "enableModernPlayerControlsSeekEdu": true,
+                                "enableModernPlayerSpeedmasterPadding": true,
+                                "enableModernSavingServer": true,
+                                "enableModernSnackbar": true,
+                                "enableModernTypeComponentsServer": true,
+                                "enableModernTypePostBaServer": true,
+                                "enableModernizeStructuredDescriptionPlaylistLockupsV2": true,
+                                "enableModernizedBadges": true,
+                                "enablePlayerDisclosureA11yFix": true,
+                                "enablePlaylistFeedMigrationM3Features": true,
+                                "enablePremiumQualityBadgeOnServer": true,
+                                "enableResponsiveAvatarRowBreakpoint": 840,
+                                "enableRoundedBadgesForServer": true,
+                                "enableRoundedThumbs": true,
+                                "enableServerBedtimeReminderRedesign": true,
+                                "enableStation": true,
+                                "enableTextDialogModernization": true,
+                                "enableTypographyTokensMigration": true,
+                                "enableTypographyTokensMigrationM2": true,
+                                "enableTypographyTokensMigrationM3": true,
+                                "enableTypographyTokensMigrationM5": true,
+                                "enableTypographyTokensMigrationMusic": true,
+                                "enableVideoLockupMetadataServerFilling": true,
+                                "enableVmListItemMigration": true,
+                                "enableXlAvatarStackOverlapOverride": true,
+                                "liveChatUseImprovedVisibilityStyle": true,
+                                "playlistPageHeaderUgpEnableTopBarAnimation": true,
+                                "scrollIntoVisibleAreaInBottomSheets": true,
+                                "showDownloadBadgeOnLockupMetadata": true,
+                                "showVideoCollaborators": true,
+                                "textFieldSupportedForChannelEditing": true,
+                                "useAmsterdamColorsForServerLongTail": true,
+                                "useDarkerPaletteBgColorForServer": true,
+                                "ycEnableUnifiedChannelCreationFlow": true
+                              }
+                            },
+                            "musicContext": {
+                              "experiments": {
+                                "enableA11yButtonTraitOnPlaylistsInMusicPlaylistsPickerModel": true,
+                                "enableListItemA11yScaling": true,
+                                "enableRadioBuilderCarousel": true
+                              }
+                            },
+                            "reelsPlayerContext": {
+                              "experiments": {
+                                "disableGrowHeightAnimationForSuggestedAction": true,
+                                "enableDefaultAnimationsForReelMetapanel": true,
+                                "enableMoreReadablePausedStateBgColor": true,
+                                "enableReelsElementsActionBarDarkerShadows": true,
+                                "enableRhsAnimatedLikeIconNonTsComponent": true,
+                                "enableShortsDelhiIcons": true,
+                                "enableShortsPlayerOverlayElementization": true,
+                                "enableSuggestedActionDynamicHeight": true,
+                                "updateTitleSizeTo14dp": true
+                              }
+                            },
+                            "shoppingAppContext": {
+                              "experiments": {
+                                "darkThemeProductThumbnailColor": 4280756007,
+                                "disableProductPreviewPositionTransition": true,
+                                "enableMetadataRearrangementForFeaturedProductBanner": true,
+                                "enableProductStickerTwoStepSessionDismissal": true,
+                                "enableUnifyShortsAndVodBannerInconsistencies": true
+                              }
+                            },
+                            "staticDeviceEnvDataContext": {
+                              "clientName": "ANDROID",
+                              "platformName": "PLATFORM_NAME_ANDROID"
+                            },
+                            "subscriptionsContext": {
+                              "experiments": {
+                                "forceModernSubscribeButton": true
+                              }
+                            },
+                            "themeKey": "\n\u0015theme|79e4e972fba0bc8",
+                            "typographyContext": {}
+                          },
+                          "environment": {
+                            "platformName": "PLATFORM_NAME_ANDROID"
+                          },
+                          "headerRenderer": {
+                            "authorBadges": [
+                              {
+                                "liveChatAuthorBadgeRenderer": {
+                                  "accessibility": {
+                                    "accessibilityData": {
+                                      "label": "New member"
+                                    }
+                                  },
+                                  "customThumbnail": {
+                                    "elementsImage": {
+                                      "sources": [
+                                        {
+                                          "height": 16,
+                                          "url": "https://example.invalid/member-badge=s16-c-k",
+                                          "width": 16
+                                        },
+                                        {
+                                          "height": 32,
+                                          "url": "https://example.invalid/member-badge=s32-c-k",
+                                          "width": 32
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "tooltip": "New member"
+                                }
+                              }
+                            ],
+                            "authorName": {
+                              "elementsAttributedString": {
+                                "content": "@FixtureMember"
+                              }
+                            },
+                            "authorPhoto": {
+                              "elementsImage": {
+                                "sources": [
+                                  {
+                                    "height": 32,
+                                    "url": "https://example.invalid/avatar=s32-c-k",
+                                    "width": 32
+                                  },
+                                  {
+                                    "height": 64,
+                                    "url": "https://example.invalid/avatar=s64-c-k",
+                                    "width": 64
+                                  }
+                                ]
+                              }
+                            },
+                            "contextMenuAccessibility": {
+                              "accessibilityData": {
+                                "label": "Chat actions"
+                              }
+                            },
+                            "contextMenuEndpoint": {
+                              "clickTrackingParams": "<redacted>",
+                              "liveChatItemContextMenuEndpoint": {
+                                "params": "<redacted>"
+                              }
+                            },
+                            "primaryText": {
+                              "elementsAttributedString": {
+                                "content": "Welcome to the channel!"
+                              }
+                            }
+                          },
+                          "loggingDirectives": {
+                            "trackingParams": "<redacted>",
+                            "visibility": {
+                              "types": "12"
+                            }
+                          },
+                          "theme": {},
+                          "trackingParams": "<redacted>",
+                          "updateLiveChatItemEntityKey": "<redacted>"
+                        }
+                      },
+                      "subscriptionConfig": {
+                        "capabilitiesSubscriptionConfig": {
+                          "mappings": {
+                            "identifier": "capabilities|e42b5fab86acc61e",
+                            "resultPath": [
+                              12
+                            ]
+                          },
+                          "resultField": 416544718
+                        },
+                        "dataStoreSubscriptionConfig": {
+                          "mappings": [
+                            {
+                              "identifier": "EihDaHdLR2tOUUxVZ3RjR1l5WnpWblJFWllObTlmZDFGa1RuWnJVRWxSILABKAE%3D",
+                              "resultField": 8,
+                              "resultPath": [
+                                8
+                              ]
+                            }
+                          ],
+                          "resultField": 416544718
+                        },
+                        "themeSubscriptionConfig": {
+                          "mappings": [
+                            {
+                              "identifier": "\n\u0015theme|79e4e972fba0bc8",
+                              "resultPath": [
+                                1
+                              ]
+                            }
+                          ],
+                          "resultField": 416544718
+                        }
+                      },
+                      "templateConfig": {
+                        "uriTemplateConfig": {
+                          "uri": "live_chat_sponsorships_new_member_announcement.eml-fe|eec647a5531370c8"
+                        }
+                      }
+                    }
+                  }
+                },
+                "trackingParams": "CAEQl98BIhMI6_XlnPaDmAMVdsfCBB1FwReo"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

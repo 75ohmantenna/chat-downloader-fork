@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from math import isfinite
@@ -68,6 +69,11 @@ _ACTION_HANDLERS: dict[str, _ActionHandler] = {
         (_KNOWN_POLL_ACTION_TYPES, _handle_poll_action),
     )
     for action_type in types
+}
+
+_COMMERCE_BALANCE_IDENTIFIERS = {
+    "functionName": re.compile(r"updateCommerceTokenBalance\|[0-9a-f]{16}"),
+    "moduleIdentifier": re.compile(r"update_token_balance_command\|[0-9a-f]{16}"),
 }
 
 
@@ -151,7 +157,28 @@ def _get_action_type(action: JSONDict) -> str | None:
 
 def is_known_ignored_action(action: JSONDict) -> bool:
     """Return whether *action* is an explicitly ignored control action."""
-    return _get_action_type(action) in _KNOWN_IGNORE_ACTION_TYPES
+    return _get_action_type(action) in _KNOWN_IGNORE_ACTION_TYPES or (
+        _is_commerce_balance_control(_unwrap_replay_action(action))
+    )
+
+
+def _is_commerce_balance_control(action: JSONDict) -> bool:
+    """Recognize the captured balance-only UI command without running its data."""
+    if action.keys() - {"clickTrackingParams"} != {"elementsCommand"}:
+        return False
+    elements = get_dict(action, "elementsCommand")
+    command = get_dict(elements, "executeJsFunctionCommand")
+    data = get_dict(command, "data")
+    return (
+        elements.keys() == {"executeJsFunctionCommand"}
+        and command.keys() == {"data", "functionName", "moduleIdentifier"}
+        and data.keys() == {"functionArguments"}
+        and bool(get_str(data, "functionArguments"))
+        and all(
+            pattern.fullmatch(get_str(command, key))
+            for key, pattern in _COMMERCE_BALANCE_IDENTIFIERS.items()
+        )
+    )
 
 
 def process_action(
@@ -195,7 +222,10 @@ def process_action(
     handler = _ACTION_HANDLERS.get(original_action_type)
     if handler is not None:
         return ProcessedAction(*handler(action, original_action_type, data, offset))
-    if original_action_type in _KNOWN_IGNORE_ACTION_TYPES:
+    if (
+        original_action_type in _KNOWN_IGNORE_ACTION_TYPES
+        or _is_commerce_balance_control(action)
+    ):
         return None
     capture_debug_sample(
         f"youtube-unknown-action-{original_action_type}",

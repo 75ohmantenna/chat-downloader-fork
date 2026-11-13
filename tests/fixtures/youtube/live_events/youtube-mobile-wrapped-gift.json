@@ -1,0 +1,112 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "addChatItemAction": {
+            "item": {
+              "elementRenderer": {
+                "compatibilityOptions": {
+                  "liveChatAuthorExternalChannelId": "UCfixture-gifter",
+                  "liveChatId": "mobile-gift-1",
+                  "pdgElementRendererCompatibilityOptions": {
+                    "giftId": "go_team"
+                  }
+                },
+                "newElement": {
+                  "properties": {
+                    "identifierProperties": {
+                      "identifier": "gift_message_view_model.eml-fe|bba10ad149ce399d",
+                      "uniqueLoggingIdentifier": "1889485735158894512"
+                    }
+                  },
+                  "type": {
+                    "componentType": {
+                      "model": {
+                        "youtubeModel": {
+                          "context": {},
+                          "viewModel": {
+                            "giftMessageViewModel": {
+                              "authorName": {
+                                "content": "@FixtureGifter ",
+                                "styleRuns": [
+                                  {
+                                    "startIndex": 0,
+                                    "length": 15
+                                  }
+                                ]
+                              },
+                              "id": "mobile-gift-1",
+                              "image": {
+                                "sources": [
+                                  {
+                                    "clientResource": {
+                                      "imageColor": 4294901760,
+                                      "imageName": "yt_outline_gift_black_24"
+                                    }
+                                  }
+                                ]
+                              },
+                              "imageA11yLabel": "Gifts",
+                              "rendererContext": {
+                                "loggingContext": {
+                                  "loggingDirectives": {
+                                    "trackingParams": "<redacted>",
+                                    "visibility": {
+                                      "types": "12"
+                                    }
+                                  }
+                                }
+                              },
+                              "text": {
+                                "content": "sent Go team! for 5 Jewels",
+                                "styleRuns": [
+                                  {
+                                    "length": 26,
+                                    "startIndex": 0
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "subscriptionConfig": {
+                        "capabilitiesSubscriptionConfig": {
+                          "mappings": {
+                            "identifier": "capabilities|e42b5fab86acc61e",
+                            "resultPath": [
+                              6
+                            ]
+                          },
+                          "resultField": 413471385
+                        },
+                        "themeSubscriptionConfig": {
+                          "mappings": [
+                            {
+                              "identifier": "\n\u0015theme|79e4e972fba0bc8",
+                              "resultPath": [
+                                4
+                              ]
+                            }
+                          ],
+                          "resultField": 413471385
+                        }
+                      },
+                      "templateConfig": {
+                        "uriTemplateConfig": {
+                          "uri": "gift_message_view_model.eml-fe|bba10ad149ce399d"
+                        }
+                      }
+                    }
+                  }
+                },
+                "trackingParams": "CAEQl98BIhMI49yF9_KDmAMVzJDlBx28ITe2"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
