@@ -353,11 +353,14 @@ def test_kick_guide_resource_limits_match_runtime_budgets() -> None:
     rows = re.findall(r"^\| ([^|]+) \| ([^|]+) \|$", section, re.MULTILINE)
     documented = dict(rows[2:])
     byte_limits = {
-        "WebSocket payload per completed data message, including interleaved controls": (
-            kick_limits.MAX_WEBSOCKET_MESSAGE_BYTES
-        ),
+        (
+            "WebSocket payload per completed data message, "
+            "including interleaved controls"
+        ): kick_limits.MAX_WEBSOCKET_MESSAGE_BYTES,
         "Decoded history HTTP response": kick_limits.MAX_HISTORY_RESPONSE_BYTES,
-        "Serialized replay record, including newline": kick_limits.MAX_REPLAY_RECORD_BYTES,
+        "Serialized replay record, including newline": (
+            kick_limits.MAX_REPLAY_RECORD_BYTES
+        ),
         "Serialized replay page": kick_limits.MAX_REPLAY_PAGE_BYTES,
         "Total replay spool": kick_limits.MAX_REPLAY_SPOOL_BYTES,
         "Cumulative retained cursor bytes": kick_limits.MAX_REPLAY_CURSOR_BYTES,

@@ -8,11 +8,14 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.6.1 — 2026-11-13
+
 ### Fixes
 
+- Report unavailable YouTube clip popups before profile rotation, preserving
+  `VideoUnavailable` without attempting an unnecessary mobile redirect.
 - Preserve literal braces in manifest output paths for already opened writers
   and for finalized filenames whose writer initialization fails.
-
 - Freeze nested provider diagnostics after bounded shutdown so late worker
   completion cannot revise returned counters or change the observation used by
   capture inspection, manifests, and debug summaries.
