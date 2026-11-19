@@ -53,7 +53,11 @@ jobs:
         run: make ci
 
   network-replay:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       github.repository == '75ohmantenna/chat-downloader-fork')
     runs-on: ubuntu-latest
     timeout-minutes: 20
 

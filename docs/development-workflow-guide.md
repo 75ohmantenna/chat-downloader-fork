@@ -61,10 +61,10 @@ streams and escape characters that the destination cannot encode.
 Network tests remain opt-in locally. Every external check carries
 `@pytest.mark.network`, one scope marker (`network_replay`, `network_live`, or
 `network_environment`), and a hard timeout. Parser and transport regressions
-should normally use curated fixtures under `tests/fixtures/`. The GitHub Actions
-workflow schedules stable `network_replay` contracts weekly and on manual
-dispatch; volatile live and environment checks do not gate pushes or pull
-requests.
+should normally use curated fixtures under `tests/fixtures/`. GitHub Actions runs
+stable `network_replay` contracts weekly, on manual dispatch, and on pushes to
+`75ohmantenna/chat-downloader-fork`. Volatile live and environment checks remain
+opt-in.
 
 Live discovery and inactivity scenarios may succeed without chat messages.
 Separate Twitch and YouTube delivery scenarios require `TWITCH_TEST_CHANNEL`
@@ -692,7 +692,8 @@ GitHub Actions is the only supported hosted CI platform. The workflow defines
 a `test` job for `make ci` on Python 3.12, 3.13, and 3.14 on pushes to every
 branch, pull requests targeting `master`, and manual dispatch. The separate
 Python 3.14 `network-replay` job runs stable replay contracts on the weekly
-schedule and manual dispatch. Both jobs use locked dependencies, read-only
+schedule, on manual dispatch, and on branch and tag pushes to
+`75ohmantenna/chat-downloader-fork`. Both jobs use locked dependencies, read-only
 contents permission, concurrency cancellation, and a 20-minute timeout. The `test`
 checkout retains full Git history so the fork-history issue-reference guard can
 inspect every commit after its recorded baseline. Repository-level Actions

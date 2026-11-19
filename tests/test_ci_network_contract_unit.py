@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Contract checks for scheduled stable-provider validation."""
+"""Contract checks for GitHub Actions validation."""
 
 from __future__ import annotations
 
@@ -13,17 +13,22 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
-def test_ci_schedules_stable_network_contracts_without_gating_pushes() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
+def test_ci_runs_network_replay_on_schedule_dispatch_and_release_repo_pushes() -> None:
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
-    assert "  schedule:\n" in workflow
-    assert "  network-replay:\n" in workflow
-    assert "if: github.event_name != 'schedule'" in workflow
-    network_condition = "if: github.event_name == 'schedule'"
-    network_condition += " || github.event_name == 'workflow_dispatch'"
-    assert network_condition in workflow
-    assert "-m network_replay --run-network" in workflow
-    assert "-m network_live --run-network" not in workflow
+    # PyYAML interprets the unquoted workflow key `on` as a YAML 1.1 boolean.
+    assert {"schedule", "workflow_dispatch", "push"} <= workflow[True].keys()
+    assert workflow["jobs"]["test"]["if"] == "github.event_name != 'schedule'"
+    replay_job = workflow["jobs"]["network-replay"]
+    assert " ".join(replay_job["if"].split()) == (
+        "github.event_name == 'schedule' || "
+        "github.event_name == 'workflow_dispatch' || "
+        "(github.event_name == 'push' && "
+        "github.repository == '75ohmantenna/chat-downloader-fork')"
+    )
+    assert replay_job["steps"][-1]["run"] == (
+        "uv run pytest -q -p no:rerunfailures -m network_replay --run-network"
+    )
 
 
 def test_ci_fetches_full_history_for_issue_reference_guard() -> None:
