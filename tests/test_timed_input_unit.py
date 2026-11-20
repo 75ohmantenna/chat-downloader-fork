@@ -316,7 +316,7 @@ def test_terminal_retry_cancellation_preserves_later_input(
         timed_utils.termios, "tcflush", lambda *_args: flushed.append("later")
     )
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: True
+        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: True
     )
     token = _POLLING_STOP_EVENT.set(stopped)
     try:
@@ -338,7 +338,7 @@ def test_zero_delay_retry_does_not_resume_cancelled_worker(monkeypatch):
     stopped = threading.Event()
     stopped.set()
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: False
+        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: False
     )
     token = _POLLING_STOP_EVENT.set(stopped)
     try:
@@ -412,7 +412,7 @@ def test_manual_terminal_eof_closes_selector_and_reports_detachment(
     monkeypatch.setattr(timed_utils.selectors, "DefaultSelector", Selector)
     monkeypatch.setattr(timed_utils, "echo", lambda _text: None)
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: True
+        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: True
     )
     token = _POLLING_STOP_EVENT.set(threading.Event())
     try:
@@ -575,7 +575,7 @@ def test_windows_manual_retry_reports_ctrl_z_as_closed_input(monkeypatch):
         SimpleNamespace(kbhit=lambda: True, getwche=lambda: "\032")
     )
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: True
+        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: True
     )
     monkeypatch.setattr(module, "echo", lambda _text: None)
     token = _POLLING_STOP_EVENT.set(threading.Event())

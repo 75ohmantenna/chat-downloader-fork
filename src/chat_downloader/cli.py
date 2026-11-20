@@ -23,7 +23,13 @@ from .cli_args import (
     _ParamRegistrar,
     _rename_default_argument_groups,
 )
-from .debugging import disable_logger, install_cli_log_handler, log, set_log_level
+from .debugging import (
+    disable_logger,
+    install_cli_log_handler,
+    log,
+    loggers,
+    set_log_level,
+)
 from .metadata import __program__, __summary__, __version__
 from .utils.interrupts import raise_or_defer_interrupt
 
@@ -34,7 +40,7 @@ if TYPE_CHECKING:
     from _typeshed import SupportsWrite
 
 
-def _install_cli_signal_handlers() -> None:
+def _install_cli_signal_handlers(restore: contextlib.ExitStack | None = None) -> None:
     """Finish the active record before interrupting and flushing CLI output.
 
     Provider reads stay immediately interruptible. A second signal restores its
@@ -59,7 +65,12 @@ def _install_cli_signal_handlers() -> None:
         # configs) or we may not be on the main thread; soft fail so
         # library callers using CLI helpers from a worker keep working.
         with contextlib.suppress(AttributeError, ValueError, OSError):
-            signal.signal(sig, handler)
+            previous = signal.getsignal(sig)
+            # Python cannot reinstall a handler owned by native code.
+            if previous is not None:
+                signal.signal(sig, handler)
+                if restore is not None:
+                    restore.callback(signal.signal, sig, previous)
 
 
 class _ArgumentParser(argparse.ArgumentParser):
@@ -91,9 +102,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 def _run_cli(cli_args: Sequence[str] | None) -> None:
     """Parse cli_args (default sys.argv[1:]) and run the chat downloader."""
-    _install_cli_signal_handlers()
-    install_cli_log_handler()
-
     parser = _build_arg_parser()
     args = parser.parse_args(args=cli_args)
 
@@ -125,11 +133,18 @@ def _run_cli(cli_args: Sequence[str] | None) -> None:
 def main(cli_args: Sequence[str] | None = None) -> None:
     """Run the CLI and prevent a closed stdout pipe from breaking finalization."""
     try:
-        try:
-            _run_cli(cli_args)
-        finally:
-            # Include buffered help/version output and run-loop pipe failures.
-            sys.stdout.flush()
+        with contextlib.ExitStack() as restore:
+            for logger in loggers:
+                restore.callback(setattr, logger, "handlers", logger.handlers.copy())
+                restore.callback(logger.setLevel, logger.level)
+                restore.callback(setattr, logger, "disabled", logger.disabled)
+            _install_cli_signal_handlers(restore)
+            install_cli_log_handler()
+            try:
+                _run_cli(cli_args)
+            finally:
+                # Include buffered help/version output and run-loop pipe failures.
+                sys.stdout.flush()
     except BrokenPipeError:
         # The interpreter flushes stdout again at exit; keep that flush harmless.
         with Path(os.devnull).open("w", encoding="utf-8") as devnull:

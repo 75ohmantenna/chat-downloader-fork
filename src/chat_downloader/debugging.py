@@ -8,13 +8,17 @@ import logging
 import os
 import sys
 import time
+from contextlib import contextmanager
 from contextvars import ContextVar
 from enum import Enum
-from typing import Any, TextIO, cast
+from typing import TYPE_CHECKING, Any, TextIO, cast
 
 from .metadata import __program__ as logger_name
 from .redaction import render_for_log, sanitize_for_log
 from .utils.console_utils import pause
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 class TestingException(Exception):
@@ -45,6 +49,16 @@ def set_testing_mode(new_mode: TestingModes) -> None:
         new_mode: The desired testing mode from :class:`TestingModes`.
     """
     _TESTING_MODE.set(new_mode)
+
+
+@contextmanager
+def scoped_testing_mode(mode: TestingModes) -> Iterator[None]:
+    """Apply a testing mode for the lifetime of an operation."""
+    token = _TESTING_MODE.set(mode)
+    try:
+        yield
+    finally:
+        _TESTING_MODE.reset(token)
 
 
 def get_testing_mode() -> TestingModes:
@@ -228,8 +242,9 @@ def set_log_level(level: str) -> None:
             (case-insensitive).
     """
     level_name = level.upper()
-    for logger in loggers:
-        logger.setLevel(level_name)
+    for configured_logger in loggers:
+        configured_logger.setLevel(level_name)
+        configured_logger.disabled = False
 
 
 def disable_logger() -> None:

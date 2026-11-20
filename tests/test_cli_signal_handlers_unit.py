@@ -12,7 +12,7 @@ import time
 
 import pytest
 
-from chat_downloader.cli import _install_cli_signal_handlers
+from chat_downloader.cli import _install_cli_signal_handlers, main
 
 
 @pytest.fixture
@@ -83,3 +83,11 @@ def test_install_is_noop_off_main_thread(restore_signal_handlers) -> None:
     thread.start()
     thread.join()
     assert errors == []
+
+
+def test_main_restores_handlers_after_version_exit(restore_signal_handlers):
+    before = [signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)]
+    with pytest.raises(SystemExit) as error:
+        main(["--version"])
+    assert error.value.code == 0
+    assert [signal.getsignal(sig) for sig in (signal.SIGINT, signal.SIGTERM)] == before

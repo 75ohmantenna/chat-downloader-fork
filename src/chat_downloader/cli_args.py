@@ -45,29 +45,18 @@ def parse_header(value: str) -> tuple[str, str]:
         argparse.ArgumentTypeError: Invalid format or name forbidden by RFC 7230.
     """
     key, sep, header_value = value.partition(":")
-    if not sep:
-        msg = f'Invalid header {value!r}. Expected the format "NAME:VALUE".'
-        raise argparse.ArgumentTypeError(
-            msg,
-        )
-
     key = key.strip()
     header_value = header_value.strip()
-
-    if not key:
-        msg = f'Invalid header {value!r}. Expected the format "NAME:VALUE".'
-        raise argparse.ArgumentTypeError(
-            msg,
-        )
+    if not sep or not key:
+        msg = 'Invalid header. Expected the format "NAME:VALUE".'
+        raise argparse.ArgumentTypeError(msg)
 
     if "\n" in key or "\r" in key or "\n" in header_value or "\r" in header_value:
         err_msg = "Header keys and values cannot contain newline characters."
         raise argparse.ArgumentTypeError(err_msg)
 
     if not HEADER_NAME_PATTERN.fullmatch(key):
-        err_msg = (
-            f"Invalid header name {key!r}. Only RFC 7230 token characters are allowed."
-        )
+        err_msg = "Invalid header name. Only RFC 7230 token characters are allowed."
         raise argparse.ArgumentTypeError(err_msg)
 
     return key.title(), header_value

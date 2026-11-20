@@ -454,6 +454,7 @@ def test_unknown_action_captures_debug_sample(diagnostics, content):
                 "sample_limit": 10,
                 "sample_group": "youtube-unknown-action",
                 "group_limit": 50,
+                "skip_redundant": True,
             },
         )
     ]

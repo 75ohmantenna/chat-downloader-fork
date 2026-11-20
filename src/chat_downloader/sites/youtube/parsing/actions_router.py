@@ -233,6 +233,7 @@ def process_action(
         sample_limit=YOUTUBE_DEBUG_SAMPLE_LIMIT,
         sample_group="youtube-unknown-action",
         group_limit=YOUTUBE_DEBUG_SAMPLE_GROUP_LIMIT,
+        skip_redundant=True,
     )
     debug_log(f"Unknown action: {original_action_type}", action, data)
     return None

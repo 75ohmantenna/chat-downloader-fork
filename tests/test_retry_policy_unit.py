@@ -49,7 +49,7 @@ def test_wait_uses_explicit_interruptible_override(monkeypatch) -> None:
     sleep = Mock()
     monkeypatch.setattr("chat_downloader.utils.retry_utils.timed_input", timed_input)
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: True
+        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: True
     )
 
     policy = RetryPolicy(max_attempts=3, retry_timeout=1, interruptible_retry=False)
@@ -84,7 +84,7 @@ def test_redirected_stdin_retry_sleeps_without_consuming_input(monkeypatch) -> N
         os.fdopen(writer, "wb", buffering=0) as output,
     ):
         output.write(b"redirected input\n")
-        monkeypatch.setattr(retry_utils.sys, "stdin", stream)
+        monkeypatch.setattr(sys, "stdin", stream)
         delays = []
 
         RetryPolicy(retry_timeout=0.05).wait(1, sleep_func=delays.append)
@@ -172,7 +172,7 @@ def test_finite_terminal_retry_finishes_without_newline_and_restores_stdin(
 
 def test_manual_retry_with_closed_stdin_has_actionable_error(monkeypatch) -> None:
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: False
+        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: False
     )
     with pytest.raises(ChatDownloaderError, match="interactive terminal"):
         RetryPolicy(retry_timeout=-1).wait(1)
@@ -180,7 +180,7 @@ def test_manual_retry_with_closed_stdin_has_actionable_error(monkeypatch) -> Non
 
 def test_manual_retry_reports_eof_after_tty_detaches(monkeypatch) -> None:
     monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils._stdin_is_interactive", lambda: True
+        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: True
     )
     monkeypatch.setattr(
         "builtins.input",
@@ -191,14 +191,14 @@ def test_manual_retry_reports_eof_after_tty_detaches(monkeypatch) -> None:
 
 
 def test_stdin_interactivity_handles_detached_stream(monkeypatch) -> None:
-    monkeypatch.setattr(retry_utils.sys, "stdin", SimpleNamespace(isatty=lambda: True))
-    assert retry_utils._stdin_is_interactive()
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: True))
+    assert retry_utils.stdin_is_interactive()
 
     def detached() -> bool:
         raise OSError("detached")
 
-    monkeypatch.setattr(retry_utils.sys, "stdin", SimpleNamespace(isatty=detached))
-    assert not retry_utils._stdin_is_interactive()
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=detached))
+    assert not retry_utils.stdin_is_interactive()
 
 
 @pytest.mark.parametrize("attempt", [1, 2, 3])
@@ -251,7 +251,7 @@ def test_retry_wait_checks_stop_after_injected_sleep():
 
 def test_untimed_manual_retry_keeps_prompt_and_enter_behavior(monkeypatch):
     prompts = []
-    monkeypatch.setattr(retry_utils, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(retry_utils, "stdin_is_interactive", lambda: True)
     monkeypatch.setattr(
         "builtins.input", lambda prompt: prompts.append(prompt) or "ready"
     )
@@ -329,7 +329,7 @@ def test_server_minimum_preserves_local_backoff_and_cannot_be_enter_skipped(
 ):
     entered = Mock()
     sleeps = []
-    monkeypatch.setattr(retry_utils, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(retry_utils, "stdin_is_interactive", lambda: True)
     monkeypatch.setattr(retry_utils, "timed_input", entered)
     RetryPolicy(retry_timeout=local).wait(
         1, server_minimum=minimum, sleep_func=sleeps.append
@@ -340,7 +340,7 @@ def test_server_minimum_preserves_local_backoff_and_cannot_be_enter_skipped(
 
 def test_manual_enter_waits_until_server_minimum_has_elapsed(monkeypatch):
     events = []
-    monkeypatch.setattr(retry_utils, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(retry_utils, "stdin_is_interactive", lambda: True)
     monkeypatch.setattr(
         retry_utils,
         "timed_input",
@@ -357,7 +357,7 @@ def test_manual_enter_waits_until_server_minimum_has_elapsed(monkeypatch):
 
 def test_server_zero_still_allows_interactive_local_backoff(monkeypatch):
     entered = Mock()
-    monkeypatch.setattr(retry_utils, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(retry_utils, "stdin_is_interactive", lambda: True)
     monkeypatch.setattr(retry_utils, "timed_input", entered)
     RetryPolicy(retry_timeout=2).wait(1, server_minimum=0)
     entered.assert_called_once_with(2.0)
@@ -387,7 +387,7 @@ def test_server_minimum_is_cancelled_before_retry_or_manual_input(monkeypatch, m
         sleeps.append(seconds)
         stopped.set()
 
-    monkeypatch.setattr(retry_utils, "_stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(retry_utils, "stdin_is_interactive", lambda: True)
     monkeypatch.setattr(retry_utils, "_MAX_SLEEP_SECONDS", 2)
     monkeypatch.setattr(retry_utils, "timed_input", entered)
     token = _POLLING_STOP_EVENT.set(stopped)

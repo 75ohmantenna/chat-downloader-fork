@@ -437,6 +437,50 @@ def test_capture_debug_sample_limits_unique_payloads(sample_dir, grouped):
     assert len(list(sample_dir.glob("*.json"))) == 2
 
 
+@pytest.mark.parametrize("grouped", [False, True])
+def test_capture_debug_sample_skips_redundant_work(sample_dir, monkeypatch, grouped):
+    bounds = {"sample_limit": 2, "skip_redundant": True}
+    if grouped:
+        bounds.update(sample_limit=3, sample_group="events", group_limit=2)
+
+    def capture(value):
+        return red.capture_debug_sample("bounded-label", {"value": value}, **bounds)
+
+    assert capture(1) is not None
+    with monkeypatch.context() as redundant:
+        redundant.setattr(red.os, "fsync", lambda *_: pytest.fail("duplicate fsync"))
+        assert capture(1) is None
+
+    assert capture(2) is not None
+    sanitize = red.sanitize_for_log
+
+    def reject_payload(value):
+        assert not isinstance(value, dict), "redacted a payload after the quota filled"
+        return sanitize(value)
+
+    monkeypatch.setattr(red, "sanitize_for_log", reject_payload)
+    assert capture(1) is None
+    assert capture(3) is None
+
+
+def test_capture_debug_sample_interrupt_releases_quotas(sample_dir):
+    bounds = {"sample_limit": 1, "sample_group": "events", "group_limit": 1}
+    with (
+        patch.object(red, "_write_or_validate_sample", side_effect=KeyboardInterrupt),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        red.capture_debug_sample("interrupted", {"value": 1}, **bounds)
+
+    assert red.capture_debug_sample("interrupted", {"value": 2}, **bounds)
+
+
+def test_empty_sample_directory_uses_default(monkeypatch):
+    monkeypatch.delenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", raising=False)
+    default = red._sample_directory()
+    monkeypatch.setenv("CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR", "")
+    assert red._sample_directory() == default
+
+
 def test_capture_debug_sample_releases_group_slot_when_label_is_full(sample_dir):
     bounds = {"sample_group": "events", "group_limit": 1}
     assert (

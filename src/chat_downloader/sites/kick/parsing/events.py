@@ -253,6 +253,7 @@ def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event ac
             sample_limit=KICK_UNKNOWN_EVENT_SAMPLE_LIMIT,
             sample_group="kick-unknown-event",
             group_limit=KICK_DEBUG_SAMPLE_LIMIT,
+            skip_redundant=True,
         )
         logger.debug("Skipping unsupported Kick event: %s", event_name)
         return None

@@ -17,6 +17,10 @@ from requests.exceptions import (
 )
 
 from chat_downloader.debugging import TestingException as RuntimeTestingException
+from chat_downloader.debugging import (
+    TestingModes as RuntimeTestingModes,
+)
+from chat_downloader.debugging import get_testing_mode, scoped_testing_mode
 from chat_downloader.errors import ChatGeneratorError, ParsingError, SiteNotSupported
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime.capture_manifest import RunManifest
@@ -840,20 +844,39 @@ def test_unexpected_writer_close_during_exhaustion_fails_run(
 
 
 @pytest.mark.parametrize(
-    ("options", "expected_modes"),
+    ("options", "expected_mode"),
     [
-        ([{"pause_on_debug": True}], ["PAUSE_ON_DEBUG"]),
-        ([{"exit_on_debug": True}, {}], ["EXIT_ON_DEBUG", "NONE"]),
+        ({"pause_on_debug": True}, RuntimeTestingModes.PAUSE_ON_DEBUG),
+        ({"exit_on_debug": True}, RuntimeTestingModes.EXIT_ON_DEBUG),
+        ({}, RuntimeTestingModes.NONE),
     ],
 )
-def test_execute_run_configures_and_resets_testing_mode(
-    monkeypatch, downloader, options, expected_modes
-):
-    seen_modes = []
-    monkeypatch.setattr(
-        "chat_downloader.runtime.runner.set_testing_mode",
-        lambda mode: seen_modes.append(mode.name),
-    )
-    for kwargs in options:
-        execute_run(downloader(), **kwargs)
-    assert seen_modes == expected_modes
+def test_execute_run_configures_and_resets_testing_mode(options, expected_mode):
+    class Downloader:
+        def __init__(self, **kwargs):
+            assert get_testing_mode() is expected_mode
+
+        def get_chat(self, **kwargs):
+            return _FakeChat()
+
+        def close(self):
+            pass
+
+    with scoped_testing_mode(RuntimeTestingModes.EXIT_ON_ERROR):
+        assert execute_run(Downloader, **options).success
+        assert get_testing_mode() is RuntimeTestingModes.EXIT_ON_ERROR
+
+
+def test_execute_run_restores_testing_mode_after_interrupt(downloader):
+    with (
+        scoped_testing_mode(RuntimeTestingModes.EXIT_ON_ERROR),
+        pytest.raises(KeyboardInterrupt),
+    ):
+        try:
+            execute_run(
+                downloader(error=KeyboardInterrupt()),
+                propagate_interrupt=True,
+                exit_on_debug=True,
+            )
+        finally:
+            assert get_testing_mode() is RuntimeTestingModes.EXIT_ON_ERROR

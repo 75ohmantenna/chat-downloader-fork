@@ -323,6 +323,7 @@ def test_unknown_event_is_captured_and_skipped(captured):
         "sample_limit": 3,
         "sample_group": "kick-unknown-event",
         "group_limit": 10,
+        "skip_redundant": True,
     }
 
 

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import codecs
+import contextlib
 import io
 import locale
 import sys
@@ -245,10 +246,21 @@ def safe_print(
         out.flush()
 
 
+def stdin_is_interactive() -> bool:
+    """Treat detached or closed input as noninteractive."""
+    try:
+        return sys.stdin.isatty()
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def pause(text: str = "Press Enter to continue...") -> None:
-    """Block until the user presses Enter, showing a prompt.
+    """Prompt on stderr and wait for Enter when stdin is interactive.
 
     Args:
         text: Prompt text displayed to the user.
     """
-    input(text)
+    if stdin_is_interactive():
+        print(text, end="", file=sys.stderr, flush=True)
+        with contextlib.suppress(EOFError):
+            input()

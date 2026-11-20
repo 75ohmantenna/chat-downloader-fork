@@ -19,6 +19,7 @@ from urllib.parse import parse_qsl, unquote_plus, urlencode, urlsplit, urlunspli
 
 from .debug_sample_utils import describe_debug_sample, slugify_debug_label
 from .utils.atomic_files import PublishedFileError, atomic_text_file, sync_directory
+from .utils.interrupts import defer_interrupts
 
 REDACTED = "<redacted>"
 _DEBUG_SAMPLE_CAPTURE_ENV = "CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES"
@@ -312,7 +313,7 @@ def _require_private_sample_entry(
 def _sample_directory() -> Path:
     """Resolve the configured diagnostic directory consistently."""
     default = Path(tempfile.gettempdir()) / "chat_downloader_debug_samples"
-    return Path(os.environ.get(_DEBUG_SAMPLE_DIR_ENV, str(default)))
+    return Path(os.environ.get(_DEBUG_SAMPLE_DIR_ENV) or default)
 
 
 def preflight_debug_samples() -> None:
@@ -401,6 +402,31 @@ def _sample_key(sample_dir: Path, label: str) -> tuple[str, str]:
     return str(sample_dir.absolute()), slugify_debug_label(label)
 
 
+def _warn_debug_sample_limit(sample_dir: Path, label: str, limit: int) -> None:
+    """Log a quota rejection once per label and directory, with the lock held."""
+    key = _sample_key(sample_dir, label)
+    if key not in _DEBUG_SAMPLE_LIMIT_WARNED:
+        _DEBUG_SAMPLE_LIMIT_WARNED.add(key)
+        _get_logger().debug(
+            "Debug sample limit reached: label=%s limit=%d directory=%s",
+            label,
+            limit,
+            sample_dir,
+        )
+
+
+def _debug_sample_quota_full(sample_dir: Path, label: str, limit: int | None) -> bool:
+    """Check whether published samples have exhausted a quota."""
+    if limit is None or limit < 0:
+        return False
+    with _DEBUG_SAMPLE_LIMIT_LOCK:
+        digests = _DEBUG_SAMPLE_DIGESTS.get(_sample_key(sample_dir, label), {})
+        if sum(pending == 0 for pending in digests.values()) >= limit:
+            _warn_debug_sample_limit(sample_dir, label, limit)
+            return True
+    return False
+
+
 def _reserve_debug_sample(
     sample_dir: Path,
     label: str,
@@ -423,14 +449,7 @@ def _reserve_debug_sample(
                 return True, True
             return True, False
         if len(digests) >= sample_limit:
-            if key not in _DEBUG_SAMPLE_LIMIT_WARNED:
-                _DEBUG_SAMPLE_LIMIT_WARNED.add(key)
-                _get_logger().debug(
-                    "Debug sample limit reached: label=%s limit=%d directory=%s",
-                    label,
-                    sample_limit,
-                    sample_dir,
-                )
+            _warn_debug_sample_limit(sample_dir, label, sample_limit)
             return False, False
         digests[digest] = 1
         return True, True
@@ -467,6 +486,38 @@ def _validate_debug_sample_group(
         raise ValueError(msg)
 
 
+def _claim_debug_sample(
+    sample_dir: Path,
+    label: str,
+    digest: str,
+    sample_limit: int | None,
+    sample_group: str | None,
+    group_limit: int | None,
+    reservations: list[tuple[str, str]],
+    *,
+    skip_redundant: bool,
+) -> bool:
+    """Claim aggregate and label quotas before publishing a sample."""
+    bounds: list[tuple[str, str, int | None]] = []
+    if sample_group is not None and group_limit is not None:
+        group_digest = hashlib.sha1(
+            f"{slugify_debug_label(label)}:{digest}".encode(),
+            usedforsecurity=False,
+        ).hexdigest()[:12]
+        bounds.append((sample_group, group_digest, group_limit))
+    bounds.append((label, digest, sample_limit))
+    with defer_interrupts():
+        for bound_label, bound_digest, limit in bounds:
+            allowed, reserved = _reserve_debug_sample(
+                sample_dir, bound_label, bound_digest, limit
+            )
+            if reserved:
+                reservations.append((bound_label, bound_digest))
+            if not allowed or (skip_redundant and limit is not None and not reserved):
+                return False
+    return True
+
+
 def capture_debug_sample(
     label: str,
     payload: Any,
@@ -474,6 +525,7 @@ def capture_debug_sample(
     sample_limit: int | None = None,
     sample_group: str | None = None,
     group_limit: int | None = None,
+    skip_redundant: bool = False,
 ) -> str | None:
     """Write sanitized payloads to deterministic JSON files with explicit opt-in.
 
@@ -482,7 +534,9 @@ def capture_debug_sample(
 
     ``sample_limit`` bounds unique payloads per label/directory in this process;
     ``sample_group``/``group_limit`` additionally bound samples across labels
-    without making them compete for individual limits.
+    without making them compete for individual limits. Set ``skip_redundant``
+    to skip work once a quota is full and skip revalidating samples already
+    published in this process.
     """
     if not _debug_sample_capture_enabled():
         return None
@@ -490,8 +544,15 @@ def capture_debug_sample(
     logger = _get_logger()
     reservations: list[tuple[str, str]] = []
     sample_dir: Path | None = None
+    published = False
     try:
+        sample_dir = _sample_directory()
         _validate_debug_sample_group(sample_group, group_limit)
+        if skip_redundant and (
+            _debug_sample_quota_full(sample_dir, sample_group or "", group_limit)
+            or _debug_sample_quota_full(sample_dir, label, sample_limit)
+        ):
+            return None
         sanitized = sanitize_for_log(payload)
         serialized = json.dumps(
             sanitized,
@@ -508,29 +569,22 @@ def capture_debug_sample(
         digest = hashlib.sha1(
             serialized.encode("utf-8"), usedforsecurity=False
         ).hexdigest()[:12]
-        sample_dir = _sample_directory()
-        bounds: list[tuple[str, str, int | None]] = []
-        if sample_group is not None and group_limit is not None:
-            group_digest = hashlib.sha1(
-                f"{slugify_debug_label(label)}:{digest}".encode(),
-                usedforsecurity=False,
-            ).hexdigest()[:12]
-            bounds.append((sample_group, group_digest, group_limit))
-        bounds.append((label, digest, sample_limit))
-        for bound_label, bound_digest, limit in bounds:
-            allowed, reserved = _reserve_debug_sample(
-                sample_dir, bound_label, bound_digest, limit
-            )
-            if reserved:
-                reservations.append((bound_label, bound_digest))
-            if not allowed:
-                _finish_debug_samples(sample_dir, reservations)
-                return None
+        if not _claim_debug_sample(
+            sample_dir,
+            label,
+            digest,
+            sample_limit,
+            sample_group,
+            group_limit,
+            reservations,
+            skip_redundant=skip_redundant,
+        ):
+            return None
+        path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
         directory_fd = _prepare_sample_directory(sample_dir)
         try:
-            path = sample_dir / f"{slugify_debug_label(label)}-{digest}.json"
             _write_or_validate_sample(path, serialized, directory_fd)
-            _finish_debug_samples(sample_dir, reservations, succeeded=True)
+            published = True
         finally:
             os.close(directory_fd)
         hint = describe_debug_sample(path)
@@ -544,12 +598,12 @@ def capture_debug_sample(
         )
         return str(path)
     except (OSError, TypeError, ValueError) as exc:
-        if sample_dir is not None:
-            _finish_debug_samples(
-                sample_dir, reservations, succeeded=isinstance(exc, PublishedFileError)
-            )
+        published |= isinstance(exc, PublishedFileError)
         logger.warning("Unable to capture debug sample for %r: %s", label, exc)
         return None
+    finally:
+        if sample_dir is not None:
+            _finish_debug_samples(sample_dir, reservations, succeeded=published)
 
 
 class BoundedSampleCapture:

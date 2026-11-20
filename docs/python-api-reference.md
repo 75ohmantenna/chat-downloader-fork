@@ -116,7 +116,9 @@ wrapper. It creates a `ChatDownloader`, separates init, request, and runtime
 parameters through `runtime/cli_bridge.py`, iterates the chat, applies logging
 behavior, finalizes attached writers, and closes resources.
 
-Use `run()` when embedding CLI-like behavior.
+Use `run()` when embedding CLI-like behavior. Calls to `cli.main()` in the same
+process must be serialized because the command-line entry point temporarily
+configures shared logging and signal handlers.
 
 `run()` also accepts runtime controls such as `quiet`, `compact_console`,
 `exit_on_debug`,
@@ -331,7 +333,7 @@ finally:
 | `run_manifest` | `None` | New filename for a JSON outcome, recording, and output-hash report |
 | `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |
 | `exit_on_debug` | `False` | Exit when unexpected debug conditions are hit |
-| `pause_on_debug` | `False` | Pause when selected debug conditions are hit |
+| `pause_on_debug` | `False` | Pause on interactive stdin when selected debug conditions are hit |
 
 Helpers:
 
@@ -341,7 +343,8 @@ Helpers:
 
 The CLI exposes every `RunConfig` field except `max_seen_message_ids`.
 The `--testing` flag is a CLI convenience that enables debug logging and
-`pause_on_debug`.
+`pause_on_debug`. Pause prompts go to stderr. A run restores the caller's
+testing mode when it finishes.
 
 ### `SiteDefault`
 
@@ -531,7 +534,8 @@ timestamps, these records receive monotonic namespaced IDs and
   custom header names containing auth/token/secret/credential markers, API-key
   headers, and Basic/Bearer/OAuth/SAPISIDHASH values before logging or capture
 - `capture_debug_sample(label, payload, *, sample_limit=None,
-  sample_group=None, group_limit=None)` for opt-in sanitized sample capture
+  sample_group=None, group_limit=None, skip_redundant=False)` for opt-in
+  sanitized sample capture
 
 Project log handlers sanitize structured values, exception text, stack
 information, URL credentials, sensitive query parameters, and terminal control
@@ -544,8 +548,9 @@ from diagnostics and run errors. Semantic provider entries also redact the
 `capture_debug_sample()` writes only when debug logging is enabled and
 `CHAT_DOWNLOADER_CAPTURE_DEBUG_SAMPLES` is truthy. The target directory defaults
 to a temporary directory and can be overridden with
-`CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. On supported POSIX systems, custom capture
-directories must be owned by the current user with mode `0700`; sample files
+`CHAT_DOWNLOADER_DEBUG_SAMPLE_DIR`. An empty override uses the default. On
+supported POSIX systems, custom capture directories must be owned by the
+current user with mode `0700`; sample files
 use mode `0600`. Capture rejects symbolic links, unexpected file types, foreign
 ownership, and broader permissions. Platforms without secure
 directory-relative no-follow creation refuse capture rather than use a
@@ -560,9 +565,12 @@ and a fixed 50-sample aggregate limit for each family (empty action parse,
 missing keys, untyped action, unknown message type, unknown action, and unknown
 continuation). The aggregate reservation runs first, so exhausted families do
 not accumulate new label keys. Failed writes release aggregate and per-label
-claims, except after a successful publication; an identical prior sample can
-still reuse its deterministic path. These anomaly quotas require the shared
-capture opt-in and debug logging, and are separate from clean-response sampling.
+claims unless the sample was published. These anomaly quotas require the shared
+capture opt-in and debug logging and are separate from clean-response sampling.
+
+Unknown Kick events and unknown YouTube actions set `skip_redundant=True`.
+This skips serialization after a quota fills and skips file revalidation for
+samples already published in the process.
 
 Clean-run provider captures require a second explicit opt-in because they
 contain ordinary public chat data. Set

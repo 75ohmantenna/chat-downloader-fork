@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import math
-import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from chat_downloader.errors import ChatDownloaderError
 
+from .console_utils import stdin_is_interactive
 from .conversion_utils import backoff_seconds
 from .timed_generator import (
     _POLLING_STOP_EVENT,
@@ -104,14 +104,6 @@ def _sleep_delay(seconds: float, sleep: Callable[[float], None]) -> None:
     _check_polling_cancelled()
 
 
-def _stdin_is_interactive() -> bool:
-    """Treat detached or closed input as noninteractive."""
-    try:
-        return sys.stdin.isatty()
-    except (OSError, ValueError, AttributeError):
-        return False
-
-
 @dataclass(frozen=True)
 class RetryPolicy:
     """Unified retry policy for backoff and retry decision logic."""
@@ -169,7 +161,7 @@ class RetryPolicy:
             if seconds is not None:
                 return
         if seconds is None:
-            if not _stdin_is_interactive():
+            if not stdin_is_interactive():
                 msg = "Manual retry requires an interactive terminal."
                 raise ChatDownloaderError(msg)
             try:
@@ -183,7 +175,7 @@ class RetryPolicy:
         use_interruptible = (
             self.interruptible_retry if interruptible is None else interruptible
         )
-        if use_interruptible and _stdin_is_interactive():
+        if use_interruptible and stdin_is_interactive():
             timed_input(seconds)
             _check_polling_cancelled()
             return

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import logging
 from contextlib import nullcontext
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ from chat_downloader.cli_args import (
     splitter,
     str2bool,
 )
+from chat_downloader.debugging import loggers
 from chat_downloader.models import ChatRequest, DownloaderConfig, RunConfig
 from chat_downloader.runtime.runner import RunResult
 
@@ -257,9 +259,45 @@ def test_cli_registration_uses_dataclass_metadata(monkeypatch, missing) -> None:
         assert _run_and_capture("-T", "12.5")["connect_timeout"] == 12.5
 
 
-def test_invalid_header_flag_raises_parse_error() -> None:
-    with pytest.raises(SystemExit):
-        main([URL, "--header", "BrokenHeader"])
+@pytest.mark.parametrize(
+    "value",
+    ["Authorization=Bearer SYNTHETIC", ":SYNTHETIC", "SYNTHETIC bad name: value"],
+)
+def test_invalid_header_flag_redacts_parse_error(value, capsys) -> None:
+    with pytest.raises(SystemExit) as error:
+        main([URL, "--header", value])
+    assert error.value.code == 2
+    stderr = capsys.readouterr().err
+    assert "Invalid header" in stderr
+    assert "SYNTHETIC" not in stderr
+
+
+def test_main_restores_logger_state(monkeypatch) -> None:
+    def snapshot():
+        return [
+            (logger.handlers.copy(), logger.level, logger.disabled)
+            for logger in loggers
+        ]
+
+    def fake_run(**kwargs):
+        observed.append(snapshot())
+        return RunResult(success=True)
+
+    observed = []
+    monkeypatch.setattr("chat_downloader.cli.run", fake_run)
+    for logger in loggers:
+        monkeypatch.setattr(logger, "disabled", True)
+    original = snapshot()
+
+    main([URL, "--logging", "none"])
+    assert all(disabled for _, _, disabled in observed[0])
+    assert snapshot() == original
+
+    main([URL, "--logging", "debug"])
+    assert all(
+        level == logging.DEBUG and not disabled for _, level, disabled in observed[1]
+    )
+    assert snapshot() == original
 
 
 def test_parse_header_returns_key_value_pair() -> None:

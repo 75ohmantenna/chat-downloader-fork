@@ -17,7 +17,7 @@ from chat_downloader.debugging import (
     TestingException,
     TestingModes,
     log,
-    set_testing_mode,
+    scoped_testing_mode,
 )
 from chat_downloader.errors import (
     ChatDownloaderError,
@@ -58,14 +58,13 @@ class _ClosableDownloader(Protocol):
     def close(self) -> None: ...
 
 
-def _configure_testing_mode(run_config: RunConfig) -> None:
-    """Apply the debug testing mode represented by a typed run config."""
+def _select_testing_mode(run_config: RunConfig) -> TestingModes:
+    """Select the debug testing mode represented by a typed run config."""
     if run_config.exit_on_debug:
-        set_testing_mode(TestingModes.EXIT_ON_DEBUG)
-    elif run_config.pause_on_debug:
-        set_testing_mode(TestingModes.PAUSE_ON_DEBUG)
-    else:
-        set_testing_mode(TestingModes.NONE)
+        return TestingModes.EXIT_ON_DEBUG
+    if run_config.pause_on_debug:
+        return TestingModes.PAUSE_ON_DEBUG
+    return TestingModes.NONE
 
 
 def _classify_run_error(e: Exception) -> str:
@@ -373,7 +372,7 @@ def _complete_run_record(
     _log_run_summary(chat, result.message_count, result.message_type_counts, result)
 
 
-def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
+def execute_run(
     downloader_cls: type,
     *,
     propagate_interrupt: bool = False,
@@ -387,7 +386,24 @@ def execute_run(  # noqa: C901 — one capture error/finalization lifecycle
     init_params, chat_params, run_params = categorize_parameters(kwargs)
     run_config = RunConfig.from_kwargs(**run_params)
 
-    _configure_testing_mode(run_config)
+    with scoped_testing_mode(_select_testing_mode(run_config)):
+        return _execute_run(
+            downloader_cls,
+            init_params,
+            chat_params,
+            run_config,
+            propagate_interrupt=propagate_interrupt,
+        )
+
+
+def _execute_run(  # noqa: C901 — one capture error/finalization lifecycle
+    downloader_cls: type,
+    init_params: dict[str, object],
+    chat_params: dict[str, object],
+    run_config: RunConfig,
+    *,
+    propagate_interrupt: bool,
+) -> RunResult:
     downloader = None
     result = RunResult()
     started = monotonic()

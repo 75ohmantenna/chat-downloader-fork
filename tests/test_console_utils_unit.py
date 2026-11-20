@@ -116,18 +116,28 @@ def test_safe_print_uses_windows_console_short_circuit(monkeypatch) -> None:
     assert writes == [("hello\n", out)]
 
 
-def test_pause_calls_input(monkeypatch) -> None:
-    prompts = []
+@pytest.mark.parametrize("at_eof", [False, True])
+def test_pause_prompts_on_stderr(monkeypatch, capsys, at_eof) -> None:
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(isatty=lambda: True))
+    calls = []
 
-    def fake_input(prompt="") -> str:
-        prompts.append(prompt)
+    def fake_input() -> str:
+        calls.append(True)
+        if at_eof:
+            raise EOFError
         return ""
 
     monkeypatch.setattr("builtins.input", fake_input)
-
     console_utils.pause("Continue?")
+    assert calls == [True]
+    assert capsys.readouterr() == ("", "Continue?")
 
-    assert prompts == ["Continue?"]
+
+def test_pause_skips_noninteractive_stdin(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO())
+    monkeypatch.setattr("builtins.input", lambda: pytest.fail("stdin was read"))
+    console_utils.pause()
+    assert capsys.readouterr() == ("", "")
 
 
 def _install_fake_ctypes(monkeypatch, handlers) -> None:
