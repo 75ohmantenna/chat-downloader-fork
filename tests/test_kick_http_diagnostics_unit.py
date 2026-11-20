@@ -78,9 +78,14 @@ def test_public_http_status_and_duration_are_logged_without_secrets(
         else:
             invoke()
     status = "transport_error" if isinstance(outcome, str) else str(outcome)
-    assert caplog.messages == [
+    expected_messages = [
         f"Kick HTTP resource={resource} origin={origin} status={status} elapsed=0.250s"
     ]
+    if outcome == 200 and endpoint in {"chat", "global"}:
+        expected_messages.append(
+            f"Kick realtime negotiated: protocol=pusher scope={endpoint}"
+        )
+    assert caplog.messages == expected_messages
     assert "PRIVATE" not in caplog.text
     assert "https://" not in caplog.text
     client.close()

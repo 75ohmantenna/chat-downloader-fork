@@ -164,7 +164,7 @@ class KickRealtimeClient:
         path = (
             f"/channels/{channel_id}/chat/connection" if channel_id else "/connection"
         )
-        return parse_connection(
+        connection = parse_connection(
             self._post(
                 path,
                 {
@@ -178,6 +178,12 @@ class KickRealtimeClient:
                 },
             )
         )
+        logger.debug(
+            "Kick realtime negotiated: protocol=%s scope=%s",
+            connection.provider,
+            "chat" if channel_id is not None else "global",
+        )
+        return connection
 
     def connection_token(self) -> str:
         """Request a short-lived anonymous token; never log or persist it."""

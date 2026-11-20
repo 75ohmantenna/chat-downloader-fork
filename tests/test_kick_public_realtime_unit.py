@@ -264,10 +264,15 @@ def test_negotiation_rejects_unsupported_or_credential_bearing_endpoints(payload
         (RequestException("network secret"), ConnectionError),
     ],
 )
-def test_negotiation_shares_endpoint_failure_policy(response, error):
+def test_negotiation_shares_endpoint_failure_policy(response, error, caplog):
+    caplog.set_level("DEBUG", logger=rc.logger.name)
     client = rc.KickRealtimeClient(session=PostSession([response]))
     with pytest.raises(error):
         client.negotiate()
+    assert not any(
+        message.startswith("Kick realtime negotiated:") for message in caplog.messages
+    )
+    assert "network secret" not in caplog.text
     client.close()
 
 
@@ -1936,9 +1941,11 @@ def test_public_subscription_cancellation_prevents_other_feed_and_readers():
 )
 def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
     monkeypatch,
+    caplog,
     public_events,
     delivery,
 ):
+    caplog.set_level("DEBUG", logger=rc.logger.name)
     channel = {"id": 123, "chatroom": {"id": 456}, "livestream": None}
     state_session = FakeKickSession([FakeResponse(payload=channel)] * 2)
     worker_state_session = FakeKickSession([])
@@ -2058,6 +2065,16 @@ def test_default_live_capture_composes_negotiation_protocols_and_cancellation(
     assert sessions[1].close_calls == int(public_events)
     assert chat.diagnostics["pusher_connection_count"] == 1
     assert chat.diagnostics["centrifugo_connection_count"] == int(public_events)
+    expected_negotiations = ["Kick realtime negotiated: protocol=pusher scope=chat"]
+    if public_events:
+        expected_negotiations.append(
+            "Kick realtime negotiated: protocol=centrifugo scope=global"
+        )
+    assert [
+        message
+        for message in caplog.messages
+        if message.startswith("Kick realtime negotiated:")
+    ] == expected_negotiations
     assert chat.diagnostics["public_state_poll_count"] == int(public_events)
     assert len(opened[0]._workers) == (2 if public_events else 1)
     assert (opened[0]._poll_worker is not None) is public_events

@@ -37,7 +37,10 @@ def test_realtime_keepalives_are_counted_without_repeated_debug_noise(monkeypatc
         )
     assert diagnostics == ["control_frame_count"] * 3
     assert logs == [
-        ("Ignoring Kick realtime control event: %s", PUSHER_CONNECTION_ESTABLISHED)
+        (
+            "Ignoring normalized Kick realtime control event: %s",
+            PUSHER_CONNECTION_ESTABLISHED,
+        )
     ]
 
 

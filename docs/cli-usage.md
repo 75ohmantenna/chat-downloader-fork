@@ -269,6 +269,17 @@ shared with the Python API, the parser reads help text and aliases from
 dataclass metadata and defaults from the fields themselves. CLI-only options
 such as `--logging` are defined in `cli_args.py`.
 
+**Retry controls**
+
+- `--max_attempts` defaults to 15 attempts per retry loop, including the first
+  attempt.
+- `--retry_timeout` sets the retry delay in seconds. The default uses exponential
+  backoff. Use `0` to retry immediately or a negative value to wait for input
+  from an interactive terminal.
+- `--interruptible_retry` defaults to true and lets an interactive user press
+  Enter to skip the remaining delay. Pass `--interruptible_retry false` to
+  disable that shortcut.
+
 HTTP retries honor valid `Retry-After` integer seconds and HTTP dates as a
 minimum wait, alongside the configured backoff or fixed retry delay. Enter
 cannot shorten that minimum; manual retry prompts appear only after it.
@@ -287,6 +298,8 @@ Filtering and output:
   `message_groups`, including the `all` group. An empty list uses groups.
 - `--format` or `--format_file` — change rendered text output.
 - `--output` — write one or more files (repeatable).
+- `--sort_keys` defaults to true for JSONL output. Pass `--sort_keys false` to
+  write keys in insertion order.
 - `--compact_console` — opt into suppressing unchanged supported state updates
   on stdout. Currently this suppresses only complete Kick `prediction_updated`
   payloads with a nonblank prediction ID. Creation notices and incomplete
@@ -312,7 +325,7 @@ Request control:
 - `--connect_timeout`, `--read_timeout` — HTTP timeouts.
 - `--message_receive_timeout` — live receive polling timeout. Twitch and the
   legacy standalone Kick transport enforce a one-second minimum. Kick's
-  negotiated public transport caps socket and queue polls at one second.
+  negotiated public transport uses one second for both socket and queue polls.
   Messages are delivered immediately when data arrives.
 - `--proxy`, `--cookies` — proxy and UTF-8 Netscape-format cookie file. When
   `--proxy` is omitted, standard proxy environment variables apply. Cookie
@@ -327,11 +340,17 @@ Request control:
   `INVALID_ARGUMENT`. Explicit `--user-agent` and `--header` values remain
   authoritative during rotation. Inconsistent User-Agent or client-header
   overrides can cause HTTP 400; retry with profile defaults to isolate them.
+- `--chat_type` selects YouTube's `live` chat by default. Use `--chat_type top`
+  for Top Chat.
+- `--ignore` skips YouTube video IDs during channel discovery. Pass multiple
+  IDs as one comma-separated argument.
 - `--youtube_replay_poll_interval` — explicitly override completed YouTube
   replay polling with an interval from 0.5 through 8 seconds. The default
   respects the provider delay; faster polling is opt-in and can be rate-limited.
 - `--twitch_client_id` — override the public Twitch Client-ID for GraphQL
   and replay requests.
+- `--buffer_size` sets the Twitch IRC receive buffer in bytes and defaults
+  to 4096.
 - `--user-agent`, `--header "Name: Value"` (repeatable) — request headers.
 
 Kick accepts `--start_time` and `--end_time` for VOD and clip replay URLs.

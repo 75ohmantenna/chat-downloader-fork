@@ -308,9 +308,10 @@ alias with the same value.
 ### Public realtime transports
 
 Both protocols normalize control frames to shared Pusher-style event names for
-dispatch; debug logs label these as realtime controls. Ping/pong frames still
-increment control counters without a debug line for every keepalive. Recovery
-logs report the actual UTC history window, clock offset, and page bound.
+dispatch. Debug logs mark these names as normalized and record the negotiated
+protocol and scope (`chat` or `global`) for each connection. Ping/pong frames
+increment control counters without a debug line for every keepalive.
+Recovery logs report the actual UTC history window, clock offset, and page bound.
 
 `public_transport.py` owns the primary chat connection, its single reader, and a
 publication queue bounded to 1,024 frames and 64 MiB of wire payload. It adds the independent global
@@ -364,9 +365,9 @@ leases renew before expiry through anonymous `realtime/auth/connection`; tokens
 are never logged or persisted. Temporary command errors reconnect; permanent
 rejections terminate. See the [Centrifugo JSON protocol](https://centrifugal.dev/docs/transports/client_protocol).
 
-Both providers use socket and queue receive polls capped at one second, bounded
-subscription waits, and idle watchdogs. Invalid shapes and unsupported event
-names remain visible in bounded diagnostics and opt-in sanitized samples.
+Both negotiated providers use one-second socket and queue receive polls,
+bounded subscription waits, and idle watchdogs. Invalid shapes and unsupported
+event names remain visible in bounded diagnostics and opt-in sanitized samples.
 Counters include provider connections,
 confirmed public subscriptions, snapshot polls/failures, WebSocket frames, and
 synthetic REST frames separately. These fixed counters are retained in manifests.
