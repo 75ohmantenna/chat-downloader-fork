@@ -213,7 +213,7 @@ class ChatDownloaderSession:
         self.closed = False
         try:
             if isinstance(self.session, requests.sessions.Session):
-                configure_bounded_session(self.session)
+                configure_bounded_session(self.session, explicit_proxy=proxy)
         except BaseException:
             self.session.close()
             self.closed = True

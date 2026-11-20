@@ -328,9 +328,11 @@ Request control:
   negotiated public transport uses one second for both socket and queue polls.
   Messages are delivered immediately when data arrives.
 - `--proxy`, `--cookies` — proxy and UTF-8 Netscape-format cookie file. When
-  `--proxy` is omitted, standard proxy environment variables apply. Cookie
-  authentication rejects an effective remote proxy and warns for a loopback
-  proxy. Pass `--proxy ""` to disable environment proxies explicitly.
+  `--proxy` is omitted, standard proxy environment variables apply. An explicit
+  proxy URL takes precedence over environment proxies for YouTube and Twitch
+  HTTP requests and Twitch IRC. Cookie authentication rejects an effective
+  remote proxy and warns for a loopback proxy. Pass `--proxy ""` to disable
+  environment proxies explicitly.
 - `--request_profile` — request-header preset: `youtube_web`,
   `youtube_android`, `youtube_ios`, or `twitch_web`. Unknown names fail during
   configuration.

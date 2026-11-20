@@ -106,12 +106,12 @@ def resolve_session_proxy(session: object | None, target_url: str) -> str | None
     """Resolve the effective explicit or environment proxy for ``target_url``."""
     if session is None:
         return None
-    configured = dict(getattr(session, "proxies", {}) or {})
-    if getattr(session, "trust_env", True):
-        environment = requests.utils.get_environ_proxies(target_url)
-        environment.update(configured)
-        configured = environment
+    configured = getattr(session, "proxies", {}) or {}
     proxy_url = requests.utils.select_proxy(target_url, configured)
+    if not proxy_url and getattr(session, "trust_env", True):
+        proxy_url = requests.utils.select_proxy(
+            target_url, requests.utils.get_environ_proxies(target_url)
+        )
     return proxy_url if isinstance(proxy_url, str) and proxy_url else None
 
 

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any, ClassVar, cast
 
 import pytest
+import requests
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
 from chat_downloader.errors import CookieError, InvalidParameter
@@ -16,6 +17,7 @@ from chat_downloader.request_profiles import REQUEST_PROFILES
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.common import get_mapped_keys
 from chat_downloader.sites.models import SiteDefault
+from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.sites.session import ChatDownloaderSession, CookieSpec
 from chat_downloader.sites.youtube import client_context
 from chat_downloader.sites.youtube.client_context import (
@@ -92,6 +94,51 @@ def test_http_session_empty_proxy_disables_environment() -> None:
     http = _http(proxy="")
     assert http.session.trust_env is False
     assert http.session.proxies == {}
+
+
+@pytest.mark.parametrize(
+    ("proxy", "expected_proxy", "expected_verify"),
+    [
+        (None, "http://target-proxy.test:8080", "/custom-ca.pem"),
+        ("", None, True),
+        (
+            "socks5h://explicit.test:1080",
+            "socks5h://explicit.test:1080",
+            "/custom-ca.pem",
+        ),
+    ],
+)
+def test_http_and_live_transports_share_proxy_precedence(
+    monkeypatch, proxy, expected_proxy, expected_verify
+):
+    def environment(_url, **_kwargs):
+        return {
+            "https": "http://environment.test:8080",
+            "https://target.test": "http://target-proxy.test:8080",
+        }
+
+    def send(_session, request, **kwargs):
+        assert (
+            requests.utils.select_proxy(request.url, kwargs["proxies"])
+            == expected_proxy
+        )
+        assert kwargs["verify"] == expected_verify
+        response = requests.Response()
+        response.status_code = 200
+        return response
+
+    monkeypatch.setattr(requests.sessions, "get_environ_proxies", environment)
+    monkeypatch.setattr(requests.utils, "get_environ_proxies", environment)
+    monkeypatch.setattr(requests.Session, "send", send)
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "/custom-ca.pem")
+    url = "https://target.test/gql"
+    http = ChatDownloaderSession(proxy=proxy)
+    try:
+        assert http.get(url).status_code == 200
+        assert http.post(url).status_code == 200
+        assert resolve_session_proxy(http.session, url) == expected_proxy
+    finally:
+        http.close()
 
 
 @pytest.mark.parametrize("proxy", ["socks10://proxy:1080", "http:bad"])

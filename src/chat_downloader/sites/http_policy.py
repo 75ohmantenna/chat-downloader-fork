@@ -359,7 +359,9 @@ def _buffer_response(response: requests.Response) -> requests.Response:
     return response
 
 
-def configure_bounded_session(session: requests.Session) -> None:
+def configure_bounded_session(
+    session: requests.Session, *, explicit_proxy: str | None = None
+) -> None:
     """Install bounded streaming before requests can access response content."""
     # Owned transport waits cooperate; arbitrary user callbacks are not preempted.
     if getattr(session.send, "__func__", None) is not requests.sessions.Session.send:
@@ -371,6 +373,10 @@ def configure_bounded_session(session: requests.Session) -> None:
 
     def send(request: requests.PreparedRequest, **kwargs: object) -> requests.Response:
         with request_budget(kwargs.get("timeout")):
+            if explicit_proxy:
+                # Requests merges environment proxies ahead of session proxies.
+                # Override the route while retaining other environment settings.
+                kwargs["proxies"] = {"http": explicit_proxy, "https": explicit_proxy}
             _configure_adapter(session.get_adapter(cast("str", request.url)))
             token = _ACTIVE_SESSION.set(session)
             try:

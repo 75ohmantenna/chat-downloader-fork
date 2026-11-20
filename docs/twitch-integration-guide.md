@@ -406,8 +406,9 @@ multiple errors together.
 The default public Client-ID is defined in `constants.py`; callers can override
 it with `DownloaderConfig(twitch_client_id=...)` or `--twitch_client_id`.
 
-Twitch HTTP and IRC transports share the configured proxy policy. When no
-explicit proxy is supplied, standard environment proxy variables may apply.
+An explicit proxy URL takes precedence over environment proxies for both
+Twitch HTTP and IRC. When no explicit proxy is supplied, standard environment
+proxy variables may apply.
 Combining cookies with an effective remote proxy is rejected before a session
 is created; `proxy=""` explicitly opts out of environment proxies.
 
