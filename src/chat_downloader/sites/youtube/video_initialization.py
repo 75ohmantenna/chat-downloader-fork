@@ -10,16 +10,18 @@ from typing import TYPE_CHECKING, Any, cast
 from chat_downloader.debugging import log
 from chat_downloader.errors import ParsingError
 from chat_downloader.request_profiles import get_next_request_profile
+from chat_downloader.sites.base import request_diagnostics_scope
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_str
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.string_utils import regex_search
 
-from .client_requests_bootstrap import (
+from .bootstrap_diagnostics import (
     BootstrapRequests,
     merge_bootstrap_diagnostics,
-    request_bootstrap_json,
+    publish_bootstrap_snapshot,
 )
+from .client_requests_bootstrap import request_bootstrap_json
 from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_LIVE_CHAT_REPLAY_URL,
@@ -33,9 +35,13 @@ if TYPE_CHECKING:
     import requests
 
     from chat_downloader.models import ChatRequest
+    from chat_downloader.sites.base import CaptureDiagnostics
     from chat_downloader.utils.json_types import JSONDict
 
     from ._protocols import YouTubeDownloaderProto
+
+
+_VideoDetails = dict[str, Any]
 
 
 _GENERIC_UNPLAYABLE_REASONS = frozenset(
@@ -62,6 +68,29 @@ def _parse_chat_bootstrap(response: requests.Response) -> JSONDict:
     return data
 
 
+def bootstrap_video(
+    site: YouTubeDownloaderProto,
+    video_id: str,
+    request: ChatRequest,
+    capture: CaptureDiagnostics,
+    *,
+    video_type: str = "video",
+) -> tuple[_VideoDetails, JSONDict]:
+    """Bootstrap with eager counters and fold in any untracked snapshot data."""
+    before = capture.data.copy()
+    with request_diagnostics_scope(site, request, capture):
+        if video_type == "clip":
+            details, config = site._get_initial_video_info(
+                video_id, request, video_type="clip"
+            )
+        else:
+            details, config = site._get_initial_video_info(video_id, request)
+    publish_bootstrap_snapshot(
+        capture, before, get_dict(config, "_chat_downloader_bootstrap_diagnostics")
+    )
+    return details, config
+
+
 class YouTubeVideoInitializationMixin:
     """Enrich video details with continuation bootstrap metadata."""
 
@@ -70,11 +99,11 @@ class YouTubeVideoInitializationMixin:
         video_id: str,
         params: ChatRequest | None = None,
         video_type: str = "video",
-    ) -> tuple[dict[str, Any], Any]:
+    ) -> tuple[_VideoDetails, JSONDict]:
         """Get initial YouTube video information and continuation metadata."""
         proto = cast("YouTubeDownloaderProto", self)
         attempted_profiles: set[str] = set()
-        bootstrap = BootstrapRequests(getattr(proto, "_request_diagnostics", None))
+        bootstrap = BootstrapRequests.for_request(self, params)
 
         while True:
             bootstrap.profile(getattr(proto, "_request_profile", None) or "youtube_web")

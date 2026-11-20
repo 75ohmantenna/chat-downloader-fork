@@ -7,13 +7,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.errors import ParsingError
-from chat_downloader.sites.base import warn_unconfigured_chat_options
+from chat_downloader.sites.base import (
+    request_diagnostics_scope,
+    warn_unconfigured_chat_options,
+)
 from chat_downloader.sites.models import Chat
-from chat_downloader.utils.json_types import get_dict
 from chat_downloader.utils.time_utils import ensure_seconds
 
 from .capture_inspection import inspect_capture
 from .continuation import _ContinuationLoop
+from .video_initialization import bootstrap_video
 
 if TYPE_CHECKING:
     import re
@@ -54,12 +57,11 @@ class YouTubeChatStreamsMixin:
         """Get chat messages for a YouTube clip."""
         proto = cast("YouTubeDownloaderProto", self)
         request = proto._coerce_chat_request(params)
-        warn_unconfigured_chat_options(request)
-        initial_info, ytcfg = proto._get_initial_video_info(
-            clip_id,
-            request,
-            video_type="clip",
-        )
+        with request_diagnostics_scope(self, request) as capture:
+            warn_unconfigured_chat_options(request)
+            initial_info, ytcfg = bootstrap_video(
+                proto, clip_id, request, capture, video_type="clip"
+            )
 
         initial_info["offset"] = clip_start_time = initial_info.get("clip_start_time")
         clip_end_time = initial_info.get("clip_end_time")
@@ -81,20 +83,19 @@ class YouTubeChatStreamsMixin:
             end_time=clip_start_time + min(max(requested_end, 0), max_duration),
         )
 
-        diagnostics: dict[str, object] = dict(
-            get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
-        )
-        messages = (
-            iter(())
-            if requested_start > max_duration or requested_end < 0
-            else self._get_chat_messages(initial_info, ytcfg, request, diagnostics)
-        )
+        with request_diagnostics_scope(self, request, capture):
+            messages = (
+                iter(())
+                if requested_start > max_duration or requested_end < 0
+                else self._get_chat_messages(initial_info, ytcfg, request, capture.data)
+            )
         chat = Chat(
             messages,
             id=clip_id,
-            diagnostics=diagnostics,
+            diagnostics=capture.data,
             **initial_info,
         )
+        chat._owns_capture_diagnostics = True
         chat._request_window = {
             "start_time": request.start_time,
             "end_time": request.end_time,
@@ -111,18 +112,14 @@ class YouTubeChatStreamsMixin:
         """Get chat messages for a YouTube video, given its ID."""
         proto = cast("YouTubeDownloaderProto", self)
         request = proto._coerce_chat_request(params)
-        warn_unconfigured_chat_options(request)
-        initial_info, ytcfg = proto._get_initial_video_info(video_id, request)
-
-        diagnostics: dict[str, object] = dict(
-            get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
-        )
-        chat = Chat(
-            self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
-            id=video_id,
-            diagnostics=diagnostics,
-            **initial_info,
-        )
+        with request_diagnostics_scope(self, request) as capture:
+            warn_unconfigured_chat_options(request)
+            initial_info, ytcfg = bootstrap_video(proto, video_id, request, capture)
+            messages = self._get_chat_messages(
+                initial_info, ytcfg, request, capture.data
+            )
+        chat = Chat(messages, id=video_id, diagnostics=capture.data, **initial_info)
+        chat._owns_capture_diagnostics = True
         chat._capture_inspector = lambda path, summary: inspect_capture(
             path, run_summary=summary
         )

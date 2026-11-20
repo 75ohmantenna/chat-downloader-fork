@@ -284,6 +284,7 @@ module names.
 | `client_auth.py` | SAPISIDHASH authentication header generation |
 | `client_context.py` | InnerTube context dict construction and request-profile application |
 | `client_challenges.py` | Shared YouTube challenge vocabulary and response evidence for initial, bootstrap, browse, and chat requests |
+| `bootstrap_diagnostics.py` | Bootstrap attempt counts and capture diagnostic updates |
 | `client_requests_bootstrap.py` | Direct mobile and fallback InnerTube bootstrap requests (initial video data) |
 | `client_requests_continuation.py` | HTTP continuation polling: request dispatch, retry, error surfacing |
 | `client_requests_errors.py` | HTTP/JSON error classification and continuation retry helpers using shared challenge detection |

@@ -73,6 +73,7 @@ The normal YouTube flow is:
 
 - `client_context.py`: request headers and client context construction
 - `client_challenges.py`: shared challenge hints and response classification
+- `bootstrap_diagnostics.py`: eager bootstrap attempt and profile diagnostics
 - `client_requests_bootstrap.py`: fallback InnerTube `player` and `next`
   bootstrap requests
 - `client_requests_initial.py`: initial request helpers
@@ -373,15 +374,18 @@ failures remain counted even when the retry budget is exhausted.
 Separate `bootstrap_request_count`, `bootstrap_http_error_count`,
 `bootstrap_network_error_count`, `bootstrap_fallback_count`, and
 `bootstrap_profile_switch_count` counters cover watch/player/next/chat-page
-bootstrap calls preceding a returned chat, including actual page retries.
+bootstrap calls, including page retries and fresh bootstrap during capture.
 `continuation_profile_switch_count` covers polling profile changes. Diagnostics
 also retain `initial_request_profile`, `active_request_profile`, and the chosen
 `chat_view` label. The view label uses `Top chat` or `Live chat` with a `replay`
 suffix when polling the replay endpoint, independent of the client profile's
-bootstrap token labels. A request-scoped setup ledger preserves these counters
-even if bootstrap fails before a chat is created. The run result, debug summary,
-and manifest retain that ledger after sessions close; a new retrieval resets
-it even when the provider session is reused.
+bootstrap token labels. Each capture owns its setup counters, including calls
+that fail before a chat is returned, while bootstrapping a candidate video for
+a channel capture, or during continuation recovery. A new retrieval starts with
+its own counters even when the provider session is reused. Once a chat is
+returned, its diagnostics include failed attempts during iteration. The run
+result, debug summary, and manifest retain the capture's counters after sessions
+close.
 
 The offline [YouTube capture inspector](development-workflow-guide.md#youtube-capture-inspection)
 reports these counters alongside missing source timestamps, zero-offset mobile

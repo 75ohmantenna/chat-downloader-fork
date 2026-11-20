@@ -150,7 +150,11 @@ class RunResult:
 
     def observe_provider(self, chat: Chat | None, downloader: object) -> None:
         """Freeze provider counters after bounded cleanup, including nested ledgers."""
-        setup = getattr(downloader, "_request_diagnostics", {})
+        setup = (
+            {}
+            if getattr(chat, "_owns_capture_diagnostics", False)
+            else getattr(downloader, "_request_diagnostics", {})
+        )
         if not isinstance(setup, dict):
             setup = {}
         diagnostics = {**setup, **getattr(chat, "diagnostics", {})}

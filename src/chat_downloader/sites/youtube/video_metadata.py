@@ -13,7 +13,8 @@ from chat_downloader.debugging import log
 from chat_downloader.errors import CaptchaChallengeRequired, ParsingError
 from chat_downloader.utils.json_types import get_dict, get_str
 
-from .client_requests_bootstrap import BootstrapRequests, get_innertube_video_bootstrap
+from .bootstrap_diagnostics import BootstrapRequests
+from .client_requests_bootstrap import get_innertube_video_bootstrap
 from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _YT_CFG_RE,
@@ -47,7 +48,7 @@ class YouTubeVideoMetadataCoreMixin:
             original_url = f"{_YT_HOME}/watch?v={video_id}"
 
         proto = cast("YouTubeDownloaderProto", self)
-        bootstrap = BootstrapRequests(getattr(proto, "_request_diagnostics", None))
+        bootstrap = BootstrapRequests.for_request(self, params)
         initial: tuple[JSONDict, JSONDict, JSONDict] | None = None
         if (
             video_type != "clip"

@@ -9,12 +9,13 @@ from typing import TYPE_CHECKING, Any, cast
 from requests.exceptions import HTTPError, RequestException
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Mapping, MutableMapping
+    from collections.abc import Callable, Iterator
 
     import requests
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONAny, JSONDict
+
 
 from chat_downloader.errors import ParsingError, VideoNotFound
 from chat_downloader.request_profiles import (
@@ -49,62 +50,6 @@ _MOBILE_FILTER_LABELS = {
     "LIVE_CHAT_FILTER_MODE_DEFAULT": "Top chat",
     "LIVE_CHAT_FILTER_MODE_UNFILTERED": "Live chat",
 }
-
-_BOOTSTRAP_COUNTERS = (
-    "bootstrap_request_count",
-    "bootstrap_http_error_count",
-    "bootstrap_network_error_count",
-    "bootstrap_fallback_count",
-    "bootstrap_profile_switch_count",
-)
-
-
-def merge_bootstrap_diagnostics(
-    target: MutableMapping[str, object], source: Mapping[str, object]
-) -> None:
-    """Accumulate fixed bootstrap counters without copying credentials."""
-    for key in _BOOTSTRAP_COUNTERS:
-        target[key] = get_int(target, key) + get_int(source, key)
-
-
-class BootstrapRequests:
-    """Count actual bootstrap HTTP calls across retries without retaining bodies."""
-
-    def __init__(self, sink: dict[str, object] | None = None) -> None:
-        self.diagnostics: dict[str, object] = dict.fromkeys(_BOOTSTRAP_COUNTERS, 0)
-        self._sink = sink
-        if sink is not None:
-            for key in _BOOTSTRAP_COUNTERS:
-                sink.setdefault(key, 0)
-
-    def increment(self, key: str) -> None:
-        """Retain a counter locally and in the active retrieval's failure ledger."""
-        self.diagnostics[key] = get_int(self.diagnostics, key) + 1
-        if self._sink is not None:
-            self._sink[key] = get_int(self._sink, key) + 1
-
-    def profile(self, name: str) -> None:
-        """Keep initial and active profiles even when bootstrap raises."""
-        for target in (self.diagnostics, self._sink):
-            if target is not None:
-                target.setdefault("initial_request_profile", name)
-                target["active_request_profile"] = name
-
-    def request(
-        self,
-        method: Callable[..., requests.Response],
-        url: str,
-        **kwargs: object,
-    ) -> requests.Response:
-        self.increment("bootstrap_request_count")
-        try:
-            response = method(url, **kwargs)
-        except (RequestException, OSError):
-            self.increment("bootstrap_network_error_count")
-            raise
-        if getattr(response, "status_code", 200) >= 400:
-            self.increment("bootstrap_http_error_count")
-        return response
 
 
 def _fallback_profile(profile_name: object) -> str:

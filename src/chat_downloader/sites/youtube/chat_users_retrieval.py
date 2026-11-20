@@ -11,7 +11,9 @@ from chat_downloader.debugging import log
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.models import coerce_chat_request
 from chat_downloader.sites.base import (
+    CaptureDiagnostics,
     handled_chat_request,
+    request_diagnostics_scope,
     warn_unconfigured_chat_options,
 )
 from chat_downloader.sites.models import Chat
@@ -47,9 +49,11 @@ class YouTubeChatUsersRetrievalMixin:
     ) -> Chat:
         """Get chat by user arguments."""
         request = coerce_chat_request(params)
-        warn_unconfigured_chat_options(request)
+        with request_diagnostics_scope(self, request) as capture:
+            warn_unconfigured_chat_options(request)
         title = try_get_first_value(user_video_args)
-        chat_item = Chat(title=title, id=title)
+        chat_item = Chat(title=title, id=title, diagnostics=capture.data)
+        chat_item._owns_capture_diagnostics = True
         chat_item._metadata_pending = True
         chat_item._capture_inspector = lambda path, summary: inspect_capture(
             path, run_summary=summary
@@ -97,12 +101,18 @@ class YouTubeChatUsersRetrievalMixin:
                     log("debug", f'Skipping video with ID: "{video_id}"')
                     continue
 
+                proto = cast("YouTubeDownloaderProto", self)
+                diagnostics = ChildDiagnostics(chat_item.diagnostics)
+                child_capture = CaptureDiagnostics({}, diagnostics.update)
                 try:
                     # The outer channel chat already processed these options.
-                    with handled_chat_request(params):
-                        chat = cast(
-                            "YouTubeDownloaderProto", self
-                        ).get_chat_by_video_id(video_id, params)
+                    with (
+                        handled_chat_request(params),
+                        request_diagnostics_scope(
+                            self, params, child_capture, handoff=True
+                        ),
+                    ):
+                        chat = proto.get_chat_by_video_id(video_id, params)
 
                     log(
                         "info",
@@ -111,7 +121,6 @@ class YouTubeChatUsersRetrievalMixin:
 
                     _copy_chat_metadata(chat_item, chat)
                     overlap = deliveries.begin(video_id)
-                    diagnostics = ChildDiagnostics(chat_item.diagnostics)
                     diagnostics.update(chat.diagnostics)
                     try:
                         for item in chat:

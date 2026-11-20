@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 from requests.exceptions import ConnectionError as RequestsConnectionError
 
-from chat_downloader.sites.youtube.client_requests_bootstrap import BootstrapRequests
+from chat_downloader.sites.youtube.bootstrap_diagnostics import BootstrapRequests
 from tests.youtube_third_helpers import http_response
 
 

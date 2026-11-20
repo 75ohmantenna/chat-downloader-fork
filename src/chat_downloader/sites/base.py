@@ -8,7 +8,7 @@ import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import fields
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple
 
 from chat_downloader.debugging import log
 from chat_downloader.models import (
@@ -22,7 +22,7 @@ from .retry import retry as perform_retry
 from .session import ChatDownloaderSession, CookieSpec
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping
+    from collections.abc import Callable, Iterable, Iterator, Mapping
 
     import requests
 
@@ -32,6 +32,63 @@ if TYPE_CHECKING:
 _handled_chat_request: ContextVar[ChatRequest | None] = ContextVar(
     "_handled_chat_request", default=None
 )
+
+
+class CaptureDiagnostics(NamedTuple):
+    """A capture's counters and optional projection into its parent."""
+
+    data: dict[str, object]
+    on_update: Callable[[Mapping[str, object]], None] | None = None
+
+    def publish(self) -> None:
+        """Refresh the parent with this capture's current diagnostics."""
+        if self.on_update is not None:
+            self.on_update(self.data)
+
+
+class _RequestDiagnosticsScope(NamedTuple):
+    site: object
+    request: ChatRequest
+    capture: CaptureDiagnostics
+    handoff: bool
+
+
+_request_diagnostics_scope: ContextVar[_RequestDiagnosticsScope | None] = ContextVar(
+    "_request_diagnostics_scope", default=None
+)
+
+
+def get_request_diagnostics(
+    site: object, request: ChatRequest | None
+) -> CaptureDiagnostics | None:
+    """Return diagnostics bound to this provider and capture request."""
+    scope = _request_diagnostics_scope.get()
+    if scope is not None and scope.site is site and scope.request is request:
+        return scope.capture
+    return None
+
+
+@contextmanager
+def request_diagnostics_scope(
+    site: object,
+    request: ChatRequest,
+    capture: CaptureDiagnostics | None = None,
+    *,
+    handoff: bool = False,
+) -> Iterator[CaptureDiagnostics]:
+    """Bind synchronous setup and let dispatch delegate to a provider entry."""
+    scope = _request_diagnostics_scope.get()
+    if capture is None and scope is not None and scope.handoff:
+        capture = get_request_diagnostics(site, request)
+    if capture is None:
+        capture = CaptureDiagnostics({})
+    token = _request_diagnostics_scope.set(
+        _RequestDiagnosticsScope(site, request, capture, handoff)
+    )
+    try:
+        yield capture
+    finally:
+        _request_diagnostics_scope.reset(token)
 
 
 @contextmanager

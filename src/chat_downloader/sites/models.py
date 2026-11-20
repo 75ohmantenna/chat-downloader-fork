@@ -97,6 +97,7 @@ class Chat:
         self.id = id
         self._metadata_pending = False
         self.diagnostics = diagnostics if diagnostics is not None else {}
+        self._owns_capture_diagnostics = False
         self._request_window: dict[str, object] | None = None
         # Providers with a relative public start time can supply the recording origin.
         self._recording_start_time: int | None = None

@@ -24,6 +24,7 @@ from chat_downloader.errors import (
 )
 from chat_downloader.redaction import BoundedSampleCapture, capture_debug_sample
 from chat_downloader.request_profiles import get_next_request_profile
+from chat_downloader.sites.base import CaptureDiagnostics, get_request_diagnostics
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_int, get_str
 from chat_downloader.utils.time_utils import ensure_seconds
@@ -37,7 +38,6 @@ from .client_context import (
     apply_request_profile_to_innertube_context,
     apply_request_profile_to_ytcfg,
 )
-from .client_requests_bootstrap import merge_bootstrap_diagnostics
 from .client_requests_continuation import _get_continuation_info
 from .constants_patterns import (
     _YT_HOME,
@@ -64,6 +64,7 @@ from .delivery_recovery import ReplayPageHistory
 from .helpers import require_innertube_api_key
 from .message_pipeline import _process_actions
 from .paid_events import PaidEventCache
+from .video_initialization import bootstrap_video
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
@@ -294,6 +295,9 @@ class _ContinuationLoop:
         self.ytcfg = ytcfg
         self.params = params
         self.diagnostics = diagnostics if diagnostics is not None else {}
+        self.capture_diagnostics = get_request_diagnostics(
+            downloader, params
+        ) or CaptureDiagnostics(self.diagnostics)
         self.paid_events = PaidEventCache()
         self.replay_pages = ReplayPageHistory()
         self._accepted_response = False
@@ -471,6 +475,7 @@ class _ContinuationLoop:
             get_int(self.diagnostics, "continuation_profile_switch_count") + 1
         )
         self.diagnostics["active_request_profile"] = next_profile
+        self.capture_diagnostics.publish()
         log(
             "warning",
             f"Switching YouTube request profile after {reason}: {next_profile}",
@@ -550,11 +555,11 @@ class _ContinuationLoop:
             "(HTTP 400); refreshing with profile: "
             f"{self.downloader._request_profile}",
         )
-        details, ytcfg = self.downloader._get_initial_video_info(
-            get_str(self.initial_info, "original_video_id"), self.params
-        )
-        merge_bootstrap_diagnostics(
-            self.diagnostics, get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
+        details, ytcfg = bootstrap_video(
+            self.downloader,
+            get_str(self.initial_info, "original_video_id"),
+            self.params,
+            self.capture_diagnostics,
         )
         status = details.get("status")
         if status in REPLAY_STATUSES | {"live", "upcoming"} and (

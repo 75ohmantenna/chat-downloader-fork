@@ -16,7 +16,11 @@ from chat_downloader.errors import (
 )
 from chat_downloader.redaction import preflight_debug_samples, sanitize_for_log
 from chat_downloader.sites import get_all_sites
-from chat_downloader.sites.base import handled_chat_request
+from chat_downloader.sites.base import (
+    CaptureDiagnostics,
+    handled_chat_request,
+    request_diagnostics_scope,
+)
 
 from .chat_pipeline import configure_chat
 
@@ -85,6 +89,7 @@ def _execute_chat_generator(
 
 def _create_chat_for_site(
     owner: _SiteSessionOwner,
+    setup: dict[str, object],
     site: type[BaseChatDownloader],
     match_info: tuple[str, re.Match[str]],
     request: ChatRequest,
@@ -92,20 +97,23 @@ def _create_chat_for_site(
     generator_method_name, match = match_info
     preflight_debug_samples()
     site_object = owner.create_session(site)
-    site_object._request_diagnostics = owner._request_diagnostics
     resolved_request = request.resolved_for_site(site_object)
     log("info", f"Site: {site_object._NAME}")
     log(
         "debug",
         f"Program parameters: {sanitize_for_log(resolved_request.as_dict())}",
     )
-    chat = _execute_chat_generator(
-        site_object,
-        generator_method_name,
-        match,
-        resolved_request,
-        site.__name__,
-    )
+    with request_diagnostics_scope(
+        site_object, resolved_request, CaptureDiagnostics(setup), handoff=True
+    ):
+        chat = _execute_chat_generator(
+            site_object,
+            generator_method_name,
+            match,
+            resolved_request,
+            site.__name__,
+        )
+    chat._owns_capture_diagnostics = True
     try:
         configure_chat(chat, resolved_request, site_object)
         log("debug", f"Chat information: {_chat_debug_snapshot(chat)}")
@@ -121,7 +129,8 @@ def _create_chat_for_site(
 
 def dispatch_chat(owner: _SiteSessionOwner, request: ChatRequest) -> Chat:
     """Resolve one request into a fully configured provider chat."""
-    owner._request_diagnostics = {}
+    setup: dict[str, object] = {}
+    owner._request_diagnostics = setup
     if not request.url:
         msg = "No URL provided."
         raise URLNotProvided(msg)
@@ -136,7 +145,9 @@ def dispatch_chat(owner: _SiteSessionOwner, request: ChatRequest) -> Chat:
     for site in get_all_sites():
         match_info = site.matches(effective_request.url)
         if match_info:
-            return _create_chat_for_site(owner, site, match_info, effective_request)
+            return _create_chat_for_site(
+                owner, setup, site, match_info, effective_request
+            )
 
     parsed = urlparse(effective_request.url)
     if parsed.netloc:
