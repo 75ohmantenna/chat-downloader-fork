@@ -102,8 +102,9 @@ class _TwitchLiveIterator:
     def request_stop(self) -> None:
         """Wake the active receive; the generator retains final socket ownership."""
         self.stopped.set()
-        if self.irc is not None:
-            self.irc.request_stop()
+        irc = self.irc
+        if irc is not None:
+            irc.request_stop()
 
     def close(self) -> None:
         """Stop the transport and close the source when it is idle."""
@@ -270,6 +271,7 @@ def iter_stream_chat_messages(  # noqa: C901 — live IRC reconnect loop is intr
                     yield raw_message
 
             except ConnectionError as error:
+                control.check_stopped()
                 diagnostics.start_outage()
                 twitch_chat_irc.close_connection()
                 control.check_stopped()

@@ -204,12 +204,16 @@ def test_download_gql_dict_response_with_errors():
         gql._download_gql(post, _operations())
 
 
-def test_close_connection_swallows_oserror():
-    irc = TwitchChatIRC.__new__(TwitchChatIRC)
-    irc.socket = MagicMock()
-    irc.current_channel = None
-    irc.socket.sendall.side_effect = OSError("connection reset")
+def test_close_connection_swallows_oserror(monkeypatch):
+    transport = MagicMock()
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.irc_transport._create_irc_socket",
+        lambda *_: transport,
+    )
+    irc = TwitchChatIRC()
+    transport.sendall.side_effect = OSError("connection reset")
     irc.close_connection()
+    transport.close.assert_called_once()
 
 
 def test_irc_buffer_overflow_truncation():

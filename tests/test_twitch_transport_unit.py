@@ -940,9 +940,11 @@ def test_twitch_chat_irc_close_is_idempotent(irc_socket):
     irc_socket.close.assert_called_once()
     irc.close_connection()
     irc_socket.close.assert_called_once()
+    irc.request_stop()
+    irc_socket.shutdown.assert_called_once_with(irc_transport.socket.SHUT_WR)
 
 
-def test_twitch_chat_irc_closes_transport_without_shutdown() -> None:
+def test_twitch_chat_irc_closes_transport_without_shutdown(monkeypatch) -> None:
     class ProxyTransport:
         def __init__(self) -> None:
             self.closed = False
@@ -950,10 +952,15 @@ def test_twitch_chat_irc_closes_transport_without_shutdown() -> None:
         def close(self) -> None:
             self.closed = True
 
-    irc = irc_transport.TwitchChatIRC.__new__(irc_transport.TwitchChatIRC)
+        def settimeout(self, _timeout: float) -> None:
+            pass
+
+        def sendall(self, _data: bytes) -> None:
+            pass
+
     transport = ProxyTransport()
-    irc.socket = transport
-    irc.send_raw = lambda _command: None
+    monkeypatch.setattr(irc_transport, "_create_irc_socket", lambda *_: transport)
+    irc = irc_transport.TwitchChatIRC()
     irc.close_connection()
     assert transport.closed
 

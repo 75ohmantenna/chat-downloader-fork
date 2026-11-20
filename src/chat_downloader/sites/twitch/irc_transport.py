@@ -8,6 +8,7 @@ import codecs
 import socket
 import time
 from contextlib import suppress
+from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
@@ -168,7 +169,9 @@ class TwitchChatIRC:
         self.socket = _create_irc_socket(connect_timeout, proxy_url)
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="ignore")
         self.current_channel: str | None = None
+        self._shutdown_lock = Lock()
         self._closed = False
+        self._stop_requested = False
 
         try:
             # Registration precedes live cancellation ownership; keep it bounded.
@@ -205,15 +208,18 @@ class TwitchChatIRC:
         self.socket.settimeout(message_receive_timeout)
 
     def close_connection(self) -> None:
-        """Send QUIT and shut down the IRC socket."""
-        if getattr(self, "_closed", False):
-            return
-        self._closed = True
+        """Close the IRC socket, sending QUIT on a normal close."""
+        with self._shutdown_lock:
+            if self._closed:
+                return
+            self._closed = True
+            send_quit = not self._stop_requested
         try:
-            self.send_raw("QUIT")
-            shutdown = getattr(self.socket, "shutdown", None)
-            if shutdown is not None:
-                shutdown(socket.SHUT_WR)
+            if send_quit:
+                self.send_raw("QUIT")
+                shutdown = getattr(self.socket, "shutdown", None)
+                if shutdown is not None:
+                    shutdown(socket.SHUT_WR)
         except OSError:
             pass
         finally:
@@ -222,8 +228,12 @@ class TwitchChatIRC:
 
     def request_stop(self) -> None:
         """Interrupt a blocked receive without writing or racing final close."""
-        with suppress(OSError):
-            self.socket.shutdown(socket.SHUT_RDWR)
+        with self._shutdown_lock:
+            if self._closed or self._stop_requested:
+                return
+            self._stop_requested = True
+            with suppress(OSError):
+                self.socket.shutdown(socket.SHUT_RDWR)
 
 
 def _drain_readbuffer(readbuffer: str) -> str:

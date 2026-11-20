@@ -36,6 +36,11 @@ def test_twitch_deadline_interrupts_receive_and_closes_without_reconnect(
     transport.recv.side_effect = recv
     transport.shutdown.side_effect = lambda _how: released.set()
     factory = Mock(return_value=transport)
+    start_outage = Mock()
+    monkeypatch.setattr(
+        "chat_downloader.sites.twitch.irc_diagnostics._TwitchLiveDiagnostics.start_outage",
+        start_outage,
+    )
     monkeypatch.setattr(
         "chat_downloader.sites.twitch.irc_transport._create_irc_socket", factory
     )
@@ -61,10 +66,17 @@ def test_twitch_deadline_interrupts_receive_and_closes_without_reconnect(
         chat.chat._worker.join(2)
         assert not chat.chat._worker.is_alive()
         transport.shutdown.assert_any_call(socket.SHUT_RDWR)
+        transport.shutdown.assert_called_once()
         transport.close.assert_called_once()
         transport.recv.assert_called_once()
         factory.assert_called_once()
+        start_outage.assert_not_called()
+        assert b"QUIT\r\n" not in [
+            call.args[0] for call in transport.sendall.call_args_list
+        ]
         assert chat.diagnostics["reconnect_count"] == 0
+        assert chat.diagnostics["reconnect_outage_duration_ms"] == 0
+        assert chat.diagnostics["reconnect_outage_max_duration_ms"] == 0
         assert list(chat) == []
     finally:
         released.set()
