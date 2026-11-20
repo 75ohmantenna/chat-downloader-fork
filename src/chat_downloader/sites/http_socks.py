@@ -151,6 +151,14 @@ class _DeadlineSOCKSSocket(_SOCKSSocket):
         current_budget().remaining()
 
 
+class SOCKSProxyConnectionError(NewConnectionError):
+    """A SOCKS tunnel could not be established."""
+
+
+class SOCKSProxyConnectTimeout(ConnectTimeoutError):
+    """A SOCKS tunnel exceeded its connect or negotiation timeout."""
+
+
 class SOCKSDeadlineMixin(SOCKSConnection):
     """Compose before an existing SOCKS connection without global patching."""
 
@@ -167,12 +175,12 @@ class SOCKSDeadlineMixin(SOCKSConnection):
             )
             if isinstance(cause, socket.timeout):
                 msg = "Provider SOCKS connection timed out."
-                raise ConnectTimeoutError(self, msg) from None
+                raise SOCKSProxyConnectTimeout(self, msg) from None
             msg = "Unable to establish provider SOCKS connection."
-            raise NewConnectionError(self, msg) from None
+            raise SOCKSProxyConnectionError(self, msg) from None
         except ValueError:
             msg = "Unable to establish provider SOCKS connection."
-            raise NewConnectionError(self, msg) from None
+            raise SOCKSProxyConnectionError(self, msg) from None
 
     def _connect_socks(self) -> socket.socket:
         options = self._socks_options

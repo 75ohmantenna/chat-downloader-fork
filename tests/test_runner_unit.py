@@ -13,6 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 from requests.exceptions import (
     ConnectionError,  # noqa: A004 — requests.ConnectionError is intentional here
+    ProxyError,
     RequestException,
 )
 
@@ -21,7 +22,12 @@ from chat_downloader.debugging import (
     TestingModes as RuntimeTestingModes,
 )
 from chat_downloader.debugging import get_testing_mode, scoped_testing_mode
-from chat_downloader.errors import ChatGeneratorError, ParsingError, SiteNotSupported
+from chat_downloader.errors import (
+    ChatGeneratorError,
+    ParsingError,
+    RetriesExceeded,
+    SiteNotSupported,
+)
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime.capture_manifest import RunManifest
 from chat_downloader.runtime.capture_verification import inspect_provider_capture
@@ -122,8 +128,10 @@ def test_run_result_preserves_existing_positional_field_order() -> None:
         (ParsingError("parse"), SITE_CHANGE_ERROR_HINT),
         (RuntimeTestingException("test"), SITE_CHANGE_ERROR_HINT),
         (ConnectionError("offline"), "internet connection"),
+        (RetriesExceeded("failed"), "failed"),
         (SiteNotSupported("no site"), "no site"),
         (RequestException("timeout"), "timeout"),
+        (RequestException(), ""),
         (OSError("disk full"), "disk full"),
         (ValueError("max_attempts must be positive"), "max_attempts"),
         (RuntimeError("unexpected acquisition"), "unexpected acquisition"),
@@ -146,6 +154,17 @@ def test_execute_run_reports_acquisition_errors(downloader, logged, error, fragm
         )
     assert _summary(logged)["success"] is False
     assert factory.instance.closed is True
+
+
+def test_execute_run_reports_proxy_failure_after_retry_exhaustion(downloader, logged):
+    error = RetriesExceeded("generic retry failure")
+    error.__cause__ = ProxyError("PRIVATE_PROXY_REPLY")
+
+    result = execute_run(downloader(error=error))
+
+    assert not result.success
+    assert "Unable to connect through the proxy" in (result.error_message or "")
+    assert "PRIVATE_PROXY_REPLY" not in repr(logged)
 
 
 _PAID_MESSAGES = [

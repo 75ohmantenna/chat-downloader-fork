@@ -5,18 +5,37 @@
 from __future__ import annotations
 
 import pytest
+from requests.exceptions import ProxyError
 
 from chat_downloader.errors import (
     IncompleteContinuationError,
     RetriesExceeded,
 )
 from chat_downloader.sites.youtube.client_challenges import contains_challenge_text
+from chat_downloader.sites.youtube.client_requests_continuation import (
+    _get_continuation_info,
+)
 from chat_downloader.sites.youtube.client_requests_errors import (
     _apply_retry_or_raise,
     _is_retryable_status,
     _retry_or_raise_exhausted,
 )
 from chat_downloader.utils.retry_utils import RetryPolicy
+
+
+def test_proxy_reply_is_omitted_when_continuation_retries_exhaust(caplog):
+    def refuse(*_args, **_kwargs):
+        raise ProxyError("PRIVATE_PROXY_REPLY")
+
+    with pytest.raises(RetriesExceeded, match="Unable to connect through the proxy"):
+        _get_continuation_info(
+            "https://www.youtube.com/youtubei/v1/live_chat/get_live_chat",
+            refuse,
+            {"max_attempts": 1},
+        )
+
+    assert "Unable to connect through the proxy" in caplog.text
+    assert "PRIVATE_PROXY_REPLY" not in caplog.text
 
 
 @pytest.mark.parametrize(

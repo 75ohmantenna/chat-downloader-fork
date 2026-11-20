@@ -33,4 +33,6 @@ def test_generated_help_preserves_key_argument_groups() -> None:
     assert "Twitch and Kick channel URLs cannot seek" in normalized_help
     assert "mutually exclusive with --message_groups" in normalized_help
     assert "seconds without an emitted message" in normalized_help
+    assert "socks5:// resolves the destination locally" in normalized_help
+    assert "socks5h:// resolves it through the proxy" in normalized_help
     assert "Pass false to append" in normalized_help

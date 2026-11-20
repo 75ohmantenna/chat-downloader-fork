@@ -40,8 +40,10 @@ class DownloaderConfig:
     proxy: str | None = field(
         default=None,
         metadata=_cli_metadata(
-            "Proxy URL (HTTP/HTTPS/SOCKS), e.g. socks5://127.0.0.1:1080."
-            " Defaults to None (system proxy settings)",
+            "Proxy URL (HTTP/HTTPS/SOCKS). socks5:// resolves the destination"
+            " locally, socks5h:// resolves it through the proxy."
+            " Defaults to system proxy settings. Use an empty string for direct"
+            " connections",
             group="init",
             flags=["-p"],
         ),

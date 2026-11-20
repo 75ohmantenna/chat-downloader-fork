@@ -18,6 +18,7 @@ from chat_downloader.errors import (
     RetriesExceeded,
     VideoNotFound,
 )
+from chat_downloader.sites.proxy import PROXY_CONNECTION_HINT, is_http_proxy_failure
 from chat_downloader.sites.session import reject_redirect
 from chat_downloader.utils.json_utils import try_parse_json
 from chat_downloader.utils.retry_utils import (
@@ -226,10 +227,14 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
             )
 
         except (RequestException, OSError) as e:
+            detail = (
+                PROXY_CONNECTION_HINT
+                if is_http_proxy_failure(e)
+                else f"{type(e).__name__}: {e}"
+            )
             log(
                 "error",
-                f"Network error (attempt {attempt_number}/{max_attempts}): "
-                f"{type(e).__name__}: {e}",
+                f"Network error (attempt {attempt_number}/{max_attempts}): {detail}",
             )
             if retry_policy.can_retry(attempt_number):
                 retry_policy.wait(

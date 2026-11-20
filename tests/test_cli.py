@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import logging
+import socket
 from contextlib import nullcontext
 from unittest.mock import patch
 
@@ -85,6 +86,38 @@ def test_cli_invalid_request_exits_without_traceback(caplog) -> None:
     assert exc_info.value.code == 1
     assert "max_attempts" in caplog.text
     assert "Traceback" not in caplog.text
+
+
+@pytest.mark.parametrize("scheme", ["http", "socks5h"])
+@pytest.mark.parametrize("environment", [False, True], ids=["explicit", "environment"])
+def test_cli_refused_proxy_reports_safe_proxy_guidance(
+    scheme, environment, monkeypatch, caplog
+) -> None:
+    caplog.set_level("DEBUG")
+    with socket.socket() as refused:
+        refused.bind(("127.0.0.1", 0))
+        port = refused.getsockname()[1]
+        proxy = f"{scheme}://PRIVATE_USER:PRIVATE_PASSWORD@127.0.0.1:{port}"
+        args = [
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "--max_attempts",
+            "1",
+            "--logging",
+            "debug",
+        ]
+        if environment:
+            monkeypatch.setenv("https_proxy", proxy)
+            monkeypatch.setenv("no_proxy", "")
+        else:
+            args.extend(["--proxy", proxy])
+        with pytest.raises(SystemExit) as error:
+            main(args)
+
+    assert error.value.code == 1
+    assert "Unable to connect through the proxy" in caplog.text
+    assert "internet connection" not in caplog.text
+    assert "PRIVATE_USER" not in caplog.text
+    assert "PRIVATE_PASSWORD" not in caplog.text
 
 
 @pytest.mark.parametrize("value", ["a,b,c", "a b c", "a;b;c", "a, b; c", "only"])

@@ -23,6 +23,7 @@ from chat_downloader.errors import (
     ChatDownloaderError,
     ChatGeneratorError,
     ParsingError,
+    RetriesExceeded,
 )
 from chat_downloader.models import DEFAULT_MAX_SEEN_MESSAGE_IDS, RunConfig
 from chat_downloader.redaction import sanitize_for_log
@@ -30,6 +31,7 @@ from chat_downloader.sites._message_dedup import (
     _ConsoleStateDeduplicator,
     _FormattedMessageDeduplicator,
 )
+from chat_downloader.sites.proxy import PROXY_CONNECTION_HINT, is_http_proxy_failure
 from chat_downloader.utils.dict_utils import copy_containers
 from chat_downloader.utils.interrupts import defer_interrupts
 
@@ -71,10 +73,16 @@ def _classify_run_error(e: Exception) -> str:
     """Return the user-facing error string for a run-loop exception.
 
     Parser, dispatch, and testing failures include site-change guidance;
-    connection failures use connection guidance. Other errors keep their text.
+    connection failures use proxy or connection guidance. Other errors keep
+    their text.
     """
     if isinstance(e, (ChatGeneratorError, ParsingError, TestingException)):
         return f"{e}. {SITE_CHANGE_ERROR_HINT}"
+    if is_http_proxy_failure(e) or (
+        isinstance(e, RetriesExceeded)
+        and is_http_proxy_failure(e.__cause__ or e.__context__)
+    ):
+        return PROXY_CONNECTION_HINT
     if isinstance(e, RequestsConnectionError):
         return (
             "Unable to establish a connection. Please check your "

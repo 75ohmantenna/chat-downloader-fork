@@ -11,6 +11,7 @@ from requests.exceptions import RequestException
 
 from chat_downloader.debugging import log
 from chat_downloader.errors import RetriesExceeded
+from chat_downloader.sites.proxy import PROXY_CONNECTION_HINT, is_http_proxy_failure
 from chat_downloader.sites.session import reject_redirect
 from chat_downloader.utils.retry_utils import (
     RetryPolicy,
@@ -130,16 +131,20 @@ def _get_continuation_info(
             counters["network_error_count"] = (
                 cast("int", counters["network_error_count"]) + 1
             )
+            detail = (
+                PROXY_CONNECTION_HINT
+                if is_http_proxy_failure(exc)
+                else f"{type(exc).__name__}: {exc}"
+            )
             log(
                 "error",
-                f"Network error (attempt {attempt_number}/{max_attempts}): "
-                f"{type(exc).__name__}: {exc}",
+                f"Network error (attempt {attempt_number}/{max_attempts}): {detail}",
             )
             _apply_retry_or_raise(
                 retry_policy,
                 attempt_number,
                 continuation_url,
-                f"{type(exc).__name__}: {exc}",
+                detail,
                 RetriesExceeded,
                 server_minimum=get_retry_after(exc),
             )

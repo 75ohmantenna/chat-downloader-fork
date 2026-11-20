@@ -14,9 +14,19 @@ from urllib.parse import unquote, urlparse
 
 import requests
 import socks  # type: ignore[import-untyped]  # PySocks ships without type stubs
+from requests.exceptions import ProxyError as RequestsProxyError
+from requests.exceptions import RequestException
+from urllib3.exceptions import MaxRetryError
 from urllib3.util.ssltransport import SSLTransport
 
 from chat_downloader.errors import InvalidParameter
+
+from .http_socks import SOCKSProxyConnectionError, SOCKSProxyConnectTimeout
+
+PROXY_CONNECTION_HINT = (
+    "Unable to connect through the proxy. Check the proxy address, credentials, "
+    "reachability, and environment proxy settings."
+)
 
 _DEFAULT_PROXY_PORTS = {
     "http": 80,
@@ -40,6 +50,18 @@ TLS_DIAGNOSTIC_CIPHERS = frozenset(
         "ECDHE-ECDSA-CHACHA20-POLY1305",
     }
 )
+
+
+def is_http_proxy_failure(error: BaseException | None) -> bool:
+    """Recognize HTTP and SOCKS tunnel failures without inspecting error text."""
+    if isinstance(error, RequestsProxyError):
+        return True
+    if not isinstance(error, RequestException) or not error.args:
+        return False
+    wrapper = error.args[0]
+    return isinstance(wrapper, MaxRetryError) and isinstance(
+        wrapper.reason, (SOCKSProxyConnectionError, SOCKSProxyConnectTimeout)
+    )
 
 
 def tls_socket_diagnostics(transport: object) -> dict[str, object]:

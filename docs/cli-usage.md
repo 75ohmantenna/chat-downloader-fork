@@ -344,6 +344,8 @@ Request control:
   HTTP requests and Twitch IRC. Cookie authentication rejects an effective
   remote proxy and warns for a loopback proxy. Pass `--proxy ""` to disable
   environment proxies explicitly.
+  Use `socks5://host:port` to resolve the destination locally or
+  `socks5h://host:port` to let the proxy resolve it.
 - `--request_profile` — request-header preset: `youtube_web`,
   `youtube_android`, `youtube_ios`, or `twitch_web`. Unknown names fail during
   configuration.
@@ -470,6 +472,8 @@ It does not throttle changing updates or change either capture file.
 - A cookie/proxy safety error can come from `HTTP_PROXY`, `HTTPS_PROXY`, or
   `ALL_PROXY` even when `--proxy` was not supplied. Remove the remote proxy or
   pass `--proxy ""` if direct connections are intended.
+- When the CLI reports that it cannot connect through the proxy, check the
+  proxy address, credentials, reachability, and environment proxy settings.
 - `CaptchaChallengeRequired` means a platform denied access or returned a
   challenge response. Kick raises it for unclassified HTTP 403 responses and
   challenge or unexpected HTML bodies. Kick selects an available HTTP backend
