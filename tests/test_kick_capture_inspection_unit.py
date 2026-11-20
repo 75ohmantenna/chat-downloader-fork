@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from chat_downloader.sites.kick.capture_inspection import inspect_capture
+from chat_downloader.sites.kick.live_service import _KickLiveDiagnostics
 from scripts.inspect_kick_capture import main
 
 
@@ -157,6 +158,36 @@ def test_in_memory_run_summary_matches_offline_log_report(capture, tmp_path):
     assert inspect_capture(capture, run_summary=summary) == inspect_capture(
         capture, log
     )
+
+
+def test_legacy_live_summary_matches_current_counter_accounting(capture, tmp_path):
+    log = _log(tmp_path / "debug.log")
+    legacy = ast.literal_eval(log.read_text().split("Run summary: ", 1)[1])
+    diagnostics = _KickLiveDiagnostics().summary
+    current = legacy | {
+        "provider_diagnostics": diagnostics
+        | legacy["provider_diagnostics"]
+        | {"PRIVATE_SENTINEL": 1},
+    }
+    report = inspect_capture(capture, run_summary=current)
+    assert report == inspect_capture(capture, log)
+    assert list(report["frame_accounting"]) == [
+        *(name for name, value in diagnostics.items() if type(value) is int),
+        "run_failed",
+        "deadline_accounting_incomplete",
+        "unaccounted_frames",
+        "emitted_minus_records",
+        "summary_minus_records",
+        "malformed_type_count_gap",
+        "message_type_count_mismatches",
+    ]
+
+
+def test_live_summary_requires_original_counters(capture, tmp_path, capsys):
+    log = _log(tmp_path / "debug.log")
+    summary = ast.literal_eval(log.read_text().split("Run summary: ", 1)[1])
+    del summary["provider_diagnostics"]["pusher_key_recovery_count"]
+    _assert_bad_summary(capture, _summary(log, summary), capsys)
 
 
 def test_log_and_in_memory_summary_are_mutually_exclusive(capture, tmp_path):

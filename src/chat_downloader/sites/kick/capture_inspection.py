@@ -16,37 +16,14 @@ from chat_downloader.sites.kick.constants import MESSAGE_GROUPS
 from chat_downloader.utils.capture_reader import read_capture_lines, read_debug_summary
 from chat_downloader.utils.json_types import get_dict, get_str
 
+from .live_counters import LIVE_COUNTER_DEFAULTS
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
 _KNOWN_TYPES = frozenset(t for group in MESSAGE_GROUPS.values() for t in group)
 _LOCATION = re.compile(r"([0-9]+)-([0-9]+)")
 _INVALID_SUMMARY = "invalid_run_summary"
-_FRAME_KEYS = (
-    "websocket_frame_count",
-    "control_frame_count",
-    "parsed_event_count",
-    "unsupported_event_count",
-    "unknown_message_type_count",
-    "malformed_event_count",
-    "invalid_websocket_frame_count",
-    "websocket_reconnect_count",
-    "pusher_error_count",
-    "pusher_key_recovery_count",
-    "pusher_connection_count",
-    "centrifugo_connection_count",
-    "public_state_poll_count",
-    "public_state_poll_failure_count",
-    "public_subscription_count",
-    "synthetic_frame_count",
-    "preloaded_emitted_count",
-    "startup_backfill_emitted_count",
-    "history_recovery_failure_count",
-    "live_emitted_count",
-    "reconnect_backfill_emitted_count",
-    "reconnect_backfill_truncated_count",
-    "reconnect_backfill_truncated_microseconds",
-)
 _ANOMALIES = (
     "history_recovery_failure_count",
     "unsupported_event_count",
@@ -108,8 +85,10 @@ def _emotes_valid(record: Mapping[str, object]) -> bool:
     return True
 
 
-def _counter(values: Mapping[str, object], key: str) -> int:
-    value = values.get(key)
+def _counter(
+    values: Mapping[str, object], key: str, *, default: int | None = None
+) -> int:
+    value = values.get(key, default)
     if type(value) is not int or value < 0:
         raise ValueError(_INVALID_SUMMARY)
     return value
@@ -125,25 +104,11 @@ def _frame_accounting(
     summary: dict[str, object], inspection: _Inspection
 ) -> dict[str, int]:
     """Reconcile decoded frames and emitted records; expose only fixed keys."""
-    counters = {
-        **dict.fromkeys(
-            (
-                "pusher_connection_count",
-                "startup_backfill_emitted_count",
-                "history_recovery_failure_count",
-                "centrifugo_connection_count",
-                "public_state_poll_count",
-                "public_state_poll_failure_count",
-                "public_subscription_count",
-                "synthetic_frame_count",
-                "reconnect_backfill_truncated_count",
-                "reconnect_backfill_truncated_microseconds",
-            ),
-            0,
-        ),
-        **get_dict(summary, "provider_diagnostics"),
+    counters = dict(get_dict(summary, "provider_diagnostics"))
+    result = {
+        key: _counter(counters, key, default=default)
+        for key, default in LIVE_COUNTER_DEFAULTS.items()
     }
-    result = {key: _counter(counters, key) for key in _FRAME_KEYS}
     if type(summary.get("success")) is not bool:
         raise ValueError(_INVALID_SUMMARY)
     result["run_failed"] = int(not summary["success"])

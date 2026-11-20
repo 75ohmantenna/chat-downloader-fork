@@ -47,6 +47,7 @@ from .errors import (
     KickServerError,
 )
 from .history import iter_reverse_history
+from .live_counters import LIVE_COUNTER_DEFAULTS
 from .live_iterator import KickLiveIterator
 from .parsing.events import (
     MALFORMED_EVENT_TYPE_DIAGNOSTIC_PREFIX,
@@ -118,33 +119,12 @@ class _KickLiveDiagnostics:
 
     def __init__(self) -> None:
         self._counter_lock = Lock()
-        self.summary: dict[str, object] = {
-            "websocket_frame_count": 0,
-            "control_frame_count": 0,
-            "parsed_event_count": 0,
-            "unsupported_event_count": 0,
-            "unknown_message_type_count": 0,
-            "malformed_event_count": 0,
-            "malformed_event_type_counts": {},
-            "invalid_websocket_frame_count": 0,
-            "websocket_reconnect_count": 0,
-            "pusher_error_count": 0,
-            "pusher_key_recovery_count": 0,
-            "pusher_connection_count": 0,
-            "centrifugo_connection_count": 0,
-            "public_state_poll_count": 0,
-            "public_state_poll_failure_count": 0,
-            "public_subscription_count": 0,
-            "synthetic_frame_count": 0,
-            "preloaded_emitted_count": 0,
-            "startup_backfill_emitted_count": 0,
-            "history_recovery_failure_count": 0,
-            "live_emitted_count": 0,
-            "reconnect_backfill_emitted_count": 0,
-            "reconnect_backfill_truncated_count": 0,
-            "reconnect_backfill_truncated_microseconds": 0,
-            "last_websocket_frame_timestamp": None,
-        }
+        self.summary: dict[str, object] = {}
+        for name in LIVE_COUNTER_DEFAULTS:
+            self.summary[name] = 0
+            if name == "malformed_event_count":
+                self.summary["malformed_event_type_counts"] = {}
+        self.summary["last_websocket_frame_timestamp"] = None
 
     def increment(self, name: str) -> None:
         """Increment one integer counter by name."""
