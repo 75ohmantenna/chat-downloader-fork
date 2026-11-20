@@ -212,10 +212,19 @@ characters unsupported by the filesystem encoding raises an error.
 Duplicate targets are removed after expansion and path resolution.
 Names containing substituted fields require a new destination, regardless of
 `--overwrite`; an existing generated target is an error, not an append target.
-Fixed explicit paths retain overwrite and append behavior, including names with
-escaped literal braces. Capture destinations must be regular files with one
-link: symbolic links, hard links, special files, and unverifiable file identities
-are rejected before repair or truncation. New files are created with mode `0600`
+Fixed explicit paths are overwritten by default. Use `--overwrite false` to
+append, including when an explicit path contains escaped literal braces.
+Append setup leaves existing newline-terminated JSONL records in place.
+For a checkpointed replay, use `--resume` and `--verify_output` with a matching
+JSONL/TXT pair. After an ordinary append, use
+[`scripts/audit_capture_parity.py`](../scripts/audit_capture_parity.py) to check
+both files. Supply the capture's format. If formatted output deduplicates
+across records, repeat the auditor's line reset option for each later run,
+as in `audit_capture_parity.py --dedup-reset-before-jsonl-line 451 ...` when
+the next run starts at line 451.
+Capture destinations must be regular files
+with one link. The CLI rejects symbolic links, hard links, special files, and
+unverifiable file identities before repair or truncation. New files use mode `0600`
 where POSIX permissions apply. On setup failure, the capture tries to release
 unused generated names that still identify the empty files it created.
 

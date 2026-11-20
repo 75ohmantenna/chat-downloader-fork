@@ -197,7 +197,8 @@ class ChatRequest:
     overwrite: bool = field(
         default=True,
         metadata=_cli_metadata(
-            "Overwrite existing explicit output file; generated names must be new",
+            "Overwrite existing explicit output files by default. Pass false"
+            " to append. Generated names must be new",
             group="output",
         ),
     )
