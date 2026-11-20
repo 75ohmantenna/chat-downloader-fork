@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import select
-import socket
-import socketserver
-import threading
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -15,54 +11,6 @@ if TYPE_CHECKING:
 
 
 import requests
-
-
-class _ConnectProxy(socketserver.StreamRequestHandler):
-    """Minimal HTTP CONNECT-only proxy for testing."""
-
-    def handle(self) -> None:
-        line = self.rfile.readline().decode()
-        if not line.upper().startswith("CONNECT "):
-            return
-        host_port = line.split()[1]
-        host, _, port_str = host_port.rpartition(":")
-        port = int(port_str) if port_str else 443
-        # Drain request headers
-        while self.rfile.readline().strip():
-            pass
-        try:
-            remote = socket.create_connection((host, port), timeout=10)
-        except OSError:
-            self.wfile.write(b"HTTP/1.1 502 Bad Gateway\r\n\r\n")
-            return
-        self.wfile.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
-        self.wfile.flush()
-        fds = [self.connection, remote]
-        try:
-            while True:
-                readable, _, _ = select.select(fds, [], fds, 30)
-                if not readable:
-                    break
-                for src in readable:
-                    dst = remote if src is self.connection else self.connection
-                    data = src.recv(65536)
-                    if not data:
-                        return
-                    dst.sendall(data)
-        finally:
-            remote.close()
-
-
-@pytest.fixture(scope="session")
-def local_http_proxy() -> str:
-    """Spin up a local CONNECT proxy on a free port and return its URL."""
-    server = socketserver.ThreadingTCPServer(("127.0.0.1", 0), _ConnectProxy)
-    server.daemon_threads = True
-    port = server.server_address[1]
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{port}"
-    server.shutdown()
 
 
 @pytest.fixture

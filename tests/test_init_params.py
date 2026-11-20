@@ -10,6 +10,9 @@ from chat_downloader import ChatDownloader
 from chat_downloader.errors import InvalidParameter
 from chat_downloader.models import DownloaderConfig
 from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.sites.youtube import YouTubeChatDownloader
+from tests.test_http_policy_unit import TLS_FIXTURES
+from tests.test_http_policy_unit import local_http as _local_http  # noqa: F401 - named fixture
 
 
 @pytest.fixture
@@ -82,51 +85,49 @@ def test_loopback_proxy_cookie_warning(proxy, cookies, cookie_file, caplog):
     assert any("local proxy" in record.message for record in caplog.records) is cookies
 
 
-def _get_one_message(**init_params) -> None:
-    session = ChatDownloader(**init_params)
-    chat = None
+@pytest.mark.timeout(10)
+@pytest.mark.parametrize("use_proxy", [False, True], ids=["direct", "connect"])
+def test_initialization_options_reach_the_wire(
+    local_http, monkeypatch, tmp_path, use_proxy
+) -> None:
+    target = local_http(tls=True)
+    proxy = local_http()
+    for name in ("ALL_PROXY", "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv(name.lower(), raising=False)
+    if not use_proxy:
+        # A session that ignores proxy="" would route through this proxy.
+        monkeypatch.setenv("https_proxy", proxy.url)
+
+    cookies = tmp_path / "cookies.txt"
+    cookies.write_text(
+        "# Netscape HTTP Cookie File\n"
+        "127.0.0.1\tFALSE\t/\tTRUE\t4102444800\tsid\tsynthetic\n",
+        encoding="utf-8",
+    )
+    session = ChatDownloader(
+        proxy=proxy.url if use_proxy else "",
+        headers={"X-Test-Client": "loopback"},
+        cookies=str(cookies),
+        connect_timeout=2,
+        read_timeout=2,
+    )
     try:
-        chat = session.get_chat(
-            "https://www.youtube.com/watch?v=wXspodtIxYU", max_messages=1
-        )
-        assert len(list(chat)) == 1
+        site = session.create_session(YouTubeChatDownloader)
+        with site._session_get(
+            f"{target.url}/init", verify=str(TLS_FIXTURES / "certificate.pem")
+        ) as response:
+            assert response.status_code == 200
     finally:
-        if chat is not None:
-            chat.close()
         session.close()
 
-
-@pytest.mark.network
-@pytest.mark.network_environment
-@pytest.mark.timeout(90)
-@pytest.mark.parametrize(
-    ("kind", "platform"),
-    [("proxy", None), ("cookies", None)]
-    + [
-        ("headers", platform)
-        for platform in (
-            "Windows NT 10.0; Win64; x64",
-            "Macintosh; Intel Mac OS X 10_15_7",
-            "X11; Linux x86_64",
-        )
-    ],
-)
-def test_network_initialization(kind, platform, request) -> None:
-    if kind == "proxy":
-        for proxy in ("", None, request.getfixturevalue("local_http_proxy")):
-            _get_one_message(proxy=proxy)
-    elif kind == "cookies":
-        _get_one_message(cookies=None)
-    else:
-        _get_one_message(
-            headers={
-                "User-Agent": (
-                    f"Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/143.0.0.0 Safari/537.36"
-                ),
-                "Accept-Language": "en-US, en",
-            }
-        )
+    [(path, peer_port, headers)] = target.requests
+    assert path == "/init"
+    assert headers.get("X-Test-Client") == "loopback"
+    assert headers.get("Cookie") == "sid=synthetic"
+    assert proxy.tunnels == (
+        [(target.url.removeprefix("https://"), peer_port)] if use_proxy else []
+    )
 
 
 @pytest.fixture

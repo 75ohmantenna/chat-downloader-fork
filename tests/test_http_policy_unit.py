@@ -10,7 +10,7 @@ import ssl
 import threading
 import time
 import zlib
-from contextlib import ExitStack
+from contextlib import ExitStack, suppress
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from socketserver import StreamRequestHandler, ThreadingTCPServer
@@ -62,6 +62,7 @@ def local_http():
                 encoding=None,
                 mode="body",
                 requests=[],
+                tunnels=[],
                 stop=threading.Event(),
                 accepted=threading.Event(),
                 disconnected=threading.Event(),
@@ -70,19 +71,30 @@ def local_http():
 
             class Handler(BaseHTTPRequestHandler):
                 protocol_version = "HTTP/1.1"
+                timeout = 2
 
                 def log_message(self, *_args):
                     pass
+
+                def handle(self):
+                    # A test can close its client during a handshake or read.
+                    with suppress(ConnectionError):
+                        super().handle()
 
                 def do_POST(self):
                     self.rfile.read(int(self.headers.get("Content-Length", "0")))
                     self.do_GET()
 
                 def do_CONNECT(self):
+                    self.close_connection = True
                     host, port = self.path.rsplit(":", 1)
+                    if host != "127.0.0.1":
+                        self.send_error(403)
+                        return
                     with socket.create_connection(
                         (host, int(port)), timeout=1
                     ) as upstream:
+                        state.tunnels.append((self.path, upstream.getsockname()[1]))
                         self.send_response(200)
                         self.end_headers()
                         _relay(self.connection, upstream, state.stop)
@@ -148,7 +160,9 @@ def local_http():
                 context.load_cert_chain(
                     TLS_FIXTURES / "certificate.pem", TLS_FIXTURES / "private-key.pem"
                 )
-                server.socket = context.wrap_socket(server.socket, server_side=True)
+                server.socket = context.wrap_socket(
+                    server.socket, server_side=True, do_handshake_on_connect=False
+                )
             thread = threading.Thread(
                 target=server.serve_forever,
                 kwargs={"poll_interval": 0.01},
