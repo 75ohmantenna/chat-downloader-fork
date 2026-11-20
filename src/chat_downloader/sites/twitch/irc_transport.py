@@ -9,7 +9,9 @@ import socket
 import time
 from contextlib import suppress
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
+
+from urllib3.util.ssltransport import SSLTransport
 
 from chat_downloader.debugging import log
 from chat_downloader.redaction import capture_debug_sample
@@ -232,8 +234,12 @@ class TwitchChatIRC:
             if self._closed or self._stop_requested:
                 return
             self._stop_requested = True
+            # HTTPS CONNECT wraps both TLS layers without exposing shutdown.
+            transport = cast("SSLTransport | socket.socket | _ProxySocket", self.socket)
+            while isinstance(transport, SSLTransport):
+                transport = transport.socket
             with suppress(OSError):
-                self.socket.shutdown(socket.SHUT_RDWR)
+                transport.shutdown(socket.SHUT_RDWR)
 
 
 def _drain_readbuffer(readbuffer: str) -> str:

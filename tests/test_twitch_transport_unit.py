@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 from requests.exceptions import HTTPError
+from urllib3.util.ssltransport import SSLTransport
 
 import chat_downloader.redaction as red
 from chat_downloader.errors import (
@@ -942,6 +943,24 @@ def test_twitch_chat_irc_close_is_idempotent(irc_socket):
     irc_socket.close.assert_called_once()
     irc.request_stop()
     irc_socket.shutdown.assert_called_once_with(irc_transport.socket.SHUT_WR)
+
+
+def test_twitch_chat_irc_cancel_wakes_https_proxy_tunnel(irc_socket, monkeypatch):
+    irc = irc_transport.TwitchChatIRC()
+    inner = SSLTransport.__new__(SSLTransport)
+    outer = SSLTransport.__new__(SSLTransport)
+    inner.socket = irc_socket
+    outer.socket = inner
+    monkeypatch.setattr(irc, "socket", outer)
+    irc_socket.sendall.reset_mock()
+
+    irc.request_stop()
+    irc.request_stop()
+    irc.close_connection()
+
+    irc_socket.shutdown.assert_called_once_with(irc_transport.socket.SHUT_RDWR)
+    irc_socket.sendall.assert_not_called()
+    irc_socket.close.assert_called_once()
 
 
 def test_twitch_chat_irc_closes_transport_without_shutdown(monkeypatch) -> None:
