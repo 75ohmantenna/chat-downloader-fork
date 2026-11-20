@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import gzip
+import io
 import select
 import socket
 import ssl
@@ -751,15 +752,20 @@ def test_deflate_empty_blocks_cannot_retain_unbounded_fallback_history(
     # otherwise retains every byte while deciding whether raw-deflate fallback
     # is required, and read1 does not return until decoded output or EOF.
     server.body = b"\x78\x9c" + b"\x00\x00\x00\xff\xff" * 40000
-    monkeypatch.setattr(http_deadline, "MAX_WIRE_BYTES", 64 * 1024)
+    # Allow for the fixture headers, socket read-ahead and the first body read
+    # so the wire quota can only trip after the decoder has received data.
+    wire_limit = 1024 + io.DEFAULT_BUFFER_SIZE + http_policy._READ_BYTES
+    assert len(server.body) > wire_limit
+    monkeypatch.setattr(http_deadline, "MAX_WIRE_BYTES", wire_limit)
     http = _http()
     try:
         with pytest.raises(ParsingError, match="32 MiB wire limit"):
             http.get(server.url)
         response = closed_responses[-1]
         assert response.raw.closed
+        assert response.raw._decoder is not None
         retained = getattr(response.raw._decoder, "_first_try_data", b"")
-        assert len(retained) <= http_deadline.MAX_WIRE_BYTES
+        assert len(retained) <= wire_limit
     finally:
         http.close()
 
