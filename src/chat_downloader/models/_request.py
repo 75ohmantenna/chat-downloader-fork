@@ -151,7 +151,7 @@ class ChatRequest:
     inactivity_timeout: float | None = field(
         default=None,
         metadata=_cli_metadata(
-            "Stop if no messages received for this many seconds",
+            "Stop after this many seconds without an emitted message",
             group="termination",
         ),
     )
@@ -176,7 +176,7 @@ class ChatRequest:
         default=None,
         metadata=_cli_metadata(
             "Specific message types to include as one comma-separated "
-            "argument (overrides message_groups)",
+            "argument (mutually exclusive with --message_groups)",
             group="type",
         ),
     )

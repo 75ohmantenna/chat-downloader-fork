@@ -31,3 +31,5 @@ def test_generated_help_preserves_key_argument_groups() -> None:
     assert "Other extensions are not supported" in normalized_help
     assert "use .jsonl for structured output" in normalized_help
     assert "Twitch and Kick channel URLs cannot seek" in normalized_help
+    assert "mutually exclusive with --message_groups" in normalized_help
+    assert "seconds without an emitted message" in normalized_help

@@ -318,7 +318,9 @@ Filtering and output:
   long a live capture runs. This also applies to offline Twitch channels.
   End bounds are inclusive. Kick treats a zero-duration window as an empty
   selection and does not request history for it.
-- `--timeout`, `--inactivity_timeout` — bound long-running captures.
+- `--timeout` bounds message retrieval. `--inactivity_timeout` stops retrieval
+  after the specified number of seconds without an emitted record. Traffic
+  excluded by a message filter and transport keepalives do not reset this timer.
 
 Request control:
 
