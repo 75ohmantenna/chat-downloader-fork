@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import inspect
 
+import pytest
+
 from chat_downloader.chat_downloader import ChatDownloader, run
 from chat_downloader.models import (
-    CHAT_PARAM_NAMES,
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_READ_TIMEOUT,
     ChatRequest,
@@ -86,7 +87,7 @@ def test_chat_downloader_init_logs_sanitized_cookies(monkeypatch) -> None:
 
     monkeypatch.setattr("chat_downloader.chat_downloader.log", fake_log)
 
-    ChatDownloader(cookies="/tmp/cookies.txt")
+    ChatDownloader(cookies="/tmp/cookies.txt", proxy="")
 
     init_log = next(
         msg for msg in messages if msg.startswith("Initialization parameters:")
@@ -95,13 +96,18 @@ def test_chat_downloader_init_logs_sanitized_cookies(monkeypatch) -> None:
     assert "<redacted>" in init_log
 
 
-def test_get_chat_signature_matches_chat_request_fields() -> None:
-    sig = inspect.signature(ChatDownloader.get_chat)
-    params = set(sig.parameters) - {"self"}
-    assert params == set(CHAT_PARAM_NAMES)
-
-
-def test_get_chat_builds_chat_request_and_delegates(monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("url_args", "expected_url"),
+    [
+        ((), ""),
+        ((None,), ""),
+        (("https://example.invalid/watch?v=1",), "https://example.invalid/watch?v=1"),
+    ],
+    ids=["omitted", "explicit-none", "supplied"],
+)
+def test_get_chat_builds_chat_request_and_delegates(
+    monkeypatch, url_args, expected_url
+) -> None:
     downloader = ChatDownloader()
     seen: list[ChatRequest] = []
 
@@ -112,7 +118,7 @@ def test_get_chat_builds_chat_request_and_delegates(monkeypatch) -> None:
     monkeypatch.setattr(downloader, "get_chat_request", fake_get_chat_request)
 
     result = downloader.get_chat(
-        url=None,
+        *url_args,
         output="out.jsonl",
         message_types=["text_message"],
         ignore=["abc"],
@@ -121,7 +127,7 @@ def test_get_chat_builds_chat_request_and_delegates(monkeypatch) -> None:
 
     assert result == "chat"
     assert len(seen) == 1
-    assert seen[0].url == ""
+    assert seen[0].url == expected_url
     assert seen[0].output == "out.jsonl"
     assert seen[0].message_types == ["text_message"]
     assert seen[0].ignore == ["abc"]

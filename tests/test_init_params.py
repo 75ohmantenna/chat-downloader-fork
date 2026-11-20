@@ -164,7 +164,7 @@ def test_clear_cookies_disables_future_cookie_file_reloads(cookie_file) -> None:
     seed.set_cookie_value(".example.com", "sid", "cookie-from-file")
     seed.session.cookies.save(cookie_file, ignore_discard=True, ignore_expires=True)
     seed.close()
-    session = ChatDownloader(cookies=cookie_file)
+    session = ChatDownloader(cookies=cookie_file, proxy="")
     first_site = session.create_session(DummySite)
     assert first_site.get_cookie_value("sid") == "cookie-from-file"
     session.clear_cookies()
