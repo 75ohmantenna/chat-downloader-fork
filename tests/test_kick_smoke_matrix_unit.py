@@ -12,13 +12,22 @@ from types import SimpleNamespace
 
 import pytest
 
+from chat_downloader.metadata import __program__, __version__
 from chat_downloader.sites.kick.capture_inspection import inspect_capture
 from chat_downloader.sites.kick.live_service import _KickLiveDiagnostics
-from chat_downloader.utils import atomic_files
+from chat_downloader.utils import _bounded_records, atomic_files
 from scripts import smoke_kick_live as smoke
 
 
-def _manifest(directory, *, diagnostics=None, prefetched=0, **changes):
+def _manifest(
+    directory,
+    *,
+    diagnostics=None,
+    prefetched=0,
+    message_type="text_message",
+    sorted_keys=True,
+    **changes,
+):
     state = _KickLiveDiagnostics().summary
     state.update(
         websocket_frame_count=3,
@@ -43,9 +52,10 @@ def _manifest(directory, *, diagnostics=None, prefetched=0, **changes):
     )
     data = {
         "message_count": count,
-        "message_type_counts": {"text_message": count} if count else {},
+        "message_type_counts": {message_type: count} if count else {},
         "success": True,
         "parity_status": "passed",
+        "termination_reason": "timeout",
         "provider_diagnostics": state,
         "prefetched_after_deadline_count": prefetched,
         "deadline_prefetch_count_complete": True,
@@ -55,12 +65,13 @@ def _manifest(directory, *, diagnostics=None, prefetched=0, **changes):
         "".join(
             json.dumps(
                 {
-                    "message_type": "text_message",
+                    "message_type": message_type,
                     "message_id": str(index),
                     "timestamp": index,
                     "author": {"id": "author"},
                     "message": "PRIVATE_CHAT_TEXT",
-                }
+                },
+                sort_keys=sorted_keys,
             )
             + "\n"
             for index in range(count)
@@ -81,8 +92,23 @@ def test_matrix_uses_bounded_children_private_artifacts_and_content_free_report(
         calls.append((command, kwargs))
         directory = kwargs["cwd"]
         assert kwargs["stdin"] == subprocess.DEVNULL
-        assert 0 < kwargs["timeout"] <= 46
-        if directory.name != "quiet":
+        if directory.name == "inactivity":
+            assert (
+                float(command[command.index("--timeout") + 1])
+                > float(command[command.index("--inactivity_timeout") + 1])
+                == 5
+            )
+            assert kwargs["timeout"] == 51
+        else:
+            assert 0 < kwargs["timeout"] <= 46
+        if directory.name == "help":
+            kwargs["stdout"].write(
+                f"usage: {__program__} --help --version --message_types "
+                "--inactivity_timeout\n".encode()
+            )
+        elif directory.name == "version":
+            kwargs["stdout"].write(f"{__version__}\n".encode())
+        elif directory.name != "quiet":
             kwargs["stdout"].write(b"PRIVATE_CHAT_TEXT")
         kwargs["stderr"].write(b"PRIVATE_PROVIDER_ERROR")
         invalid = directory.name in {
@@ -99,7 +125,13 @@ def test_matrix_uses_bounded_children_private_artifacts_and_content_free_report(
                 "require_complete": "Complete capture requires a completed replay.",
             }[directory.name]
             kwargs["stderr"].write(diagnostic.encode())
-        if not invalid and directory.name not in {"help", "version"}:
+        if directory.name == "inactivity":
+            _manifest(
+                directory,
+                message_type="goal_canceled",
+                termination_reason="inactivity_timeout",
+            )
+        elif not invalid and directory.name not in {"help", "version"}:
             _manifest(directory)
         return SimpleNamespace(returncode=1 if invalid else 0)
 
@@ -349,13 +381,204 @@ def test_ordinary_quiet_capture_can_succeed_without_records(
             "parsed_event_count": 0,
             "live_emitted_count": 0,
         },
+        termination_reason="inactivity_timeout" if case == "inactivity" else "timeout",
     )
+    (tmp_path / "chat.jsonl").unlink()
     monkeypatch.setattr(
         smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
     )
     result = smoke._run_case(tmp_path, case, [], expected_success=True, timeout=1)
     assert result["passed"] is True
     assert result["records"] == 0
+
+
+@pytest.mark.parametrize("count", [0, 2])
+def test_inactivity_rejects_capture_files_inconsistent_with_manifest(
+    tmp_path, monkeypatch, count
+):
+    _manifest(
+        tmp_path,
+        diagnostics={
+            "websocket_frame_count": count + 1,
+            "parsed_event_count": count,
+            "live_emitted_count": count,
+        },
+        message_type="goal_canceled",
+        termination_reason="inactivity_timeout",
+    )
+    capture = tmp_path / "chat.jsonl"
+    if count:
+        capture.unlink()
+    else:
+        capture.write_text('{"message_type": "goal_canceled"}\n')
+    monkeypatch.setattr(
+        smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    result = smoke._run_case(
+        tmp_path, "inactivity", [], expected_success=True, timeout=1
+    )
+    assert result["passed"] is False
+
+
+@pytest.mark.parametrize("case", ["filtered", "inactivity"])
+def test_filter_rejects_manifest_type_counts_that_disagree_with_capture(
+    tmp_path, monkeypatch, case
+):
+    message_type = "text_message" if case == "filtered" else "goal_canceled"
+    _manifest(
+        tmp_path,
+        message_type=message_type,
+        message_type_counts={message_type: 1, "PRIVATE": 1},
+        termination_reason="inactivity_timeout" if case == "inactivity" else "timeout",
+    )
+    monkeypatch.setattr(
+        smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    result = smoke._run_case(tmp_path, case, [], expected_success=True, timeout=1)
+    assert result["passed"] is False
+    assert "PRIVATE" not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        b'{"message_type":"PRIVATE","message_type":"text_message"}\n',
+        b'["PRIVATE"]\n',
+        b'{"PRIVATE":NaN,"message_type":"text_message"}\n',
+        None,
+    ],
+)
+def test_filtered_capture_rejects_invalid_jsonl_with_content_free_error(
+    tmp_path, monkeypatch, payload
+):
+    _manifest(tmp_path)
+    capture = tmp_path / "chat.jsonl"
+    if payload is None:
+        capture.unlink()
+        capture.mkdir()
+    else:
+        capture.write_bytes(payload * 2)
+    monkeypatch.setattr(
+        smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    result = smoke._run_case(tmp_path, "filtered", [], expected_success=True, timeout=1)
+    assert result["passed"] is False
+    assert result["error"] == "invalid_or_missing_capture"
+    assert "PRIVATE" not in json.dumps(result)
+
+
+def test_filtered_capture_applies_physical_record_limit(tmp_path, monkeypatch):
+    _manifest(tmp_path)
+    monkeypatch.setattr(_bounded_records, "MAX_CAPTURE_RECORD_BYTES", 16)
+    monkeypatch.setattr(
+        smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    result = smoke._run_case(tmp_path, "filtered", [], expected_success=True, timeout=1)
+    assert result["passed"] is False
+    assert result["error"] == "invalid_or_missing_capture"
+
+
+def test_recursive_manifest_fails_with_content_free_error(tmp_path, monkeypatch):
+    (tmp_path / "manifest.json").write_text("[" * 4096 + '"PRIVATE"' + "]" * 4096)
+    monkeypatch.setattr(
+        smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    result = smoke._run_case(tmp_path, "filtered", [], expected_success=True, timeout=1)
+    assert result["passed"] is False
+    assert result["error"] == "invalid_or_missing_manifest"
+    assert "PRIVATE" not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    ("count", "reason", "passed"),
+    [
+        (3, "timeout", True),
+        (5, "message_limit", True),
+        (6, "message_limit", False),
+        (3, "message_limit", False),
+        (5, "timeout", True),
+        (0, "completed", False),
+    ],
+)
+def test_quiet_requires_message_cap_or_early_deadline(
+    tmp_path, monkeypatch, count, reason, passed
+):
+    _manifest(
+        tmp_path,
+        diagnostics={
+            "websocket_frame_count": count + 1,
+            "parsed_event_count": count,
+            "live_emitted_count": count,
+        },
+        termination_reason=reason,
+    )
+    monkeypatch.setattr(
+        smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    result = smoke._run_case(tmp_path, "quiet", [], expected_success=True, timeout=1)
+    assert result["passed"] is passed
+
+
+@pytest.mark.parametrize(
+    ("case", "message_type", "reason", "sorted_keys", "passed"),
+    [
+        ("inactivity", "goal_canceled", "inactivity_timeout", False, True),
+        ("inactivity", "goal_canceled", "timeout", True, False),
+        ("inactivity", "text_message", "inactivity_timeout", True, False),
+        ("filtered", "text_message", "timeout", True, True),
+        ("filtered", "text_message", "timeout", False, False),
+        ("filtered", "goal_canceled", "timeout", True, False),
+    ],
+)
+def test_filtered_capture_cases_enforce_their_cli_options(
+    tmp_path, monkeypatch, case, message_type, reason, sorted_keys, passed
+):
+    manifest = _manifest(
+        tmp_path,
+        message_type=message_type,
+        termination_reason=reason,
+        sorted_keys=sorted_keys,
+    )
+    assert manifest["provider_inspection"]["status"] == "ok"
+    monkeypatch.setattr(
+        smoke.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0)
+    )
+    result = smoke._run_case(tmp_path, case, [], expected_success=True, timeout=1)
+    assert result["passed"] is passed
+    assert "PRIVATE" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("case", ["help", "version"])
+def test_cli_information_matches_real_offline_output(tmp_path, case):
+    result = smoke._run_case(
+        tmp_path, case, [f"--{case}"], expected_success=True, timeout=10
+    )
+    assert result["passed"] is True
+
+
+@pytest.mark.parametrize("case", ["help", "version"])
+def test_cli_information_rejects_unrelated_stdout(tmp_path, monkeypatch, case):
+    def child(*args, **kwargs):
+        kwargs["stdout"].write(b"PRIVATE_CHAT_TEXT")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(smoke.subprocess, "run", child)
+    result = smoke._run_case(tmp_path, case, [], expected_success=True, timeout=1)
+    assert result["passed"] is False
+    assert "PRIVATE" not in json.dumps(result)
+
+
+def test_help_rejects_renamed_option_with_expected_prefix(tmp_path, monkeypatch):
+    def child(*args, **kwargs):
+        kwargs["stdout"].write(
+            f"usage: {__program__} --help --version --message_types_renamed "
+            "--inactivity_timeout\n".encode()
+        )
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(smoke.subprocess, "run", child)
+    result = smoke._run_case(tmp_path, "help", [], expected_success=True, timeout=1)
+    assert result["passed"] is False
 
 
 @pytest.mark.parametrize(

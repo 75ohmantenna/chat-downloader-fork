@@ -101,14 +101,14 @@ def test_mobile_replay_paid_events_emotes_and_writer_parity(monkeypatch, tmp_pat
         chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
     messages = list(chat)
     chat.close()
-    assert [m["message_type"] for m in messages] == [
-        "viewer_engagement_message",
-        "text_message",
-        "paid_message",
-        "ticker_paid_message_item",
-        "paid_sticker",
-        "ticker_paid_sticker_item",
-        "chat_ended",
+    assert [(m["message_type"], m["action_type"]) for m in messages] == [
+        ("viewer_engagement_message", "add_chat_item"),
+        ("text_message", "add_chat_item"),
+        ("paid_message", "add_chat_item"),
+        ("ticker_paid_message_item", "add_live_chat_ticker_item"),
+        ("paid_sticker", "add_chat_item"),
+        ("ticker_paid_sticker_item", "add_live_chat_ticker_item"),
+        ("chat_ended", "chat_ended"),
     ]
     assert messages[0]["message"].startswith("Live chat replay is on.")
     assert messages[1]["message"] == ":thanksdoc:" * 6

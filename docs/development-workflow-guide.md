@@ -64,12 +64,20 @@ Network tests remain opt-in locally. Every external check carries
 should normally use curated fixtures under `tests/fixtures/`. GitHub Actions runs
 stable `network_replay` contracts weekly, on manual dispatch, and on pushes to
 `75ohmantenna/chat-downloader-fork`. Volatile live and environment checks remain
-opt-in. A provider CAPTCHA challenge during setup or capture fails the network
-probe with `CaptchaChallengeRequired`, even when the scenario allows an
-asset-specific `LoginRequired` error.
+opt-in. An unavailable-asset scenario must raise its expected error during
+setup or before the first delivered record. The scenario runner propagates
+`CaptchaChallengeRequired`, even when the asset allows `LoginRequired`.
+The dedicated Kick socket probe reports a recognized challenge or handshake
+HTTP 403 as a skip.
 
-Live metadata discovery scenarios may succeed without chat messages. Offline
-timed-generator tests check inactivity against a blocked source. The Kick
+YouTube channel discovery requires a resolved video after iteration. A quiet
+chat can pass once its video metadata is available. The separate streams-tab
+checks exercise channel aliases directly. YouTube text records can carry a
+provider replay offset or a live receive timestamp when the source timestamp
+is absent. The multiple-output replay probe checks JSONL against delivered
+records and audits TXT rendering with duplicate suppression.
+
+Offline timed-generator tests check inactivity against a blocked source. The Kick
 missing-channel probe expects `UserNotFound` for a missing slug. Separate
 Twitch and YouTube delivery scenarios require `TWITCH_TEST_CHANNEL`
 and `YOUTUBE_TEST_CHANNEL_ID`, respectively, naming active public channels.
@@ -296,11 +304,18 @@ The artifact directory must not exist. The runner creates it with mode `0700`,
 runs an all-groups capture and a separate messages-only `realtime` capture, each
 for eight minutes by default, then checks help/version, quiet and compact output,
 text filtering, custom headers, inactivity shutdown, and rejection of unsupported
-output extensions and live replay-only options. Each capture writes JSONL, TXT,
-and a manifest with output verification. Child processes have independent
-wall-clock limits and cannot wait for stdin. Short cases default to ten seconds;
-`--case-duration` changes that limit. Very short durations can expire during
-connection setup and correctly require review for incomplete deadline accounting.
+output extensions and live replay-only options. Each capture requests JSONL,
+TXT, and a manifest with output verification. A zero-record run can leave
+both output files uncreated. The quiet case checks stdout and the
+five-message cap. The filtered case checks text-only records and sorted JSON
+keys. The inactivity case requires an inactivity timeout and checks any
+delivered records against its goal-event filter.
+
+Child processes have independent wall-clock limits and cannot wait for stdin.
+Short cases default to ten seconds. The inactivity case allows at least six
+seconds for its five-second inactivity timer when `--case-duration` is shorter.
+Very short durations can expire during connection setup and require review for
+incomplete deadline accounting.
 Live availability and event delivery can also cause the smoke run to fail.
 
 Repeat `--proxy socks5://host:port` to add bounded all-groups proxy captures.

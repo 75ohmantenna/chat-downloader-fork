@@ -10,10 +10,13 @@ import math
 import re
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from chat_downloader.metadata import __program__, __version__
 from chat_downloader.utils.atomic_files import atomic_text_file
+from chat_downloader.utils.capture_reader import open_capture_input, read_capture_lines
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -177,6 +180,99 @@ def _realtime_fields(manifest: dict[str, object]) -> dict[str, object]:
     }
 
 
+class _InvalidCaptureError(ValueError):
+    """The case's JSONL capture could not be validated."""
+
+
+def _capture_matches_filter(
+    capture: Path,
+    count: int,
+    message_type: str,
+    reported_types: object,
+    *,
+    sorted_keys: bool = False,
+) -> bool:
+    expected_types = {message_type: count} if count else {}
+    if (
+        not isinstance(reported_types, dict)
+        or reported_types != expected_types
+        or any(type(value) is not int for value in reported_types.values())
+    ):
+        return False
+    records = 0
+    try:
+        with closing(read_capture_lines(capture)) as lines:
+            for line in lines:
+                record = line.record
+                if record is None:
+                    raise _InvalidCaptureError
+                if record.get("message_type") != message_type:
+                    return False
+                if sorted_keys and json.dumps(record) != json.dumps(
+                    record, sort_keys=True
+                ):
+                    return False
+                records += 1
+    except FileNotFoundError as error:
+        # Lazy output writers do not create a file for a zero-record run.
+        if count == 0:
+            return True
+        raise _InvalidCaptureError from error
+    except (OSError, RecursionError) as error:
+        raise _InvalidCaptureError from error
+    return records == count
+
+
+def _capture_case_passed(
+    directory: Path, name: str, manifest: dict[str, object]
+) -> bool:
+    count = manifest["message_count"]
+    if type(count) is not int:
+        return False
+    if name == "quiet":
+        reason = manifest["termination_reason"]
+        return (
+            count <= 5
+            and (reason == "timeout" or (reason == "message_limit" and count == 5))
+            and (directory / "stdout.log").stat().st_size == 0
+        )
+    if name == "inactivity":
+        return manifest["termination_reason"] == "inactivity_timeout" and (
+            _capture_matches_filter(
+                directory / "chat.jsonl",
+                count,
+                "goal_canceled",
+                manifest["message_type_counts"],
+            )
+        )
+    if name == "filtered":
+        return count > 0 and _capture_matches_filter(
+            directory / "chat.jsonl",
+            count,
+            "text_message",
+            manifest["message_type_counts"],
+            sorted_keys=True,
+        )
+    return count > 0
+
+
+def _cli_info_matches(stdout: Path, name: str) -> bool:
+    output = stdout.read_text("utf-8", errors="replace")
+    if name == "version":
+        return output == f"{__version__}\n"
+    options = set(re.findall(r"(?<![\w-])--[\w-]+", output))
+    return (
+        output.startswith(f"usage: {__program__} ")
+        and {
+            "--help",
+            "--version",
+            "--message_types",
+            "--inactivity_timeout",
+        }
+        <= options
+    )
+
+
 def _run_case(
     directory: Path,
     name: str,
@@ -208,9 +304,12 @@ def _run_case(
         "passed": passed,
         "exit_code": completed.returncode,
     }
-    if expected_success and name not in {"help", "version"}:
+    if name in {"help", "version"}:
+        result["passed"] = passed and _cli_info_matches(directory / "stdout.log", name)
+    elif expected_success:
         try:
-            manifest = json.loads((directory / "manifest.json").read_text("utf-8"))
+            with open_capture_input(directory / "manifest.json") as source:
+                manifest = json.loads(source.read().decode("utf-8"))
             result.update(_aggregate_fields(manifest))
             inspection = manifest["provider_inspection"]
             result["passed"] = (
@@ -218,15 +317,16 @@ def _run_case(
                 and manifest["success"] is True
                 and manifest["parity_status"] == "passed"
                 and inspection["status"] == "ok"
-                and (name in {"quiet", "inactivity"} or manifest["message_count"] > 0)
-                and (name != "quiet" or (directory / "stdout.log").stat().st_size == 0)
+                and _capture_case_passed(directory, name, manifest)
             )
             if name == "realtime":
                 result.update(_realtime_fields(manifest))
                 result["passed"] = result["passed"] and result["realtime_delivery"]
-        except (OSError, ValueError, KeyError, TypeError):
+        except _InvalidCaptureError:
+            result.update(passed=False, error="invalid_or_missing_capture")
+        except (OSError, ValueError, KeyError, TypeError, RecursionError):
             result.update(passed=False, error="invalid_or_missing_manifest")
-    elif not expected_success:
+    else:
         expected = {
             "invalid_extension": "Unsupported output format 'csv'.",
             "live_resume": "Resume requires a completed replay with stable identity.",
@@ -257,6 +357,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     for name, options, success in _cases(args.duration):
         case_dir = directory / name
         case_dir.mkdir()
+        # Leave the five-second inactivity timer time to fire before the deadline.
+        case_duration = (
+            max(args.case_duration, 6.0) if name == "inactivity" else args.case_duration
+        )
         capture_options = (
             [
                 "--output",
@@ -277,7 +381,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 [
                     url,
                     "--timeout",
-                    str(args.case_duration),
+                    str(case_duration),
                     "--max_attempts",
                     "2",
                     "--retry_timeout",
@@ -290,7 +394,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 expected_success=success,
                 timeout=max(
                     args.duration if name in {"capture", "realtime"} else 0,
-                    args.case_duration,
+                    case_duration,
                 )
                 + 45,
             )

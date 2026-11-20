@@ -384,10 +384,10 @@ Separate `bootstrap_request_count`, `bootstrap_http_error_count`,
 bootstrap calls, including page retries and fresh bootstrap during capture.
 `continuation_profile_switch_count` covers polling profile changes. Diagnostics
 also retain `initial_request_profile`, `active_request_profile`, and the chosen
-`chat_view` label. The view label uses `Top chat` or `Live chat` with a `replay`
-suffix when polling the replay endpoint, independent of the client profile's
-bootstrap token labels. Each capture owns its setup counters, including calls
-that fail before a chat is returned, while bootstrapping a candidate video for
+`chat_view` label. The selected continuation determines whether the view is
+`Top chat` or `Live chat`. Polling the replay endpoint adds the `replay`
+suffix when the provider's label omits it. Each capture owns its setup counters,
+including calls that fail before a chat is returned, while bootstrapping a candidate video for
 a channel capture, or during continuation recovery. A new retrieval starts with
 its own counters even when the provider session is reused. Once a chat is
 returned, its diagnostics include failed attempts during iteration. The run

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import itertools
+import re
 
 # Network-dependent integration tests (YouTube API).
 import pytest
@@ -17,37 +18,32 @@ pytestmark = [
 ]
 
 
-def test_youtube_channel_discovery() -> None:
-    """Resolve supported channel URL forms to concrete live video records."""
-    max_videos = 50
+@pytest.mark.parametrize(
+    ("selector", "channel"),
+    [
+        ("channel_id", "UCSJ4gkVC6NrvII8umztf0Ow"),
+        ("user_id", "YellowBrickCinema"),
+        ("custom_username", "LofiGirl"),
+        ("handle", "LofiGirl"),
+    ],
+    ids=["channel-id", "legacy-user", "custom-url", "handle"],
+)
+def test_youtube_channel_discovery(selector: str, channel: str) -> None:
+    """Read a bounded sample from each alias's Streams tab."""
     downloader = ChatDownloader()
     try:
         youtube = downloader.create_session(YouTubeChatDownloader)
-        tests = [
-            {
-                "id": "UCwobzUc3z-0PrFpoRxNszXQ",
-                "type": "channel_id",
-            },
-            {
-                "id": "LofiGirl",
-                "type": "custom_username",
-            },
-            {
-                "id": "LofiGirl",
-                "type": "handle",
-            },
-        ]
-
-        for test in tests:
-            videos = list(
-                itertools.islice(
-                    youtube.get_user_videos(
-                        **{test["type"]: test["id"], "video_type": "live"}
-                    ),
-                    max_videos,
-                )
+        assert isinstance(youtube, YouTubeChatDownloader)
+        videos = list(
+            itertools.islice(
+                youtube.get_user_videos(**{selector: channel}, video_type="live"),
+                5,
             )
-            assert videos
-            assert all(video.get("video_id") for video in videos)
+        )
     finally:
         downloader.close()
+    assert videos, "Streams tab yielded no video records."
+    for video in videos:
+        assert re.fullmatch(r"[0-9A-Za-z_-]{11}", video["video_id"])
+        assert video["title"].strip()
+        assert video["video_type"] in {"DEFAULT", "LIVE", "UPCOMING"}

@@ -4,6 +4,10 @@
 
 from __future__ import annotations
 
+import re
+from functools import partial
+from typing import TYPE_CHECKING, Any
+
 from chat_downloader.errors import (
     ChatDisabled,
     LoginRequired,
@@ -12,6 +16,87 @@ from chat_downloader.errors import (
     VideoUnavailable,
     VideoUnplayable,
 )
+from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
+from tests.fixtures.replay_checks import assert_message_limit, assert_timed_window
+
+if TYPE_CHECKING:
+    from chat_downloader.sites.models import Chat
+
+
+_YOUTUBE_CLIP_END = 10
+_YOUTUBE_CLIP_LIMIT = 3
+_PAST_CLIP_ID = "Ugy_1IfsnZUWZSXL6C94AaABCQ"
+_PREMIERE_CLIP_ID = "UgzNZCNnPzq-M3_Utjl4AaABCQ"
+_GIFT_START = 5 * 3600 + 22 * 60 + 17
+_GIFT_END = _GIFT_START + 11
+
+
+def _assert_top_chat(chat: Chat, messages: list[dict[str, Any]]) -> None:
+    assert chat.diagnostics.get("chat_view") == "Top chat replay"
+    assert_timed_window(messages, start=0, end=20, required_types=("text_message",))
+
+
+def _assert_live_chat_limit(chat: Chat, messages: list[dict[str, Any]]) -> None:
+    assert chat.diagnostics.get("chat_view") == "Live chat replay"
+    assert_message_limit(chat, messages, limit=10)
+
+
+def _assert_replay_events(
+    _chat: Chat,
+    messages: list[dict[str, Any]],
+    *,
+    start: float,
+    end: float,
+    groups: tuple[str, ...] = (),
+    witnesses: tuple[tuple[str, str], ...],
+) -> None:
+    assert_timed_window(messages, start=start, end=end)
+    types = {message["message_type"] for message in messages}
+    if groups:
+        allowed = {kind for group in groups for kind in _MESSAGE_GROUPS[group]}
+        assert types <= allowed, f"Unexpected message types: {types - allowed}"
+        assert "text_message" not in types, "Paid filters admitted ordinary chat."
+    delivered = {
+        (message["message_type"], message.get("action_type"))
+        for message in messages
+        if "time_in_seconds" in message
+    }
+    missing = set(witnesses) - delivered
+    assert not missing, f"Missing timed replay events: {sorted(missing)}"
+
+
+def _assert_youtube_clip(
+    chat: Chat, messages: list[dict[str, Any]], *, clip_id: str
+) -> None:
+    assert chat.id == clip_id
+    assert chat.video_type == "clip"
+    assert len(messages) <= _YOUTUBE_CLIP_LIMIT, (
+        f"Replay exceeded the clip message limit of {_YOUTUBE_CLIP_LIMIT}."
+    )
+    window = chat._request_window
+    assert window is not None
+    # The request window uses recording offsets, while emitted offsets are local
+    # to the clip. chat.duration may describe the full recording.
+    assert window["time_basis"] == "recording"
+    start = window["start_time"]
+    end = window["end_time"]
+    assert isinstance(start, (int, float))
+    assert isinstance(end, (int, float))
+    assert 0 <= start < end
+    assert end == start + _YOUTUBE_CLIP_END
+    assert_timed_window(
+        messages, start=0, end=_YOUTUBE_CLIP_END, required_types=("text_message",)
+    )
+
+
+def _has_resolved_livestream_metadata(chat: Chat) -> bool:
+    return (
+        not chat._metadata_pending
+        and bool(chat.id and re.fullmatch(r"[0-9A-Za-z_-]{11}", chat.id))
+        and bool(chat.title and chat.title.strip())
+        and chat.status in {"live", "upcoming"}
+    )
+
 
 YOUTUBE_EXTRACTOR_TESTS = [
     # Get top live streams
@@ -30,26 +115,35 @@ YOUTUBE_EXTRACTOR_TESTS = [
         "network_live": True,
         "params": {
             "url": "https://www.youtube.com/channel/UCSJ4gkVC6NrvII8umztf0Ow",
-            "timeout": 5,
+            "timeout": 20,
+            "max_messages": 1,
         },
         "expected_result": {
-            "chat_condition": lambda chat: bool(chat.id and chat.title),
+            "chat_condition": _has_resolved_livestream_metadata,
         },
     },
     {
         "name": "Discover livestream metadata using custom url (1).",
         "network_live": True,
-        "params": {"url": "https://www.youtube.com/c/lofigirl", "timeout": 5},
+        "params": {
+            "url": "https://www.youtube.com/c/lofigirl",
+            "timeout": 20,
+            "max_messages": 1,
+        },
         "expected_result": {
-            "chat_condition": lambda chat: bool(chat.id and chat.title),
+            "chat_condition": _has_resolved_livestream_metadata,
         },
     },
     {
         "name": "Discover livestream metadata using custom url (2).",
         "network_live": True,
-        "params": {"url": "https://www.youtube.com/lofigirl", "timeout": 5},
+        "params": {
+            "url": "https://www.youtube.com/lofigirl",
+            "timeout": 20,
+            "max_messages": 1,
+        },
         "expected_result": {
-            "chat_condition": lambda chat: bool(chat.id and chat.title),
+            "chat_condition": _has_resolved_livestream_metadata,
         },
     },
     {
@@ -57,10 +151,11 @@ YOUTUBE_EXTRACTOR_TESTS = [
         "network_live": True,
         "params": {
             "url": "https://www.youtube.com/user/YellowBrickCinema",
-            "timeout": 5,
+            "timeout": 20,
+            "max_messages": 1,
         },
         "expected_result": {
-            "chat_condition": lambda chat: bool(chat.id and chat.title),
+            "chat_condition": _has_resolved_livestream_metadata,
         },
     },
     {
@@ -84,7 +179,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
         "expected_result": {
             "message_types": ["text_message"],
             "action_types": ["add_chat_item"],
-            "messages_condition": lambda messages: 0 < len(messages) <= 10,
+            "after_capture": _assert_live_chat_limit,
         },
     },
     {
@@ -98,47 +193,49 @@ YOUTUBE_EXTRACTOR_TESTS = [
         "expected_result": {
             "message_types": ["text_message"],
             "action_types": ["add_chat_item"],
-            "messages_condition": lambda messages: len(messages) > 0,
+            "after_capture": _assert_top_chat,
         },
     },
     {
         "name": "Get superchat and ticker messages from live chat replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=UlemRwXYWHg",
+            "start_time": 0,
             "end_time": 20,
             "message_groups": ["superchat", "tickers"],
         },
         "expected_result": {
-            "message_types": [
-                "paid_message",
-                "ticker_paid_message_item",
-                "membership_item",
-                "ticker_sponsor_item",
-                "paid_sticker",
-                "ticker_paid_sticker_item",
-            ],
-            "action_types": ["add_chat_item", "add_live_chat_ticker_item"],
-            "messages_condition": lambda messages: len(messages) > 0,
+            "after_capture": partial(
+                _assert_replay_events,
+                start=0,
+                end=20,
+                groups=("superchat", "tickers"),
+                witnesses=(
+                    ("paid_message", "add_chat_item"),
+                    ("ticker_paid_message_item", "add_live_chat_ticker_item"),
+                ),
+            ),
         },
     },
     {
         "name": "Get all messages from live chat replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=97w16cYskVI",
+            "start_time": 0,
             "end_time": 50,
             "message_types": ["all"],
         },
         "expected_result": {
-            "message_types": [
-                "viewer_engagement_message",
-                "paid_message",
-                "ticker_paid_message_item",
-                "text_message",
-                "paid_sticker",
-                "ticker_paid_sticker_item",
-            ],
-            "action_types": ["add_chat_item", "add_live_chat_ticker_item"],
-            "messages_condition": lambda messages: len(messages) > 0,
+            "after_capture": partial(
+                _assert_replay_events,
+                start=0,
+                end=50,
+                witnesses=(
+                    ("text_message", "add_chat_item"),
+                    ("paid_message", "add_chat_item"),
+                    ("ticker_paid_message_item", "add_live_chat_ticker_item"),
+                ),
+            ),
         },
     },
     {
@@ -162,27 +259,33 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "message_groups": ["superchat"],
         },
         "expected_result": {
-            "message_types": ["paid_message", "membership_item"],
-            "action_types": ["add_chat_item"],
-            "messages_condition": lambda messages: len(messages) > 0,
+            "after_capture": partial(
+                _assert_replay_events,
+                start=0,
+                end=20,
+                groups=("superchat",),
+                witnesses=(("paid_message", "add_chat_item"),),
+            ),
         },
     },
     {
         "name": "Chat replay with membership gifts",
         "params": {
             "url": "https://www.youtube.com/watch?v=cb0h-KbpDo8",
-            "start_time": "5:22:17",
-            "end_time": "5:22:28",
+            "start_time": _GIFT_START,
+            "end_time": _GIFT_END,
             "message_groups": ["all"],
         },
         "expected_result": {
-            "message_types": [
-                "text_message",
-                "sponsorships_gift_purchase_announcement",
-                "ticker_sponsor_item",
-            ],
-            "action_types": ["add_chat_item", "add_live_chat_ticker_item"],
-            "messages_condition": lambda messages: len(messages) > 0,
+            "after_capture": partial(
+                _assert_replay_events,
+                start=_GIFT_START,
+                end=_GIFT_END,
+                witnesses=(
+                    ("sponsorships_gift_purchase_announcement", "add_chat_item"),
+                    ("ticker_sponsor_item", "add_live_chat_ticker_item"),
+                ),
+            ),
         },
     },
     {
@@ -324,25 +427,43 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "error": [LoginRequired, VideoUnavailable],
         },
     },
+    {
+        # Age restricted -- YouTube may return LoginRequired or VideoUnavailable
+        # depending on whether the age-gate check fires first.
+        "name": (
+            "Sign in to confirm your age. This video may be inappropriate "
+            "for some users (secondary watch page)."
+        ),
+        "params": {
+            "url": "https://www.youtube.com/watch?v=_8W6Aoql-yk",
+        },
+        "expected_result": {
+            "error": [LoginRequired, VideoUnavailable],
+        },
+    },
     # Clips
     {
         "name": "Chat replay of clip (past broadcast)",
         "params": {
-            "url": "https://www.youtube.com/clip/Ugy_1IfsnZUWZSXL6C94AaABCQ",
-            "max_messages": 3,
+            "url": f"https://www.youtube.com/clip/{_PAST_CLIP_ID}",
+            "start_time": 0,
+            "end_time": _YOUTUBE_CLIP_END,
+            "max_messages": _YOUTUBE_CLIP_LIMIT,
         },
         "expected_result": {
-            "messages_condition": lambda messages: 0 < len(messages) <= 3,
+            "after_capture": partial(_assert_youtube_clip, clip_id=_PAST_CLIP_ID),
         },
     },
     {
         "name": "Chat replay of clip (premiere)",
         "params": {
-            "url": "https://www.youtube.com/clip/UgzNZCNnPzq-M3_Utjl4AaABCQ",
-            "max_messages": 3,
+            "url": f"https://www.youtube.com/clip/{_PREMIERE_CLIP_ID}",
+            "start_time": 0,
+            "end_time": _YOUTUBE_CLIP_END,
+            "max_messages": _YOUTUBE_CLIP_LIMIT,
         },
         "expected_result": {
-            "messages_condition": lambda messages: 0 < len(messages) <= 3,
+            "after_capture": partial(_assert_youtube_clip, clip_id=_PREMIERE_CLIP_ID),
         },
     },
     {
@@ -352,20 +473,6 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
         "expected_result": {
             "error": [NoChatReplay, LoginRequired],
-        },
-    },
-    {
-        # Age restricted -- YouTube may return LoginRequired or VideoUnavailable
-        # depending on whether the age-gate check fires first.
-        "name": (
-            "Sign in to confirm your age. This clip may be inappropriate "
-            "for some users."
-        ),
-        "params": {
-            "url": "https://www.youtube.com/watch?v=_8W6Aoql-yk",
-        },
-        "expected_result": {
-            "error": [LoginRequired, VideoUnavailable],
         },
     },
     {

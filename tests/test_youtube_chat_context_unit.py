@@ -59,6 +59,25 @@ def test_context_selects_label_not_insertion_order(monkeypatch):
     )._build_context().loop_state.continuation == ("top-token")
 
 
+def test_replay_diagnostics_report_the_selected_continuation_label(monkeypatch):
+    _patch_http(monkeypatch)
+    labels = {"Live chat replay": "live-token", "Top chat": "top-token"}
+
+    def select(available, *, chat_type, is_replay):
+        assert chat_type == "live"
+        assert is_replay
+        return "Top chat", available["Top chat"]
+
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.continuation._select_initial_continuation",
+        select,
+    )
+    loop = _loop(info={"status": "past", "continuation_info": labels})
+    context = loop._build_context()
+    assert context.loop_state.continuation == "top-token"
+    assert loop.diagnostics["chat_view"] == "Top chat replay"
+
+
 def test_context_applies_profile(monkeypatch):
     _patch_http(monkeypatch, innertube=False)
     owner = Downloader()
