@@ -1,0 +1,128 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        {
+          "replayChatItemAction": {
+            "videoOffsetTimeMsec": "42647",
+            "actions": [
+              {
+                "replaceLiveChatRendererAction": {
+                  "toReplace": "REPLACE_LIVE_CHAT_ACTION_PANEL",
+                  "replacement": {
+                    "liveChatRestrictedParticipationRenderer": {
+                      "message": {
+                        "runs": [
+                          {
+                            "text": "Subscribers-only mode was enabled"
+                          }
+                        ]
+                      },
+                      "buttons": [
+                        {
+                          "buttonRenderer": {
+                            "icon": {
+                              "iconType": "INFO"
+                            },
+                            "trackingParams": "<redacted>",
+                            "accessibilityData": {
+                              "accessibilityData": {
+                                "label": "Subscribers-only mode was enabled during this time."
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "reactionControlPanelOverlayViewModel": {
+                            "reactionControlPanel": {
+                              "reactionControlPanelViewModel": {
+                                "collapsedButton": {
+                                  "reactionControlPanelButtonViewModel": {
+                                    "emojiId": "❤",
+                                    "shouldTriggerAnimation": false,
+                                    "a11yLabel": "❤",
+                                    "buttonIconType": "EMPTY_HEART"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "icon": {
+                        "iconType": "TAB_SUBSCRIPTIONS"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
+          "replayChatItemAction": {
+            "videoOffsetTimeMsec": "260120",
+            "actions": [
+              {
+                "replaceLiveChatRendererAction": {
+                  "toReplace": "REPLACE_LIVE_CHAT_ACTION_PANEL",
+                  "replacement": {
+                    "liveChatRestrictedParticipationRenderer": {
+                      "message": {
+                        "runs": [
+                          {
+                            "text": "Slow mode was enabled"
+                          }
+                        ]
+                      },
+                      "buttons": [
+                        {
+                          "buttonRenderer": {
+                            "icon": {
+                              "iconType": "INFO"
+                            },
+                            "accessibilityData": {
+                              "accessibilityData": {
+                                "label": "Slow mode was enabled during this time."
+                              }
+                            },
+                            "command": {
+                              "commandMetadata": {
+                                "webCommandMetadata": {
+                                  "sendPost": true
+                                }
+                              },
+                              "signalServiceEndpoint": {
+                                "signal": "CLIENT_SIGNAL",
+                                "actions": [
+                                  {
+                                    "liveChatAddToToastAction": {
+                                      "item": {
+                                        "notificationTextRenderer": {
+                                          "successResponseText": {
+                                            "simpleText": "Slow mode was enabled during this time."
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "icon": {
+                        "iconType": "LOCK"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

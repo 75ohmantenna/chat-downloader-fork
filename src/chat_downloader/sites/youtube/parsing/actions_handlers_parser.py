@@ -9,9 +9,11 @@ from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _PATH_BANNER_RENDERER,
     _PATH_ITEM,
+    _PATH_REPLACEMENT,
     _PATH_REPLACEMENT_ITEM,
     _PATH_TOOLTIP,
     _RENDERER_BANNER_CHAT_SUMMARY,
+    _RENDERER_RESTRICTED_PARTICIPATION,
 )
 from chat_downloader.sites.youtube.constants_patterns import YOUTUBE_DEBUG_SAMPLE_LIMIT
 from chat_downloader.utils.dict_utils import multi_get, try_get_first_key
@@ -24,8 +26,8 @@ from chat_downloader.utils.json_types import (
 )
 from chat_downloader.utils.time_utils import seconds_to_time
 
-from .message_content_text_parser import _parse_runs
-from .message_items_content_parser import _parse_item
+from .message_content_text_parser import _get_simple_text, _parse_runs
+from .message_items_content_parser import _parse_item, _reconcile_time_fields
 from .modern_elements import normalize_element
 
 
@@ -151,6 +153,42 @@ def _handle_replace_action(
     original_message_type = try_get_first_key(original_item)
     data = _parse_item(original_item, data, offset)
     return (data, original_item, original_message_type, original_action_type)
+
+
+def _handle_replace_renderer_action(
+    action: JSONDict,
+    original_action_type: str,
+    data: JSONDict,
+    offset: float,
+) -> tuple[JSONDict, JSONDict, str | None, str]:
+    """Capture a textual participation notice from the chat action panel."""
+    action_data = get_dict(action, original_action_type)
+    target = get_str(action_data, "toReplace")
+    replacement = get_dict(action_data, _PATH_REPLACEMENT)
+    renderer = _RENDERER_RESTRICTED_PARTICIPATION
+    if target != "REPLACE_LIVE_CHAT_ACTION_PANEL" or replacement.keys() != {renderer}:
+        return (data, action, None, original_action_type)
+
+    item = get_dict(replacement, renderer)
+    message = get_dict(item, "message")
+    text = "".join(
+        get_str(run, "text")
+        for run in get_list(message, "runs")
+        if isinstance(run, dict)
+    ) or _get_simple_text(message)
+    if not text or not text.strip():
+        return (data, action, None, original_action_type)
+
+    data["message"] = text
+    icon = get_str(get_dict(item, "icon"), "iconType")
+    if icon:
+        data["icon"] = icon
+    _reconcile_time_fields(data, offset)
+
+    # Button controls are presentation metadata for this action panel.
+    notice_item = item.copy()
+    notice_item.pop("buttons", None)
+    return (data, {renderer: notice_item}, renderer, original_action_type)
 
 
 def _handle_tooltip_action(

@@ -45,6 +45,7 @@ from chat_downloader.sites.youtube.parsing.actions_router import iter_action_occ
 from chat_downloader.utils.json_types import dig
 
 _FX_DIR = Path(__file__).resolve().parent / "fixtures" / "youtube" / "live_events"
+_RESTRICTION_FIXTURE = "youtube-replay-restricted-participation.json"
 
 _RECORDED_EVENT_LISTS = {
     "youtube-shapy-crimson-desert-10m-events.json",
@@ -78,6 +79,10 @@ _EXPECTED_OUTCOMES: dict[str, tuple[str | NonEmissionReason, ...]] = {
         "ticker_paid_message_item",
     ),
     "youtube-replay-pinned-banner-timing.json": ("text_message", "banner"),
+    _RESTRICTION_FIXTURE: (
+        "restricted_participation",
+        "restricted_participation",
+    ),
 }
 
 
@@ -137,3 +142,55 @@ def test_live_event_fixture(name: str, drift_recorder: list[str]) -> None:
         f"  {line}" for line in drift_recorder
     )
     assert actual_outcomes == list(_EXPECTED_OUTCOMES[name])
+
+
+@pytest.mark.parametrize(
+    ("key_path", "value"),
+    [
+        (("toReplace",), "ANOTHER_PANEL"),
+        (("replacement",), {"liveChatUnexpectedRenderer": {}}),
+        (("replacement", "liveChatUnexpectedRenderer"), {}),
+        (("replacement", "liveChatRestrictedParticipationRenderer"), {}),
+        (
+            ("replacement", "liveChatRestrictedParticipationRenderer", "message"),
+            {"runs": [{}]},
+        ),
+    ],
+)
+def test_invalid_panel_replacement_is_diagnosed_without_emission(
+    key_path, value, drift_recorder
+):
+    payload = json.loads((_FX_DIR / _RESTRICTION_FIXTURE).read_text(encoding="utf-8"))
+    action = parse_continuation_response(payload).actions[0]
+    command = action["replayChatItemAction"]["actions"][0][
+        "replaceLiveChatRendererAction"
+    ]
+    for key in key_path[:-1]:
+        command = command[key]
+    command[key_path[-1]] = value
+    msg_filter = MessageFilter(_MESSAGE_GROUPS, groups_to_add=["all"])
+
+    outcome = process_pipeline_action(action, 0, msg_filter, None)
+
+    assert outcome.non_emission_reason is NonEmissionReason.INVALID_MESSAGE
+    assert outcome.message is None
+    assert drift_recorder == [
+        "No message type Action type: replaceLiveChatRendererAction"
+    ]
+
+
+def test_panel_notice_tolerates_malformed_optional_icon(drift_recorder):
+    payload = json.loads((_FX_DIR / _RESTRICTION_FIXTURE).read_text(encoding="utf-8"))
+    action = parse_continuation_response(payload).actions[0]
+    command = action["replayChatItemAction"]["actions"][0][
+        "replaceLiveChatRendererAction"
+    ]
+    command["replacement"]["liveChatRestrictedParticipationRenderer"]["icon"] = []
+    msg_filter = MessageFilter(_MESSAGE_GROUPS, groups_to_add=["moderation"])
+
+    outcome = process_pipeline_action(action, 0, msg_filter, None)
+
+    assert outcome.message is not None
+    assert outcome.message["message"] == "Subscribers-only mode was enabled"
+    assert "icon" not in outcome.message
+    assert not drift_recorder

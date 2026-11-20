@@ -53,6 +53,36 @@ def _assert_paid_ticker_timing(parsed, seconds, text):
 
 
 @pytest.mark.parametrize(
+    ("clip_offset", "subscriber_time", "slow_mode_time"),
+    [(0, "0:42", "4:20"), (40, "0:02", "3:40")],
+)
+def test_replay_restricted_participation_retains_notices_and_offsets(
+    clip_offset, subscriber_time, slow_mode_time
+):
+    payload = _load_payload("youtube-replay-restricted-participation.json")
+    parsed = _parse_actions(parse_continuation_response(payload), clip_offset)
+
+    assert parsed == [
+        {
+            "action_type": "replace_live_chat_renderer",
+            "message_type": "restricted_participation",
+            "message": "Subscribers-only mode was enabled",
+            "icon": "TAB_SUBSCRIPTIONS",
+            "time_in_seconds": pytest.approx(42.647 - clip_offset),
+            "time_text": subscriber_time,
+        },
+        {
+            "action_type": "replace_live_chat_renderer",
+            "message_type": "restricted_participation",
+            "message": "Slow mode was enabled",
+            "icon": "LOCK",
+            "time_in_seconds": pytest.approx(260.12 - clip_offset),
+            "time_text": slow_mode_time,
+        },
+    ]
+
+
+@pytest.mark.parametrize(
     ("clip_offset", "expected_text"),
     [(0, "4:48:50"), (17300, "0:30"), (17331, "-0:00")],
 )

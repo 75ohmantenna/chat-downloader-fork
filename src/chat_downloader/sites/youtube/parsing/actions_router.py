@@ -21,6 +21,7 @@ from chat_downloader.sites.youtube.constants_actions_messages_core import (
     _KNOWN_REMOVE_ACTION_TYPES,
     _KNOWN_REMOVE_BANNER_TYPES,
     _KNOWN_REPLACE_ACTION_TYPES,
+    _KNOWN_REPLACE_RENDERER_ACTION_TYPES,
     _KNOWN_TOOLTIP_ACTION_TYPES,
 )
 from chat_downloader.sites.youtube.constants_patterns import (
@@ -45,6 +46,7 @@ from .actions_handlers_parser import (
     _handle_remove_action,
     _handle_remove_banner_action,
     _handle_replace_action,
+    _handle_replace_renderer_action,
     _handle_tooltip_action,
 )
 
@@ -63,6 +65,7 @@ _ACTION_HANDLERS: dict[str, _ActionHandler] = {
         (_KNOWN_INTERACTIVITY_WIDGET_ACTION_TYPES, _handle_interactivity_widget_action),
         (_KNOWN_REMOVE_ACTION_TYPES, _handle_remove_action),
         (_KNOWN_REPLACE_ACTION_TYPES, _handle_replace_action),
+        (_KNOWN_REPLACE_RENDERER_ACTION_TYPES, _handle_replace_renderer_action),
         (_KNOWN_TOOLTIP_ACTION_TYPES, _handle_tooltip_action),
         (_KNOWN_ADD_BANNER_TYPES, _handle_add_banner_action),
         (_KNOWN_REMOVE_BANNER_TYPES, _handle_remove_banner_action),

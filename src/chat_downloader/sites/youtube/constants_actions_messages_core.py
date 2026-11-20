@@ -8,10 +8,12 @@
 from __future__ import annotations
 
 _PATH_ITEM = "item"
+_PATH_REPLACEMENT = "replacement"
 _PATH_REPLACEMENT_ITEM = "replacementItem"
 _PATH_TOOLTIP = "tooltip"
 _PATH_BANNER_RENDERER = "bannerRenderer"
 _RENDERER_BANNER_CHAT_SUMMARY = "liveChatBannerChatSummaryRenderer"
+_RENDERER_RESTRICTED_PARTICIPATION = "liveChatRestrictedParticipationRenderer"
 
 # Action type mappings
 _KNOWN_ADD_TICKER_TYPES = {
@@ -35,7 +37,7 @@ _KNOWN_ADD_ACTION_TYPES = {
         "liveChatModeChangeMessageRenderer",  # e.g. slow mode enabled
         "liveChatAutoModMessageRenderer",
         "liveChatProductItemRenderer",
-        "liveChatRestrictedParticipationRenderer",
+        _RENDERER_RESTRICTED_PARTICIPATION,
         # Gifting
         "giftMessageViewModel",
         "liveChatSponsorshipsGiftPurchaseAnnouncementRenderer",  # purchase
@@ -49,6 +51,10 @@ _KNOWN_REPLACE_ACTION_TYPES = {
         "liveChatPlaceholderItemRenderer",
         "liveChatTextMessageRenderer",
     ],
+}
+
+_KNOWN_REPLACE_RENDERER_ACTION_TYPES = {
+    "replaceLiveChatRendererAction": [_RENDERER_RESTRICTED_PARTICIPATION],
 }
 
 # actions that have an 'item'
@@ -107,6 +113,7 @@ _KNOWN_ACTION_TYPES = {
     **_KNOWN_ITEM_ACTION_TYPES,
     **_KNOWN_REMOVE_ACTION_TYPES,
     **_KNOWN_REPLACE_ACTION_TYPES,
+    **_KNOWN_REPLACE_RENDERER_ACTION_TYPES,
     **_KNOWN_ADD_BANNER_TYPES,
     **_KNOWN_REMOVE_BANNER_TYPES,
     **_KNOWN_TOOLTIP_ACTION_TYPES,

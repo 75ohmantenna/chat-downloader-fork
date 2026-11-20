@@ -668,6 +668,17 @@ coverage, with synthetic regression tests in
 - `restricted_participation` from
   `liveChatRestrictedParticipationRenderer`
 
+When a `replaceLiveChatRendererAction` replaces the chat action panel with
+a textual `liveChatRestrictedParticipationRenderer`, the parser emits
+`restricted_participation` in the `moderation` group. It preserves the notice
+text, icon, and replay wrapper offset when present and ignores the panel's
+buttons and reaction controls. The curated
+`youtube-replay-restricted-participation.json` fixture retains the captured
+subscribers-only and slow-mode notices at 42.647 and 260.12 seconds, with
+unrelated reaction metadata removed.
+Unsupported panel targets, ambiguous replacements, and notices without text
+retain parser diagnostics and are excluded from the capture.
+
 ## Moderation Actions
 
 YouTube exposes four wire-level actions related to moderation. Three of them
