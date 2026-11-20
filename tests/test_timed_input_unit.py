@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib
+import importlib.util
 import io
 import os
 import sys
@@ -29,19 +29,24 @@ def pipe_stdin(monkeypatch):
         yield stream, output
 
 
-def _reload_timed_utils_with_msvcrt(fake_msvcrt: Any):
-    original = sys.modules.get("msvcrt")
-    sys.modules["msvcrt"] = fake_msvcrt
-    module = importlib.reload(timed_utils)
-    return module, original
+@pytest.fixture
+def load_windows_timed_utils(monkeypatch):
+    def load(fake_msvcrt: SimpleNamespace):
+        # The sibling name lets the backend resolve its relative imports
+        # without replacing the live module.
+        spec = importlib.util.spec_from_file_location(
+            f"{timed_utils.__package__}._test_windows_timed_input",
+            timed_utils.__file__,
+        )
+        assert spec is not None
+        assert spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        with monkeypatch.context() as patch:
+            patch.setitem(sys.modules, "msvcrt", fake_msvcrt)
+            spec.loader.exec_module(module)
+        return module
 
-
-def _restore_timed_utils(original_msvcrt: Any) -> None:
-    if original_msvcrt is None:
-        sys.modules.pop("msvcrt", None)
-    else:
-        sys.modules["msvcrt"] = original_msvcrt
-    importlib.reload(timed_utils)
+    return load
 
 
 def test_timed_input_without_timeout_uses_builtin_input(monkeypatch) -> None:
@@ -193,66 +198,64 @@ def test_posix_timed_input_timeout_ignores_tcflush_errors(
         timed_utils.posix_timed_input(0, "Prompt: ", newline=False)
 
 
-def test_win_timed_input_handles_backspace_and_newline(monkeypatch) -> None:
+def test_win_timed_input_handles_backspace_and_newline(
+    load_windows_timed_utils,
+) -> None:
     outputs: list[str] = []
     chars = iter(["a", "b", "\b", "c", "\r"])
     fake_msvcrt = SimpleNamespace(
         kbhit=lambda: True,
         getwche=lambda: next(chars),
     )
-    module, original_msvcrt = _reload_timed_utils_with_msvcrt(fake_msvcrt)
+    original_lock = timed_utils._INPUT_LOCK
+    module = load_windows_timed_utils(fake_msvcrt)
+
+    assert timed_utils.TimeoutOccurred is TimeoutOccurred
+    assert timed_utils._INPUT_LOCK is original_lock
 
     monotonic_values = iter([0.0, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5])
 
-    try:
-        monkeypatch.setattr(module, "echo", outputs.append)
-        monkeypatch.setattr(module.time, "monotonic", lambda: next(monotonic_values))
-        monkeypatch.setattr(module.time, "sleep", lambda *_args: None)
+    module.echo = outputs.append
+    module.time = SimpleNamespace(
+        monotonic=lambda: next(monotonic_values), sleep=lambda _seconds: None
+    )
 
-        assert module.win_timed_input(1.0, "P>", newline=False) == "ac"
-        assert outputs == ["P>", "\r    \rP>a", module.CRLF]
-    finally:
-        _restore_timed_utils(original_msvcrt)
+    assert module.win_timed_input(1.0, "P>", newline=False) == "ac"
+    assert outputs == ["P>", "\r    \rP>a", module.CRLF]
 
 
-def test_win_timed_input_raises_keyboard_interrupt(monkeypatch) -> None:
+def test_win_timed_input_raises_keyboard_interrupt(load_windows_timed_utils) -> None:
     fake_msvcrt = SimpleNamespace(
         kbhit=lambda: True,
         getwche=lambda: "\003",
     )
-    module, original_msvcrt = _reload_timed_utils_with_msvcrt(fake_msvcrt)
+    module = load_windows_timed_utils(fake_msvcrt)
 
-    try:
-        monkeypatch.setattr(module, "echo", lambda *_args: None)
-        monkeypatch.setattr(module.time, "monotonic", lambda: 0.0)
-        monkeypatch.setattr(module.time, "sleep", lambda *_args: None)
+    module.echo = lambda *_args: None
+    module.time = SimpleNamespace(monotonic=lambda: 0.0, sleep=lambda _seconds: None)
 
-        with pytest.raises(KeyboardInterrupt):
-            module.win_timed_input(1.0, "P>", newline=False)
-    finally:
-        _restore_timed_utils(original_msvcrt)
+    with pytest.raises(KeyboardInterrupt):
+        module.win_timed_input(1.0, "P>", newline=False)
 
 
-def test_win_timed_input_timeout_prints_newline(monkeypatch) -> None:
+def test_win_timed_input_timeout_prints_newline(load_windows_timed_utils) -> None:
     outputs: list[str] = []
     fake_msvcrt = SimpleNamespace(
         kbhit=lambda: False,
         getwche=lambda: "",
     )
-    module, original_msvcrt = _reload_timed_utils_with_msvcrt(fake_msvcrt)
+    module = load_windows_timed_utils(fake_msvcrt)
     monotonic_values = iter([0.0, 0.0, 2.0])
 
-    try:
-        monkeypatch.setattr(module, "echo", outputs.append)
-        monkeypatch.setattr(module.time, "monotonic", lambda: next(monotonic_values))
-        monkeypatch.setattr(module.time, "sleep", lambda *_args: None)
+    module.echo = outputs.append
+    module.time = SimpleNamespace(
+        monotonic=lambda: next(monotonic_values), sleep=lambda _seconds: None
+    )
 
-        with pytest.raises(module.TimeoutOccurred):
-            module.win_timed_input(1.0, "P>", newline=True)
+    with pytest.raises(module.TimeoutOccurred):
+        module.win_timed_input(1.0, "P>", newline=True)
 
-        assert outputs == ["P>", module.CRLF]
-    finally:
-        _restore_timed_utils(original_msvcrt)
+    assert outputs == ["P>", module.CRLF]
 
 
 class _AliveTimer:
@@ -423,7 +426,9 @@ def test_manual_terminal_eof_closes_selector_and_reports_detachment(
         _POLLING_STOP_EVENT.reset(token)
 
 
-def test_windows_cancellation_before_key_read_preserves_later_input(monkeypatch):
+def test_windows_cancellation_before_key_read_preserves_later_input(
+    load_windows_timed_utils,
+):
     from chat_downloader.utils.timed_generator import (
         _POLLING_STOP_EVENT,
         _PollingCancelled,
@@ -435,37 +440,37 @@ def test_windows_cancellation_before_key_read_preserves_later_input(monkeypatch)
         stopped.set()
         return True
 
-    module, original_msvcrt = _reload_timed_utils_with_msvcrt(
+    module = load_windows_timed_utils(
         SimpleNamespace(kbhit=ready, getwche=lambda: consumed.append("later") or "\r")
     )
     token = _POLLING_STOP_EVENT.set(stopped)
     try:
-        monkeypatch.setattr(module, "echo", lambda _text: None)
+        module.echo = lambda _text: None
         with pytest.raises(_PollingCancelled):
             module.timed_input(60)
         assert consumed == []
     finally:
         _POLLING_STOP_EVENT.reset(token)
-        _restore_timed_utils(original_msvcrt)
 
 
-def test_windows_manual_input_retains_characters_across_polls(monkeypatch):
+def test_windows_manual_input_retains_characters_across_polls(
+    monkeypatch, load_windows_timed_utils
+):
     from chat_downloader.utils.timed_generator import _POLLING_STOP_EVENT
 
     ready = iter([True, False, True, True])
     characters = iter(["a", "b", "\r"])
     stopped = threading.Event()
-    module, original_msvcrt = _reload_timed_utils_with_msvcrt(
+    module = load_windows_timed_utils(
         SimpleNamespace(kbhit=lambda: next(ready), getwche=lambda: next(characters))
     )
     token = _POLLING_STOP_EVENT.set(stopped)
     try:
-        monkeypatch.setattr(module, "echo", lambda _text: None)
+        module.echo = lambda _text: None
         monkeypatch.setattr(stopped, "wait", lambda _seconds: False)
         assert module.timed_input() == "ab"
     finally:
         _POLLING_STOP_EVENT.reset(token)
-        _restore_timed_utils(original_msvcrt)
 
 
 def test_terminal_eof_remaining_wait_is_cancellable_without_flushing(
@@ -566,25 +571,27 @@ def test_terminal_partial_line_does_not_outlive_manual_retry_deadline(
         os.close(master)
 
 
-def test_windows_manual_retry_reports_ctrl_z_as_closed_input(monkeypatch):
+def test_windows_manual_retry_reports_ctrl_z_as_closed_input(
+    monkeypatch, load_windows_timed_utils
+):
     from chat_downloader.errors import ChatDownloaderError
-    from chat_downloader.utils.retry_utils import RetryPolicy
+    from chat_downloader.utils import retry_utils
     from chat_downloader.utils.timed_generator import _POLLING_STOP_EVENT
 
-    module, original_msvcrt = _reload_timed_utils_with_msvcrt(
-        SimpleNamespace(kbhit=lambda: True, getwche=lambda: "\032")
+    characters = iter(["\032"])
+    module = load_windows_timed_utils(
+        SimpleNamespace(kbhit=lambda: True, getwche=lambda: next(characters))
     )
-    monkeypatch.setattr(
-        "chat_downloader.utils.retry_utils.stdin_is_interactive", lambda: True
-    )
-    monkeypatch.setattr(module, "echo", lambda _text: None)
+    monkeypatch.setattr(retry_utils, "stdin_is_interactive", lambda: True)
+    monkeypatch.setattr(retry_utils, "timed_input", module.timed_input)
+    module.echo = lambda _text: None
     token = _POLLING_STOP_EVENT.set(threading.Event())
     try:
         with pytest.raises(ChatDownloaderError, match="input closed"):
-            RetryPolicy(retry_timeout=-1).wait(1)
+            retry_utils.RetryPolicy(retry_timeout=-1).wait(1)
+        assert next(characters, None) is None
     finally:
         _POLLING_STOP_EVENT.reset(token)
-        _restore_timed_utils(original_msvcrt)
 
 
 @pytest.mark.parametrize(
