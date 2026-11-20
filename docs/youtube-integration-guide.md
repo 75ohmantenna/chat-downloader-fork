@@ -247,6 +247,13 @@ response supplies a reload token and status is known. Direct InnerTube bootstrap
 already supplies normalized continuation hints and skips this enrichment.
 Each bootstrap profile attempt can make its own chat-page request.
 
+When YouTube explicitly marks a video as members-only and supplies neither
+usable chat submenu tokens nor a chat-page reload token, bootstrap raises
+`VideoUnplayable` with YouTube's reason. This access restriction does not
+trigger the missing-token warning, a `--testing` pause, or a request-profile
+switch. If YouTube supplies a usable continuation, bootstrap can still use
+it to retrieve chat.
+
 The final InnerTube fallback retries failed `player` and `next` operations
 independently within the request budget; a successful `player` response is not
 downloaded again when `next` fails. Chat-page enrichment uses the same bounded

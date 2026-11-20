@@ -99,6 +99,23 @@ def _player_captcha_error(error_screen: JSONDict) -> CaptchaChallengeRequired | 
     )
 
 
+def _members_only_error(playability_status: JSONDict) -> VideoUnplayable | None:
+    """Identify the player offer that denies access to members-only content."""
+    error_screen = get_dict(playability_status, "errorScreen")
+    offer = get_dict(error_screen, "playerLegacyDesktopYpcOfferRenderer")
+    if (
+        get_str(playability_status, "status") != "UNPLAYABLE"
+        or get_str(offer, "offerId") != "sponsors_only_video"
+    ):
+        return None
+    reason = (
+        get_str(playability_status, "reason")
+        or get_str(offer, "offerDescription")
+        or "Members-only content"
+    )
+    return VideoUnplayable(reason)
+
+
 def _raise_for_early_playability(
     playability_status: JSONDict,
     player_response_info: JSONDict,
@@ -111,6 +128,9 @@ def _raise_for_early_playability(
             "Age-restricted videos may not have accessible chat."
         )
         raise VideoUnavailable(msg)
+
+    if membership_error := _members_only_error(playability_status):
+        raise membership_error
 
     if is_unplayable(player_response_info):
         debug_log("Video detected as unplayable")

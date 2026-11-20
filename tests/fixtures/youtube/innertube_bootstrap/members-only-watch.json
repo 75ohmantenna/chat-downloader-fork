@@ -1,0 +1,47 @@
+{
+  "player_response": {
+    "playabilityStatus": {
+      "status": "UNPLAYABLE",
+      "reason": "Join this channel to get access to members-only content like this video, and other exclusive perks.",
+      "errorScreen": {
+        "playerLegacyDesktopYpcOfferRenderer": {
+          "itemTitle": "Members-only content",
+          "offerDescription": "Join this channel to get access to members-only content like this video, and other exclusive perks.",
+          "offerId": "sponsors_only_video"
+        }
+      }
+    },
+    "videoDetails": {
+      "videoId": "example0001",
+      "isLiveContent": true
+    },
+    "microformat": {
+      "playerMicroformatRenderer": {
+        "liveBroadcastDetails": {
+          "isLiveNow": false
+        }
+      }
+    }
+  },
+  "initial_data": {
+    "contents": {
+      "twoColumnWatchNextResults": {
+        "conversationBar": {
+          "conversationBarRenderer": {
+            "availabilityMessage": {
+              "messageRenderer": {
+                "text": {
+                  "runs": [
+                    {
+                      "text": "Live chat replay was turned off for this video."
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

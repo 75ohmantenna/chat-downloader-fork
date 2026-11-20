@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.debugging import log
@@ -27,10 +26,17 @@ from .constants_patterns import (
     _YT_LIVE_CHAT_URL,
 )
 from .helpers import extract_chat_submenu_continuations
-from .playability import _player_captcha_error, raise_if_playability_error
+from .playability import (
+    _members_only_error,
+    _player_captcha_error,
+    is_age_gated,
+    raise_if_playability_error,
+)
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     import requests
 
     from chat_downloader.models import ChatRequest
@@ -48,13 +54,28 @@ _GENERIC_UNPLAYABLE_REASONS = frozenset(
 )
 
 
-def _has_generic_unplayable_reason(player_response: JSONDict) -> bool:
+def _has_generic_unplayable_reason(playability: JSONDict) -> bool:
     """Return whether a profile retry could clarify a generic failure."""
-    playability = get_dict(player_response, "playabilityStatus")
     if get_str(playability, "status") != "UNPLAYABLE":
         return False
     reason = (get_str(playability, "reason") or "").strip().rstrip(".").casefold()
     return reason in _GENERIC_UNPLAYABLE_REASONS
+
+
+def _watch_reload_token(yt_initial_data: JSONDict) -> str:
+    """Find the watch-page token used to load the chat page."""
+    token = multi_get(
+        yt_initial_data,
+        "contents",
+        "twoColumnWatchNextResults",
+        "conversationBar",
+        "liveChatRenderer",
+        "continuations",
+        0,
+        "reloadContinuationData",
+        "continuation",
+    )
+    return token if isinstance(token, str) and token.strip() else ""
 
 
 def _parse_chat_bootstrap(response: requests.Response) -> JSONDict:
@@ -65,6 +86,48 @@ def _parse_chat_bootstrap(response: requests.Response) -> JSONDict:
         msg = "YouTube chat-page bootstrap did not supply submenu tokens"
         raise ParsingError(msg)
     return data
+
+
+def _enrich_chat_submenus(
+    session_get: Callable[..., requests.Response],
+    client_continuation: str,
+    params: ChatRequest | None,
+    *,
+    is_replay: bool,
+) -> dict[str, str]:
+    """Refresh submenu tokens through the chat-page bootstrap."""
+    try:
+        if not client_continuation:
+            msg = "liveChat reload continuation token missing"
+            raise KeyError(msg)  # noqa: TRY301 — use the same warning as a failed chat-page bootstrap
+        chat_url = _YT_LIVE_CHAT_REPLAY_URL if is_replay else _YT_LIVE_CHAT_URL
+        dict_live_chats = request_bootstrap_json(
+            session_get,
+            f"{chat_url}?continuation={client_continuation}",
+            _parse_chat_bootstrap,
+            params,
+        )
+        canonical_labels = {
+            label: f"{label} replay" if is_replay else label
+            for label in ("Top chat", "Live chat")
+        }
+        continuations = extract_chat_submenu_continuations(
+            dict_live_chats,
+            fallback_labels=list(canonical_labels.values()),
+        )
+    except (KeyError, TypeError, IndexError, ParsingError) as exc:
+        log(
+            "warning",
+            "Unable to enrich chat submenu continuation tokens from "
+            "chat-page bootstrap "
+            f"({type(exc).__name__}). Falling back to playability "
+            "checks when required.",
+        )
+        return {}
+    return {
+        canonical_labels.get(label, label): token
+        for label, token in continuations.items()
+    }
 
 
 def bootstrap_video(
@@ -129,11 +192,23 @@ class YouTubeVideoInitializationMixin:
                 _player_captcha_error(get_dict(playability, "errorScreen"))
                 or player_captcha
             )
+            membership_error = _members_only_error(playability)
+            if membership_error and is_age_gated(player_response_info):
+                membership_error = None
+            generic_unplayable = (
+                membership_error is None and _has_generic_unplayable_reason(playability)
+            )
             unknown_status = details["status"] == "unknown"
+            client_continuation = _watch_reload_token(yt_initial_data)
+            if membership_error and not (
+                client_continuation
+                or any(token.strip() for token in details["continuation_info"].values())
+            ):
+                raise player_captcha or membership_error
             if (
                 unknown_status
                 and get_str(playability, "status") not in {"", "OK"}
-                and not _has_generic_unplayable_reason(player_response_info)
+                and not generic_unplayable
             ):
                 raise_if_playability_error(
                     player_response_info, yt_initial_data, player_captcha=player_captcha
@@ -141,57 +216,19 @@ class YouTubeVideoInitializationMixin:
             if not unknown_status and not yt_initial_data.get(
                 "_chat_downloader_continuation_info"
             ):
-                # Refresh submenu tokens through the chat-page bootstrap.
-                try:
-                    client_continuation = multi_get(
-                        yt_initial_data,
-                        "contents",
-                        "twoColumnWatchNextResults",
-                        "conversationBar",
-                        "liveChatRenderer",
-                        "continuations",
-                        0,
-                        "reloadContinuationData",
-                        "continuation",
-                    )
-                    if not client_continuation:
-                        msg = "liveChat reload continuation token missing"
-                        raise KeyError(msg)  # noqa: TRY301 — intentionally caught by the enclosing except to trigger the fallback-path warning
-                    is_replay = details["status"] in REPLAY_STATUSES
-                    chat_url = (
-                        _YT_LIVE_CHAT_REPLAY_URL if is_replay else _YT_LIVE_CHAT_URL
-                    )
-                    dict_live_chats = request_bootstrap_json(
-                        partial(bootstrap.request, proto._session_get),
-                        f"{chat_url}?continuation={client_continuation}",
-                        _parse_chat_bootstrap,
+                details["continuation_info"].update(
+                    _enrich_chat_submenus(
+                        lambda url: bootstrap.request(proto._session_get, url),
+                        client_continuation,
                         params,
+                        is_replay=details["status"] in REPLAY_STATUSES,
                     )
-                    canonical_labels = {
-                        label: f"{label} replay" if is_replay else label
-                        for label in ("Top chat", "Live chat")
-                    }
+                )
 
-                    continuation_info = extract_chat_submenu_continuations(
-                        dict_live_chats,
-                        fallback_labels=list(canonical_labels.values()),
-                    )
-                    for source_label, token in continuation_info.items():
-                        details["continuation_info"][
-                            canonical_labels.get(source_label, source_label)
-                        ] = token
-                except (KeyError, TypeError, IndexError, ParsingError) as exc:
-                    log(
-                        "warning",
-                        "Unable to enrich chat submenu continuation tokens from "
-                        "chat-page bootstrap "
-                        f"({type(exc).__name__}). Falling back to playability "
-                        "checks when required.",
-                    )
-
-            bootstrap_unplayable = bool(
-                yt_initial_data.get("_chat_downloader_continuation_info")
-            ) and _has_generic_unplayable_reason(player_response_info)
+            bootstrap_unplayable = (
+                bool(yt_initial_data.get("_chat_downloader_continuation_info"))
+                and generic_unplayable
+            )
             if (
                 details["continuation_info"]
                 and not bootstrap_unplayable
@@ -202,10 +239,7 @@ class YouTubeVideoInitializationMixin:
             next_profile = (
                 get_next_request_profile(proto._request_profile, site="youtube")
                 if getattr(proto, "_auto_profile_fallback", False)
-                and (
-                    unknown_status
-                    or _has_generic_unplayable_reason(player_response_info)
-                )
+                and (unknown_status or generic_unplayable)
                 else None
             )
             if (
