@@ -177,9 +177,6 @@ def test_youtube_initial_page_forwards_retry_after(status, sleeps):
         "https://www.youtube.com/watch?v=example",
         get,
         ChatRequest(max_attempts=2, retry_timeout=0),
-        "unmatched-initial",
-        "unmatched-config",
-        "unmatched-player",
     ) == ({"contents": {}}, {}, {})
     assert get.call_count == 2
     assert sleeps == [7.0]
@@ -217,9 +214,6 @@ def test_raised_http_errors_preserve_delay_across_request_boundaries(
             "https://www.youtube.com/watch?v=example",
             request,
             options,
-            "unmatched-initial",
-            "unmatched-config",
-            "unmatched-player",
         )
         assert result[0] == {"contents": {}}
     else:
@@ -262,9 +256,6 @@ def test_initial_page_server_hint_does_not_extend_attempt_budget(attempts, sleep
             "https://www.youtube.com/watch?v=example",
             get,
             ChatRequest(max_attempts=attempts, retry_timeout=0),
-            "unmatched-initial",
-            "unmatched-config",
-            "unmatched-player",
         )
     assert get.call_count == attempts
     assert sleeps == [7.0] * (attempts - 1)

@@ -30,9 +30,6 @@ def _initial(session_get, params):
         _WATCH_URL,
         session_get,
         params,
-        r"ytInitialData",
-        r"ytcfg",
-        r"ytInitialPlayerResponse",
     )
 
 
@@ -64,20 +61,6 @@ def _sequence(*responses):
         return response
 
     return request, calls
-
-
-def _patch_initial_parser(monkeypatch, title, *, valid=True):
-    monkeypatch.setattr(
-        _yt_initial, "regex_search", lambda *_a, **_k: "{}" if valid else None
-    )
-    monkeypatch.setattr(
-        _yt_initial,
-        "try_parse_json",
-        lambda _value, default=None: (
-            {"contents": {}} if valid and default is None else default
-        ),
-    )
-    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: title)
 
 
 def test_get_innertube_context_normalizes_without_mutating_input() -> None:
@@ -212,8 +195,9 @@ def test_continuation_diagnostics_accumulate_retries_and_failure_categories(
     ids=["http-500", "http-429", "chat-request"],
 )
 def test_get_initial_info_retries(monkeypatch, status, text, title, typed_request):
-    request, calls = _sequence(_page(status, text), _page(200, "<html>ok</html>"))
-    _patch_initial_parser(monkeypatch, title)
+    success = '<script>var ytInitialData = {"contents":{}};</script>'
+    request, calls = _sequence(_page(status, text), _page(200, success))
+    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: title)
     params = (
         ChatRequest(url=_WATCH_URL, max_attempts=2)
         if typed_request
@@ -476,10 +460,7 @@ def test_get_continuation_info_raises_challenge(
 )
 def test_get_initial_info_exhausted(monkeypatch, status, text, title, fragments):
     request, calls = _sequence(_page(status, text), _page(status, text))
-    if status == 503:
-        _patch_initial_parser(monkeypatch, title, valid=False)
-    else:
-        monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: title)
+    monkeypatch.setattr(_yt_initial, "get_title_of_webpage", lambda _html: title)
     with pytest.raises(RetriesExceeded) as exc_info:
         _initial(request, {"max_attempts": 2, "retry_timeout": 0})
     assert len(calls) == 2
@@ -507,11 +488,8 @@ def test_get_initial_info_raises_retries_exceeded_on_network_error() -> None:
         ("", "other"),
     ],
 )
-def test_initial_page_diagnostics_report_safe_final_host(
-    final_url, host, caplog, monkeypatch
-):
+def test_initial_page_diagnostics_report_safe_final_host(final_url, host, caplog):
     caplog.set_level("DEBUG", logger="chat_downloader")
-    _patch_initial_parser(monkeypatch, "", valid=False)
     result = SimpleNamespace(status_code=200, text="<html></html>", url=final_url)
     with pytest.raises(ParsingError):
         _initial(lambda _, **_kwargs: result, None)

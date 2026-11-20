@@ -5,14 +5,10 @@
 # URL regex patterns for initial data extraction
 from __future__ import annotations
 
-_YT_INITIAL_BOUNDARY_RE = r"\s*(?:var\s+(?:meta|head)|</script|\n)"
 _YT_INITIAL_DATA_RE = (
-    r'(?:window\s*\[\s*["\']ytInitialData["\']\s*\]|ytInitialData)\s*=\s*'
-    r"({.+?})\s*;" + _YT_INITIAL_BOUNDARY_RE
+    r"""(?:\bwindow\s*\[\s*["']ytInitialData["']\s*\]|\bytInitialData)\s*=\s*(?=\{)"""
 )
-_YT_INITIAL_PLAYER_RESPONSE_RE = (
-    r"ytInitialPlayerResponse\s*=\s*({.+?})\s*;" + _YT_INITIAL_BOUNDARY_RE
-)
+_YT_INITIAL_PLAYER_RESPONSE_RE = r"\bytInitialPlayerResponse\s*=\s*(?=\{)"
 _YT_CFG_RE = r"ytcfg\.set\s*\(\s*({.+?})\s*\)\s*;"
 
 # URL base

@@ -123,7 +123,4 @@ def test_get_initial_info_raises_parsing_error_when_html_unparseable() -> None:
             url="https://www.youtube.com/watch?v=abc",
             session_get=MagicMock(return_value=response),
             params=None,
-            yt_initial_data_re=r"ytInitialData\s*=\s*({.*?});",
-            yt_cfg_re=r"ytcfg\.set\(({.*?})\);",
-            yt_initial_player_response_re=r"ytInitialPlayerResponse\s*=\s*({.*?});",
         )

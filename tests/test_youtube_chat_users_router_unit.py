@@ -53,12 +53,11 @@ def test_live_user_router_resolves_video_before_chat_lookup(monkeypatch) -> None
     router = _LiveRouter()
     captured = {}
 
-    def fake_get_initial_info(page_url, session_get, params, *patterns):
+    def fake_get_initial_info(page_url, session_get, params):
         captured.update(
             page_url=page_url,
             session_get=session_get,
             params=params,
-            pattern_count=len(patterns),
         )
         return {}, {}, {"videoDetails": {"videoId": "LLpNUqHVam8"}}
 
@@ -75,7 +74,6 @@ def test_live_user_router_resolves_video_before_chat_lookup(monkeypatch) -> None
         "page_url": url,
         "session_get": router._session_get,
         "params": request,
-        "pattern_count": 3,
     }
 
 

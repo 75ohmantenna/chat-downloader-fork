@@ -16,12 +16,7 @@ from chat_downloader.utils.json_types import get_dict, get_str
 from .bootstrap_diagnostics import BootstrapRequests
 from .client_requests_bootstrap import get_innertube_video_bootstrap
 from .client_requests_initial import _get_initial_info
-from .constants_patterns import (
-    _YT_CFG_RE,
-    _YT_HOME,
-    _YT_INITIAL_DATA_RE,
-    _YT_INITIAL_PLAYER_RESPONSE_RE,
-)
+from .constants_patterns import _YT_HOME
 from .playability import _raise_for_popup
 from .video_status import parse_video_details, video_details_to_dict
 
@@ -85,9 +80,6 @@ class YouTubeVideoMetadataCoreMixin:
                     original_url,
                     partial(bootstrap.request, proto._session_get),
                     params,
-                    _YT_INITIAL_DATA_RE,
-                    _YT_CFG_RE,
-                    _YT_INITIAL_PLAYER_RESPONSE_RE,
                 )
             except (CaptchaChallengeRequired, ParsingError) as error:
                 if video_type == "clip":

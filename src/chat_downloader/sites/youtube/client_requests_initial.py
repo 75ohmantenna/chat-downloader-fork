@@ -4,7 +4,9 @@
 
 from __future__ import annotations
 
+import re
 from html.parser import HTMLParser
+from json import JSONDecodeError, JSONDecoder
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
@@ -29,6 +31,11 @@ from chat_downloader.utils.string_utils import (
 )
 
 from .client_challenges import raise_if_initial_challenge_response
+from .constants_patterns import (
+    _YT_CFG_RE,
+    _YT_INITIAL_DATA_RE,
+    _YT_INITIAL_PLAYER_RESPONSE_RE,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -50,18 +57,41 @@ _INITIAL_PAGE_HOSTS = frozenset(
 )
 
 
-class _InitialDataScriptParser(HTMLParser):
-    """Read dedicated initial-data scripts without matching lookalike attributes."""
+# Recognize the existing statement boundaries after decoding the object.
+_ASSIGNMENT_END = re.compile(r"\s*;\s*(?:$|var\s+(?:meta|head)|\n)")
+_SCRIPT_TYPE = re.compile(
+    r"module|(?:application|text)/(?:x-)?(?:ecma|java)script"
+    r"|text/(?:javascript1\.[0-5]|jscript|livescript)"
+)
+_JS_STRING_OR_COMMENT = (
+    r""""(?:[^"\\]|\\[\s\S])*"|'(?:[^'\\]|\\[\s\S])*'|"""
+    r"`(?:[^`\\]|\\[\s\S])*`|(?:<!--|//)[^\r\n]*|/\*[\s\S]*?\*/"
+)
 
-    def __init__(self) -> None:
+
+class _BootstrapScriptParser(HTMLParser):
+    """Read YouTube bootstrap scripts and their JSON assignments."""
+
+    def __init__(self, html: str) -> None:
         super().__init__()
         self.reading = False
+        self.dedicated = False
         self.parts: list[str] = []
-        self.result: JSONDict = {}
+        self.scripts: list[str] = []
+        self.initial_data: JSONDict = {}
+        self.feed(html)
+        if not self.scripts and not html.lstrip().startswith("<"):
+            self.scripts.append(html)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "script":
-            self.reading = ("id", "yt-initial-data") in attrs
+            attributes = dict(attrs)
+            self.dedicated = ("id", "yt-initial-data") in attrs
+            script_type = (attributes.get("type") or "").strip().lower()
+            self.reading = self.dedicated or (
+                "src" not in attributes
+                and (not script_type or _SCRIPT_TYPE.fullmatch(script_type) is not None)
+            )
             self.parts = []
 
     def handle_data(self, data: str) -> None:
@@ -70,19 +100,36 @@ class _InitialDataScriptParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "script" and self.reading:
-            value = try_parse_json("".join(self.parts), None)
-            if isinstance(value, dict) and value and not self.result:
-                self.result = value
+            script = "".join(self.parts)
+            if self.dedicated:
+                value = try_parse_json(script)
+                if isinstance(value, dict) and value and not self.initial_data:
+                    self.initial_data = value
+            else:
+                self.scripts.append(script)
             self.reading = False
+
+    def assignment(self, pattern: str) -> JSONDict:
+        """Return the first complete nonempty object assigned to a bootstrap name."""
+        decoder = JSONDecoder()
+        for script in self.scripts:
+            for match in re.finditer(rf"{_JS_STRING_OR_COMMENT}|({pattern})", script):
+                if match[1] is None:
+                    continue
+                try:
+                    value, end = decoder.raw_decode(script, match.end())
+                except JSONDecodeError:
+                    continue
+                # The assignment patterns match only values starting with an object.
+                if value and _ASSIGNMENT_END.match(script, end):
+                    return cast("JSONDict", value)
+        return {}
 
 
 def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop are intrinsic
     url: str,
     session_get: Callable[..., Any],
     params: ChatRequest | dict[str, Any] | None,
-    yt_initial_data_re: str,
-    yt_cfg_re: str,
-    yt_initial_player_response_re: str,
 ) -> tuple[JSONDict, JSONDict, JSONDict]:
     """Get initial YouTube page data with retry handling."""
     if params is None:
@@ -162,24 +209,21 @@ def _get_initial_info(  # noqa: C901 — HTTP status-code dispatch + retry loop 
                     )
                     raise RetriesExceeded(msg)
 
-            script_parser = _InitialDataScriptParser()
-            script_parser.feed(html)
-            yt_initial_data = script_parser.result or try_parse_json(
-                regex_search(html, yt_initial_data_re), None
+            script_parser = _BootstrapScriptParser(html)
+            yt_initial_data = script_parser.initial_data or script_parser.assignment(
+                _YT_INITIAL_DATA_RE
             )
 
-            if not isinstance(yt_initial_data, dict) or not yt_initial_data:
+            if not yt_initial_data:
                 log("debug", f"HTML ({len(html)} chars): {html[:500]}")
                 msg = "Unable to parse initial video data"
                 raise ParsingError(msg)
 
-            cfg = regex_search(html, yt_cfg_re)
+            cfg = regex_search(html, _YT_CFG_RE)
             ytcfg = cast("JSONDict", try_parse_json(cfg, {}))
-            player_response = regex_search(
-                html,
-                yt_initial_player_response_re,
+            player_response_info = script_parser.assignment(
+                _YT_INITIAL_PLAYER_RESPONSE_RE
             )
-            player_response_info = cast("JSONDict", try_parse_json(player_response, {}))
 
         except (RequestException, OSError) as e:
             log(

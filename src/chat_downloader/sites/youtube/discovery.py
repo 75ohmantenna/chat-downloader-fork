@@ -17,10 +17,7 @@ from .client_requests_initial import _get_initial_info
 from .constants_patterns import (
     _LIVE_PLAYLIST_URL,
     _VIDEO_TYPE_REMAPPING,
-    _YT_CFG_RE,
     _YT_HOME,
-    _YT_INITIAL_DATA_RE,
-    _YT_INITIAL_PLAYER_RESPONSE_RE,
 )
 from .helpers import (
     _extract_browse_continuation_token_from_item,
@@ -207,9 +204,6 @@ class YouTubeDiscoveryMixin:
             _LIVE_PLAYLIST_URL,
             proto._session_get,
             params,
-            _YT_INITIAL_DATA_RE,
-            _YT_CFG_RE,
-            _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
         two_column = multi_get(
             yt_initial_data,
@@ -267,9 +261,6 @@ class YouTubeDiscoveryMixin:
             browse_url,
             proto._session_get,
             request,
-            _YT_INITIAL_DATA_RE,
-            _YT_CFG_RE,
-            _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
         page_contents = _select_videos_tab(yt_info, user_url, video_type)
         api_key = require_innertube_api_key(ytcfg)

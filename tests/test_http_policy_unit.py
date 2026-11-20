@@ -452,9 +452,6 @@ def test_youtube_consumers_cannot_parse_before_decoded_body_limit(
                     server.url,
                     lambda url, **options: http.get(url, **kwargs, **options),
                     None,
-                    "data",
-                    "cfg",
-                    "player",
                 )
             else:
                 _get_continuation_info(server.url, http.post, {"max_attempts": 1})

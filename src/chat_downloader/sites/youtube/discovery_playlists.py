@@ -12,12 +12,7 @@ from chat_downloader.utils.json_types import dig, get_dict, get_list, get_str
 
 from .client_context import _get_innertube_context
 from .client_requests_initial import _get_initial_info
-from .constants_patterns import (
-    _YT_CFG_RE,
-    _YT_HOME,
-    _YT_INITIAL_DATA_RE,
-    _YT_INITIAL_PLAYER_RESPONSE_RE,
-)
+from .constants_patterns import _YT_HOME
 from .discovery import _report_discovery_drift
 from .helpers import (
     _extract_browse_continuation_token_from_item,
@@ -140,9 +135,6 @@ class YouTubePlaylistDiscoveryMixin:
             playlist_url,
             proto._session_get,
             request,
-            _YT_INITIAL_DATA_RE,
-            _YT_CFG_RE,
-            _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
 
         api_key = require_innertube_api_key(ytcfg)

@@ -125,8 +125,10 @@ That page provides:
 
 Initial data can come from a dedicated `yt-initial-data` script containing a
 JSON object or from the legacy `ytInitialData` assignment. A valid dedicated
-script takes precedence; malformed or empty script data falls back to the
-assignment.
+script takes precedence. Malformed or empty script data falls back to the
+assignment. The watch page and chat page decode complete assignment objects,
+so JavaScript-like text inside a JSON string is preserved. The watch page
+reads the player response the same way.
 
 For authenticated requests, explicit `USER_SESSION_ID` and
 `DELEGATED_SESSION_ID` values take precedence over `DATASYNC_ID`. Visitor data

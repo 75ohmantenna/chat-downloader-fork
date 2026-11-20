@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import Mock
 
 import pytest
@@ -117,7 +118,7 @@ def test_video_data_normalizes_params(params):
         ),
     ],
 )
-def test_initial_info_enriches_chat_submenus(monkeypatch, status, items, expected):
+def test_initial_info_enriches_chat_submenus(status, items, expected):
     replay = status == "past"
     token = "client-replay-token" if replay else "client-live-token"
     config = {"cfg": True} if replay else {"INNERTUBE_CLIENT_NAME": "web"}
@@ -134,8 +135,9 @@ def test_initial_info_enriches_chat_submenus(monkeypatch, status, items, expecte
         items,
     )
     bootstrap = wrap("continuationContents.liveChatContinuation.header", header)
-    returns(monkeypatch, "video_initialization.regex_search", "{}")
-    returns(monkeypatch, "video_initialization.try_parse_json", bootstrap)
+    owner._session_get.return_value = http_response(
+        text=f"<script>var ytInitialData = {json.dumps(bootstrap)};</script>"
+    )
     details, ytcfg = owner._get_initial_video_info("abc", None)
     route = "live_chat_replay" if replay else "live_chat"
     owner._session_get.assert_called_once_with(

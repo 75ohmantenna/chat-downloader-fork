@@ -12,12 +12,7 @@ from chat_downloader.errors import VideoUnavailable
 from chat_downloader.utils.json_types import get_dict, get_str
 
 from .client_requests_initial import _get_initial_info
-from .constants_patterns import (
-    _YT_CFG_RE,
-    _YT_HOME,
-    _YT_INITIAL_DATA_RE,
-    _YT_INITIAL_PLAYER_RESPONSE_RE,
-)
+from .constants_patterns import _YT_HOME
 
 if TYPE_CHECKING:
     from chat_downloader.models import ChatRequest
@@ -40,9 +35,6 @@ class YouTubeChatUsersRouterMixin:
             f"{_YT_HOME}/{match.group('type') or ''}{match.group('id')}/live",
             proto._session_get,
             params,
-            _YT_INITIAL_DATA_RE,
-            _YT_CFG_RE,
-            _YT_INITIAL_PLAYER_RESPONSE_RE,
         )
         video_id = get_str(get_dict(player_response, "videoDetails"), "videoId")
         if not video_id or re.fullmatch(r"[0-9A-Za-z_-]{11}", video_id) is None:

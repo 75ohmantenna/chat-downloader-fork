@@ -23,7 +23,6 @@ from tests.youtube_third_helpers import http_response, patch, response, returns,
 
 HOME = "https://www.youtube.com"
 CONTINUATION_URL = f"{HOME}/youtubei/v1/live_chat/get_live_chat"
-INITIAL_PATTERNS = (r"ytInitialData", r"ytcfg", r"ytInitialPlayerResponse")
 
 
 class _FakeSession:
@@ -315,23 +314,20 @@ def test_continuation_errors_and_recovery(failure):
 def test_requests_reject_disabled_attempts(initial):
     with pytest.raises(ValueError, match="max_attempts"):
         if initial:
-            _get_initial_info(
-                f"{HOME}/watch?v=test", Mock(), {"max_attempts": 0}, *INITIAL_PATTERNS
-            )
+            _get_initial_info(f"{HOME}/watch?v=test", Mock(), {"max_attempts": 0})
         else:
             _get_continuation_info(CONTINUATION_URL, Mock(), {"max_attempts": 0})
 
 
 @pytest.mark.parametrize("mode", ["missing", "success", "network-retry"])
-def test_initial_info(monkeypatch, mode):
-    returns(monkeypatch, "client_requests_initial.regex_search", "{}")
-    patch(
-        monkeypatch,
-        "client_requests_initial.try_parse_json",
-        lambda _value, default=None: {"contents": {}} if default is None else default,
+def test_initial_info(mode):
+    reply = http_response(
+        404 if mode == "missing" else 200,
+        text=(
+            "<title>Missing</title>"
+            '<script>var ytInitialData = {"contents":{}};</script>'
+        ),
     )
-    returns(monkeypatch, "client_requests_initial.get_title_of_webpage", "Missing")
-    reply = http_response(404 if mode == "missing" else 200, text="<html>ok</html>")
     get = Mock(return_value=reply)
     params = None
     if mode == "network-retry":
@@ -339,13 +335,9 @@ def test_initial_info(monkeypatch, mode):
         params = {"max_attempts": 2}
     if mode == "missing":
         with pytest.raises(VideoNotFound, match="Missing"):
-            _get_initial_info(
-                f"{HOME}/watch?v=missing", get, {"max_attempts": 1}, *INITIAL_PATTERNS
-            )
+            _get_initial_info(f"{HOME}/watch?v=missing", get, {"max_attempts": 1})
     else:
-        result = _get_initial_info(
-            f"{HOME}/watch?v=test", get, params, *INITIAL_PATTERNS
-        )
+        result = _get_initial_info(f"{HOME}/watch?v=test", get, params)
         assert result == ({"contents": {}}, {}, {})
         assert get.call_count == (2 if mode == "network-retry" else 1)
 

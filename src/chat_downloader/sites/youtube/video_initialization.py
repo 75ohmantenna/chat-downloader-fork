@@ -13,8 +13,6 @@ from chat_downloader.request_profiles import get_next_request_profile
 from chat_downloader.sites.base import request_diagnostics_scope
 from chat_downloader.utils.dict_utils import multi_get
 from chat_downloader.utils.json_types import get_dict, get_str
-from chat_downloader.utils.json_utils import try_parse_json
-from chat_downloader.utils.string_utils import regex_search
 
 from .bootstrap_diagnostics import (
     BootstrapRequests,
@@ -22,6 +20,7 @@ from .bootstrap_diagnostics import (
     publish_bootstrap_snapshot,
 )
 from .client_requests_bootstrap import request_bootstrap_json
+from .client_requests_initial import _BootstrapScriptParser
 from .constants_patterns import (
     _YT_INITIAL_DATA_RE,
     _YT_LIVE_CHAT_REPLAY_URL,
@@ -59,8 +58,8 @@ def _has_generic_unplayable_reason(player_response: JSONDict) -> bool:
 
 
 def _parse_chat_bootstrap(response: requests.Response) -> JSONDict:
-    data = try_parse_json(regex_search(response.text, _YT_INITIAL_DATA_RE))
-    if not isinstance(data, dict) or not extract_chat_submenu_continuations(
+    data = _BootstrapScriptParser(response.text).assignment(_YT_INITIAL_DATA_RE)
+    if not extract_chat_submenu_continuations(
         data, fallback_labels=["Top chat", "Live chat"]
     ):
         msg = "YouTube chat-page bootstrap did not supply submenu tokens"

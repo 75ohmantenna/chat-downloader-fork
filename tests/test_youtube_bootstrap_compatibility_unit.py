@@ -16,15 +16,11 @@ from chat_downloader.sites.youtube.client_context import (
     _get_innertube_context,
 )
 from chat_downloader.sites.youtube.client_requests_initial import _get_initial_info
-from chat_downloader.sites.youtube.constants_patterns import (
-    _YT_CFG_RE,
-    _YT_INITIAL_DATA_RE,
-    _YT_INITIAL_PLAYER_RESPONSE_RE,
-)
 from chat_downloader.sites.youtube.helpers import (
     _browse_api_headers,
     _update_browse_visitor_data,
 )
+from chat_downloader.sites.youtube.video_initialization import _parse_chat_bootstrap
 from tests.youtube_third_helpers import http_response
 
 HOME = "https://www.youtube.com"
@@ -36,9 +32,6 @@ def _read_page(html):
         HOME,
         Mock(return_value=http_response(text=html)),
         None,
-        _YT_INITIAL_DATA_RE,
-        _YT_CFG_RE,
-        _YT_INITIAL_PLAYER_RESPONSE_RE,
     )
 
 
@@ -49,6 +42,45 @@ def test_dedicated_script_bootstraps_initial_config_and_player():
     }
     assert config == {"INNERTUBE_API_KEY": "fixture-key"}
     assert player == {"videoDetails": {"videoId": "abcdefghijk"}}
+
+
+def test_script_assignments_preserve_title_and_chat_continuation():
+    html = FIXTURE.with_name("initial_data_assignments.html").read_text()
+    title = "script }; var metadata in title"
+    initial, config, player = _read_page(html)
+
+    assert initial["title"] == title
+    assert config == {"INNERTUBE_API_KEY": "fixture-key"}
+    assert player == {"videoDetails": {"title": title, "videoId": "abcdefghijk"}}
+    assert _parse_chat_bootstrap(http_response(text=html)) == initial
+
+
+@pytest.mark.parametrize(
+    "decoy",
+    [
+        """<div data-title='ytInitialData = {"title":"decoy"};'>page</div>""",
+        """<!-- <script>ytInitialData = {"title":"decoy"};</script> -->""",
+        """<script>var note = 'ytInitialData = {"title":"decoy"};';</script>""",
+        """<script>/* ytInitialData = {"title":"decoy"}; */</script>""",
+        """<script>// ytInitialData = {"title":"decoy"};\n</script>""",
+        """<script><!-- ytInitialData = {"title":"decoy"};\n</script>""",
+        """<script src="remote.js">ytInitialData = {"title":"decoy"};</script>""",
+        """<script type="text/plain">ytInitialData = {"title":"decoy"};</script>""",
+        """<script>var pattern = /ytInitialData = {"title":"decoy"};/;</script>""",
+        """<script>ytInitialData = {broken};</script>""",
+        """<script>ytInitialData = {};</script>""",
+    ],
+)
+def test_valid_assignments_follow_decoys_or_invalid_assignments(decoy):
+    html = decoy + (
+        '<script type="module">window.ytInitialData = {"title":"valid"};</script>'
+    )
+    assert _read_page(html)[0] == {"title": "valid"}
+
+
+def test_bare_script_assignments_are_supported():
+    html = 'var ytInitialData = {"title":"valid"};\n'
+    assert _read_page(html)[0] == {"title": "valid"}
 
 
 @pytest.mark.parametrize(
@@ -166,7 +198,16 @@ def test_invalid_explicit_delegated_id_uses_datasync(value):
     assert headers["x-goog-pageid"] == "page"
 
 
-@pytest.mark.parametrize("value", ["[1]", '"text"', "true"])
+@pytest.mark.parametrize("value", ["[1]", '"text"', "true", "{broken}", "{}"])
 def test_legacy_initial_data_also_requires_object(value):
     with pytest.raises(ParsingError, match="Unable to parse initial video data"):
         _read_page(f"<script>ytInitialData = {value};</script>")
+
+
+@pytest.mark.parametrize("value", ["[1]", "{broken}", '{"valid":true} + extra'])
+def test_invalid_player_assignment_returns_empty_object(value):
+    html = (
+        '<script>ytInitialData = {"valid":true};\n'
+        f"ytInitialPlayerResponse = {value};</script>"
+    )
+    assert _read_page(html)[2] == {}
