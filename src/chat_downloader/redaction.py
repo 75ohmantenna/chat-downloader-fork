@@ -61,7 +61,7 @@ _APPARENT_USERINFO_RE = re.compile(
     r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+:[^@\s/'\"<>]+@"
 )
 _QUERY_PAIR_RE = re.compile(r"([?&])([^=\s&#]+)(=)([^&#\s'\"<>]*)")
-_GOOGLE_API_KEY_RE = re.compile(r"^AIza[A-Za-z0-9_-]{20,}$")
+_GOOGLE_API_KEY_RE = re.compile(r"AIza[A-Za-z0-9_-]{20,}")
 _LABELED_VALUE_RE = re.compile(
     r"(?i)\b([A-Za-z][A-Za-z0-9_-]*)\s*([:=])\s*"
     r"((?:bearer\s+)?[^\s,;]+)"
@@ -132,8 +132,10 @@ def _is_sensitive_key(key: str) -> bool:
 
 def _is_sensitive_query_value(key: str, value: str) -> bool:
     """Return whether a query value is credential-shaped or token-bearing."""
+    # A URL in prose can absorb punctuation or other text after the key. A
+    # credential-shaped prefix is enough to redact the entire query value.
     return _is_sensitive_key(key) or (
-        key.lower() == "key" and _GOOGLE_API_KEY_RE.fullmatch(value) is not None
+        key.lower() == "key" and _GOOGLE_API_KEY_RE.match(value) is not None
     )
 
 

@@ -141,6 +141,24 @@ def test_redacts_google_api_key_in_generic_key_query() -> None:
     assert "key=%3Credacted%3E" in rendered
 
 
+@pytest.mark.parametrize(
+    "url", ["https://www.youtube.com/youtubei/v1/live_chat", "/youtubei/v1/live_chat"]
+)
+@pytest.mark.parametrize("suffix", [".", ").", ":detail", "%2E", "&v=video-id"])
+def test_redacts_google_api_key_adjacent_to_log_punctuation(url, suffix) -> None:
+    api_key = "AIza" + "A" * 35
+
+    rendered = red.render_for_log(
+        f"Endpoint: {url}?%6Bey={api_key}{suffix} Last error: HTTP 403"
+    )
+
+    assert api_key not in rendered
+    assert "redacted" in rendered
+    assert "Last error: HTTP 403" in rendered
+    if suffix.startswith("&"):
+        assert suffix in rendered
+
+
 def test_redacts_tokens_from_urllib3_request_target_log() -> None:
     api_key = "AIza" + "A" * 35
     continuation = "opaque-continuation"
