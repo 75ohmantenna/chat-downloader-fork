@@ -68,6 +68,13 @@ def chat_request():
     return ChatRequest(url="https://example.com/watch?v=abc")
 
 
+@pytest.mark.parametrize("name", ["overwrite", "sort_keys", "interruptible_retry"])
+@pytest.mark.parametrize("value", ["false", 0, None])
+def test_request_boolean_fields_require_bools(name, value):
+    with pytest.raises(ValueError, match=f"{name} must be a boolean"):
+        ChatRequest.from_kwargs(**{name: value})
+
+
 def test_request_defaults_and_serialization(chat_request):
     request = chat_request
     expected = {

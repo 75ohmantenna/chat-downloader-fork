@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from unittest.mock import patch
 
 import pytest
 
@@ -379,6 +380,14 @@ def test_microseconds_to_timestamp_with_float() -> None:
     result = microseconds_to_timestamp(microseconds)
     assert isinstance(result, str)
     assert "2020" in result
+
+
+def test_pre_epoch_timestamp_avoids_platform_conversion():
+    with patch("chat_downloader.utils.time_utils.dt", wraps=dt) as datetime_module:
+        datetime_module.datetime.fromtimestamp.side_effect = OSError
+        assert microseconds_to_timestamp(-1, "%Y-%m-%d %H:%M:%S.%f") == (
+            "1969-12-31 23:59:59.999999"
+        )
 
 
 @pytest.mark.parametrize(

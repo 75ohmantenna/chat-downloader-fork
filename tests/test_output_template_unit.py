@@ -4,11 +4,14 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from chat_downloader.errors import InvalidParameter
 from chat_downloader.models import ChatRequest
 from chat_downloader.output.continuous_write import ContinuousWriter
+from chat_downloader.output.targets import _expand_output_file_name
 from chat_downloader.sites.models import Chat
 
 
@@ -37,3 +40,21 @@ def test_literal_braces_and_supported_fields_expand(tmp_path) -> None:
         chat.attach_writer(ContinuousWriter(path, lazy_initialise=True))
         assert list(chat) == [{}]
     assert (tmp_path / "{archive}_Example_123.txt").read_text() == "hello\n"
+
+
+def test_generated_path_reports_unsupported_filesystem_encoding(monkeypatch) -> None:
+    with (
+        monkeypatch.context() as patch,
+        pytest.raises(
+            InvalidParameter, match="Output path could not be encoded as ascii"
+        ),
+    ):
+        patch.setattr(os, "fsencode", lambda value: value.encode("ascii"))
+        _expand_output_file_name("{title}.txt", title="日本語", video_id=None)
+
+
+def test_generated_path_reports_invalid_unicode() -> None:
+    with pytest.raises(
+        InvalidParameter, match="Output path could not be encoded as utf-8"
+    ):
+        _expand_output_file_name("{title}.txt", title="broken\ud800", video_id=None)

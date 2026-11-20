@@ -10,6 +10,7 @@ import json
 import os
 import time
 from abc import ABC, abstractmethod
+from codecs import BOM_UTF8, BOM_UTF16_BE, BOM_UTF16_LE
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
@@ -54,9 +55,10 @@ def _repair_text_final_line(file: BinaryIO, file_name: str) -> str:
     if last_byte == b"\n":
         return _newline_at(file, end)
     newline: str = "\r\n" if last_byte == b"\r" else os.linesep
+    scan_start = max(0, end - MAX_CAPTURE_RECORD_BYTES)
     position = end
-    while position:
-        start = max(0, position - _TAIL_SCAN_BYTES)
+    while position > scan_start:
+        start = max(scan_start, position - _TAIL_SCAN_BYTES)
         file.seek(start)
         index = file.read(position - start).rfind(b"\n")
         if index >= 0:
@@ -115,8 +117,13 @@ def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> str:
 
     file.seek(truncate_at)
     tail = file.read(end - truncate_at)
+    # UTF-16/32 JSON syntax contains raw NULs, which UTF-8 JSON never emits.
+    # Their BOMs start with a UTF-16 BOM or a raw NUL.
+    if b"\0" in tail or tail.startswith((BOM_UTF8, BOM_UTF16_BE, BOM_UTF16_LE)):
+        msg = f"Unterminated JSONL record in {file_name} must be UTF-8 without a BOM."
+        raise ValueError(msg)
     try:
-        json.loads(tail)
+        json.loads(tail.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
         file.truncate(truncate_at)
         action = "Removed an incomplete trailing JSONL record from"

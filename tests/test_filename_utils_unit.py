@@ -45,10 +45,17 @@ class TestSanitizeFilenameComponent:
         assert sanitize_filename_component("AUX") == "_AUX"
         assert sanitize_filename_component("COM1") == "_COM1"
         assert sanitize_filename_component("LPT9") == "_LPT9"
+        assert sanitize_filename_component("COM¹") == "_COM¹"
+        assert sanitize_filename_component("lpt²") == "_lpt²"
+        assert sanitize_filename_component("CONOUT$") == "_CONOUT$"
 
     def test_reserved_name_with_extension_prefixed(self) -> None:
         assert sanitize_filename_component("NUL.txt") == "_NUL.txt"
         assert sanitize_filename_component("COM1.log") == "_COM1.log"
+        assert sanitize_filename_component("LPT³.log") == "_LPT³.log"
+        assert sanitize_filename_component("conin$.log") == "_conin$.log"
+        assert sanitize_filename_component("COM¹ .log") == "_COM¹ .log"
+        assert sanitize_filename_component("CONOUT$ .log") == "_CONOUT$ .log"
 
     def test_non_reserved_name_unchanged(self) -> None:
         assert sanitize_filename_component("CONSOLE") == "CONSOLE"

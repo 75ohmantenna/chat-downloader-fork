@@ -26,6 +26,12 @@ class _SiteValueResolver(Protocol):
     def get_site_value(self, value: object) -> object: ...
 
 
+def _validate_boolean(name: str, value: object) -> None:
+    if not isinstance(value, bool):
+        msg = f"{name} must be a boolean, got {type(value).__name__}"
+        raise ValueError(msg)  # noqa: TRY004 — structured run validation error
+
+
 def _validate_positive_integer(
     name: str,
     value: object,
@@ -254,6 +260,9 @@ class ChatRequest:
 
     def __post_init__(self) -> None:
         """Validate request fields that have constrained runtime values."""
+        _validate_boolean("overwrite", self.overwrite)
+        _validate_boolean("sort_keys", self.sort_keys)
+        _validate_boolean("interruptible_retry", self.interruptible_retry)
         outputs = self.output if isinstance(self.output, list) else [self.output]
         for output in outputs:
             if isinstance(output, str):

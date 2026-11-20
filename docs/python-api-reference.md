@@ -210,6 +210,8 @@ downloader = ChatDownloader(**config.as_dict())
 
 `ChatRequest` holds request-level settings passed into
 `ChatDownloader.get_chat(...)` or `ChatDownloader.get_chat_request(...)`.
+The `overwrite`, `sort_keys`, and `interruptible_retry` fields require Python
+booleans.
 
 Fields appear in dataclass definition order. Contract tests compare every name
 and default below with the dataclass definitions used by the facade and CLI:

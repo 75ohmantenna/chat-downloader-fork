@@ -203,7 +203,9 @@ text is rounded to whole seconds. TXT output emits one semantic paid event.
 Output names may contain `{title}` and `{id}` placeholders; use `{{` and `}}`
 for literal braces. Other fields, conversions, and format specifications are
 rejected when the request is validated. Metadata is sanitized before
-substitution. Duplicate targets are removed after expansion and path resolution.
+substitution. Windows device names receive a prefix, and a path containing
+characters unsupported by the filesystem encoding raises an error.
+Duplicate targets are removed after expansion and path resolution.
 Names containing substituted fields require a new destination, regardless of
 `--overwrite`; an existing generated target is an error, not an append target.
 Fixed explicit paths retain overwrite and append behavior, including names with
@@ -223,14 +225,14 @@ its newline is kept and terminated. JSONL tail repair bounds its backward search
 to one 16 MiB record, an optional trailing CR, and a preceding LF boundary byte.
 It additionally inspects up to two bytes at that boundary to identify LF or
 CRLF, then rereads only the bounded final record for validation. An unterminated
-tail over that limit raises an input/resource error before any existing bytes
-are changed; preserve the file for inspection rather than expecting automatic
-truncation. Total capture size is not limited by this tail-read cap. Text append
-mode similarly terminates an existing final line
-before writing the next record. Append retains the last existing LF or CRLF
-terminator for both repair and new records, even on a host with different native
-line endings. Without an existing terminator, the host convention is used; a
-trailing CR establishes CRLF. A partial trailing CR is replaced by the selected
+tail over that limit or containing an encoding signature or raw null byte
+raises an error before any existing bytes are changed. Total capture size is
+independent of this tail-read cap. Text append mode also terminates an existing
+final line and searches up to 16 MiB for the previous line ending. Append retains
+the last LF or CRLF found for both repair and new records, even on a host with
+different native line endings. If the search finds no terminator, the host
+convention is used. A trailing CR establishes CRLF in that case. A partial
+trailing CR is replaced by the selected
 terminator. Existing mixed endings are not normalized. Equivalent output paths
 that resolve to the same file are deduplicated so each message is written once.
 

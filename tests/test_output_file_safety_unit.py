@@ -13,6 +13,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from chat_downloader import run
 from chat_downloader.output import _secure_file, targets
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.output.writers import (
@@ -300,6 +301,15 @@ def test_explicit_paths_and_literal_braces_keep_overwrite_append_policy(
     if not overwrite:
         assert rows[0] == {"preserved": True}
     assert rows[-1]["message_id"] == "4"
+
+
+def test_python_run_rejects_string_overwrite_before_opening_capture(tmp_path):
+    output = tmp_path / "existing.jsonl"
+    output.write_text(_SECRET)
+    result = run(**_options([output], overwrite="false"))
+    assert not result.success
+    assert result.error_message == "overwrite must be a boolean, got str"
+    assert output.read_text() == _SECRET
 
 
 @pytest.mark.parametrize("overwrite", [False, True])

@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from string import Formatter
 from typing import Any, Protocol
 
 from chat_downloader.debugging import log
+from chat_downloader.errors import InvalidParameter
 from chat_downloader.output._secure_file import _check_output_path
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.utils.filename_utils import (
@@ -61,9 +63,15 @@ def _expand_output_file_name(
 ) -> str:
     """Expand output placeholders with safe single-component metadata."""
     validate_output_template(file_name)
-    safe_title = sanitize_filename_component(title).replace("..", "_")
-    safe_id = sanitize_filename_component(video_id).replace("..", "_")
-    return file_name.format(title=safe_title, id=safe_id)
+    try:
+        safe_title = sanitize_filename_component(title).replace("..", "_")
+        safe_id = sanitize_filename_component(video_id).replace("..", "_")
+        path = file_name.format(title=safe_title, id=safe_id)
+        os.fsencode(path)
+    except UnicodeEncodeError as error:
+        msg = f"Output path could not be encoded as {error.encoding}."
+        raise InvalidParameter(msg) from error
+    return path
 
 
 def _register_output_path(

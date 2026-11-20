@@ -131,6 +131,54 @@ def test_jsonl_append_tail_recovery_is_stable_for_large_log(tmp_path: Path) -> N
         assert sum(1 for _line in file) == 20_001
 
 
+@pytest.mark.parametrize(
+    "encoding", ["utf-8-sig", "utf-16-le", "utf-16-be", "utf-16", "utf-32"]
+)
+@pytest.mark.parametrize("prefix", [b"", b'{"preserved": true}\n'])
+def test_jsonl_append_rejects_foreign_encoded_tail(tmp_path, encoding, prefix):
+    path = tmp_path / "capture.jsonl"
+    original = prefix + '{"message": "foreign"}'.encode(encoding)
+    path.write_bytes(original)
+    with pytest.raises(ValueError, match="must be UTF-8 without a BOM"):
+        JsonLinesContinuousWriter(str(path), overwrite=False)
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("final_cr", [b"", b"\r"])
+def test_text_append_bounds_newline_search(tmp_path, monkeypatch, final_cr):
+    limit = 64
+    monkeypatch.setattr(writers_module, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    monkeypatch.setattr(os, "linesep", "\n")
+    path = tmp_path / "capture.txt"
+    initial = b"start\r\n" + b"x" * (limit + 1)
+    path.write_bytes(initial + final_cr)
+    read_sizes = []
+    detach = writers_module._OutputFile.detach
+
+    def track_detach(prepared):
+        stream = detach(prepared)
+        read = stream.read
+
+        def bounded_read(size=-1):
+            read_sizes.append(size)
+            return read(size)
+
+        monkeypatch.setattr(stream, "read", bounded_read)
+        return stream
+
+    monkeypatch.setattr(writers_module._OutputFile, "detach", track_detach)
+    writer = TextContinuousWriter(str(path), overwrite=False)
+    try:
+        writer.write("next")
+    finally:
+        writer.close()
+    newline = b"\r\n" if final_cr else b"\n"
+    assert all(0 < size <= 8 for size in read_sizes)
+    assert 0 < sum(read_sizes) <= limit + 2
+    assert path.read_bytes() == initial + newline + b"next" + newline
+
+
 @pytest.mark.parametrize("prefix", [b"", b"{}\n" * 20_000])
 @pytest.mark.parametrize("terminal_cr", [b"", b"\r"])
 def test_jsonl_append_accepts_exact_record_limit(

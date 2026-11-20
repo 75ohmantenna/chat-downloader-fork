@@ -14,7 +14,7 @@ from chat_downloader.errors import InvalidParameter
 # Reserved Windows device names (case-insensitive, optional extension).
 # These names cannot be used as filenames on Windows regardless of directory.
 _RESERVED_WINDOWS_NAMES_RE = re.compile(
-    r"^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\..+)?$",
+    r"CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM[0-9¹²³]|LPT[0-9¹²³]",
     re.IGNORECASE,
 )
 
@@ -77,7 +77,8 @@ def sanitize_filename_component(
         return replace_char
 
     # 4. Prefix reserved Windows device names to make them safe
-    if _RESERVED_WINDOWS_NAMES_RE.match(result):
+    stem = result.partition(".")[0].rstrip(" ")
+    if _RESERVED_WINDOWS_NAMES_RE.fullmatch(stem):
         result = replace_char + result
 
     # 5. Truncate to max_length UTF-8 bytes

@@ -60,6 +60,7 @@ ISO8601_REGEX = re.compile(
 )
 
 UTC = dt.UTC
+_UNIX_EPOCH = dt.datetime(1970, 1, 1, tzinfo=UTC)
 
 
 def timestamp_to_microseconds(timestamp: str) -> int:
@@ -127,9 +128,7 @@ def microseconds_to_timestamp(
         format: strftime format; codes: https://strftime.org/ and
             https://docs.python.org/3/library/datetime.html#strftime-and-strptime-format-codes.
     """
-    seconds, fraction = divmod(microseconds, MICROSECONDS_PER_SECOND)
-    timestamp = dt.datetime.fromtimestamp(seconds, tz=UTC)
-    return (timestamp + dt.timedelta(microseconds=fraction)).strftime(format)
+    return (_UNIX_EPOCH + dt.timedelta(microseconds=microseconds)).strftime(format)
 
 
 def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any:
@@ -226,8 +225,7 @@ def parse_date(
 
 def parse_iso8601(data_str: str) -> float:
     """Parse an ISO 8601 string and return microseconds since the Unix epoch."""
-    epoch = dt.datetime(1970, 1, 1, tzinfo=UTC)
-    delta = parse_date(data_str) - epoch
+    delta = parse_date(data_str) - _UNIX_EPOCH
     return float(
         (delta.days * 86_400 + delta.seconds) * MICROSECONDS_PER_SECOND
         + delta.microseconds
