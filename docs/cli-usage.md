@@ -509,14 +509,17 @@ Current checkpoints use schema version 2. Version 1 checkpoints stored only
 message IDs and cannot distinguish raw event kinds or repeated occurrences;
 they are rejected before append. Start a new capture with new output paths.
 The version check applies to releases; avoid resuming across unreleased source
-changes that affect output. If chat or downloader shutdown fails, the
-checkpoint does not advance. A writer close failure also withholds the
-checkpoint; if capture already failed, its original error remains reported.
+changes that affect output. The checkpoint stays unchanged if a writer fails
+to close or the runner receives an error during chat or downloader shutdown.
+Best-effort source and provider session cleanup may log and suppress close
+errors. In that case the checkpoint can still advance after the output passes
+its integrity checks. If capture already failed, its original error remains
+reported.
 If file rollback fails, the checkpoint also stays unchanged even when writer
 counts match; the torn artifacts require inspection before resuming.
 
-A process crash, power failure, or failed chat or downloader close can leave
-output newer than its checkpoint.
+A process crash, power failure, or shutdown failure that withholds a
+checkpoint can leave output newer than its checkpoint.
 The next run rejects that mismatch without truncating files. Preserve the
 artifacts for inspection and start a fresh capture to recover. A `.lock` file
 prevents simultaneous checkpoint writers; after an unclean exit, remove that

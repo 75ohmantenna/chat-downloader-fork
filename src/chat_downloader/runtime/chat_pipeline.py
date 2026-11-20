@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
@@ -14,21 +14,19 @@ from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from chat_downloader.models import ChatRequest, SiteDefault
     from chat_downloader.sites.base import BaseChatDownloader
     from chat_downloader.sites.models import Chat
 
 
-class _MessageSource(Protocol):
-    def __next__(self) -> object: ...
-
-
-class _MessageLimitIterator:
+class _MessageLimitIterator[Message]:
     """Limit an iterator while preserving its explicit close lifecycle."""
 
     def __init__(
         self,
-        source: _MessageSource,
+        source: Iterator[Message],
         limit: int,
         diagnostics: dict[str, object] | None = None,
     ) -> None:
@@ -37,10 +35,10 @@ class _MessageLimitIterator:
         self._diagnostics = diagnostics
         self._closed = False
 
-    def __iter__(self) -> _MessageLimitIterator:
+    def __iter__(self) -> _MessageLimitIterator[Message]:
         return self
 
-    def __next__(self) -> object:
+    def __next__(self) -> Message:
         if self._closed or self._remaining <= 0:
             self.close()
             raise StopIteration

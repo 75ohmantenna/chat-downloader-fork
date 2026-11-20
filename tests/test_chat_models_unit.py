@@ -5,6 +5,7 @@ import pytest
 
 from chat_downloader.errors import NoChatReplay
 from chat_downloader.formatting.format import ItemFormatter
+from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.output_dispatch import _ChatOutputDispatcher
 
@@ -306,3 +307,69 @@ def test_chat_context_propagates_unexpected_cleanup_error_without_body_error(
     assert raised.value is cleanup_error
     chat.close()
     assert source.close_calls == writer.close_calls == 1
+
+
+def test_closed_chat_cannot_emit_or_attach_lazy_output(tmp_path):
+    path = tmp_path / "chat.jsonl"
+    writer = ContinuousWriter(str(path), lazy_initialise=True)
+    chat = Chat(iter([{"message": "hello"}]))
+    chat.attach_writer(writer)
+
+    chat.close()
+
+    assert next(chat, None) is None
+    assert not path.exists()
+    with pytest.raises(RuntimeError, match="closed chat"):
+        chat.attach_writer(writer)
+
+
+def test_chat_retries_interrupted_source_close_without_reentrant_cleanup():
+    class Source(_CloseableSource):
+        def close(self):
+            self.close_calls += 1
+            chat.close()
+            if self.close_calls == 1:
+                raise KeyboardInterrupt
+
+    source = Source(items=[{"message": "hello"}])
+    chat = Chat(source)
+    writer = _Writer()
+    chat.attach_writer(writer)
+
+    with pytest.raises(KeyboardInterrupt):
+        chat.close()
+    assert source.close_calls == writer.close_calls == 1
+    assert next(chat, None) is None
+    with pytest.raises(RuntimeError, match="closed chat"):
+        chat.attach_writer(_Writer())
+
+    chat.close()
+    chat.close()
+    assert source.close_calls == 2
+    assert writer.close_calls == 1
+
+
+def test_source_closing_chat_during_iteration_prevents_output(tmp_path):
+    path = tmp_path / "chat.jsonl"
+
+    def source():
+        chat.close()
+        yield {"message": "hello"}
+
+    chat = Chat(source())
+    chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
+
+    assert next(chat, None) is None
+    assert not path.exists()
+
+
+def test_non_dictionary_chat_item_is_rejected_before_output(tmp_path):
+    path = tmp_path / "chat.jsonl"
+    chat = Chat(iter([1]))
+    chat.attach_writer(ContinuousWriter(str(path), lazy_initialise=True))
+
+    with pytest.raises(TypeError, match="must yield message dictionaries"):
+        next(chat)
+
+    assert not path.exists()
+    assert next(chat, None) is None

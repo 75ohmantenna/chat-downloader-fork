@@ -14,7 +14,7 @@ from chat_downloader.utils.console_utils import safe_print
 from chat_downloader.utils.interrupts import defer_interrupts, interruptible
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Generator, Iterator
+    from collections.abc import Callable, Iterator
     from pathlib import Path
     from types import TracebackType
 
@@ -65,7 +65,7 @@ class Chat:
 
     def __init__(
         self,
-        chat: Generator[Any, Any, Any] | Iterator[Any] | None = None,
+        chat: Iterator[dict[str, Any]] | None = None,
         title: str | None = None,
         duration: float | None = None,
         status: str | None = None,
@@ -109,7 +109,8 @@ class Chat:
         # free of the output layer at import time. The deduplication-cache size
         # is remembered here and handed to the dispatcher, which owns it.
         self._output_dispatcher: _ChatOutputDispatcher | None = None
-        self._generator_closed = False
+        self._closed = False
+        self._source_close_started = False
         self._max_seen_message_ids = max_seen_message_ids
 
     def set_formatter(self, formatter: Callable[[dict[str, Any]], str]) -> None:
@@ -147,6 +148,9 @@ class Chat:
 
     def attach_writer(self, writer: ChatOutputWriter) -> None:
         """Attach a writer to this chat, creating the dispatcher on demand."""
+        if self._closed:
+            msg = "Cannot attach a writer to a closed chat"
+            raise RuntimeError(msg)
         if self._output_dispatcher is None:
             # Deferred import: output dispatch is only needed once a caller
             # actually wires up output, keeping sites.models import-light.
@@ -158,10 +162,13 @@ class Chat:
         self._output_dispatcher.attach_writer(writer)
 
     def close(self) -> None:
-        """Close the message source and all attached writers once."""
+        """Close the source and writers, retrying interrupted source cleanup."""
+        self._closed = True
         try:
-            if not self._generator_closed:
-                self._generator_closed = True
+            if self._source_close_started:
+                return
+            try:
+                self._source_close_started = True
                 close_generator = getattr(self.chat, "close", None)
                 if callable(close_generator):
                     try:
@@ -171,6 +178,9 @@ class Chat:
                             "debug",
                             f"Suppressed chat generator close() error: {error}",
                         )
+            except KeyboardInterrupt:
+                self._source_close_started = False
+                raise
         finally:
             if self._output_dispatcher is not None:
                 self._output_dispatcher.close()
@@ -184,14 +194,21 @@ class Chat:
 
     def __next__(self) -> dict[str, Any]:
         """Get the next chat message from the generator."""
+        if self._closed:
+            raise StopIteration
         if self.chat is None:
             msg = "No chat generator available"
             raise StopIteration(msg)
 
         try:
             with interruptible():
-                item: dict[str, Any] = next(self.chat)
+                item: object = next(self.chat)
             with defer_interrupts():
+                if self._closed:
+                    raise StopIteration  # noqa: TRY301 — close raced with source advancement
+                if not isinstance(item, dict):
+                    msg = "Chat source must yield message dictionaries"
+                    raise TypeError(msg)  # noqa: TRY301 — close outputs on invalid data
                 if self._output_dispatcher is not None:
                     self._output_dispatcher.emit(item)
         except BaseException:

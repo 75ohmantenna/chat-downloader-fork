@@ -11,6 +11,8 @@ from contextlib import suppress
 from contextvars import ContextVar, copy_context
 from typing import TYPE_CHECKING, Any, NoReturn, Self
 
+from chat_downloader.utils.interrupts import defer_interrupts
+
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Iterator
 
@@ -107,8 +109,11 @@ class TimedGenerator:
 
             def on_timeout() -> None:
                 with self._timer_lock:
-                    if self._timer_live(owned=epoch == self._timeout_generation):
-                        self._timeout_expired.set()
+                    if not self._timer_live(owned=epoch == self._timeout_generation):
+                        return
+                    self._timeout_expired.set()
+                    self._stop_timers()
+                self._request_source_stop()
 
             self.timer = threading.Timer(self.timeout, on_timeout)
             self.timer.daemon = True
@@ -138,14 +143,16 @@ class TimedGenerator:
                         return
                     end = self._inactivity_deadline
                     remaining = end - time.monotonic() if end is not None else 0
-                    if remaining <= 0:
-                        self._inactivity_expired.set()
+                    if remaining > 0:
+                        self.inactivity_timer = threading.Timer(
+                            remaining, on_inactivity_timeout
+                        )
+                        self.inactivity_timer.daemon = True
+                        self.inactivity_timer.start()
                         return
-                    self.inactivity_timer = threading.Timer(
-                        remaining, on_inactivity_timeout
-                    )
-                    self.inactivity_timer.daemon = True
-                    self.inactivity_timer.start()
+                    self._inactivity_expired.set()
+                    self._stop_timers()
+                self._request_source_stop()
 
         on_inactivity_timeout()
 
@@ -193,17 +200,26 @@ class TimedGenerator:
             and str(error) == "generator already executing"
         )
 
-    def _cancel_timers(self) -> None:
-        with self._timer_lock:
-            self._stop_requested.set()
-            for timer in (self.timer, self.inactivity_timer):
-                if timer is not None:
-                    timer.cancel()
+    def _stop_timers(self) -> None:
+        """Signal cancellation and stop timer threads under the timer lock."""
+        self._stop_requested.set()
+        for timer in (self.timer, self.inactivity_timer):
+            if timer is not None:
+                timer.cancel()
+
+    def _request_source_stop(self) -> None:
         request_stop = getattr(self.generator, "request_stop", None)
         if callable(request_stop):
             # Cancellation is best-effort; bounded close still follows.
             with suppress(OSError, RuntimeError, ValueError):
                 request_stop()
+
+    def _cancel_timers(self) -> None:
+        with self._timer_lock:
+            self._stop_timers()
+        # An expiry callback already owns the source stop notification.
+        if not self._deadline_expired():
+            self._request_source_stop()
         with self._worker_state_lock:
             worker_advancing = self._worker_advancing
         if worker_advancing:
@@ -275,13 +291,26 @@ class TimedGenerator:
         During advancement, return after a bounded join; the worker closes the
         iterator once advancement returns or raises.
         """
-        with self._timer_lock:
-            if self._closed:
-                return
-            self._closed = True
-        self._cancel_timers()
-        if threading.current_thread() is not self._worker:
-            self._worker.join(timeout=max(POLLING_TIME * 2, 0.2))
+        with defer_interrupts():
+            owns_close = False
+            try:
+                with self._timer_lock:
+                    if self._closed:
+                        return
+                    owns_close = True
+                    self._stop_requested.set()
+                    self._closed = True
+                self._cancel_timers()
+            except KeyboardInterrupt:
+                if owns_close:
+                    with self._timer_lock:
+                        self._closed = False
+                raise
+            if threading.current_thread() is not self._worker:
+                self._worker.join(timeout=max(POLLING_TIME * 2, 0.2))
+
+    def _deadline_expired(self) -> bool:
+        return self._timeout_expired.is_set() or self._inactivity_expired.is_set()
 
     def _deadline_wait(self) -> float | None:
         """Return the minimum remaining deadline; None when no timers active."""
@@ -355,7 +384,9 @@ class TimedGenerator:
 
     def __next__(self) -> Any:
         """Return the next item or stop when configured timers expire."""
-        if self._closed:
+        if self._closed or (
+            self._stop_requested.is_set() and not self._deadline_expired()
+        ):
             raise StopIteration
 
         try:

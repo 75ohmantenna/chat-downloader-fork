@@ -377,7 +377,10 @@ malformed-event-type counts, truncated backfill counts and uncovered time, and
 the last decoded or synthetic frame's receive timestamp. See the
 [Kick diagnostic schema](kick-integration-guide.md#live-diagnostics).
 
-Use the chat as a context-managed iterable of message dictionaries:
+Use the chat as a context-managed iterable of message dictionaries. If you
+construct `Chat` directly, pass an iterator that yields dictionaries with
+string keys. Iteration raises `TypeError` if the source yields a non-dictionary
+value.
 
 ```python
 with chat:
@@ -387,6 +390,7 @@ with chat:
 
 Context exit closes the message source and attached outputs on early exit,
 consumer failure, or exhaustion. It does not suppress consumer exceptions.
+A closed chat is exhausted, and attaching a writer to it raises `RuntimeError`.
 Source shutdown keeps its existing bounded-worker behavior; an in-flight
 provider request may finish later under its transport timeout.
 
@@ -407,9 +411,13 @@ an explicit output path; a misspelling such as `over_write` is an error.
 
 `TimedGenerator` transfers source exceptions to the consuming thread, including
 `SystemExit` and `GeneratorExit`. Call `close()` when stopping consumption early
-to request worker shutdown and cancel its timers.
-Restarting an overall timer cancels its predecessor; callbacks from superseded
-timers cannot expire the new deadline. Timer starts after closure do nothing.
+to request worker shutdown and cancel its timers. Deadline expiry requests
+worker shutdown even while the consumer is between calls to `next()`. An
+already-queued item completed before the deadline remains available for
+delivery. The timeout callback runs during iteration when the deadline ends
+consumption. Restarting an overall timer cancels its predecessor; callbacks from
+superseded timers cannot expire the new deadline. Timer starts after closure or
+expiry do nothing.
 
 Custom `ItemFormatter` field definitions may provide a `template`, an optional
 `singular_template`, and `omit_if_false: true`. The singular template is used

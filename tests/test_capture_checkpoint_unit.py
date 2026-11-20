@@ -619,6 +619,35 @@ def test_failed_downloader_close_does_not_advance_checkpoint(
         assert not checkpoint.exists()
 
 
+def test_suppressed_provider_close_error_allows_checkpoint_to_advance(
+    tmp_path, params, monkeypatch
+):
+    from chat_downloader import ChatDownloader
+
+    warnings = []
+    monkeypatch.setattr(
+        "chat_downloader.runtime.session_lifecycle.log",
+        lambda level, message: warnings.append((level, message)),
+    )
+
+    def fail_to_close():
+        raise OSError("provider close failed")
+
+    class Replay(Downloader):
+        def close(self):
+            owner = ChatDownloader()
+            owner.sessions["provider"] = SimpleNamespace(close=fail_to_close)
+            owner.close()
+
+    assert execute_run(Downloader, **params, max_messages=1).success
+    checkpoint = tmp_path / "checkpoint.json"
+    assert load_json(checkpoint)["total"] == 1
+
+    assert execute_run(Replay, **params).success
+    assert load_json(checkpoint)["total"] == len(Replay.records)
+    assert ("warning", "Error closing session: provider close failed") in warnings
+
+
 def test_failed_downloader_close_preserves_primary_error_without_checkpoint(
     tmp_path, params
 ) -> None:

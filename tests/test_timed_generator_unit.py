@@ -11,7 +11,8 @@ from unittest.mock import patch
 import pytest
 
 import chat_downloader.debugging as _debugging
-from chat_downloader.utils.timed_generator import TimedGenerator
+from chat_downloader.utils.interrupts import raise_or_defer_interrupt
+from chat_downloader.utils.timed_generator import TimedGenerator, polling_sleep
 
 
 class _FakeTimer:
@@ -143,6 +144,129 @@ def test_timed_generator_delivers_item_generated_before_deadline(
             assert called == []
         finally:
             tg.close()
+
+
+def test_deadline_stops_polling_before_consumer_resumes(monkeypatch, timer_kind):
+    kind, option, _, _ = timer_kind
+    polling_started = threading.Event()
+    stopped = threading.Event()
+    closed = threading.Event()
+    calls = []
+    stop_calls = []
+    clock = [100.0]
+
+    class Source:
+        def __next__(self):
+            if polling_started.is_set():
+                raise AssertionError("source advanced after cancellation")
+            if calls:
+                polling_started.set()
+                polling_sleep(10)
+                raise AssertionError("deadline did not cancel polling sleep")
+            calls.append("item")
+            return "queued-before-deadline"
+
+        def request_stop(self):
+            stop_calls.append("stop")
+            stopped.set()
+
+        def close(self):
+            closed.set()
+
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    with patch("chat_downloader.utils.timed_generator.threading.Timer") as timer:
+        tg = TimedGenerator(
+            Source(),
+            **{option: 1, f"on_{option}": lambda: calls.append(kind)},
+        )
+        try:
+            assert polling_started.wait(timeout=2)
+            clock[0] += 2
+            timer.call_args.args[1]()
+            assert stopped.wait(timeout=2)
+            assert closed.wait(timeout=2)
+            assert calls == ["item"]
+
+            assert next(tg) == "queued-before-deadline"
+            assert next(tg, None) is None
+            assert next(tg, None) is None
+            assert calls == ["item", kind]
+            assert tg.deadline_prefetch_summary() == (0, True)
+            assert stop_calls == ["stop"]
+        finally:
+            tg.close()
+
+
+def test_close_finishes_worker_cancellation_before_cooperative_interrupt(monkeypatch):
+    entered = threading.Event()
+    stopped = threading.Event()
+    closed = threading.Event()
+
+    class Source:
+        def __next__(self):
+            entered.set()
+            polling_sleep(10)
+            raise AssertionError("close did not cancel polling sleep")
+
+        def request_stop(self):
+            stopped.set()
+
+        def close(self):
+            closed.set()
+
+    tg = TimedGenerator(Source())
+    cancel = tg._cancel_timers
+
+    def cancel_with_interrupt():
+        raise_or_defer_interrupt()
+        cancel()
+
+    try:
+        assert entered.wait(timeout=2)
+        monkeypatch.setattr(tg, "_cancel_timers", cancel_with_interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            tg.close()
+        assert stopped.is_set()
+        assert closed.is_set()
+        assert not tg._worker.is_alive()
+    finally:
+        tg.close()
+
+
+def test_close_retries_after_direct_keyboard_interrupt(monkeypatch):
+    entered = threading.Event()
+    stopped = threading.Event()
+
+    class Source:
+        def __next__(self):
+            entered.set()
+            assert stopped.wait(timeout=5)
+            raise StopIteration
+
+        def request_stop(self):
+            stopped.set()
+
+    tg = TimedGenerator(Source())
+    cancel = tg._cancel_timers
+
+    def interrupted_cancel():
+        monkeypatch.setattr(tg, "_cancel_timers", cancel)
+        raise KeyboardInterrupt
+
+    try:
+        assert entered.wait(timeout=2)
+        monkeypatch.setattr(tg, "_cancel_timers", interrupted_cancel)
+        with pytest.raises(KeyboardInterrupt):
+            tg.close()
+        assert tg._stop_requested.is_set()
+        assert not stopped.is_set()
+        assert next(tg, None) is None
+
+        tg.close()
+        assert stopped.is_set()
+        assert not tg._worker.is_alive()
+    finally:
+        tg.close()
 
 
 def test_timeout_reason_uses_worker_completion_time_over_expiry_events() -> None:

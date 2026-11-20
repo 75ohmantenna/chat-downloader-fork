@@ -71,6 +71,9 @@ ALLOWLIST: frozenset[str] = frozenset(
         # rollback, and persistence enforce one replay checkpoint contract.
         # Keep validation adjacent to the state it protects.
         "runtime/capture_checkpoint.py",
+        # One timed iterator owns deadline expiry, worker cancellation, and
+        # delivery of prefetched results without racing source cleanup.
+        "utils/timed_generator.py",
     }
 )
 SRC = Path(__file__).resolve().parents[1] / "src" / "chat_downloader"
