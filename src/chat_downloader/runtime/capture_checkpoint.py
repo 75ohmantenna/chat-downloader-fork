@@ -20,6 +20,7 @@ from chat_downloader.formatting import format as format_module
 from chat_downloader.metadata import __version__
 from chat_downloader.models import ChatRequest
 from chat_downloader.output.continuous_write import ContinuousWriter
+from chat_downloader.utils._source_close import _SourceClose
 from chat_downloader.utils.atomic_files import sync_directory
 from chat_downloader.utils.filename_utils import output_path_identity
 
@@ -184,7 +185,7 @@ class _CheckpointSource:
         self, source: object, remaining: Generator[JSONDict, None, None]
     ) -> None:
         self.source, self.remaining = source, remaining
-        self.closed = False
+        self._source_close = _SourceClose()
 
     def __iter__(self) -> _CheckpointSource:
         return self
@@ -193,22 +194,13 @@ class _CheckpointSource:
         return next(self.remaining)
 
     def close(self) -> None:
-        if self.closed:
+        if self._source_close.started:
             return
         self.remaining.close()
         self._close_source()
 
     def _close_source(self) -> None:
-        if self.closed:
-            return
-        try:
-            self.closed = True
-            close = getattr(self.source, "close", None)
-            if callable(close):
-                close()
-        except KeyboardInterrupt:
-            self.closed = False
-            raise
+        self._source_close.close(lambda: self.source)
 
     def deadline_prefetch_summary(self) -> tuple[int, bool]:
         summary = getattr(self.source, "deadline_prefetch_summary", None)

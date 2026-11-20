@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from chat_downloader.debugging import log
 from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.sites.output_dispatch import configure_outputs
+from chat_downloader.utils._source_close import _SourceClose
 from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import TimedGenerator
 
@@ -34,7 +35,7 @@ class _MessageLimitIterator[Message]:
         self._remaining = limit
         self._diagnostics = diagnostics
         self._closed = False
-        self._source_close_started = False
+        self._source_close = _SourceClose()
 
     def __iter__(self) -> _MessageLimitIterator[Message]:
         return self
@@ -55,16 +56,7 @@ class _MessageLimitIterator[Message]:
 
     def close(self) -> None:
         self._closed = True
-        if self._source_close_started:
-            return
-        try:
-            self._source_close_started = True
-            close = getattr(self._source, "close", None)
-            if callable(close):
-                close()
-        except KeyboardInterrupt:
-            self._source_close_started = False
-            raise
+        self._source_close.close(lambda: self._source)
 
     def request_stop(self) -> None:
         """Preserve cooperative cancellation through the message-limit wrapper."""

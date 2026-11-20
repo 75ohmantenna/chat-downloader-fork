@@ -228,6 +228,7 @@ module names.
 | Module | Purpose |
 |--------|---------|
 | `_bounded_records.py` | Shared 16 MiB physical-record limit and bounded binary-line reads for append repair, capture inspection, and parity auditing |
+| `_source_close.py` | Optional iterator-source cleanup with a reentry guard and retry after `KeyboardInterrupt` for `Chat`, message limits, and replay checkpoints |
 | `atomic_files.py` | Private same-directory staging, file synchronization, exclusive hard-link publication, and POSIX directory synchronization for complete JSON artifacts |
 | `capture_reader.py` | Strict UTF-8 JSONL object reading, bounded unambiguous literal run-summary decoding, and nonblocking regular-file ownership shared by provider inspectors |
 | `color_utils.py` | ARGB/RGBA color conversion |

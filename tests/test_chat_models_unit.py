@@ -349,6 +349,29 @@ def test_chat_retries_interrupted_source_close_without_reentrant_cleanup():
     assert writer.close_calls == 1
 
 
+@pytest.mark.parametrize("error", [KeyboardInterrupt, ValueError])
+def test_chat_source_close_lookup_controls_retry(error):
+    class Source(_CloseableSource):
+        @property
+        def close(self):
+            raise error("close lookup")
+
+    chat = Chat(Source())
+    writer = _Writer()
+    chat.attach_writer(writer)
+
+    with pytest.raises(error, match="close lookup"):
+        chat.close()
+
+    replacement = _CloseableSource()
+    chat.chat = replacement
+    chat.close()
+    chat.close()
+
+    assert replacement.close_calls == (1 if error is KeyboardInterrupt else 0)
+    assert writer.close_calls == 1
+
+
 def test_source_closing_chat_during_iteration_prevents_output(tmp_path):
     path = tmp_path / "chat.jsonl"
 

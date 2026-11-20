@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Self
 from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
 from chat_downloader.models import SiteDefault
+from chat_downloader.utils._source_close import _SourceClose
 from chat_downloader.utils.console_utils import safe_print
 from chat_downloader.utils.interrupts import defer_interrupts, interruptible
 
@@ -29,6 +30,13 @@ __all__ = ["Chat", "Image", "SiteDefault"]
 def _default_formatter(item: dict[str, object]) -> str:
     """Render a chat item before a pipeline formatter is configured."""
     return str(item)
+
+
+def _close_chat_generator(close: Callable[[], object]) -> None:
+    try:
+        close()
+    except (OSError, RuntimeError, ValueError) as error:
+        log("debug", f"Suppressed chat generator close() error: {error}")
 
 
 @dataclass(slots=True)
@@ -110,7 +118,7 @@ class Chat:
         # is remembered here and handed to the dispatcher, which owns it.
         self._output_dispatcher: _ChatOutputDispatcher | None = None
         self._closed = False
-        self._source_close_started = False
+        self._source_close = _SourceClose()
         self._max_seen_message_ids = max_seen_message_ids
 
     def set_formatter(self, formatter: Callable[[dict[str, Any]], str]) -> None:
@@ -165,22 +173,7 @@ class Chat:
         """Close the source and writers, retrying interrupted source cleanup."""
         self._closed = True
         try:
-            if self._source_close_started:
-                return
-            try:
-                self._source_close_started = True
-                close_generator = getattr(self.chat, "close", None)
-                if callable(close_generator):
-                    try:
-                        close_generator()
-                    except (OSError, RuntimeError, ValueError) as error:
-                        log(
-                            "debug",
-                            f"Suppressed chat generator close() error: {error}",
-                        )
-            except KeyboardInterrupt:
-                self._source_close_started = False
-                raise
+            self._source_close.close(lambda: self.chat, invoke=_close_chat_generator)
         finally:
             if self._output_dispatcher is not None:
                 self._output_dispatcher.close()

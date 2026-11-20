@@ -902,6 +902,7 @@ def test_checkpoint_source_retries_interrupted_provider_close(tmp_path, started)
         def close(self):
             self.close_calls += 1
             chat.close()
+            chat.chat.close()
             if self.close_calls == 1:
                 raise KeyboardInterrupt
 
