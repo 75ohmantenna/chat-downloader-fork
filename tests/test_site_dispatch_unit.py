@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from threading import Event
 from typing import Any, ClassVar
 from unittest.mock import Mock
 
 import pytest
 
+from chat_downloader import ChatDownloader
 from chat_downloader.errors import (
     ChatGeneratorError,
     FormatFileNotFound,
@@ -62,16 +64,39 @@ def _install_sites(monkeypatch, *sites: type[BaseChatDownloader]) -> None:
     )
 
 
-def test_dispatch_chat_rejects_missing_malformed_and_unknown_urls(monkeypatch) -> None:
+_REJECTED_URLS = [
+    pytest.param(None, URLNotProvided, "No URL provided", id="explicit-none"),
+    pytest.param("", URLNotProvided, "No URL provided", id="empty"),
+    pytest.param("#", InvalidURL, "Invalid URL", id="fragment-only"),
+    pytest.param("https://", InvalidURL, "Invalid URL", id="missing-host"),
+    pytest.param(
+        "https://www.example.com/watch",
+        SiteNotSupported,
+        r"www\.example\.com",
+        id="unknown-host",
+    ),
+]
+
+
+@pytest.mark.parametrize(("url", "error", "message"), _REJECTED_URLS)
+def test_public_facade_rejects_urls_before_creating_a_session(url, error, message):
+    with closing(ChatDownloader()) as downloader:
+        with pytest.raises(error, match=message):
+            downloader.get_chat(url)
+        assert not downloader.sessions
+
+
+@pytest.mark.parametrize(("url", "error", "message"), _REJECTED_URLS)
+def test_dispatch_chat_rejects_missing_malformed_and_unknown_urls(
+    monkeypatch, url, error, message
+) -> None:
     _install_sites(monkeypatch, _GoodSite)
     owner = _Owner()
 
-    with pytest.raises(URLNotProvided):
-        dispatch_chat(owner, ChatRequest())
-    with pytest.raises(InvalidURL):
-        dispatch_chat(owner, ChatRequest(url="https://"))
-    with pytest.raises(SiteNotSupported, match=r"www\.example\.com"):
-        dispatch_chat(owner, ChatRequest(url="https://www.example.com/watch"))
+    with pytest.raises(error, match=message):
+        dispatch_chat(owner, ChatRequest(url=url))
+
+    assert not owner.sessions
 
 
 @pytest.mark.parametrize(

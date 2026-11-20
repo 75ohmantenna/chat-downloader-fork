@@ -7,28 +7,25 @@ from __future__ import annotations
 from typing import Any
 
 from chat_downloader.errors import (
-    InvalidURL,
     NoChatReplay,
-    SiteNotSupported,
-    URLNotProvided,
     UserNotFound,
     VideoUnavailable,
 )
 
 BASE_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     {
-        "name": "Inactivity timeout",
+        "name": "Discover Twitch channel metadata using the bare hostname.",
+        "network_live": True,
         "params": {
             "url": "https://twitch.tv/xenova",
-            "inactivity_timeout": 5,
-            "timeout": 20,
+            "timeout": 5,
         },
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
         },
     },
     {
-        "name": "Get a certain number of messages from a livestream.",
+        "name": "Get a limited number of messages from a YouTube replay.",
         "params": {
             "url": "https://www.youtube.com/watch?v=wXspodtIxYU",
             "max_messages": 10,
@@ -49,26 +46,12 @@ BASE_EXTRACTOR_TESTS: list[dict[str, Any]] = [
             "messages_condition": lambda messages: 0 < len(messages) <= 10,
         },
     },
-    {
-        "name": "No URL provided.",
-        "params": {"url": ""},
-        "expected_result": {"error": URLNotProvided},
-    },
-    {
-        "name": "Site not supported",
-        "params": {"url": "https://www.example.com"},
-        "expected_result": {"error": SiteNotSupported},
-    },
-    {
-        "name": "Invalid URL",
-        "params": {"url": "#"},
-        "expected_result": {"error": InvalidURL},
-    },
 ]
 
 TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     {
         "name": "Discover livestream metadata.",
+        "network_live": True,
         "params": {"url": "https://www.twitch.tv/xenova", "timeout": 5},
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
@@ -76,6 +59,7 @@ TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     },
     {
         "name": "Deliver chat messages from a livestream.",
+        "network_live": True,
         "requires_env": "TWITCH_TEST_CHANNEL",
         "params": {
             "url": "https://www.twitch.tv/{channel}",
@@ -127,7 +111,8 @@ TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
 
 KICK_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     {
-        "name": "Offline Kick channels fail clearly.",
+        "name": "Missing Kick channel raises UserNotFound.",
+        "network_live": True,
         "params": {"url": "https://kick.com/somelikelyofflinechannel"},
         "expected_result": {"error": UserNotFound},
     },

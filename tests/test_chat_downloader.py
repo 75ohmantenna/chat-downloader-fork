@@ -45,21 +45,11 @@ _SITE_TESTS: dict[type[BaseChatDownloader], list[dict[str, Any]]] = {
 }
 
 
-def _is_live_case(test: dict[str, Any]) -> bool:
-    """Return whether a scenario targets mutable live-channel state."""
-    url = str(test["params"].get("url", "")).lower()
-    if "kick.com/" in url and "/videos/" not in url:
-        return True
-    if "twitch.tv/" in url and "/videos/" not in url and "clips.twitch.tv/" not in url:
-        return True
-    return "youtube.com/" in url and not any(
-        path in url for path in ("/watch?", "/clip/")
-    )
-
-
 def _case_marks(test: dict[str, Any]) -> tuple[pytest.MarkDecorator, ...]:
     kind = (
-        pytest.mark.network_live if _is_live_case(test) else pytest.mark.network_replay
+        pytest.mark.network_live
+        if test.get("network_live")
+        else pytest.mark.network_replay
     )
     return pytest.mark.network, kind, pytest.mark.timeout(90)
 
@@ -362,7 +352,7 @@ def test_network_runner_requires_positive_outcome_check() -> None:
     ],
     ids=lambda scenario: scenario["name"],
 )
-def test_network_runner_keeps_discovery_and_inactivity_empty_stream_contracts(
+def test_network_runner_allows_empty_streams_for_metadata_discovery(
     scenario,
 ):
     downloader = _SuccessfulDownloader()

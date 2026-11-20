@@ -68,13 +68,19 @@ opt-in. A provider CAPTCHA challenge during setup or capture fails the network
 probe with `CaptchaChallengeRequired`, even when the scenario allows an
 asset-specific `LoginRequired` error.
 
-Live discovery and inactivity scenarios may succeed without chat messages.
-Separate Twitch and YouTube delivery scenarios require `TWITCH_TEST_CHANNEL`
+Live metadata discovery scenarios may succeed without chat messages. Offline
+timed-generator tests check inactivity against a blocked source. The Kick
+missing-channel probe expects `UserNotFound` for a missing slug. Separate
+Twitch and YouTube delivery scenarios require `TWITCH_TEST_CHANNEL`
 and `YOUTUBE_TEST_CHANNEL_ID`, respectively, naming active public channels.
 Missing settings explicitly skip those delivery scenarios; configured scenarios
 fail if no messages arrive within their thirty-second capture window. The Kick
 live check uses `KICK_TEST_CHANNEL` (default `xqc`) and requires a confirmed
 subscription plus an application record from the default negotiated transport.
+
+Offline initialization tests use a loopback HTTPS origin and HTTP proxy to
+verify proxy behavior, custom headers, and cookies on the wire. Invalid,
+missing, and unsupported URLs are also tested offline through the public facade.
 
 ## Commands
 
@@ -375,7 +381,7 @@ uv run pytest -v -m network_replay --run-network
 # Volatile live-channel and WebSocket smoke checks
 uv run pytest -v -m network_live --run-network
 
-# Proxy, header, and cookie integration checks
+# Operator-selected external resources such as KICK_TEST_REPLAY_CASE
 uv run pytest -v -m network_environment --run-network
 
 # Every external check

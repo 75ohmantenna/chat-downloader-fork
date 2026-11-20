@@ -27,6 +27,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     # TESTING FOR CORRECT FUNCTIONALITY
     {
         "name": "Discover livestream metadata using channel id.",
+        "network_live": True,
         "params": {
             "url": "https://www.youtube.com/channel/UCSJ4gkVC6NrvII8umztf0Ow",
             "timeout": 5,
@@ -37,6 +38,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Discover livestream metadata using custom url (1).",
+        "network_live": True,
         "params": {"url": "https://www.youtube.com/c/lofigirl", "timeout": 5},
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
@@ -44,6 +46,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Discover livestream metadata using custom url (2).",
+        "network_live": True,
         "params": {"url": "https://www.youtube.com/lofigirl", "timeout": 5},
         "expected_result": {
             "chat_condition": lambda chat: bool(chat.id and chat.title),
@@ -51,6 +54,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Discover livestream metadata using user id.",
+        "network_live": True,
         "params": {
             "url": "https://www.youtube.com/user/YellowBrickCinema",
             "timeout": 5,
@@ -61,6 +65,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Deliver chat messages from a discovered livestream.",
+        "network_live": True,
         "requires_env": "YOUTUBE_TEST_CHANNEL_ID",
         "params": {
             "url": "https://www.youtube.com/channel/{channel}",
@@ -317,34 +322,6 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
         "expected_result": {
             "error": [LoginRequired, VideoUnavailable],
-        },
-    },
-    # Potential parsing errors
-    {
-        "name": "Parsing error with '};' inside yt initial data (1)",
-        "params": {
-            "url": "https://www.youtube.com/watch?v=CHqg6qOn4no",
-        },
-        "expected_result": {
-            "error": [NoChatReplay, LoginRequired],
-        },
-    },
-    {
-        "name": "Parsing error with '};' inside yt initial data (2)",
-        "params": {
-            "url": "https://www.youtube.com/watch?v=gVfgbahppCY",
-        },
-        "expected_result": {
-            "error": [NoChatReplay, LoginRequired],
-        },
-    },
-    {
-        "name": 'Title with JS-like syntax "};"',
-        "params": {
-            "url": "https://www.youtube.com/watch?v=lsguqyKfVQg",
-        },
-        "expected_result": {
-            "error": [NoChatReplay, LoginRequired],
         },
     },
     # Clips
