@@ -1,13 +1,16 @@
 # SPDX-License-Identifier: MIT
 from __future__ import annotations
 
+from contextlib import closing
 from unittest.mock import MagicMock
 
 import pytest
 from requests.cookies import create_cookie
 
+from chat_downloader import ChatDownloader, ChatRequest
 from chat_downloader.sites.kick import extractor
 from chat_downloader.sites.kick.extractor import KickChatDownloader
+from chat_downloader.sites.models import Chat
 
 CLIP_ID = "clip_01M0BHEHDAX2NEAGXG0DA8V9S5"
 CLIP_URL = f"https://kick.com/n3on/clips/{CLIP_ID}"
@@ -219,3 +222,54 @@ def test_default_foreign_options_do_not_warn(monkeypatch, downloader):
     monkeypatch.setattr(extractor, "build_channel_chat", MagicMock())
     downloader.get_chat_by_channel("creator", {})
     assert logs == []
+
+
+@pytest.mark.parametrize("direct", [True, False])
+def test_pipeline_options_warn_only_for_direct_live_chat(
+    monkeypatch, tmp_path, downloader, direct
+):
+    messages = [{"message": f"message {index}"} for index in range(3)]
+    warnings = []
+    monkeypatch.setattr(
+        "chat_downloader.sites.base.log",
+        lambda level, message: warnings.append(message) if level == "warning" else None,
+    )
+    monkeypatch.setattr(
+        extractor, "build_channel_chat", lambda *_: Chat(iter(messages))
+    )
+    output = tmp_path / "capture.jsonl"
+    request = ChatRequest(
+        url="https://kick.com/creator",
+        max_messages=1,
+        timeout=60,
+        inactivity_timeout=60,
+        output=str(output),
+    )
+
+    if direct:
+        assert list(downloader.get_chat_by_channel("creator", request)) == messages
+        assert len(warnings) == 1
+        for option in ("max_messages", "timeout", "inactivity_timeout", "output"):
+            assert option in warnings[0]
+        assert str(output) not in warnings[0]
+        assert not output.exists()
+    else:
+        with closing(ChatDownloader()) as facade:
+            assert list(facade.get_chat_request(request)) == messages[:1]
+        assert len(output.read_text().splitlines()) == 1
+        assert warnings == []
+
+
+def test_direct_replay_preserves_native_message_limit(monkeypatch, downloader):
+    builder = MagicMock(return_value=Chat(iter(())))
+    monkeypatch.setattr(extractor, "build_clip_chat", builder)
+    logger = MagicMock()
+    monkeypatch.setattr("chat_downloader.sites.base.log", logger)
+
+    request = ChatRequest(max_messages=1, timeout=60)
+    downloader.get_chat_by_clip("creator", CLIP_ID, request)
+
+    replay_request = builder.call_args.args[2]
+    assert replay_request.max_messages == request.max_messages
+    assert "max_messages" not in logger.call_args.args[1]
+    assert "timeout" in logger.call_args.args[1]

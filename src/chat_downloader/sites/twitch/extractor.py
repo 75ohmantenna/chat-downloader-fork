@@ -8,7 +8,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.debugging import logger
 from chat_downloader.errors import SiteError
-from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.sites.base import (
+    BaseChatDownloader,
+    warn_unconfigured_chat_options,
+)
 from chat_downloader.sites.session import get_scoped_cookie
 
 from .badge_client import update_badge_info
@@ -217,6 +220,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             VideoUnavailable: The VOD does not exist or is unavailable.
         """
         request = self._coerce_chat_request(params)
+        warn_unconfigured_chat_options(request)
         return build_vod_chat(self, vod_id, request)
 
     def _get_chat_by_clip_id(
@@ -242,6 +246,7 @@ class TwitchChatDownloader(BaseChatDownloader):
             NoChatReplay: The clip's VOD has expired and chat is unavailable.
         """
         request = self._coerce_chat_request(params)
+        warn_unconfigured_chat_options(request)
         return build_clip_chat(self, clip_id, request)
 
     def _get_chat_messages_by_stream_id(
@@ -299,4 +304,5 @@ class TwitchChatDownloader(BaseChatDownloader):
             UserNotFound: The channel does not exist.
         """
         request = self._coerce_chat_request(params)
+        warn_unconfigured_chat_options(request)
         return build_stream_chat(self, stream_id, request)

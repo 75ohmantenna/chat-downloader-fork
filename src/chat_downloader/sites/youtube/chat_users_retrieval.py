@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING, Any, cast
 from chat_downloader.debugging import log
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.models import coerce_chat_request
+from chat_downloader.sites.base import (
+    handled_chat_request,
+    warn_unconfigured_chat_options,
+)
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.dict_utils import try_get_first_value
 from chat_downloader.utils.json_types import get_int
@@ -43,6 +47,7 @@ class YouTubeChatUsersRetrievalMixin:
     ) -> Chat:
         """Get chat by user arguments."""
         request = coerce_chat_request(params)
+        warn_unconfigured_chat_options(request)
         title = try_get_first_value(user_video_args)
         chat_item = Chat(title=title, id=title)
         chat_item._metadata_pending = True
@@ -93,9 +98,11 @@ class YouTubeChatUsersRetrievalMixin:
                     continue
 
                 try:
-                    chat = cast("YouTubeDownloaderProto", self).get_chat_by_video_id(
-                        video_id, params
-                    )
+                    # The outer channel chat already processed these options.
+                    with handled_chat_request(params):
+                        chat = cast(
+                            "YouTubeDownloaderProto", self
+                        ).get_chat_by_video_id(video_id, params)
 
                     log(
                         "info",

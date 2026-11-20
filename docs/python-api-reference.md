@@ -712,6 +712,14 @@ Kick URLs (`kick.com/{username}` for live chat,
 standard `get_chat()` and `get_chat_request()` entry points like any other
 site.
 
+Direct provider `get_chat_by_*` methods return a `Chat` without the facade's
+limits, timeouts, formatting, or file writers. When these methods ignore
+non-default options such as `max_messages`, `timeout`, `inactivity_timeout`,
+or `output`, they log a warning naming the options. Kick VOD and clip
+replay apply `max_messages` in their replay source. Use
+`ChatDownloader.get_chat()` or `ChatDownloader.get_chat_request()` to apply
+all of these options across providers.
+
 ### Replay checkpoints and automatic parity
 
 Use `run(resume="capture.checkpoint.json", verify_output=True, ...)` with explicit

@@ -15,7 +15,10 @@ from urllib.parse import unquote
 from chat_downloader.debugging import log
 from chat_downloader.models import ChatRequest, DownloaderConfig, get_field_default
 from chat_downloader.sites._message_dedup import _ConsoleState
-from chat_downloader.sites.base import BaseChatDownloader
+from chat_downloader.sites.base import (
+    BaseChatDownloader,
+    warn_unconfigured_chat_options,
+)
 from chat_downloader.utils.json_types import get_dict, get_int, get_list, get_str
 
 from .api_client import KickApiClient
@@ -199,6 +202,7 @@ class KickChatDownloader(BaseChatDownloader):
         """
         request = self._coerce_chat_request(params)
         self._warn_ignored_request_options(request)
+        warn_unconfigured_chat_options(request)
         return build_channel_chat(self, username, request)
 
     def get_chat_by_video(  # pragma: no cover — network-dependent VOD API
@@ -215,6 +219,7 @@ class KickChatDownloader(BaseChatDownloader):
         """
         request = self._coerce_chat_request(params)
         self._warn_ignored_request_options(request)
+        warn_unconfigured_chat_options(request, supports_message_limit=True)
         return build_vod_chat(
             username,
             video_id,
@@ -241,6 +246,7 @@ class KickChatDownloader(BaseChatDownloader):
         """
         request = self._coerce_chat_request(params)
         self._warn_ignored_request_options(request)
+        warn_unconfigured_chat_options(request, supports_message_limit=True)
         return build_clip_chat(
             username,
             clip_id,

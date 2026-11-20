@@ -16,6 +16,7 @@ from chat_downloader.errors import (
 )
 from chat_downloader.redaction import preflight_debug_samples, sanitize_for_log
 from chat_downloader.sites import get_all_sites
+from chat_downloader.sites.base import handled_chat_request
 
 from .chat_pipeline import configure_chat
 
@@ -69,7 +70,8 @@ def _execute_chat_generator(
     if not chat_generator:
         msg = f"{generator_method_name} has not been implemented in {site_name}."
         raise NotImplementedError(msg)
-    chat: Chat | None = chat_generator(match, request)
+    with handled_chat_request(request):
+        chat: Chat | None = chat_generator(match, request)
     log(
         "debug",
         f'Match found: "{match}". Running "{generator_method_name}" '

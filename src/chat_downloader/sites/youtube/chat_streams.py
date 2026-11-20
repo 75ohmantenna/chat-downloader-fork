@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from chat_downloader.errors import ParsingError
+from chat_downloader.sites.base import warn_unconfigured_chat_options
 from chat_downloader.sites.models import Chat
 from chat_downloader.utils.json_types import get_dict
 from chat_downloader.utils.time_utils import ensure_seconds
@@ -53,6 +54,7 @@ class YouTubeChatStreamsMixin:
         """Get chat messages for a YouTube clip."""
         proto = cast("YouTubeDownloaderProto", self)
         request = proto._coerce_chat_request(params)
+        warn_unconfigured_chat_options(request)
         initial_info, ytcfg = proto._get_initial_video_info(
             clip_id,
             request,
@@ -98,6 +100,7 @@ class YouTubeChatStreamsMixin:
         """Get chat messages for a YouTube video, given its ID."""
         proto = cast("YouTubeDownloaderProto", self)
         request = proto._coerce_chat_request(params)
+        warn_unconfigured_chat_options(request)
         initial_info, ytcfg = proto._get_initial_video_info(video_id, request)
 
         diagnostics: dict[str, object] = dict(

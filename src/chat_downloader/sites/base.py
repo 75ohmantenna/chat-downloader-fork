@@ -5,10 +5,18 @@
 from __future__ import annotations
 
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import fields
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from chat_downloader.debugging import log
-from chat_downloader.models import SiteDefault, coerce_chat_request
+from chat_downloader.models import (
+    ChatRequest,
+    SiteDefault,
+    coerce_chat_request,
+    get_field_default,
+)
 
 from .retry import retry as perform_retry
 from .session import ChatDownloaderSession, CookieSpec
@@ -18,9 +26,46 @@ if TYPE_CHECKING:
 
     import requests
 
-    from chat_downloader.models import ChatRequest
-
     from ._message_dedup import _ConsoleState
+
+
+_handled_chat_request: ContextVar[ChatRequest | None] = ContextVar(
+    "_handled_chat_request", default=None
+)
+
+
+@contextmanager
+def handled_chat_request(request: ChatRequest) -> Iterator[None]:
+    """Identify a request whose generic options are handled by an outer call."""
+    token = _handled_chat_request.set(request)
+    try:
+        yield
+    finally:
+        _handled_chat_request.reset(token)
+
+
+def warn_unconfigured_chat_options(
+    request: ChatRequest, *, supports_message_limit: bool = False
+) -> None:
+    """Warn about unused generic options without logging their values."""
+    if _handled_chat_request.get() is request:
+        return
+
+    ignored = [
+        item.name
+        for item in fields(ChatRequest)
+        if item.metadata.get("cli", {}).get("group")
+        in {"termination", "format", "output"}
+        and not (supports_message_limit and item.name == "max_messages")
+        and getattr(request, item.name) != get_field_default(item)
+    ]
+    if ignored:
+        log(
+            "warning",
+            f"Ignoring {', '.join(ignored)} in direct provider calls. "
+            "Use ChatDownloader.get_chat() or ChatDownloader.get_chat_request() "
+            "for these options.",
+        )
 
 
 class BaseChatDownloader:
