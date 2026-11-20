@@ -64,22 +64,33 @@ class YouTubeChatStreamsMixin:
         initial_info["offset"] = clip_start_time = initial_info.get("clip_start_time")
         clip_end_time = initial_info.get("clip_end_time")
 
-        if clip_start_time is None or clip_end_time is None:
+        if (
+            clip_start_time is None
+            or clip_end_time is None
+            or clip_end_time < clip_start_time
+        ):
             msg = f"Could not determine clip time range for clip {clip_id!r}"
             raise ParsingError(msg)
 
         max_duration = clip_end_time - clip_start_time
 
+        requested_start = ensure_seconds(request.start_time, 0)
+        requested_end = ensure_seconds(request.end_time, max_duration)
         request = request.with_updates(
-            start_time=ensure_seconds(request.start_time, 0) + clip_start_time,
-            end_time=ensure_seconds(request.end_time, max_duration) + clip_start_time,
+            start_time=clip_start_time + min(max(requested_start, 0), max_duration),
+            end_time=clip_start_time + min(max(requested_end, 0), max_duration),
         )
 
         diagnostics: dict[str, object] = dict(
             get_dict(ytcfg, "_chat_downloader_bootstrap_diagnostics")
         )
+        messages = (
+            iter(())
+            if requested_start > max_duration or requested_end < 0
+            else self._get_chat_messages(initial_info, ytcfg, request, diagnostics)
+        )
         chat = Chat(
-            self._get_chat_messages(initial_info, ytcfg, request, diagnostics),
+            messages,
             id=clip_id,
             diagnostics=diagnostics,
             **initial_info,

@@ -161,6 +161,11 @@ replace an explicit Live token or supply a missing view. This fallback supports
 live and replay video targets; clips remain on the normal page bootstrap because
 clip time ranges are page-specific.
 
+Clip replay start and end times are relative to the clip. The downloader
+restricts the requested window to the clip bounds before translating it to
+parent-recording time. A requested window entirely outside the clip yields no
+chat messages.
+
 Unavailable clips can return a confirmation popup without player metadata.
 That popup raises `VideoUnavailable` before status inference or profile
 rotation; it is a terminal provider result rather than an incomplete bootstrap.
@@ -178,6 +183,8 @@ overlay metadata for title and view count. Playlist discovery reads the selected
 tab's list sections and supports both `playlistVideoRenderer` and video
 `lockupViewModel` items, including modern continuation items. Playlist links and
 items nested in menus or sidebars are excluded from video enumeration.
+Channel and playlist discovery logs a warning and stops pagination after 1,000
+continuation pages or five consecutive continuation pages without video results.
 
 Public `get_playlist_items()` accepts HTTPS `/playlist` URLs from `youtube.com`,
 `www.youtube.com`, or `m.youtube.com`, with exactly one nonempty playlist ID.
@@ -250,7 +257,9 @@ SAPISIDHASH-style authorization headers. Public chats often work without
 cookies, but cookies help when YouTube wants stronger session context.
 Authentication-only headers are emitted only with the corresponding account or
 authorization state, and missing client metadata is omitted rather than sent as
-the literal string `None`.
+the literal string `None`. Each chat poll refreshes cookie-derived authorization
+and origin headers. Clearing the cookies removes those generated headers on the
+next poll and preserves explicitly configured headers.
 
 ### Continuation polling and parsing
 
@@ -477,7 +486,12 @@ fallback remains separate and still handles incomplete chat-poll responses
 after bootstrap has succeeded. Empty response objects, non-object JSON roots,
 and absent, empty, or non-dictionary live-chat continuation blocks enter the
 bounded request retry and profile-recovery path. A nonempty block with an empty
-action list is valid. Invalid or overflowing pacing hints use the default delay.
+action list is valid. The parser skips malformed continuation entries when a
+later entry has a usable token. A malformed action or continuation container,
+or a continuation list with unusable chat entries and no valid token, enters
+profile recovery before the page can emit messages. Individual non-object
+actions count as parse losses. Invalid color values are omitted from rendered
+messages. Invalid or overflowing pacing hints use the default delay.
 Generic unplayability in an InnerTube bootstrap is checked even when `next`
 exposes tokens, so unusable Web replay tokens do not bypass profile recovery.
 

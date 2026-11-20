@@ -32,7 +32,7 @@ class ContinuationParseResult:
     """Parsed result from a single YouTube live-chat continuation response.
 
     Attributes:
-        actions: Raw action dictionaries extracted from the payload. Empty for
+        actions: Raw action entries extracted from the payload. Empty for
             responses such as live heartbeat ticks with no new messages.
         next_continuation: Opaque token for the next request, or ``None`` when
             no further pages are available.
@@ -99,22 +99,31 @@ _POLL_DELAY_FIELDS = (
 def _extract_next_continuation(
     info: JSONDict,
 ) -> tuple[str | None, str | None, object, dict[str, object]]:
-    """Scan continuations and return the first chat continuation entry.
+    """Return the first usable chat continuation and reject malformed exhaustion.
 
     Seek-only continuations are intentionally skipped.
     """
+    invalid_entry = False
     for cont in get_list(info, "continuations"):
         if not isinstance(cont, dict):
+            invalid_entry = True
             continue
         continuation_key = next(iter(cont), None)
         if continuation_key is None:
-            continue
-        continuation_info = cont[continuation_key]
-        if not isinstance(continuation_info, dict):
+            invalid_entry = True
             continue
 
         if continuation_key in _KNOWN_SEEK_CONTINUATIONS:
             # Seek-only continuation — not a chat token; keep searching.
+            continue
+
+        continuation_info = cont[continuation_key]
+        if not isinstance(continuation_info, dict):
+            invalid_entry = True
+            continue
+        token = get_str(continuation_info, "continuation")
+        if not token.strip():
+            invalid_entry = True
             continue
 
         debug: dict[str, object] = {
@@ -124,7 +133,7 @@ def _extract_next_continuation(
         if continuation_key not in _KNOWN_CHAT_CONTINUATIONS:
             debug["unknown"] = True
         return (
-            get_str(continuation_info, "continuation") or None,
+            token,
             get_str(continuation_info, "clickTrackingParams")
             or get_str(continuation_info, "trackingParams")
             or None,
@@ -132,6 +141,9 @@ def _extract_next_continuation(
             debug,
         )
 
+    if invalid_entry:
+        msg = "YouTube chat continuation entries contain no usable token."
+        raise IncompleteContinuationError(msg)
     return None, None, None, {}
 
 
@@ -174,7 +186,7 @@ def parse_continuation_response(
         )
 
     info = multi_get(payload, "continuationContents", "liveChatContinuation")
-    if info is None:
+    if not isinstance(info, dict) or not info:
         summary = summarize_continuation_payload(payload)
         msg = (
             "Unrecognized YouTube continuation response shape. "
@@ -184,6 +196,10 @@ def parse_continuation_response(
         raise IncompleteContinuationError(
             msg,
         )
+    for key in ("actions", "continuations"):
+        if key in info and not isinstance(info[key], list):
+            msg = f"Expected a list for YouTube liveChatContinuation.{key}."
+            raise IncompleteContinuationError(msg)
     token, click_tracking, raw_timeout, debug_info = _extract_next_continuation(info)
     if debug_info:
         debug_info = {

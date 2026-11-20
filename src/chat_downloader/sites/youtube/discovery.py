@@ -24,8 +24,7 @@ from .constants_patterns import (
 )
 from .helpers import (
     _extract_browse_continuation_token_from_item,
-    _extract_browse_continuation_token_from_response,
-    _fetch_browse_continuation,
+    _iter_browse_videos,
     require_innertube_api_key,
 )
 from .parsing.message_items_video import _parse_video
@@ -291,27 +290,12 @@ class YouTubeDiscoveryMixin:
         videos, continuation = _process_page_items(first_items)
         yield from videos
 
-        seen_continuations: set[str] = set()
-        while continuation:
-            items, continuation_info = _fetch_browse_continuation(
-                proto,
-                continuation,
-                continuation_url,
-                continuation_params,
-                ytcfg,
-                request,
-                seen_continuations,
-            )
-            if items is None and continuation_info is None:
-                break
-            if not items:
-                continuation = (
-                    _extract_browse_continuation_token_from_response(
-                        continuation_info,
-                    )
-                    if continuation_info
-                    else None
-                )
-                continue
-            videos, continuation = _process_page_items(items)
-            yield from videos
+        yield from _iter_browse_videos(
+            proto,
+            continuation,
+            continuation_url,
+            continuation_params,
+            ytcfg,
+            request,
+            _process_page_items,
+        )

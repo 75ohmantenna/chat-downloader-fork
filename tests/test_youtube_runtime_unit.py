@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from contextlib import closing
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import Mock, call
@@ -34,6 +37,7 @@ from chat_downloader.sites.youtube.continuation_helpers import (
     derive_live_offset_milliseconds,
     enrich_live_message_timing,
 )
+from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
 from chat_downloader.sites.youtube.message_pipeline import (
     NonEmissionReason,
     PipelineResult,
@@ -41,7 +45,7 @@ from chat_downloader.sites.youtube.message_pipeline import (
 from tests.youtube_third_helpers import (
     Downloader as _DummyDownloader,
 )
-from tests.youtube_third_helpers import patch
+from tests.youtube_third_helpers import item_action, patch
 from tests.youtube_third_helpers import (
     response as _response,
 )
@@ -61,6 +65,7 @@ def _returns(monkeypatch, name, value):
 
 def _build_result(
     *,
+    actions=None,
     debug_info=None,
     timeout_ms=None,
     is_end=True,
@@ -68,6 +73,7 @@ def _build_result(
     click_tracking_params=None,
 ):
     return SimpleNamespace(
+        actions=[] if actions is None else actions,
         debug_info={} if debug_info is None else debug_info,
         timeout_ms=timeout_ms,
         is_end=is_end,
@@ -150,7 +156,11 @@ def _stub_loop(monkeypatch, *, msg_filter=None):
         (
             "visitor-1",
             "AUTH_TOKEN",
-            {"authorization": "AUTH_TOKEN", "x-goog-visitor-id": "visitor-1"},
+            {
+                "authorization": "AUTH_TOKEN",
+                "x-origin": "https://www.youtube.com",
+                "x-goog-visitor-id": "visitor-1",
+            },
         ),
         (None, None, {}),
     ],
@@ -161,7 +171,9 @@ def test_handle_continuation_response_headers_and_request_context(
     _returns(monkeypatch, "extract_visitor_data", visitor)
     _returns(monkeypatch, "_generate_sapisidhash_header", auth)
     downloader = _DummyDownloader()
-    _loop(downloader)._handle_continuation_response(
+    loop = _loop(downloader)
+    loop._refresh_continuation_auth()
+    loop._handle_continuation_response(
         {
             "responseContext": {
                 "serviceTrackingParams": [{}, {"params": [{"value": "abc"}]}]
@@ -458,7 +470,6 @@ def test_chat_iteration_incomplete_response(monkeypatch, polling, missing_body):
     if missing_body:
         monkeypatch.setenv("CHAT_DOWNLOADER_CAPTURE_YOUTUBE_RESPONSES", "1")
         polling.fetch.return_value = {"responseContext": {}}
-        _returns(monkeypatch, "summarize_continuation_payload", "summary")
     else:
         polling.fetch.side_effect = original_error
         _returns(monkeypatch, "_ContinuationLoop._attempt_profile_fallback", False)
@@ -537,7 +548,9 @@ def test_chat_iteration_live_updates_offset_from_message_timestamps(
         "parse_continuation_response",
         Mock(
             side_effect=[
-                _build_result(is_end=False, next_continuation="next-live"),
+                _build_result(
+                    actions=[{"id": 1}], is_end=False, next_continuation="next-live"
+                ),
                 _build_result(),
             ]
         ),
@@ -650,6 +663,14 @@ def test_replay_progress_ignores_invalid_offsets(raw_offset):
     )
 
 
+@pytest.mark.parametrize("is_replay", [False, True])
+def test_malformed_actions_do_not_count_as_progress(is_replay):
+    progress = _ContinuationProgress(max_no_progress_polls=1, max_profile_fallbacks=1)
+    assert not progress.response_advanced(
+        ["unexpected"], token_changed=False, is_replay=is_replay
+    )
+
+
 def _user_video(video_id, title="Target", video_type="LIVE"):
     return {"video_id": video_id, "title": title, "video_type": video_type}
 
@@ -726,3 +747,92 @@ def test_user_chat_lookup_lifecycle(monkeypatch, scenario):
     assert [entry.args[0] for entry in lookup.get_chat_by_video_id.call_args_list] == [
         "live-1" if scenario == "first-success" else "keep-me"
     ]
+
+
+def test_malformed_actions_do_not_abort_paid_message(monkeypatch):
+    path = (
+        Path(__file__).parent
+        / "fixtures/youtube/continuations/malformed-actions-synthetic.json"
+    )
+    _returns(monkeypatch, "_get_continuation_info", json.loads(path.read_text()))
+
+    with closing(YouTubeChatDownloader()) as site:
+        loop = _ContinuationLoop(
+            site,
+            _video_info(),
+            {"INNERTUBE_API_KEY": "key"},
+            ChatRequest(chat_type="live", message_groups=["all"]),
+        )
+        messages = list(loop.run())
+
+    assert messages[0]["message"] == "Still readable"
+    assert "body_background_colour" not in messages[0]
+    assert messages[-1]["message_type"] == "chat_ended"
+    assert loop.diagnostics["parse_error"] == 1
+
+
+def test_invalid_replay_token_triggers_profile_recovery(monkeypatch, polling):
+    polling.fetch.side_effect = [
+        _response(
+            [{"id": "discard-incomplete-page"}],
+            continuations=[{"liveChatReplayContinuationData": {"continuation": 123}}],
+        ),
+        _response(),
+    ]
+    process = Mock(return_value=iter(()))
+    _patch(monkeypatch, "_process_actions", process)
+    assert list(_messages(polling.downloader, _video_info(status="was_live"))) == []
+    assert polling.downloader.applied_profiles == ["youtube_android"]
+    assert process.call_count == 1
+    assert process.call_args.args[0] == []
+
+
+@pytest.mark.parametrize("explicit_auth", [False, True])
+def test_clear_cookies_removes_generated_auth_before_next_poll(
+    monkeypatch, explicit_auth
+):
+    seen = []
+    actions = [
+        item_action(
+            "liveChatTextMessageRenderer",
+            {
+                "id": "live-text",
+                "message": {"runs": [{"text": "first"}]},
+            },
+        )
+    ]
+
+    def fetch(*_args, **_kwargs):
+        seen.append(
+            {key.casefold(): value for key, value in site.session.headers.items()}
+        )
+        if len(seen) == 1:
+            return _response(
+                actions,
+                continuations=[{"timedContinuationData": {"continuation": "next"}}],
+            )
+        return _response()
+
+    _patch(monkeypatch, "_get_continuation_info", fetch)
+    headers = (
+        {"Authorization": "Explicit value", "X-Origin": "explicit-origin"}
+        if explicit_auth
+        else None
+    )
+    with closing(YouTubeChatDownloader(headers=headers)) as site:
+        site.set_cookie_value(
+            ".youtube.com", "SAPISID", "synthetic-cookie", secure=True
+        )
+        messages = _messages(site, _video_info())
+        assert next(messages)["message"] == "first"
+        site.clear_cookies()
+        assert list(messages) == []
+
+    if explicit_auth:
+        assert [headers["authorization"] for headers in seen] == ["Explicit value"] * 2
+        assert [headers["x-origin"] for headers in seen] == ["explicit-origin"] * 2
+    else:
+        assert seen[0]["authorization"].startswith("SAPISIDHASH ")
+        assert seen[0]["x-origin"] == "https://www.youtube.com"
+        assert "authorization" not in seen[1]
+        assert "x-origin" not in seen[1]

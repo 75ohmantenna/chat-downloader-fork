@@ -31,21 +31,23 @@ def _parse_text(info: JSONDict) -> str | None:
 
 
 def _append_run(
-    message_info: dict[str, Any],
+    fragments: list[str],
     run: JSONDict,
     message_emotes: dict[str, dict[str, Any]],
     *,
     parse_links: bool,
 ) -> None:
-    """Append one run's contribution to *message_info* and *message_emotes*."""
+    """Append one run's text and record any emoji metadata."""
     if "text" in run:
         if parse_links and "navigationEndpoint" in run:
-            message_info["message"] += _parse_navigation_endpoint(
-                get_dict(run, "navigationEndpoint"),
-                get_str(run, "text"),
+            fragments.append(
+                _parse_navigation_endpoint(
+                    get_dict(run, "navigationEndpoint"),
+                    get_str(run, "text"),
+                )
             )
         else:
-            message_info["message"] += get_str(run, "text")
+            fragments.append(get_str(run, "text"))
     elif "emoji" in run:
         emoji = get_dict(run, "emoji")
         emoji_id = get_str(emoji, "emojiId") or None
@@ -61,9 +63,9 @@ def _append_run(
                 "images": _parse_thumbnails(get_dict(emoji, "image")),
                 "is_custom_emoji": emoji.get("isCustomEmoji", False),
             }
-        message_info["message"] += name
+        fragments.append(name)
     else:
-        message_info["message"] += str(run)
+        fragments.append(str(run))
 
 
 def _parse_runs(run_info: object, *, parse_links: bool = True) -> dict[str, Any]:
@@ -78,11 +80,13 @@ def _parse_runs(run_info: object, *, parse_links: bool = True) -> dict[str, Any]
         message_info["message"] = get_str(run_info, "content")
         return message_info
 
+    fragments: list[str] = []
     message_emotes: dict[str, dict[str, Any]] = {}
     for run in runs:
         if isinstance(run, dict):
-            _append_run(message_info, run, message_emotes, parse_links=parse_links)
+            _append_run(fragments, run, message_emotes, parse_links=parse_links)
 
+    message_info["message"] = "".join(fragments)
     if message_emotes:
         message_info["emotes"] = list(message_emotes.values())
 

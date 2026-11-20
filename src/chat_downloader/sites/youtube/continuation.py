@@ -59,7 +59,6 @@ from .continuation_helpers import (
 )
 from .continuations import (
     parse_continuation_response,
-    summarize_continuation_payload,
 )
 from .delivery_recovery import ReplayPageHistory
 from .helpers import require_innertube_api_key
@@ -68,12 +67,12 @@ from .paid_events import PaidEventCache
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Sequence
 
     from chat_downloader.models import ChatRequest
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
     from chat_downloader.sites.youtube._protocols import YouTubeDownloaderProto
-    from chat_downloader.utils.json_types import JSONDict
+    from chat_downloader.utils.json_types import JSONAny, JSONDict
 
     from .continuations import ContinuationParseResult
 
@@ -122,14 +121,14 @@ class _ContinuationProgress:
 
     def response_advanced(
         self,
-        actions: list[JSONDict],
+        actions: Sequence[JSONAny],
         *,
         token_changed: bool,
         is_replay: bool,
     ) -> bool:
         """Return whether a response advanced its token or replay position."""
         if not is_replay:
-            return bool(actions) or token_changed
+            return token_changed or any(isinstance(action, dict) for action in actions)
 
         latest_offset = _latest_replay_action_offset_milliseconds(actions)
         offset_advanced = latest_offset is not None and (
@@ -148,11 +147,13 @@ class _ContinuationProgress:
 
 
 def _latest_replay_action_offset_milliseconds(
-    actions: list[JSONDict],
+    actions: Sequence[JSONAny],
 ) -> float | None:
     """Return the greatest valid replay-wrapper offset in an action page."""
     latest_offset: float | None = None
     for action in actions:
+        if not isinstance(action, dict):
+            continue
         replay_action = get_dict(action, "replayChatItemAction")
         raw_offset = get_str(replay_action, "videoOffsetTimeMsec")
         try:
@@ -406,17 +407,20 @@ class _ContinuationLoop:
 
     # -- response handling --------------------------------------------------
 
+    def _refresh_continuation_auth(self) -> None:
+        """Refresh cookie-derived headers before a continuation request."""
+        auth = _generate_sapisidhash_header(self.downloader, _YT_HOME, self.ytcfg)
+        headers = {"authorization": auth, "x-origin": _YT_HOME} if auth else {}
+        self.downloader.replace_session_headers(headers, {"authorization", "x-origin"})
+
     def _handle_continuation_response(
         self, yt_info: JSONDict, continuation_params: JSONDict
     ) -> None:
-        """Refresh response credentials, log request context, and surface API errors."""
-        auth = _generate_sapisidhash_header(self.downloader, _YT_HOME, self.ytcfg)
+        """Refresh visitor data, log request context, and surface API errors."""
         visitor_data = extract_visitor_data(yt_info)
         if visitor_data:
             self.downloader.update_session_headers({"x-goog-visitor-id": visitor_data})
             log("debug", "Updated visitor data")
-        if auth:
-            self.downloader.update_session_headers({"authorization": auth})
 
         debug_info = {
             "click_tracking": multi_get(
@@ -617,6 +621,7 @@ class _ContinuationLoop:
             )
             token_before_request = ctx.loop_state.continuation
 
+            self._refresh_continuation_auth()
             try:
                 yt_info = _get_continuation_info(
                     ctx.continuation_url,
@@ -625,30 +630,22 @@ class _ContinuationLoop:
                     diagnostics=self.diagnostics,
                     json=continuation_params,
                 )
+                if self._retry_rejected_initial_request(yt_info):
+                    continue
+                self._handle_continuation_response(yt_info, continuation_params)
+                cont_result = parse_continuation_response(yt_info)
             except IncompleteContinuationError:
                 if not self._recover_incomplete_continuation():
                     raise
                 continue
 
-            if self._retry_rejected_initial_request(yt_info):
-                continue
-            self._handle_continuation_response(yt_info, continuation_params)
-
-            info = multi_get(yt_info, "continuationContents", "liveChatContinuation")
-            if not isinstance(info, dict) or not info:
-                summary = summarize_continuation_payload(yt_info)
-                msg = (
-                    "Missing continuationContents.liveChatContinuation in "
-                    "response body. "
-                    f"Summary: {summary}"
-                )
-                raise IncompleteContinuationError(msg)
-
             self._record_accepted_response()
             self._capture.capture("youtube-continuation-response", yt_info)
 
-            actions = info.get("actions") or []
-            cont_result = parse_continuation_response(yt_info)
+            info = get_dict(
+                get_dict(yt_info, "continuationContents"), "liveChatContinuation"
+            )
+            actions = cont_result.actions
             repeated_page = self._repeated_replay_page(
                 token_before_request, cont_result, info
             )

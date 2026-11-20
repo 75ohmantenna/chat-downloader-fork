@@ -9,7 +9,7 @@ from typing import Any
 
 from chat_downloader.errors import ParsingError
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import get_bool
+from chat_downloader.utils.json_types import get_bool, get_dict
 from chat_downloader.utils.time_utils import parse_iso8601
 
 from .video_status_helpers import (
@@ -30,18 +30,15 @@ def parse_video_details(
     video_type: str = "video",
 ) -> VideoDetails:
     """Parse player-response and initial-data into :class:`VideoDetails`."""
-    streaming_data = player_response_info.get("streamingData") or {}
-    first_format: dict[str, Any] = (
-        multi_get(streaming_data, "adaptiveFormats", 0)
-        or multi_get(streaming_data, "formats", 0)
-        or {}
+    streaming_data = get_dict(player_response_info, "streamingData")
+    first_format = multi_get(streaming_data, "adaptiveFormats", 0)
+    if not isinstance(first_format, dict) or not first_format:
+        first_format = multi_get(streaming_data, "formats", 0)
+    player_renderer = get_dict(
+        get_dict(player_response_info, "microformat"), "playerMicroformatRenderer"
     )
-    player_renderer: dict[str, Any] = (
-        multi_get(player_response_info, "microformat", "playerMicroformatRenderer")
-        or {}
-    )
-    live_details: dict[str, Any] = player_renderer.get("liveBroadcastDetails") or {}
-    video_details: dict[str, Any] = player_response_info.get("videoDetails") or {}
+    live_details: dict[str, Any] = get_dict(player_renderer, "liveBroadcastDetails")
+    video_details: dict[str, Any] = get_dict(player_response_info, "videoDetails")
 
     pr_video_id = video_details.get("videoId")
     if pr_video_id and pr_video_id != video_id and video_type != "clip":
@@ -71,7 +68,11 @@ def parse_video_details(
     end_time = parse_iso8601(end_timestamp) if end_timestamp else None
 
     duration = _derive_duration(
-        first_format, video_details, player_renderer, start_time, end_time
+        first_format if isinstance(first_format, dict) else {},
+        video_details,
+        player_renderer,
+        start_time,
+        end_time,
     )
     continuation_info = _extract_continuation_info(yt_initial_data)
     status = _determine_status(video_details, live_details)

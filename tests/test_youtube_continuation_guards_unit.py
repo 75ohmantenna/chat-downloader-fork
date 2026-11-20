@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from http.cookiejar import CookieJar
 from types import SimpleNamespace
 
 import pytest
@@ -30,6 +31,7 @@ def _disable_polling_sleep(monkeypatch) -> None:
 class _DummySession:
     def __init__(self) -> None:
         self.headers: dict[str, str] = {}
+        self.cookies = CookieJar()
 
 
 class _DummyDownloader:

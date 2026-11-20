@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from chat_downloader.errors import ParsingError
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.base import BaseChatDownloader
 from chat_downloader.sites.models import Chat
@@ -159,3 +160,38 @@ def test_youtube_user_retrieval_keeps_request_typed_until_discovery_boundary() -
     assert first_message["message_type"] == "text_message"
     assert downloader.discovery_params is request
     assert downloader.video_request is request
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "window", "polls"),
+    [
+        (-5, 90, (10, 70), True),
+        (10, 90, (20, 70), True),
+        (61, None, (70, 70), False),
+        (None, -1, (10, 10), False),
+    ],
+)
+def test_clip_windows_are_restricted_to_the_clip(start, end, window, polls) -> None:
+    downloader = _Streams(clip_start_time=10, clip_end_time=70)
+    request = ChatRequest(start_time=start, end_time=end)
+    chat = downloader.get_chat_by_clip_id("abc", request)
+    assert list(chat) == []
+    assert chat._request_window == {
+        "start_time": window[0],
+        "end_time": window[1],
+        "time_basis": "recording",
+    }
+    if polls:
+        assert (
+            downloader.message_params.start_time,
+            downloader.message_params.end_time,
+        ) == window
+    else:
+        assert downloader.message_params is None
+
+
+def test_inverted_clip_metadata_fails_before_clamping() -> None:
+    downloader = _Streams(clip_start_time=70, clip_end_time=10)
+    with pytest.raises(ParsingError, match="Could not determine clip time range"):
+        downloader.get_chat_by_clip_id("abc", ChatRequest())
+    assert downloader.message_params is None

@@ -10,6 +10,7 @@ import pytest
 
 from chat_downloader.errors import (
     CaptchaChallengeRequired,
+    IncompleteContinuationError,
     ParsingError,
     RetriesExceeded,
 )
@@ -110,13 +111,9 @@ def test_retryable_status_ignores_non_integers(value) -> None:
 
 
 @pytest.mark.parametrize("entry", [{}, "not-a-dict", {"someKey": "not_a_dict"}])
-def test_extract_next_continuation_skips_malformed_entries(entry) -> None:
-    assert _extract_next_continuation({"continuations": [entry]}) == (
-        None,
-        None,
-        None,
-        {},
-    )
+def test_extract_next_continuation_rejects_only_malformed_entries(entry) -> None:
+    with pytest.raises(IncompleteContinuationError, match="no usable token"):
+        _extract_next_continuation({"continuations": [entry]})
 
 
 def test_get_initial_info_raises_parsing_error_when_html_unparseable() -> None:

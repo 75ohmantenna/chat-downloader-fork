@@ -1,0 +1,22 @@
+{
+  "continuationContents": {
+    "liveChatContinuation": {
+      "actions": [
+        "unexpected",
+        {
+          "addChatItemAction": {
+            "item": {
+              "liveChatPaidMessageRenderer": {
+                "id": "synthetic-paid",
+                "authorName": {"simpleText": "Example"},
+                "timestampUsec": "6000000",
+                "message": {"runs": [{"text": "Still readable"}]},
+                "bodyBackgroundColor": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

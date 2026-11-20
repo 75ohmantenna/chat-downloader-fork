@@ -174,4 +174,32 @@ def test_error_summary():
 @pytest.mark.parametrize("actions", [{"not": "a list"}, "string"])
 def test_non_list_actions(actions):
     payload = wrap("continuationContents.liveChatContinuation.actions", actions)
-    assert parse_continuation_response(payload).actions == []
+    with pytest.raises(IncompleteContinuationError, match="actions"):
+        parse_continuation_response(payload)
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        123,
+        {},
+        {"liveChatReplayContinuationData": None},
+        {"liveChatReplayContinuationData": {"continuation": 123}},
+        {"liveChatReplayContinuationData": {"continuation": ""}},
+    ],
+)
+def test_invalid_continuation_entry_can_precede_a_valid_token(entry):
+    token = {"liveChatReplayContinuationData": {"continuation": "tok-B"}}
+    with pytest.raises(IncompleteContinuationError, match="no usable token"):
+        parse_continuation_response(response(continuations=[entry]))
+    result = parse_continuation_response(response(continuations=[entry, token]))
+    assert result.next_continuation == "tok-B"
+    assert not result.is_end
+
+
+def test_continuation_rejects_malformed_continuations_container():
+    payload = wrap(
+        "continuationContents.liveChatContinuation.continuations", {"bad": 1}
+    )
+    with pytest.raises(IncompleteContinuationError, match="continuations"):
+        parse_continuation_response(payload)

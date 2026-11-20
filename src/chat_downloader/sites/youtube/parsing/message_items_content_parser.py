@@ -102,8 +102,9 @@ def _apply_colour_keys(
 ) -> None:
     """Convert ARGB color fields to hex and store under normalized keys."""
     for colour_key in colour_keys:
-        if colour_key in item_info:
-            rgba_colour = argb_int_to_rgba(item_info[colour_key])  # type: ignore[arg-type]
+        colour = item_info.get(colour_key)
+        if isinstance(colour, int) and not isinstance(colour, bool):
+            rgba_colour = argb_int_to_rgba(colour)
             hex_colour = rgba_to_hex(rgba_colour)
             new_key = camel_case_split(colour_key.replace("Color", "Colour"))
             info[new_key] = hex_colour

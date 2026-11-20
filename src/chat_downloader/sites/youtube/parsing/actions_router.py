@@ -117,13 +117,14 @@ def _get_replay_time_seconds(replay_action: JSONDict) -> float | None:
     return offset_milliseconds / 1000
 
 
-def iter_action_occurrences(actions: Iterable[JSONDict]) -> Iterator[JSONDict]:
+def iter_action_occurrences(actions: Iterable[JSONAny]) -> Iterator[JSONDict]:
     """Expand replay siblings in order without mutating the provider payload.
 
     Each view retains the wrapper timing for the singular action parser. Empty
     or malformed wrappers still reach that parser for record-loss accounting.
     """
-    for action in actions:
+    for raw_action in actions:
+        action = raw_action if isinstance(raw_action, dict) else {}
         replay = get_dict(action, "replayChatItemAction")
         inner_actions = get_list(replay, "actions")
         if len(inner_actions) <= 1:

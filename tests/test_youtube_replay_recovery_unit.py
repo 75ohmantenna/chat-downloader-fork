@@ -274,12 +274,11 @@ def test_malformed_replacement_response_never_counts_as_recovery_success(
     from chat_downloader.errors import IncompleteContinuationError
 
     provider = YouTubeChatDownloader(request_profile="youtube_web")
-    responses = iter(
-        [_error(), {"continuationContents": {"liveChatContinuation": ["invalid"]}}]
-    )
+    invalid_response = {"continuationContents": {"liveChatContinuation": ["invalid"]}}
+    responses = iter([_error()])
     monkeypatch.setattr(
         "chat_downloader.sites.youtube.continuation._get_continuation_info",
-        lambda *args, **kwargs: next(responses),
+        lambda *args, **kwargs: next(responses, invalid_response),
     )
     monkeypatch.setattr(
         provider,

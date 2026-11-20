@@ -18,6 +18,8 @@ from .client_requests_continuation import _get_continuation_info
 from .constants_patterns import _YT_HOME
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
+
     from chat_downloader.models import ChatRequest
     from chat_downloader.utils.json_types import JSONDict, JSONList
 
@@ -283,3 +285,48 @@ def _extract_browse_continuation_token_from_response(
         if token:
             return token
     return None
+
+
+_MAX_BROWSE_CONTINUATION_PAGES = 1000
+_MAX_EMPTY_BROWSE_PAGES = 5
+
+
+def _iter_browse_videos[Video](
+    downloader: YouTubeDownloaderProto,
+    continuation: str | None,
+    continuation_url: str,
+    continuation_params: JSONDict,
+    ytcfg: JSONDict,
+    request: ChatRequest,
+    parse_items: Callable[[JSONList], tuple[list[Video], str | None]],
+) -> Iterator[Video]:
+    """Yield continuation results within the browse page and empty-page limits."""
+    seen_continuations: set[str] = set()
+    empty_pages = 0
+    if not continuation:
+        return
+    for _ in range(_MAX_BROWSE_CONTINUATION_PAGES):
+        items, payload = _fetch_browse_continuation(
+            downloader,
+            continuation,
+            continuation_url,
+            continuation_params,
+            ytcfg,
+            request,
+            seen_continuations,
+        )
+        if payload is None:
+            return
+        if items:
+            videos, continuation = parse_items(items)
+        else:
+            videos = []
+            continuation = _extract_browse_continuation_token_from_response(payload)
+        yield from videos
+        if not continuation:
+            return
+        empty_pages = 0 if videos else empty_pages + 1
+        if empty_pages >= _MAX_EMPTY_BROWSE_PAGES:
+            log("warning", "Stopped YouTube browse after consecutive empty pages.")
+            return
+    log("warning", "Stopped YouTube browse at the continuation page limit.")

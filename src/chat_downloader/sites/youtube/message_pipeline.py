@@ -33,10 +33,10 @@ from .parsing.actions_router import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Generator
+    from collections.abc import Generator, Sequence
 
     from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
-    from chat_downloader.utils.json_types import JSONDict
+    from chat_downloader.utils.json_types import JSONAny, JSONDict
 
     from .continuation_helpers import ContinuationLoopState
     from .paid_events import PaidEventCache
@@ -294,7 +294,7 @@ def _observe_replay_timing(
 
 
 def _process_actions(
-    actions: list[JSONDict],
+    actions: Sequence[JSONAny],
     offset: float | None,
     msg_filter: MessageFilter,
     time_filter: TimeRangeFilter | None,

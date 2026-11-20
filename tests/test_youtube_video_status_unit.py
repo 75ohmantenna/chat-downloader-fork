@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+from chat_downloader.sites.youtube.video_status import parse_video_details
 from chat_downloader.sites.youtube.video_status_helpers import _derive_duration
 
 _DURATION_CASES = "first_format,video_details,player_renderer,start,end,want"
@@ -36,3 +37,24 @@ def test_derive_duration(
 ) -> None:
     result = _derive_duration(first_format, video_details, player_renderer, start, end)
     assert result == want
+
+
+@pytest.mark.parametrize(
+    ("streaming", "duration"),
+    [
+        ({"formats": [1]}, 60),
+        ({"adaptiveFormats": [1], "formats": [{"approxDurationMs": "70000"}]}, 70),
+        ("unexpected", 60),
+    ],
+)
+def test_video_details_fall_back_from_invalid_format_metadata(streaming, duration):
+    detail = parse_video_details(
+        {
+            "streamingData": streaming,
+            "microformat": {"playerMicroformatRenderer": {"liveBroadcastDetails": 1}},
+            "videoDetails": {"videoId": "abc", "lengthSeconds": "60"},
+        },
+        {},
+        "abc",
+    )
+    assert detail.duration == duration

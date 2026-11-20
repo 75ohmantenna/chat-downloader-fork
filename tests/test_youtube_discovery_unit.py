@@ -410,7 +410,7 @@ def test_discovery_breaks_continuation_loop(monkeypatch):
     )
     returns(
         monkeypatch,
-        "discovery._extract_browse_continuation_token_from_response",
+        "helpers._extract_browse_continuation_token_from_response",
         "loop-token",
     )
     assert list(_Discovery().get_user_videos(channel_id="abc")) == []
@@ -581,3 +581,32 @@ def test_valid_empty_browse_response_still_ends_normally(
         {"video_id": "one"}
     ]
     assert post.call_count == 1
+
+
+@pytest.mark.parametrize("kind", ["channel", "playlist"])
+@pytest.mark.parametrize("has_videos", [False, True])
+def test_discovery_limits_pagination(monkeypatch, kind, has_videos):
+    monkeypatch.setattr(helpers, "_MAX_BROWSE_CONTINUATION_PAGES", 4)
+    monkeypatch.setattr(helpers, "_MAX_EMPTY_BROWSE_PAGES", 2)
+    initial = [_continuation("initial")]
+    if kind == "channel":
+        _patch_browse(monkeypatch, [_tab(wrap("richGridRenderer.contents", initial))])
+        listing = _Discovery().get_user_videos(channel_id="abc")
+        video = _rich_video("video")
+    else:
+        _patch_playlist(monkeypatch, initial, parse=True)
+        listing = _Playlist().get_playlist_items(PLAYLIST)
+        video = {"playlistVideoRenderer": {"videoId": "video"}}
+
+    def fetch(*_args, **_kwargs):
+        return _append(
+            [*([video] if has_videos else []), _continuation(str(post.call_count))]
+        )
+
+    post = Mock(side_effect=fetch)
+    monkeypatch.setattr(helpers, "_get_continuation_info", post)
+    videos = list(listing)
+    assert [item["video_id"] for item in videos] == (
+        ["video"] * 4 if has_videos else []
+    )
+    assert post.call_count == (4 if has_videos else 2)
