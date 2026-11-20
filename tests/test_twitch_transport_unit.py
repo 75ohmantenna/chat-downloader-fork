@@ -634,7 +634,24 @@ def test_twitch_chat_irc_registration_and_receive(irc_socket, split):
     ]
     irc.send_raw("PING")
     assert irc_socket.sendall.call_args.args == (b"PING\r\n",)
-    assert "".join(irc.recv(32) for _ in chunks) == text
+    assert "".join(irc.recv(32) or "" for _ in chunks) == text
+
+
+def test_irc_stream_distinguishes_partial_utf8_from_socket_eof(irc_socket):
+    frame = (_privmsg("utf8", "hello 😀") + "\r\n").encode()
+    encoded = "😀".encode()
+    prefix, suffix = frame.split(encoded)
+    irc_socket.recv.side_effect = [
+        prefix,
+        *[bytes([byte]) for byte in encoded],
+        suffix,
+        b"",
+    ]
+    irc = irc_transport.TwitchChatIRC(connect_timeout=0.5)
+    messages = _stream_messages(irc)
+    assert next(messages)["message"] == "hello 😀"
+    with pytest.raises(ConnectionError, match="Lost connection"):
+        next(messages)
 
 
 @pytest.mark.parametrize(
@@ -733,7 +750,7 @@ class _FakeIRC:
         self.sent_before_recv: list[list[str]] = []
         self.send_error = send_error
 
-    def recv(self, _buffer_size: int) -> str:
+    def recv(self, _buffer_size: int) -> str | None:
         self.sent_before_recv.append(self.sent.copy())
         response = next(self.responses)
         if isinstance(response, Exception):
@@ -769,7 +786,7 @@ def _stream_messages(irc, diagnostics=None):
     ],
 )
 def test_irc_transport_only_answers_completed_ping_frames(chunks, ping_count) -> None:
-    irc = _FakeIRC([*chunks, ""])
+    irc = _FakeIRC([*chunks, None])
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
     with pytest.raises(ConnectionError):
         list(_stream_messages(irc, diagnostics))
@@ -797,7 +814,7 @@ def test_irc_transport_captures_drift_but_not_control_frames(frame, unknown) -> 
         patch.object(irc_transport, "capture_debug_sample") as mock_capture,
         pytest.raises(ConnectionError),
     ):
-        list(_stream_messages(_FakeIRC([frame, ""]), diagnostics))
+        list(_stream_messages(_FakeIRC([frame, None]), diagnostics))
 
     if unknown:
         mock_capture.assert_called_once_with(
@@ -848,7 +865,7 @@ def test_irc_transport_captures_drift_but_not_control_frames(frame, unknown) -> 
     ids=["split-message-keepalive", "250-messages", "partial-tail", "receive-timeout"],
 )
 def test_irc_stream_chunks(chunks, expected, times, counters, sent):
-    irc = _FakeIRC([*chunks, ""])
+    irc = _FakeIRC([*chunks, None])
     diagnostics = irc_diagnostics._TwitchLiveDiagnostics()
     messages = []
     with (

@@ -266,7 +266,7 @@ class _MockIRC:
         self._responses = responses
         self._idx = 0
 
-    def recv(self, buffer_size: int) -> str:
+    def recv(self, buffer_size: int) -> str | None:
         if self._idx >= len(self._responses):
             msg = "Mock exhausted"
             raise ConnectionError(msg)
@@ -294,7 +294,7 @@ def test_recv_loop_handles_socket_timeout_silently() -> None:
     irc = _MockIRC(
         [
             TimeoutError("recv timed out"),  # caught silently
-            "",  # empty recv → ConnectionError → stop
+            None,  # socket EOF → ConnectionError → stop
         ],
     )
     params = {"buffer_size": 4096, "message_groups": []}
@@ -307,9 +307,9 @@ def test_recv_loop_handles_socket_timeout_silently() -> None:
     assert collected == []
 
 
-def test_recv_loop_raises_connection_error_on_empty_recv() -> None:
-    """Empty bytes from recv() must raise ConnectionError immediately."""
-    irc = _MockIRC([""])  # first recv returns empty string
+def test_recv_loop_raises_connection_error_on_socket_eof() -> None:
+    """Socket EOF must raise ConnectionError immediately."""
+    irc = _MockIRC([None])
     params = {"buffer_size": 4096, "message_groups": []}
 
     with pytest.raises(ConnectionError, match="Lost connection"):
@@ -323,7 +323,7 @@ def test_recv_loop_multiple_timeouts_before_connection_error() -> None:
             TimeoutError("t1"),
             TimeoutError("t2"),
             TimeoutError("t3"),
-            "",  # triggers ConnectionError
+            None,  # triggers ConnectionError
         ],
     )
     params = {"buffer_size": 4096, "message_groups": []}

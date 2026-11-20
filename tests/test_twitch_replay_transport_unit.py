@@ -70,6 +70,8 @@ def test_replay_request_position(
     mobile, cursor, offset, variables, edges, metadata, has_next
 ) -> None:
     expected = {"edges": edges}
+    if not mobile and (cursor or edges):
+        expected["pageInfo"] = {"hasNextPage": False}
     replies = [_video_payload(expected, **metadata)]
     if mobile:
         replies.insert(0, _PersistedQueryUnavailable("rotated"))
@@ -190,3 +192,9 @@ def test_timed_replay_does_not_start_fallback_after_close(blocked_request):
     assert source.gi_frame is None
     assert session_post.call_count == blocked_request
     assert timed._result_queue.empty()
+
+
+def test_replay_empty_continuation_page_requires_pagination_flag():
+    download = Mock(return_value=_video_payload({"edges": []}))
+    with pytest.raises(ParsingError, match="missing a boolean hasNextPage"):
+        _replay(download, cursor="cursor-1")

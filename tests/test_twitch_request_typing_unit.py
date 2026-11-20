@@ -49,7 +49,9 @@ def test_twitch_vod_entry_accepts_chat_request() -> None:
 
 def test_twitch_clip_entry_accepts_chat_request() -> None:
     downloader = TwitchChatDownloader()
-    request = ChatRequest(url="https://clips.twitch.tv/example", max_attempts=2)
+    request = ChatRequest(
+        url="https://clips.twitch.tv/example", max_attempts=2, end_time=60
+    )
     captured = {}
 
     downloader._download_base_gql = Mock(
@@ -167,9 +169,9 @@ def test_twitch_client_stream_generator_accepts_chat_request() -> None:
         def __init__(self) -> None:
             self.buffer_sizes = []
 
-        def recv(self, buffer_size) -> str:
+        def recv(self, buffer_size) -> None:
             self.buffer_sizes.append(buffer_size)
-            return ""
+            return
 
         def send_raw(self, _message) -> None:
             return None

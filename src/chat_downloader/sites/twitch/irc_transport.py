@@ -185,13 +185,13 @@ class TwitchChatIRC:
         """Send a raw IRC command without trailing CRLF, appending CRLF."""
         self.socket.sendall((string + "\r\n").encode("utf-8"))
 
-    def recv(self, buffer_size: int) -> str:
+    def recv(self, buffer_size: int) -> str | None:
         """Receive up to ``buffer_size`` bytes as incremental UTF-8 text.
 
-        Preserve valid multibyte characters across chunks; ignore malformed bytes.
+        Return None at socket EOF. A partial UTF-8 sequence may yield empty text.
         """
         data = self.socket.recv(buffer_size)
-        return self._decoder.decode(data, final=not data)
+        return self._decoder.decode(data) if data else None
 
     def join_channel(self, channel_name: str) -> None:
         """Join unless already joined; channel may include a leading ``#``."""
@@ -253,7 +253,7 @@ def _handle_ping(
             diagnostics.increment("keepalive_pong_sent_count")
 
 
-def _recv_irc(irc: TwitchChatIRC, buffer_size: int) -> str:
+def _recv_irc(irc: TwitchChatIRC, buffer_size: int) -> str | None:
     """Receive one chunk, mapping socket failures into reconnect errors."""
     try:
         return irc.recv(buffer_size)
@@ -297,7 +297,7 @@ def get_chat_messages_by_stream_id(
         try:
             new_info = _recv_irc(irc, buffer_size)
 
-            if not new_info:
+            if new_info is None:
                 msg = "Lost connection, reconnecting."
                 raise ConnectionError(msg)
             completed_ping_count = diagnostics.record_received_data(new_info)

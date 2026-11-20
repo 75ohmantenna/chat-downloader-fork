@@ -58,17 +58,21 @@ offsets. The CLI exposes these as `--start_time`, `--end_time`, and `--timeout`.
 4. Request replay comments in pages.
 5. Parse comment nodes into normalized messages.
 6. Apply time-range and message-type filtering until replay data is exhausted.
-   Clips starting at VOD offset zero still stop at the clip duration.
+   Clip-relative time ranges stay within the clip, including clips that start
+   at VOD offset zero.
 
 Required GraphQL field service errors retry during replay pagination. Missing
 video/comments or malformed comment edges retry even on the first page; only a
-valid empty edges list establishes an empty replay. Nonterminal pages that
+valid empty edges list establishes an empty replay. The primary replay query
+requires a boolean pagination flag on pages with comments and on continuation
+pages. Nonterminal pages that
 supply no new cursor or repeat a historical cursor are withheld from output
 and mark the traversal incomplete. Empty continuing pages retain a bounded retry budget.
 Terminal pages do not require a new cursor. Unexpected edge or node shapes
 count as known record loss for `--require_complete` and run manifests.
-Malformed message containers or fragment text also count as record loss and
-are skipped without discarding later valid comments or re-emitting the page.
+Comments with malformed message containers, malformed fragment text, or missing
+or invalid replay offsets count as record loss. Twitch replay skips those
+comments and keeps later valid comments on the same page.
 Malformed emote enrichment retains usable message text.
 
 Livestream, video, and clip discovery count returned edges rather than requested
@@ -346,7 +350,9 @@ the Android client's `VideoCommentsQuery` operation. The transport normalizes
 that operation's explicit `from`/`to` emote positions and cursor-only terminal
 signal into the existing replay contract before parsing. If Twitch also rejects
 the mobile persisted hash, the client retries that operation once with the
-exact full query document shipped by the Android client.
+exact full query document shipped by the Android client. Both replay
+operations round the initial seek down to a whole second for GraphQL. Local
+filtering still uses the requested time at its original precision.
 
 ### Clip handling
 
@@ -354,7 +360,9 @@ Clips do not have their own standalone chat stream. The integration maps a clip
 back to its source VOD and uses the clip offset plus clip duration to slice the
 replay comment stream.
 
-If the source VOD has expired, the integration raises `NoChatReplay`.
+If the source VOD has expired, the integration raises `NoChatReplay`. A present
+backing video ID must be a nonempty string, or the integration raises
+`ParsingError` before requesting replay comments.
 
 ## GraphQL Dependency
 

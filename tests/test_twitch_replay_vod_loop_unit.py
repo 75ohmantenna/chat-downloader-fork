@@ -63,3 +63,23 @@ def test_classify_empty_page(consecutive, max_empty, has_next_page, expected) ->
         )
         == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "expected_start", "expected_end"),
+    [(5, 30, 5, 15), (-5, -1, 0, -1), (20, 30, 20, 15)],
+)
+def test_clip_window_is_bounded_by_duration(start, end, expected_start, expected_end):
+    request = chat_request(
+        url="https://clips.twitch.tv/example", start_time=start, end_time=end
+    )
+    plan = _init_vod_loop(request, max_duration=15, offset=10)
+    assert plan.content_offset_seconds == 10 + min(expected_start, 15)
+    assert plan.time_filter.start_time == expected_start
+    assert plan.time_filter.end_time == expected_end
+    expected_disposition = "yield" if expected_start <= expected_end else "skip"
+    assert (
+        plan.time_filter.check({"time_in_seconds": expected_end})
+        == expected_disposition
+    )
+    assert plan.time_filter.check({"time_in_seconds": expected_end + 1}) == "stop"

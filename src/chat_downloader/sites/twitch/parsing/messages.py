@@ -9,6 +9,7 @@ and room state to ``message_irc_resolve``.
 
 from __future__ import annotations
 
+import math
 from logging import DEBUG
 from typing import TYPE_CHECKING, Any
 
@@ -37,7 +38,7 @@ from chat_downloader.sites.twitch.remappings import (
     build_user_remapping,
 )
 from chat_downloader.utils.dict_utils import move_to_dict as _move_to_dict
-from chat_downloader.utils.json_types import JSONDict, get_str
+from chat_downloader.utils.json_types import JSONDict, get_float, get_str
 from chat_downloader.utils.time_utils import seconds_to_time
 
 if TYPE_CHECKING:
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 
 
 class _MalformedMessage(ParsingError):
-    """A provider comment has no usable message or fragment text."""
+    """A provider comment contains malformed message data or timing."""
 
 
 def _parse_vod_emote(emote: object) -> tuple[str, int, int] | None:
@@ -194,9 +195,15 @@ def _parse_item(
         raise _MalformedMessage(msg)
     info = r.remap_dict(item, build_comment_remapping())
 
-    if "time_in_seconds" in info:
-        info["time_in_seconds"] -= offset
-        info["time_text"] = seconds_to_time(int(info["time_in_seconds"]))
+    try:
+        comment_time = get_float(item, "contentOffsetSeconds", math.nan) - offset
+    except OverflowError:
+        comment_time = math.nan
+    if not math.isfinite(comment_time):
+        msg = "Twitch comment has an invalid contentOffsetSeconds."
+        raise _MalformedMessage(msg)
+    info["time_in_seconds"] = comment_time
+    info["time_text"] = seconds_to_time(int(comment_time))
 
     badges = info.pop("author_badges", None)
     parsed_badges: list[JSONDict] = []

@@ -1,0 +1,55 @@
+{
+  "provenance": "Curated synthetic GraphQL replay page: null and omitted comment offsets between two valid comments.",
+  "raw": [
+    {
+      "data": {
+        "video": {
+          "comments": {
+            "edges": [
+              {
+                "__typename": "VideoCommentEdge",
+                "cursor": "cursor-before",
+                "node": {
+                  "__typename": "Comment",
+                  "id": "before",
+                  "contentOffsetSeconds": 1,
+                  "message": {"fragments": [{"text": "first", "emote": null}]}
+                }
+              },
+              {
+                "__typename": "VideoCommentEdge",
+                "cursor": "cursor-malformed",
+                "node": {
+                  "__typename": "Comment",
+                  "id": "malformed",
+                  "contentOffsetSeconds": null,
+                  "message": {"fragments": [{"text": "null offset", "emote": null}]}
+                }
+              },
+              {
+                "__typename": "VideoCommentEdge",
+                "cursor": "cursor-missing",
+                "node": {
+                  "__typename": "Comment",
+                  "id": "missing",
+                  "message": {"fragments": [{"text": "omitted offset", "emote": null}]}
+                }
+              },
+              {
+                "__typename": "VideoCommentEdge",
+                "cursor": "cursor-after",
+                "node": {
+                  "__typename": "Comment",
+                  "id": "after",
+                  "contentOffsetSeconds": 3,
+                  "message": {"fragments": [{"text": "last", "emote": null}]}
+                }
+              }
+            ],
+            "pageInfo": {"hasNextPage": false}
+          }
+        }
+      }
+    }
+  ]
+}

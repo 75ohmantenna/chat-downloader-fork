@@ -25,11 +25,17 @@ from chat_downloader.redaction import capture_debug_sample
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.retry import _attempt_numbers
 from chat_downloader.utils.dict_utils import multi_get
-from chat_downloader.utils.json_types import get_dict, get_float, get_list, get_str
+from chat_downloader.utils.json_types import (
+    get_bool,
+    get_dict,
+    get_float,
+    get_list,
+    get_str,
+)
 from chat_downloader.utils.time_utils import ensure_seconds
 from chat_downloader.utils.timed_generator import _check_polling_cancelled
 
-from ._replay_vod_loop import _classify_empty_page, _init_vod_loop
+from ._replay_vod_loop import _classify_empty_page, _clip_time_bounds, _init_vod_loop
 from .constants import TWITCH_DEBUG_SAMPLE_LIMIT, build_known_comment_keys
 from .graphql_client import _decode_metadata_resource, _handle_gql_errors
 from .parsing.messages import _MalformedMessage, _parse_item
@@ -282,7 +288,7 @@ def iter_vod_chat_messages(  # noqa: C901 — cursor-advance guard, first-iterat
             first_iteration = False
 
             edges = get_list(comments, "edges")
-            has_next_page = bool(multi_get(comments, "pageInfo", "hasNextPage"))
+            has_next_page = get_bool(get_dict(comments, "pageInfo"), "hasNextPage")
 
             if not edges:
                 consecutive_empty_pages += 1
@@ -400,6 +406,16 @@ def get_chat_by_vod_id(
     )
 
 
+def _clip_timing_field(clip: JSONDict, key: str) -> float | None:
+    """Read optional clip timing metadata within the supported numeric range."""
+    try:
+        value = get_float(clip, key, math.nan)
+    except OverflowError as error:
+        msg = f"Twitch clip metadata {key} is out of range"
+        raise ParsingError(msg) from error
+    return value if math.isfinite(value) else None
+
+
 def get_chat_by_clip_id(
     downloader: TwitchChatDownloader,
     clip_id: str,
@@ -427,8 +443,8 @@ def get_chat_by_clip_id(
         msg = f'Unable to retrieve clip data for "{clip_id}"'
         raise ParsingError(msg)
 
-    vod_id = multi_get(clip, "video", "id")
-    if vod_id is None:
+    video = get_dict(clip, "video")
+    if video.get("id") is None:
         msg = (
             "This clip's past broadcast has expired and chat replay "
             "is no longer available."
@@ -437,22 +453,13 @@ def get_chat_by_clip_id(
             msg,
         )
 
-    raw_offset = clip.get("videoOffsetSeconds")
-    offset: float | None = (
-        float(raw_offset)
-        if isinstance(raw_offset, (int, float))
-        and not isinstance(raw_offset, bool)
-        and math.isfinite(raw_offset)
-        else None
-    )
-    raw_duration = clip.get("durationSeconds")
-    duration: float | None = (
-        float(raw_duration)
-        if isinstance(raw_duration, (int, float))
-        and not isinstance(raw_duration, bool)
-        and math.isfinite(raw_duration)
-        else None
-    )
+    vod_id = get_str(video, "id")
+    if not vod_id:
+        msg = "Twitch clip metadata contains an invalid backing video ID"
+        raise ParsingError(msg)
+
+    offset = _clip_timing_field(clip, "videoOffsetSeconds")
+    duration = _clip_timing_field(clip, "durationSeconds")
     broadcaster = get_dict(clip, "broadcaster")
     downloader._update_badge_info(
         get_str(broadcaster, "login"), get_str(broadcaster, "id") or None
@@ -470,11 +477,14 @@ def get_chat_by_clip_id(
         id=clip_id,
         diagnostics=diagnostics,
     )
+    if offset is None:
+        start_time = ensure_seconds(request.start_time, 0)
+        end_time = ensure_seconds(request.end_time)
+    else:
+        start_time, end_time = _clip_time_bounds(request, duration)
     chat._request_window = {
-        "start_time": ensure_seconds(request.start_time, 0),
-        "end_time": ensure_seconds(
-            request.end_time, duration if offset is not None else None
-        ),
+        "start_time": start_time,
+        "end_time": end_time,
         "time_basis": "clip" if offset is not None else "recording",
     }
     return chat

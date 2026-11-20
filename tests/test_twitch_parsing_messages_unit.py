@@ -452,6 +452,7 @@ def test_parse_item_accepts_mobile_emote_positions() -> None:
     parsed = tw_messages._parse_item(
         {
             "id": "mobile-msg",
+            "contentOffsetSeconds": 0,
             "message": {
                 "userBadges": [],
                 "fragments": [

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING
 
 from chat_downloader.errors import ParsingError
@@ -57,7 +58,7 @@ def get_chat_messages_by_vod_id(
     if cursor:
         variables["cursor"] = cursor
     else:
-        variables["contentOffsetSeconds"] = content_offset_seconds or 0
+        variables["contentOffsetSeconds"] = math.floor(content_offset_seconds or 0)
 
     query: JSONList = [
         {
@@ -73,9 +74,9 @@ def get_chat_messages_by_vod_id(
         if cursor:
             fallback_variables["after"] = cursor
         else:
-            fallback_variables["contentOffsetSeconds"] = int(
-                content_offset_seconds or 0
-            )
+            fallback_variables["contentOffsetSeconds"] = variables[
+                "contentOffsetSeconds"
+            ]
         _check_polling_cancelled()
         result = download_gql_func(
             [
@@ -97,4 +98,11 @@ def get_chat_messages_by_vod_id(
         return normalized_comments, info
 
     _check_polling_cancelled()
-    return _validated_comments(result)
+    comments, info = _validated_comments(result)
+    page_info = get_dict(comments, "pageInfo")
+    if (cursor or get_list(comments, "edges")) and not isinstance(
+        page_info.get("hasNextPage"), bool
+    ):
+        msg = "Twitch replay page is missing a boolean hasNextPage"
+        raise ParsingError(msg)
+    return comments, info

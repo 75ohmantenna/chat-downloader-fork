@@ -84,6 +84,7 @@ def _edge(message_id, cursor="c1"):
         "node": {
             "__typename": "Comment",
             "id": message_id,
+            "contentOffsetSeconds": 0,
             "message": {"fragments": [{"text": message_id}]},
         },
     }
@@ -800,7 +801,18 @@ def test_stalled_twitch_replay_is_not_certified_complete(downloader, edges):
 
 def test_missing_comments_mid_pagination_is_retryable(downloader):
     downloader._download_gql.side_effect = [
-        [{"data": {"video": {"comments": {"edges": [_edge("m1")]}}}}],
+        [
+            {
+                "data": {
+                    "video": {
+                        "comments": {
+                            "edges": [_edge("m1")],
+                            "pageInfo": {"hasNextPage": True},
+                        }
+                    }
+                }
+            }
+        ],
         [{"data": {"video": {"comments": None}}}],
     ]
     get_chat_messages_by_vod_id(None, downloader._download_gql, "123", None, 0)
@@ -818,7 +830,19 @@ def test_missing_comments_after_first_page_marks_replay_incomplete(downloader):
     assert diagnostics["termination_reason"] == "pagination_stalled"
 
 
-@pytest.mark.parametrize("video", [None, {"comments": {}}, {"comments": {"edges": []}}])
+@pytest.mark.parametrize(
+    "video",
+    [
+        None,
+        {"comments": {}},
+        {"comments": {"edges": []}},
+        {"comments": {"edges": [_edge("m1")]}},
+        *[
+            {"comments": {"edges": [_edge("m1")], "pageInfo": {"hasNextPage": flag}}}
+            for flag in (None, 0, "", 1, "false")
+        ],
+    ],
+)
 def test_initial_replay_response_must_establish_completeness(
     monkeypatch, tmp_path, video
 ):
@@ -874,10 +898,16 @@ def test_missing_video_mid_pagination_raises(downloader, fallback):
 
 
 @pytest.mark.parametrize("require_complete", [False, True])
-def test_malformed_fragment_preserves_replay_output_and_reports_loss(
-    monkeypatch, tmp_path, require_complete
+@pytest.mark.parametrize(
+    ("malformed_field", "parse_errors"), [("fragments", 1), ("offset", 2)]
+)
+def test_malformed_comment_preserves_replay_output_and_reports_loss(
+    monkeypatch, tmp_path, require_complete, malformed_field, parse_errors
 ):
-    fixture = Path(__file__).parent / "fixtures/twitch/replay_malformed_fragments.json"
+    fixture = (
+        Path(__file__).parent
+        / f"fixtures/twitch/replay_malformed_{malformed_field}.json"
+    )
     payload = json.loads(fixture.read_text(encoding="utf-8"))
     download = Mock(
         side_effect=[
@@ -904,7 +934,7 @@ def test_malformed_fragment_preserves_replay_output_and_reports_loss(
         json.loads(line)["message_id"] for line in output.read_text().splitlines()
     ] == ["before", "after"]
     report = json.loads(manifest.read_text())
-    assert report["provider_diagnostics"]["parse_error"] == 1
+    assert report["provider_diagnostics"]["parse_error"] == parse_errors
     assert not report["replay_complete"]
     assert download.call_count == 2
 
@@ -982,3 +1012,80 @@ def test_message_enrichment_collaborator_errors_are_not_swallowed_or_retried(
     assert diagnostics == {}
     fetch.assert_called_once()
     downloader.retry.assert_not_called()
+
+
+@pytest.mark.parametrize("offset", ["1", False, float("nan"), float("inf"), 10**400])
+def test_invalid_comment_offset_skips_only_its_record(downloader, offset):
+    edges = [_edge("before"), _edge("malformed"), _edge("after")]
+    edges[1]["node"]["contentOffsetSeconds"] = offset
+    diagnostics: dict[str, object] = {}
+    fetch = Mock(return_value=_response(edges))
+    result = _run(downloader, fetch, diagnostics=diagnostics)
+    assert [item["message_id"] for item in result] == ["before", "after"]
+    assert diagnostics == {"parse_error": 1}
+    fetch.assert_called_once()
+
+
+@pytest.mark.parametrize("video_id", [123, "", [], {}])
+def test_invalid_clip_video_id_fails_before_requesting_comments(downloader, video_id):
+    downloader._download_base_gql.return_value = {
+        "data": {"clip": {"video": {"id": video_id}}}
+    }
+    with pytest.raises(ParsingError, match="invalid backing video ID"):
+        replay_service.get_chat_by_clip_id(downloader, "clip123", _request())
+    downloader._get_chat_messages_by_vod_id.assert_not_called()
+    downloader._update_badge_info.assert_not_called()
+
+
+def test_fractional_replay_start_uses_integer_seek_and_exact_filter(downloader):
+    edges = [_edge("before"), _edge("at-start"), _edge("after")]
+    for edge, offset in zip(edges, (12, 12.5, 13), strict=True):
+        edge["node"]["contentOffsetSeconds"] = offset
+    comments, _ = _response(edges)
+    downloader._download_gql.return_value = [
+        {"data": {"video": {"comments": comments}}}
+    ]
+    messages = _run(
+        downloader,
+        get_chat_messages_by_vod_id,
+        _request(start_time=12.5),
+    )
+    variables = downloader._download_gql.call_args.args[0][0]["variables"]
+    assert type(variables["contentOffsetSeconds"]) is int
+    assert variables["contentOffsetSeconds"] == 12
+    assert [message["message_id"] for message in messages] == ["at-start", "after"]
+
+
+@pytest.mark.parametrize("field", ["videoOffsetSeconds", "durationSeconds"])
+def test_oversized_clip_timing_fails_before_requesting_comments(downloader, field):
+    downloader._download_base_gql.return_value = {
+        "data": {"clip": {"video": {"id": "vod123"}, field: 10**400}}
+    }
+    with pytest.raises(ParsingError, match=f"{field} is out of range"):
+        replay_service.get_chat_by_clip_id(downloader, "clip123", _request())
+    downloader._get_chat_messages_by_vod_id.assert_not_called()
+
+
+@pytest.mark.parametrize("end_time", [None, 90])
+def test_clip_without_offset_reports_recording_relative_window(downloader, end_time):
+    downloader._download_base_gql.return_value = {
+        "data": {"clip": {"video": {"id": "vod123"}, "durationSeconds": 15}}
+    }
+    request = _request(
+        url="https://clips.twitch.tv/clip123", start_time=10, end_time=end_time
+    )
+
+    with closing(
+        replay_service.get_chat_by_clip_id(downloader, "clip123", request)
+    ) as chat:
+        assert chat._request_window == {
+            "start_time": 10,
+            "end_time": end_time,
+            "time_basis": "recording",
+        }
+    assert downloader._get_chat_messages_by_vod_id.call_args.args == (
+        "vod123",
+        request,
+        15.0,
+        None,
+    )

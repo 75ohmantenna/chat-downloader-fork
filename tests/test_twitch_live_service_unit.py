@@ -117,7 +117,7 @@ class _FakeIRC:
         self.closed = False
         self.sent: list[str] = []
 
-    def recv(self, _buffer_size: int) -> str:
+    def recv(self, _buffer_size: int) -> str | None:
         return next(self.responses)
 
     def send_raw(self, message: str) -> None:
@@ -262,8 +262,8 @@ def test_successful_irc_frame_capture_is_bounded_across_reconnects(
     first_frames = [_privmsg(str(index), f"message {index}") for index in range(2)]
     second_frames = [_privmsg(str(index), f"message {index}") for index in range(2, 5)]
     ircs = [
-        _FakeIRC(["\r\n".join(first_frames) + "\r\nPING :tmi.twitch.tv\r", ""]),
-        _FakeIRC(["\n" + "\r\n".join(second_frames) + "\r\n", ""]),
+        _FakeIRC(["\r\n".join(first_frames) + "\r\nPING :tmi.twitch.tv\r", None]),
+        _FakeIRC(["\n" + "\r\n".join(second_frames) + "\r\n", None]),
     ]
     downloader = _downloader()
     diagnostics = live_service._TwitchLiveDiagnostics()
@@ -309,8 +309,8 @@ def test_event_frame_capture_is_diverse_and_bounded_across_reconnects(
     resub_two = _usernotice("resub-2", "resub", "Second resub")
     milestone = _usernotice("milestone-1", "viewermilestone", "Milestone")
     ircs = [
-        _FakeIRC([f"{resub_one}\r\n{text_message}\r\n", ""]),
-        _FakeIRC([f"{resub_two}\r\n{milestone}\r\n", ""]),
+        _FakeIRC([f"{resub_one}\r\n{text_message}\r\n", None]),
+        _FakeIRC([f"{resub_two}\r\n{milestone}\r\n", None]),
     ]
     downloader = _downloader()
     diagnostics = live_service._TwitchLiveDiagnostics()

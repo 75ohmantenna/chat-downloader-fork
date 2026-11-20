@@ -41,6 +41,7 @@ def _comment_edge(edge_type="VideoCommentEdge", node_type="Comment"):
         "cursor": "cursor1",
         "node": {
             "id": "msg1",
+            "contentOffsetSeconds": 0,
             "message": {"fragments": [{"text": "Valid message"}]},
             "commenter": {"login": "user1"},
         },
@@ -213,7 +214,7 @@ def test_close_connection_swallows_oserror():
 
 def test_irc_buffer_overflow_truncation():
     irc = MagicMock()
-    irc.recv.side_effect = ["x" * (_READBUFFER_MAX_BYTES + 100), ""]
+    irc.recv.side_effect = ["x" * (_READBUFFER_MAX_BYTES + 100), None]
     with pytest.raises(ConnectionError):
         list(get_chat_messages_by_stream_id(irc, "channel", {"max_attempts": 1}))
 

@@ -288,12 +288,14 @@ def test_get_user_videos_raises_user_not_found_on_empty_user_id() -> None:
 @pytest.mark.parametrize(
     ("cursor", "offset", "expected"),
     [
-        (None, 12.5, {"contentOffsetSeconds": 12.5}),
+        (None, 12.5, {"contentOffsetSeconds": 12}),
+        (None, -0.5, {"contentOffsetSeconds": -1}),
         ("cursor123", 99.0, {"cursor": "cursor123"}),
     ],
 )
 def test_get_chat_messages_by_vod_id_selects_cursor_or_offset(cursor, offset, expected):
-    download = Mock(return_value=[{"data": {"video": {"comments": {"edges": []}}}}])
+    expected_page = {"edges": [], "pageInfo": {"hasNextPage": False}}
+    download = Mock(return_value=[{"data": {"video": {"comments": expected_page}}}])
     comments, info = get_chat_messages_by_vod_id(
         session_post=Mock(),
         download_gql_func=download,
@@ -301,8 +303,8 @@ def test_get_chat_messages_by_vod_id_selects_cursor_or_offset(cursor, offset, ex
         cursor=cursor,
         content_offset_seconds=offset,
     )
-    assert comments == {"edges": []}
-    assert info == {"comments": {"edges": []}}
+    assert comments == expected_page
+    assert info == {"comments": expected_page}
     assert download.call_args.args[0][0]["variables"] == {
         "videoID": "vod123",
         **expected,

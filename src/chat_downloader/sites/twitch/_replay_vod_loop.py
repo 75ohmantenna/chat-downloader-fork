@@ -25,6 +25,17 @@ class _VodLoopPlan:
     time_filter: TimeRangeFilter
 
 
+def _clip_time_bounds(
+    request: ChatRequest, duration: float | None
+) -> tuple[float, float | None]:
+    """Resolve the effective clip-relative start and end bounds."""
+    start_time = max(0.0, ensure_seconds(request.start_time, 0))
+    end_time = ensure_seconds(request.end_time, duration)
+    if duration is not None:
+        end_time = min(end_time, duration)
+    return start_time, end_time
+
+
 def _init_vod_loop(
     request: ChatRequest, max_duration: float | None, offset: float | None
 ) -> _VodLoopPlan:
@@ -37,8 +48,11 @@ def _init_vod_loop(
             start_time if max_duration is None else min(start_time, max_duration)
         )
     else:
-        end_time = ensure_seconds(request.end_time, max_duration)
-        content_offset_seconds = (start_time or 0) + offset
+        start_time, end_time = _clip_time_bounds(request, max_duration)
+        seek_time = (
+            start_time if max_duration is None else min(start_time, max_duration)
+        )
+        content_offset_seconds = seek_time + offset
     msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     time_filter = TimeRangeFilter(start_time, end_time, skip_mode="always")
     return _VodLoopPlan(content_offset_seconds, offset, msg_filter, time_filter)
