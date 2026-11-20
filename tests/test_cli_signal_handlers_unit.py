@@ -5,10 +5,10 @@
 from __future__ import annotations
 
 import contextlib
-import os
 import signal
+import subprocess
+import sys
 import threading
-import time
 
 import pytest
 
@@ -28,45 +28,70 @@ def restore_signal_handlers():
             signal.signal(sig, handler)
 
 
-def test_sigterm_handler_raises_keyboard_interrupt(
-    restore_signal_handlers,
+@pytest.fixture(name="install_signal_handler")
+def _install_signal_handler(restore_signal_handlers):
+    """Install the CLI handlers and return a callable for safe injection."""
+
+    def install(signum):
+        previous = signal.getsignal(signum)
+        _install_cli_signal_handlers()
+        handler = signal.getsignal(signum)
+        assert callable(handler), f"No callable installed for {signum.name}"
+        assert handler is not previous, f"Handler was not replaced for {signum.name}"
+
+        def inject():
+            assert signal.getsignal(signum) is handler
+            handler(signum, None)
+
+        return inject
+
+    return install
+
+
+@pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+def test_installed_handler_raises_keyboard_interrupt(
+    install_signal_handler, signum
 ) -> None:
-    _install_cli_signal_handlers()
+    interrupt = install_signal_handler(signum)
+
     with pytest.raises(KeyboardInterrupt):
-        os.kill(os.getpid(), signal.SIGTERM)
-        # Give the signal a moment to be delivered on slower CI.
-        for _ in range(50):
-            time.sleep(0.01)
+        interrupt()
 
 
-def test_sigint_handler_raises_keyboard_interrupt(
-    restore_signal_handlers,
-) -> None:
-    _install_cli_signal_handlers()
+def test_second_signal_restores_default(install_signal_handler) -> None:
+    interrupt = install_signal_handler(signal.SIGTERM)
+
     with pytest.raises(KeyboardInterrupt):
-        os.kill(os.getpid(), signal.SIGINT)
-        for _ in range(50):
-            time.sleep(0.01)
+        interrupt()
 
-
-def test_second_signal_restores_default(restore_signal_handlers) -> None:
-    """After one signal, sending another restores the default handler."""
-    _install_cli_signal_handlers()
-
-    # First signal: handler raises KeyboardInterrupt.
     with pytest.raises(KeyboardInterrupt):
-        os.kill(os.getpid(), signal.SIGTERM)
-        for _ in range(50):
-            time.sleep(0.01)
-
-    # Second signal: handler also raises KeyboardInterrupt AND restores
-    # SIG_DFL for that signal so a third would terminate the process.
-    with pytest.raises(KeyboardInterrupt):
-        os.kill(os.getpid(), signal.SIGTERM)
-        for _ in range(50):
-            time.sleep(0.01)
-
+        interrupt()
     assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+
+
+def test_sigint_delivery_in_child() -> None:
+    script = """
+import signal
+
+from chat_downloader.cli import _install_cli_signal_handlers
+
+signal.signal(signal.SIGINT, signal.SIG_DFL)
+_install_cli_signal_handlers()
+try:
+    signal.raise_signal(signal.SIGINT)
+except KeyboardInterrupt:
+    pass
+else:
+    raise AssertionError("SIGINT did not raise KeyboardInterrupt")
+"""
+    result = subprocess.run(  # noqa: S603 - fixed local interpreter and script
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_install_is_noop_off_main_thread(restore_signal_handlers) -> None:

@@ -38,7 +38,8 @@ def _run_timeout_capture(directory: str) -> None:
                         "time_in_seconds": 1,
                     }
                     (root / "ready").touch()
-                    threading.Event().wait()
+                    threading.Event().wait(timeout=10)
+                    raise AssertionError("SIGTERM did not interrupt the provider read")
                 finally:
                     (root / "source-closed").touch()
 

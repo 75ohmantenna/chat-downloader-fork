@@ -12,7 +12,6 @@ from typing import ClassVar
 
 import pytest
 
-from chat_downloader.cli import _install_cli_signal_handlers
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime import capture_checkpoint, capture_manifest, runner
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint
@@ -26,17 +25,16 @@ from chat_downloader.utils.interrupts import (
 )
 from tests.test_capture_checkpoint_unit import Downloader, load_json, parameters
 from tests.test_cli_signal_handlers_unit import (
-    restore_signal_handlers as _restore_signal_handlers,  # noqa: F401 - fixture
+    _install_signal_handler,  # noqa: F401 - fixture
+    restore_signal_handlers,  # noqa: F401 - fixture dependency
 )
-
-pytestmark = pytest.mark.usefixtures("_restore_signal_handlers")
 
 
 @pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
 @pytest.mark.parametrize("checkpointed", [False, True])
 @pytest.mark.parametrize("target", [".jsonl", ".txt", "observe"])
 def test_signal_finishes_record_and_all_counters_before_shutdown(
-    tmp_path, monkeypatch, signum, checkpointed, target
+    tmp_path, monkeypatch, install_signal_handler, signum, checkpointed, target
 ):
     if target == "observe" and not checkpointed:
         pytest.skip("Only checkpointed records have checkpoint observation.")
@@ -44,7 +42,7 @@ def test_signal_finishes_record_and_all_counters_before_shutdown(
     params["run_manifest"] = str(tmp_path / "run.json")
     if not checkpointed:
         params.pop("resume")
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signum)
     if target == "observe":
         original_observe = CaptureCheckpoint._observe
         second_event = capture_checkpoint._event_identity(Downloader.records[1])
@@ -52,7 +50,7 @@ def test_signal_finishes_record_and_all_counters_before_shutdown(
         def observe(checkpoint, offset, event):
             original_observe(checkpoint, offset, event)
             if event == second_event:
-                os.kill(os.getpid(), signum)
+                inject_signal()
 
         monkeypatch.setattr(CaptureCheckpoint, "_observe", observe)
     else:
@@ -61,7 +59,7 @@ def test_signal_finishes_record_and_all_counters_before_shutdown(
         def write(writer, item, *, flush=False):
             original_write(writer, item, flush=flush)
             if writer.file_name.endswith(target) and "Record 2" in str(item):
-                os.kill(os.getpid(), signum)
+                inject_signal()
 
         monkeypatch.setattr(ContinuousWriter, "write", write)
 
@@ -85,8 +83,10 @@ def test_signal_finishes_record_and_all_counters_before_shutdown(
         assert execute_run(Downloader, **params).message_count == 2
 
 
-def test_provider_read_remains_immediately_interruptible(tmp_path):
-    _install_cli_signal_handlers()
+def test_provider_read_remains_immediately_interruptible(
+    tmp_path, install_signal_handler
+):
+    inject_signal = install_signal_handler(signal.SIGTERM)
 
     class InterruptedRead(Downloader):
         records: ClassVar[list] = []
@@ -95,7 +95,7 @@ def test_provider_read_remains_immediately_interruptible(tmp_path):
             chat = super().get_chat(**kwargs)
 
             def source():
-                os.kill(os.getpid(), signal.SIGTERM)
+                inject_signal()
                 pytest.fail("Provider read should have been interrupted immediately.")
                 yield {}
 
@@ -168,7 +168,7 @@ def test_failed_shutdown_boundary_resets_interrupt_callback():
 
 @pytest.mark.parametrize("delivery", ["before_install", "after_install"])
 def test_shutdown_boundary_handles_signal_during_observer_installation(
-    monkeypatch, delivery
+    monkeypatch, delivery, install_signal_handler
 ):
     actions = []
     callbacks = interrupts._ON_INTERRUPT
@@ -179,17 +179,17 @@ def test_shutdown_boundary_handles_signal_during_observer_installation(
 
         def set(self, callback):
             if delivery == "before_install":
-                os.kill(os.getpid(), signal.SIGTERM)
+                inject_signal()
             token = callbacks.set(callback)
             if delivery == "after_install":
-                os.kill(os.getpid(), signal.SIGTERM)
+                inject_signal()
             return token
 
         def reset(self, token):
             callbacks.reset(token)
 
     monkeypatch.setattr(interrupts, "_ON_INTERRUPT", SignalingCallbackInstallation())
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     with defer_interrupts(on_interrupt=lambda: actions.append("interrupted")):
         actions.append("protected work")
     assert actions == ["interrupted", "protected work"]
@@ -198,11 +198,11 @@ def test_shutdown_boundary_handles_signal_during_observer_installation(
     assert actions == ["interrupted", "protected work"]
 
 
-def test_second_signal_can_interrupt_an_incomplete_record():
-    _install_cli_signal_handlers()
+def test_second_signal_can_interrupt_an_incomplete_record(install_signal_handler):
+    inject_signal = install_signal_handler(signal.SIGTERM)
     with pytest.raises(KeyboardInterrupt), defer_interrupts():
-        os.kill(os.getpid(), signal.SIGTERM)
-        os.kill(os.getpid(), signal.SIGTERM)
+        inject_signal()
+        inject_signal()
         pytest.fail("Second signal should interrupt immediately.")
     assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
     with defer_interrupts():
@@ -210,7 +210,9 @@ def test_second_signal_can_interrupt_an_incomplete_record():
 
 
 @pytest.mark.parametrize("propagate", [False, True])
-def test_first_signal_during_chat_close_finishes_all_owner_release(propagate):
+def test_first_signal_during_chat_close_finishes_all_owner_release(
+    propagate, install_signal_handler
+):
     owners = []
 
     class ClosingChat:
@@ -219,7 +221,7 @@ def test_first_signal_during_chat_close_finishes_all_owner_release(propagate):
 
         def close(self):
             owners.append("chat started")
-            os.kill(os.getpid(), signal.SIGTERM)
+            inject_signal()
             owners.append("chat released")
 
     class ClosingDownloader:
@@ -229,7 +231,7 @@ def test_first_signal_during_chat_close_finishes_all_owner_release(propagate):
         def close(self):
             owners.append("downloader released")
 
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     if propagate:
         with pytest.raises(KeyboardInterrupt):
             execute_run(ClosingDownloader, quiet=True, propagate_interrupt=True)
@@ -262,7 +264,7 @@ def test_first_signal_during_chat_close_finishes_all_owner_release(propagate):
 )
 @pytest.mark.parametrize("propagate", [False, True])
 def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
-    tmp_path, monkeypatch, boundary, propagate
+    tmp_path, monkeypatch, boundary, propagate, install_signal_handler
 ):
     params = parameters(tmp_path)
     assert execute_run(Downloader, **params, max_messages=1).success
@@ -276,7 +278,7 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
         nonlocal signaled
         if not signaled:
             signaled = True
-            os.kill(os.getpid(), signal.SIGTERM)
+            inject_signal()
 
     class ObservedDownloader(Downloader):
         def get_chat(self, **kwargs):
@@ -434,7 +436,7 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
         if boundary in {"chat_close", "downloader_close", "interrupt_observer"}
         else "verification"
     )
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     kwargs = {
         **params,
         "max_messages": 2,
@@ -477,15 +479,17 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
     assert len((tmp_path / "chat.txt").read_text().splitlines()) == 4
 
 
-def test_first_shutdown_signal_preserves_original_capture_error(tmp_path):
+def test_first_shutdown_signal_preserves_original_capture_error(
+    tmp_path, install_signal_handler
+):
     class FailedCapture(Downloader):
         records = Downloader.records[:2]
         failure = ValueError("original capture failure")
 
         def close(self):
-            os.kill(os.getpid(), signal.SIGTERM)
+            inject_signal()
 
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     params = parameters(tmp_path)
     result = execute_run(
         FailedCapture, **params, run_manifest=str(tmp_path / "run.json")
@@ -503,14 +507,14 @@ def test_first_shutdown_signal_preserves_original_capture_error(tmp_path):
 
 
 def test_save_failure_keeps_priority_over_deferred_shutdown_signal(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, install_signal_handler
 ):
     def save(*_args):
-        os.kill(os.getpid(), signal.SIGTERM)
+        inject_signal()
         raise OSError("checkpoint save failed")
 
     monkeypatch.setattr(CaptureCheckpoint, "save", save)
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     result = execute_run(Downloader, **parameters(tmp_path))
     assert result.interrupted
     assert not result.success
@@ -522,14 +526,14 @@ def test_save_failure_keeps_priority_over_deferred_shutdown_signal(
 
 
 def test_manifest_failure_keeps_priority_over_deferred_shutdown_signal(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, install_signal_handler
 ):
     def write(*_args, **_kwargs):
-        os.kill(os.getpid(), signal.SIGTERM)
+        inject_signal()
         raise OSError("manifest write failed")
 
     monkeypatch.setattr(RunManifest, "write", write)
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     result = execute_run(
         Downloader,
         **parameters(tmp_path),
@@ -550,14 +554,14 @@ def test_manifest_failure_keeps_priority_over_deferred_shutdown_signal(
 )
 @pytest.mark.parametrize("primary_failure", [False, True])
 def test_substantive_error_replaces_only_interruption_failure_stage(
-    tmp_path, monkeypatch, failure_at, primary_failure
+    tmp_path, monkeypatch, failure_at, primary_failure, install_signal_handler
 ):
     class InterruptedShutdown(Downloader):
         records = Downloader.records[:2]
         failure = ValueError("original capture failure") if primary_failure else None
 
         def close(self):
-            os.kill(os.getpid(), signal.SIGTERM)
+            inject_signal()
 
     def fail(*_args, **_kwargs):
         raise OSError("substantive failure")
@@ -570,7 +574,7 @@ def test_substantive_error_replaces_only_interruption_failure_stage(
         monkeypatch.setattr(CaptureCheckpoint, "save", fail)
     else:
         monkeypatch.setattr(RunManifest, "write", fail)
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     report_path = tmp_path / "run.json"
     result = execute_run(
         InterruptedShutdown,
@@ -606,17 +610,19 @@ def test_substantive_error_replaces_only_interruption_failure_stage(
         assert report["failure_stage"] == expected_stage
 
 
-def test_second_signal_interrupts_shutdown_without_closing_later_owners(tmp_path):
+def test_second_signal_interrupts_shutdown_without_closing_later_owners(
+    tmp_path, install_signal_handler
+):
     owners = []
 
     class ForcedShutdown(Downloader):
         def close(self):
-            os.kill(os.getpid(), signal.SIGTERM)
+            inject_signal()
             owners.append("first signal returned")
-            os.kill(os.getpid(), signal.SIGTERM)
+            inject_signal()
             owners.append("second signal returned")
 
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     with pytest.raises(KeyboardInterrupt):
         execute_run(
             ForcedShutdown,
@@ -634,7 +640,7 @@ def test_second_signal_interrupts_shutdown_without_closing_later_owners(tmp_path
 
 @pytest.mark.parametrize("boundary", ["file-sync", "publish"])
 def test_signal_after_manifest_commit_does_not_revise_published_report(
-    tmp_path, monkeypatch, boundary
+    tmp_path, monkeypatch, boundary, install_signal_handler
 ):
     report_path = tmp_path / "run.json"
     original_fsync, original_link = os.fsync, os.link
@@ -644,7 +650,7 @@ def test_signal_after_manifest_commit_does_not_revise_published_report(
         nonlocal signaled
         if not signaled:
             signaled = True
-            os.kill(os.getpid(), signal.SIGTERM)
+            inject_signal()
 
     def sync(descriptor):
         if boundary == "file-sync":
@@ -661,7 +667,7 @@ def test_signal_after_manifest_commit_does_not_revise_published_report(
         "os",
         SimpleNamespace(**(vars(os) | {"fsync": sync, "link": publish})),
     )
-    _install_cli_signal_handlers()
+    inject_signal = install_signal_handler(signal.SIGTERM)
     result = execute_run(Downloader, quiet=True, run_manifest=str(report_path))
     assert signaled
     assert result.interrupted
