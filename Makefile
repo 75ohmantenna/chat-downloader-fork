@@ -45,7 +45,8 @@ build:
 
 smoke: build
 	@whl=$$(ls dist/*.whl); \
-	$(UV) run --isolated --no-project --with "$$whl" chat_downloader --version
+	$(UV) run --isolated --no-project --with "$$whl" chat_downloader --version && \
+	$(UV) run --isolated --no-project --with "$$whl" python -I scripts/check_installed_wheel.py
 
 ci: lock-check lint spell fmt-check typecheck coverage smoke
 

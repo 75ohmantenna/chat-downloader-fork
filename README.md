@@ -44,14 +44,20 @@ released rather than treating workflow configuration as a passing result.
 
 ## Installation
 
+On 32-bit Windows, the default source build of the required curl-cffi 0.17.0
+does not support native x86. On 64-bit Windows, use a 64-bit Python installation
+to use a prebuilt curl-cffi wheel.
+
+The commands below install the tagged release.
+
 ```bash
-uv tool install git+https://github.com/75ohmantenna/chat-downloader-fork.git
+uv tool install git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
 ```
 
 Or with pipx:
 
 ```bash
-pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git
+pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
 ```
 
 ## Updating
@@ -60,13 +66,13 @@ Use the same tool that owns the existing installation. For an installation
 managed by `uv`:
 
 ```bash
-uv tool install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git
+uv tool install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
 ```
 
 For an installation managed by pipx:
 
 ```bash
-pipx install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git
+pipx install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
 ```
 
 **Verify the installed command:**

@@ -393,7 +393,7 @@ uv run pytest -v -m network --run-network
 | `make typecheck` | Run mypy |
 | `make coverage` | Run the offline suite with 100% line coverage enforced |
 | `make build` | Build the wheel and source distribution |
-| `make smoke` | Build and install the wheel in an isolated environment |
+| `make smoke` | Build and install the wheel in an isolated environment, check the CLI version and typing marker, and render a message with a bundled format |
 | `make check` | Run local lint, spelling, format, type, and offline test checks |
 | `make ci` | Run the complete canonical validation path |
 | `make clean` | Remove caches, coverage data, build output, and package metadata |
@@ -417,9 +417,9 @@ versions and release notes, especially for networking libraries. Commit the
 generated `uv.lock` when intentionally updating dependencies. Wheel installers
 use the requirements in `pyproject.toml`, not this lockfile. Raise minimum
 versions there when a fix must reach installed users. The current security
-floors are requests 2.34.2, certifi 2026.10.23, urllib3 2.8.0, curl-cffi
-0.17.0, and setuptools 84.2.1 for isolated builds. The urllib3 floor covers
-HTTPS proxy TLS and streamed response security fixes. The certifi floor
+floors are requests 2.34.2, certifi 2026.10.23, urllib3 2.8.0, and curl-cffi
+0.17.0. The `[build-system]` requirements pin setuptools to 84.2.1. The urllib3
+floor covers HTTPS proxy TLS and streamed response security fixes. The certifi floor
 removes trust in a certificate authority affected by compromised intermediate
 keys. Curl-cffi 0.17.0 is the stable release that bundles patched Brotli and
 libcurl. The offline Kick transport checks inspect the loaded native libraries
@@ -665,8 +665,9 @@ Provider-specific diagnosis and fixture-promotion steps live in the
    latest `v*` tag.
 3. Move relevant `Unreleased` entries under a new numbered release heading,
    update `src/chat_downloader/metadata.py::__version__`, and keep that version
-   as the topmost numbered `CHANGELOG.md` heading. Leave `pyproject.toml`
-   unchanged; setuptools reads the version dynamically.
+   as the topmost numbered `CHANGELOG.md` heading. Update every install and
+   update command in `README.md` to use the new `v<version>` tag. Setuptools
+   reads the package version dynamically from `metadata.py`.
 4. Run `uv lock`, `uv lock --check`, `uv sync --locked`, and `make ci`.
 5. Inspect the built wheel metadata and confirm the expected version, then
    create and verify the signed release commit.
@@ -684,7 +685,8 @@ Provider-specific diagnosis and fixture-promotion steps live in the
    confirm both remote refs resolve to the expected commits.
 
 `tests/test_release_metadata_unit.py` enforces agreement between the package
-version and the topmost numbered changelog release.
+version, the topmost numbered changelog release, and the README installation
+and update refs.
 
 ## Hosted CI
 
