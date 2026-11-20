@@ -62,7 +62,7 @@ class ChatDownloader:
 
         Args:
             headers: Custom HTTP request headers.
-            cookies: Path to a Netscape-format cookies file.
+            cookies: Path to a UTF-8 Netscape-format cookies file.
             proxy: HTTP/HTTPS/SOCKS URL; "" forces direct, None uses system settings.
             connect_timeout: TCP connect timeout in seconds (default 10).
             read_timeout: HTTP read timeout in seconds (default 30).

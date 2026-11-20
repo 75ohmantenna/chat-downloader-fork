@@ -175,7 +175,7 @@ finished.
 | Field | Default | Description |
 | --- | --- | --- |
 | `headers` | `None` | Custom HTTP headers |
-| `cookies` | `None` | Path to a Netscape-format cookies file |
+| `cookies` | `None` | Path to a UTF-8 Netscape-format cookies file |
 | `proxy` | `None` | HTTP, HTTPS, or SOCKS proxy URL; `InvalidParameter` is raised for unknown schemes or a missing host. `None` permits standard environment proxies; `""` disables them. With `cookies`, any effective remote proxy raises `InvalidParameter`, while loopback proxies (`127.0.0.0/8`, `::1`, `localhost`) emit a warning. |
 | `connect_timeout` | `10.0` | TCP connect timeout in seconds; must be finite and positive (`ValueError` otherwise) |
 | `read_timeout` | `30.0` | HTTP read timeout in seconds; must be finite and positive (`ValueError` otherwise) |

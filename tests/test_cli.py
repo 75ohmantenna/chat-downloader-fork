@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pytest
 
 import chat_downloader.cli_args as cli_args_module
+from chat_downloader.chat_downloader import run
 from chat_downloader.cli import main
 from chat_downloader.cli_args import (
     _build_request_headers,
@@ -47,6 +48,32 @@ def test_cli_exit_status(result) -> None:
         main([URL])
     if failed:
         assert exc_info.value.code == 1
+
+
+def test_cli_malformed_cookie_file_reports_safe_error(tmp_path, caplog) -> None:
+    cookie_path = tmp_path / "cookies.txt"
+    cookie_path.write_text(
+        "# Netscape HTTP Cookie File\n"
+        ".youtube.com TRUE / TRUE 0 LOGIN_INFO PRIVATE_SENTINEL\n",
+        encoding="utf-8",
+    )
+    url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    message = "Could not load the cookie file. Expected UTF-8 Netscape format."
+    caplog.set_level("ERROR")
+
+    result = run(url=url, cookies=str(cookie_path))
+    assert not result.success
+    assert result.error_message == message
+    assert message in caplog.text
+    assert "PRIVATE_SENTINEL" not in caplog.text
+
+    caplog.clear()
+    with pytest.raises(SystemExit) as error:
+        main([url, "--cookies", str(cookie_path)])
+
+    assert error.value.code == 1
+    assert message in caplog.text
+    assert "PRIVATE_SENTINEL" not in caplog.text
 
 
 def test_cli_invalid_request_exits_without_traceback(caplog) -> None:

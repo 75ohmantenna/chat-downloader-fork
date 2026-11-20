@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 from http.cookiejar import MozillaCookieJar
 from types import SimpleNamespace
@@ -111,6 +112,64 @@ def test_http_session_loads_cookie_file_and_rejects_missing_file(tmp_path) -> No
     assert loaded.get_cookie("LOGIN_INFO") == "cookie-value"
     with pytest.raises(CookieError, match="could not be found"):
         _http(cookies=str(tmp_path / "missing.txt"))
+
+
+def test_http_session_loads_utf8_cookies_under_legacy_default(
+    tmp_path, monkeypatch
+) -> None:
+    cookie_path = tmp_path / "cookies.txt"
+    cookie_path.write_text(
+        "# HTTP Cookie File\n"
+        "# Á\n"
+        "#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t\tLOGIN_INFO\tcafé\n"
+        "youtube.com\tFALSE\t/\tFALSE\t1.5\tPREF\t\n"
+        "youtube.com\tFALSE\t/\tFALSE\t\t\tSESSION\n",
+        encoding="utf-8",
+    )
+    real_open = io.open
+
+    def legacy_open(path, mode="r", buffering=-1, encoding=None, *args, **kwargs):
+        if "b" not in mode and encoding is None:
+            encoding = "cp1252"
+        return real_open(path, mode, buffering, encoding, *args, **kwargs)
+
+    monkeypatch.setattr("http.cookiejar.open", legacy_open, raising=False)
+    monkeypatch.setattr(io, "open", legacy_open)
+
+    loaded = _http(cookies=str(cookie_path))
+    cookies = {cookie.name: cookie for cookie in loaded.session.cookies}
+    assert cookies["LOGIN_INFO"].value == "café"
+    assert cookies["LOGIN_INFO"].has_nonstandard_attr("HTTPOnly")
+    assert cookies["LOGIN_INFO"].discard is True
+    assert cookies["PREF"].expires == 1
+    assert cookies["PREF"].value == ""
+    assert cookies["SESSION"].value is None
+
+
+@pytest.mark.parametrize(
+    ("header", "row"),
+    [
+        (False, b"PRIVATE_SENTINEL"),
+        (True, b".youtube.com TRUE / TRUE 0 LOGIN_INFO PRIVATE_SENTINEL"),
+        (True, b".youtube.com\tFALSE\t/\tTRUE\t0\tLOGIN_INFO\tPRIVATE_SENTINEL"),
+        (True, b".youtube.com\tTRUE\t/\tTRUE\tPRIVATE_SENTINEL\tLOGIN_INFO\tvalue"),
+        (True, b".youtube.com\tTRUE\t/\tTRUE\tinf\tLOGIN_INFO\tPRIVATE_SENTINEL"),
+        (True, b"PRIVATE_SENTINEL\xff"),
+    ],
+)
+def test_http_session_cookie_errors_drop_parser_details(
+    tmp_path, recwarn, header, row
+) -> None:
+    cookie_path = tmp_path / "cookies.txt"
+    cookie_path.write_bytes((b"# Netscape HTTP Cookie File\n" if header else b"") + row)
+
+    with pytest.raises(CookieError, match="Expected UTF-8 Netscape format") as error:
+        _http(cookies=str(cookie_path))
+
+    assert "PRIVATE_SENTINEL" not in str(error.value)
+    assert error.value.__context__ is None
+    assert error.value.__cause__ is None
+    assert not recwarn.list
 
 
 def test_http_session_headers_profiles_and_cookies(monkeypatch) -> None:

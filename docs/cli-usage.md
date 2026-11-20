@@ -303,10 +303,10 @@ Request control:
   legacy standalone Kick transport enforce a one-second minimum. Kick's
   negotiated public transport caps socket and queue polls at one second.
   Messages are delivered immediately when data arrives.
-- `--proxy`, `--cookies` — proxy and cookie jar. When `--proxy` is omitted,
-  standard proxy environment variables apply. Cookie authentication rejects an
-  effective remote proxy and warns for a loopback proxy; pass `--proxy ""` to
-  disable environment proxies explicitly.
+- `--proxy`, `--cookies` — proxy and UTF-8 Netscape-format cookie file. When
+  `--proxy` is omitted, standard proxy environment variables apply. Cookie
+  authentication rejects an effective remote proxy and warns for a loopback
+  proxy. Pass `--proxy ""` to disable environment proxies explicitly.
 - `--request_profile` — request-header preset: `youtube_web`,
   `youtube_android`, `youtube_ios`, or `twitch_web`. Unknown names fail during
   configuration.

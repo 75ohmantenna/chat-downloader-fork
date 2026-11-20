@@ -32,7 +32,7 @@ class DownloaderConfig:
     cookies: str | None = field(
         default=None,
         metadata=_cli_metadata(
-            "Path to Netscape-format cookies file",
+            "Path to UTF-8 Netscape-format cookies file",
             group="init",
             flags=["-c"],
         ),

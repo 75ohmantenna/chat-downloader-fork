@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from http.cookiejar import Cookie, MozillaCookieJar
-from pathlib import Path
 from time import perf_counter
 from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlparse, urlsplit
@@ -18,11 +17,12 @@ from chat_downloader._timeout_defaults import (
     DEFAULT_READ_TIMEOUT,
 )
 from chat_downloader.debugging import log
-from chat_downloader.errors import CookieError, InvalidParameter, ParsingError
+from chat_downloader.errors import InvalidParameter, ParsingError
 from chat_downloader.request_profiles import (
     get_request_profile_headers,
     normalize_request_profile,
 )
+from chat_downloader.sites.cookie_file import load_cookie_file
 from chat_downloader.sites.http_deadline import request_budget
 from chat_downloader.sites.http_policy import (
     configure_bounded_session,
@@ -240,11 +240,7 @@ class ChatDownloaderSession:
 
         cookie_jar = MozillaCookieJar(cookies) if cookies else MozillaCookieJar()
         if cookies:
-            if Path(cookies).exists():
-                cookie_jar.load(ignore_discard=True, ignore_expires=True)
-            else:
-                msg = f'The file "{cookies}" could not be found.'
-                raise CookieError(msg)
+            load_cookie_file(cookie_jar, cookies)
         cast("Any", self.session).cookies = cookie_jar
 
     def get_header(self, key: str) -> str | None:

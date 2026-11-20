@@ -249,6 +249,7 @@ module names.
 | `base.py` | `BaseChatDownloader` shared base class: URL matching, session setup, cookie handling, and optional provider-selected console state capability |
 | `common.py` | Stateless mapped-key discovery for site remapping tables |
 | `session.py` | `ChatDownloaderSession`: cohesive HTTP adapter, timeout, proxy, header/profile, cookie, and close ownership |
+| `cookie_file.py` | UTF-8 Netscape cookie-file parsing with fixed errors for malformed content |
 | `http_policy.py` | Provider-neutral Requests adapters and response consumption with decoded-body byte limits, completion deadlines, and cooperative read cancellation |
 | `http_deadline.py` | Shared monotonic request budgets, bounded wire consumption, and cooperative socket-read ownership |
 | `http_tls.py` | Budget-aware receive boundary beneath HTTPS-proxy nested TLS |
