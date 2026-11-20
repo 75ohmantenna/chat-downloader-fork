@@ -106,6 +106,7 @@ def test_empty_proxy_disables_environment_for_kick_client(client_factory):
         (".kick.com", "encoded%7Ctoken", "/", None, "encoded|token"),
         ("example.com", "token", "/", None, None),
         (".kick.com", "token", "/account", None, None),
+        (".kick.com", "token", "", None, None),
         (".kick.com", "token", "/", 1, None),
         (".kick.com", "", "/", None, None),
     ],
@@ -125,6 +126,26 @@ def test_headers_and_cookie_applicability(
     configuration = client_factory.call_args.kwargs
     assert configuration["extra_headers"] == {"X-Trace": "trace-value"}
     assert configuration["bearer_token_provider"]() == expected
+
+
+@pytest.mark.parametrize(
+    ("tokens", "expected"),
+    [
+        ([("kick.com", "token", "8443")], None),
+        ([("kick.com", "token", "443")], "token"),
+        ([("kick.com", "one", None), (".kick.com", "two", None)], None),
+        ([("kick.com", "two", None), (".kick.com", "one", None)], None),
+        ([("kick.com", "same", None), (".kick.com", "same", None)], "same"),
+    ],
+)
+def test_bearer_cookie_respects_port_and_rejects_conflicts(
+    downloader, tokens, expected
+):
+    for domain, token, port in tokens:
+        downloader.session.cookies.set_cookie(
+            create_cookie("session_token", token, domain=domain, port=port)
+        )
+    assert downloader._get_kick_bearer_token() == expected
 
 
 def test_client_construction_failure_closes_base_session(monkeypatch):

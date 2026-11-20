@@ -19,6 +19,7 @@ from chat_downloader.sites.base import (
     BaseChatDownloader,
     warn_unconfigured_chat_options,
 )
+from chat_downloader.sites.session import get_scoped_cookie
 from chat_downloader.utils.json_types import get_dict, get_int, get_list, get_str
 
 from .api_client import KickApiClient
@@ -112,19 +113,15 @@ class KickChatDownloader(BaseChatDownloader):
 
     def _get_kick_bearer_token(self) -> str | None:
         """Return a safe, current bearer token from Kick's session cookie."""
-        for cookie in self.session.cookies:
-            if (
-                cookie.name != "session_token"
-                or cookie.domain.lstrip(".").casefold() != "kick.com"
-                or cookie.path != "/"
-                or cookie.is_expired()
-            ):
-                continue
-            cookie_value = cookie.value
-            if not cookie_value:
-                continue
-            return unquote(cookie_value)
-        return None
+        cookie = get_scoped_cookie(
+            self.session.cookies,
+            "session_token",
+            "https://kick.com/",
+            frozenset({"kick.com"}),
+        )
+        if cookie is None or cookie.path != "/" or not cookie.value:
+            return None
+        return unquote(cookie.value)
 
     @property
     def _kick_client(self) -> KickApiClient:

@@ -42,6 +42,7 @@ def _response(status, body, headers=None):
     response = requests.Response()
     response.status_code = status
     response._content = json.dumps(body).encode()
+    response._content_consumed = True
     response.headers.update(headers or {})
     response.url = _URL
     return response

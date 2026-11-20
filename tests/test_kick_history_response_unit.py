@@ -21,7 +21,7 @@ from chat_downloader.errors import CaptchaChallengeRequired
 from chat_downloader.models import ChatRequest
 from chat_downloader.sites.kick import (
     api_client,
-    history_response,
+    http_response,
     replay_service,
 )
 from chat_downloader.sites.kick import (
@@ -46,9 +46,9 @@ def history_server():
         def do_GET(self):
             state.requests += 1
             self.send_response(state.status)
-            self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(state.body)))
-            for key, value in state.headers.items():
+            headers = {"Content-Type": "application/json", **state.headers}
+            for key, value in headers.items():
                 self.send_header(key, value)
             self.end_headers()
             with suppress(BrokenPipeError, ConnectionResetError):
@@ -119,7 +119,7 @@ def test_real_backends_bound_decoded_body_before_json(
     history_server.body = gzip.compress(body) if compressed else body
     if compressed:
         history_server.headers = {"Content-Encoding": "gzip"}
-    monkeypatch.setattr(history_response, "MAX_HISTORY_RESPONSE_BYTES", 128)
+    monkeypatch.setattr(http_response, "MAX_HISTORY_RESPONSE_BYTES", 128)
     client = _client(monkeypatch, history_server, backend)
     decoder = Mock(side_effect=AssertionError("oversized body reached JSON decoder"))
     monkeypatch.setattr(requests.Response, "json", decoder)
@@ -139,12 +139,31 @@ def test_real_backends_accept_exact_history_response_boundary(
     payload = message_page([_raw(content="valid \N{SNOWMAN}")])
     history_server.body = json.dumps(payload, ensure_ascii=False).encode()
     monkeypatch.setattr(
-        history_response, "MAX_HISTORY_RESPONSE_BYTES", len(history_server.body)
+        http_response, "MAX_HISTORY_RESPONSE_BYTES", len(history_server.body)
     )
     client = _client(monkeypatch, history_server, backend)
     state = {}
     assert [item["message_id"] for item in _source(client, state)] == ["one"]
     assert state["history_complete"] is True
+
+
+@pytest.mark.parametrize(
+    ("charset", "encoding"), [("iso-8859-1", "iso-8859-1"), (None, "utf-8-sig")]
+)
+def test_metadata_preserves_response_encoding(
+    monkeypatch, history_server, backend, charset, encoding
+):
+    payload = {"name": "\N{LATIN SMALL LETTER E WITH ACUTE}"}
+    history_server.body = json.dumps(payload, ensure_ascii=False).encode(encoding)
+    content_type = (
+        f"application/json; charset={charset}"
+        if charset
+        else "application/octet-stream"
+    )
+    history_server.headers = {"Content-Type": content_type}
+    monkeypatch.setattr(api_client, "CHANNEL_API_TEMPLATE", history_server.url)
+    client = _client(monkeypatch, history_server, backend)
+    assert client.fetch_channel("slug") == payload
 
 
 @pytest.mark.parametrize(
@@ -163,7 +182,7 @@ def test_real_backends_preserve_bounded_status_and_challenge_precedence(
     history_server.status = status
     history_server.body = body
     history_server.headers = {"Retry-After": "7", "Location": "/not-followed"}
-    monkeypatch.setattr(history_response, "MAX_HISTORY_RESPONSE_BYTES", 64)
+    monkeypatch.setattr(http_response, "MAX_HISTORY_RESPONSE_BYTES", 64)
     client = _client(monkeypatch, history_server, backend)
     with pytest.raises(error) as caught:
         client.fetch_message_page("1")
@@ -343,9 +362,8 @@ def test_incremental_hash_preserves_canonical_json_contract():
     assert limits.replay_page_digest(page, None) == expected
 
 
-def test_history_callback_overflow_is_latched_before_further_growth(monkeypatch):
-    monkeypatch.setattr(history_response, "MAX_HISTORY_RESPONSE_BYTES", 2)
-    body = history_response._HistoryBody()
+def test_history_callback_overflow_is_latched_before_further_growth():
+    body = http_response._ResponseBody(2, history=True)
     assert body.collect(b"abc") == 0
     assert body.content == b"ab"
     assert body.collect(b"must-not-append") == 0
@@ -365,7 +383,7 @@ def test_history_callback_overflow_is_latched_before_further_growth(monkeypatch)
 def test_native_wrapper_cannot_hide_resource_failure_or_status_precedence(
     monkeypatch, overflow, response_status, expected
 ):
-    monkeypatch.setattr(history_response, "MAX_HISTORY_RESPONSE_BYTES", 2)
+    monkeypatch.setattr(http_response, "MAX_HISTORY_RESPONSE_BYTES", 2)
 
     class NativeSession:
         __module__ = "curl_cffi.synthetic"
@@ -419,7 +437,7 @@ def test_real_stream_hooks_keep_final_response_and_latch_prior_overflow(
     payload = message_page([_raw()])
     history_server.body = json.dumps(payload).encode()
     if oversized:
-        monkeypatch.setattr(history_response, "MAX_HISTORY_RESPONSE_BYTES", 8)
+        monkeypatch.setattr(http_response, "MAX_HISTORY_RESPONSE_BYTES", 8)
 
     class ReissuedSession(requests.Session):
         def get(self, url, **kwargs):

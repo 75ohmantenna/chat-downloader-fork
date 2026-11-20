@@ -124,7 +124,12 @@ def test_successful_endpoints_use_owned_session(method, identifier, fixture, end
     assert session.calls == [
         (
             endpoint,
-            {"params": None, "timeout": (3.0, 7.0), "allow_redirects": False},
+            {
+                "params": None,
+                "timeout": (3.0, 7.0),
+                "allow_redirects": False,
+                "stream": True,
+            },
         )
     ]
 
@@ -176,6 +181,7 @@ def test_mobile_request_does_not_emit_primary_origin_credentials(monkeypatch, in
             response = requests.Response()
             response.status_code = 200
             response._content = json.dumps(payload).encode()
+            response._content_consumed = True
             response.request = request
             response.url = request.url
             return response
@@ -411,7 +417,7 @@ def test_message_page_rejects_mixed_pagination_parameters():
             (response, {"start_time": START}, KickError, "unexpected HTTP")
             for response in (
                 FakeResponse(400, []),
-                FakeResponse(422, {}, malformed=True),
+                FakeResponse(422, text="{truncated", malformed=True),
             )
         ],
         (FakeResponse(400, {}), {"cursor": "older"}, KickError, "unexpected HTTP 400"),

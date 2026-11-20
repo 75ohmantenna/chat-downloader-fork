@@ -213,19 +213,23 @@ def _default_connector(
         connection_options: _ConnectionOptions = {"socket": proxy_socket}
         if origin is not None:
             connection_options["origin"] = origin
-        return cast(
-            "_WebSocketConnection",
-            create_connection(
-                url,
-                class_=_BoundedWebSocket,
-                timeout=timeout,
-                **connection_options,
-            ),
+        connection = create_connection(
+            url,
+            class_=_BoundedWebSocket,
+            timeout=timeout,
+            redirect_limit=0,
+            **connection_options,
         )
     except BaseException:
         with suppress(OSError):
             proxy_socket.close()
         raise
+    if connection.getstatus() != 101:
+        with suppress(OSError):
+            proxy_socket.close()
+        msg = "Kick WebSocket handshake did not switch protocols."
+        raise WebSocketException(msg)
+    return cast("_WebSocketConnection", connection)
 
 
 class KickPusherTransport:

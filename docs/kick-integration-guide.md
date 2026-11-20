@@ -11,8 +11,9 @@ The Kick stack is split across two transport families:
   renewed automatically; no account, cookie, OAuth token, or login is needed.
 - Kick's public web JSON endpoints (`api/v2` for channel, clip, and message data,
   plus `api/v1/video` for VOD metadata) and the anonymous mobile `api/v1/clips`
-  fallback. When a cookie file supplies a `kick.com` `session_token`, primary
-  web API calls authenticate with its URL-decoded bearer value.
+  fallback. Primary web API calls can use a URL-decoded bearer value from a
+  `kick.com` `session_token` cookie applicable to `https://kick.com/`. The
+  selector honors cookie port restrictions and requires applicable values to agree.
 
 Kick's OAuth-scoped official Public API is a useful schema reference, but it
 does not expose the unauthenticated read-chat or replay stream this tool needs.
@@ -192,7 +193,7 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   credential-shaped user headers and cookies from the main origin.
 - `http_session.py`: constructs the client's isolated curl-cffi,
   cloudscraper, or requests transport and defines its narrow session Protocol.
-- `history_response.py`: decoded history-body limits before buffering or parsing,
+- `http_response.py`: decoded HTTP body limits before buffering or parsing,
   using bounded response hooks or a synchronous native content callback.
 - `websocket_transport.py`: the *only* module that imports `websocket-client`.
   Exposes a small parsing-free interface (`connect` / `subscribe` / `recv` /
@@ -200,6 +201,8 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   injectable so the live path is fully unit-testable without network access.
   Its pre-payload frame reservations rely on websocket-client 1.9.2 or newer.
   Oversized declared lengths are rejected before payload reads or accumulation.
+  A connection must return HTTP 101 from the selected endpoint. The connector
+  rejects handshake redirects.
 
 - `realtime_connection.py`: isolated anonymous negotiation and token requests.
 - `centrifugo_transport.py`: public protocol replies, publications, and lease renewal.
@@ -560,8 +563,9 @@ Internal limits are independent of `max_messages`, which limits chronological
 output rather than reverse-history collection. Wire and replay resource errors
 stop capture explicitly and leave history incomplete; live preload and recovery
 do not downgrade a resource rejection into another best-effort request.
-History bodies are bounded before full buffering or JSON decoding, including
-decompressed bodies. String escaping and hashing use bounded chunks, and the
+Kick bounds decoded HTTP bodies before full buffering or JSON parsing.
+The smaller HTTP limit applies to channel, VOD and clip metadata, public
+snapshots, and realtime negotiation and token responses. String escaping and hashing use bounded chunks, and the
 spool checks expansion limits before writing.
 
 | Resource | Limit |
@@ -571,6 +575,7 @@ spool checks expansion limits before writing.
 | Centrifugo entries per batch | 4,096 |
 | Centrifugo queued publications | 4,096 |
 | Decoded history HTTP response | 8 MiB |
+| Decoded metadata, snapshot, or realtime HTTP response | 2 MiB |
 | Serialized replay record, including newline | 16 MiB |
 | Serialized replay page | 64 MiB |
 | Total replay spool | 512 MiB |

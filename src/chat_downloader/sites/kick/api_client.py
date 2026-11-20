@@ -38,12 +38,11 @@ from .errors import (
     KickCountryBlocked,
     KickError,
     KickForwardHistoryRejected,
-    KickResourceLimit,
     KickServerError,
     KickVideoNotFound,
     KickVideoRestricted,
 )
-from .history_response import fetch_history_response
+from .http_response import fetch_bounded_response, response_limit_error
 from .http_session import _KickSession, create_kick_session
 
 if TYPE_CHECKING:
@@ -237,14 +236,10 @@ class KickApiClient:
             cast("int", self.diagnostics["http_requests"]) + 1
         )
         status_key = "transport_error"
-        response_exceeded = False
         try:
-            if resource == "messages":
-                response, response_exceeded = fetch_history_response(
-                    session, url, request_kwargs
-                )
-            else:
-                response = session.get(url, **request_kwargs)
+            response, response_exceeded = fetch_bounded_response(
+                session, "GET", url, request_kwargs, history=resource == "messages"
+            )
             status_key = str(response.status_code)
         finally:
             self._status_counts[status_key] = self._status_counts.get(status_key, 0) + 1
@@ -310,6 +305,7 @@ def _classify_response(
     context: str,
     resource: _ResourceKind,
     forward_history: bool = False,
+    response_exceeded: bool = False,
 ) -> None:
     """Apply Kick's shared redirect, access, history, and status precedence."""
     if 300 <= response.status_code < 400:
@@ -324,6 +320,8 @@ def _classify_response(
         msg = f"Kick rejected forward message history for {context!r}."
         raise KickForwardHistoryRejected(msg)
     _check_status(response, context=context, resource=resource)
+    if response_exceeded:
+        raise response_limit_error(history=resource == "messages")
 
 
 def _interpret_response(
@@ -334,15 +332,14 @@ def _interpret_response(
     forward_history: bool,
     response_exceeded: bool,
 ) -> JSONDict:
-    """Classify a response before parsing a bounded history JSON object."""
+    """Classify a response before parsing its bounded JSON object."""
     _classify_response(
-        response, context=context, resource=resource, forward_history=forward_history
+        response,
+        context=context,
+        resource=resource,
+        forward_history=forward_history,
+        response_exceeded=response_exceeded,
     )
-    if response_exceeded:
-        msg = (
-            "Kick history response byte resource limit exceeded; capture is incomplete."
-        )
-        raise KickResourceLimit(msg)
     data = _decode_json(response, context=context, resource=resource)
     if not isinstance(data, dict):
         msg = f"Kick {resource} response for {context!r} was not a JSON object."

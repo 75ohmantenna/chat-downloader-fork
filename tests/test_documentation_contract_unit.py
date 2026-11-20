@@ -358,6 +358,9 @@ def test_kick_guide_resource_limits_match_runtime_budgets() -> None:
             "including interleaved controls"
         ): kick_limits.MAX_WEBSOCKET_MESSAGE_BYTES,
         "Decoded history HTTP response": kick_limits.MAX_HISTORY_RESPONSE_BYTES,
+        "Decoded metadata, snapshot, or realtime HTTP response": (
+            kick_limits.MAX_OTHER_RESPONSE_BYTES
+        ),
         "Serialized replay record, including newline": (
             kick_limits.MAX_REPLAY_RECORD_BYTES
         ),

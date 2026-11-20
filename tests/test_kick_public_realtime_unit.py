@@ -30,6 +30,7 @@ from chat_downloader.sites.kick.constants import (
 from chat_downloader.sites.kick.errors import (
     KickCountryBlocked,
     KickError,
+    KickResourceLimit,
     KickServerError,
 )
 from chat_downloader.sites.kick.live_iterator import KickLiveIterator
@@ -94,15 +95,47 @@ def test_kick_http_redirect_never_inspects_body(endpoint, status):
         def text(self):
             pytest.fail("Redirect body must not be inspected for challenges.")
 
-        def json(self):
-            pytest.fail("Redirect body must not be decoded.")
+        def iter_content(self, chunk_size):
+            pytest.fail("Redirect body must not be streamed.")
 
-    client, session, consume = http_consumer(endpoint, RedirectResponse())
+        def close(self):
+            self.closed = True
+
+    response = RedirectResponse()
+    client, session, consume = http_consumer(endpoint, response)
     try:
         with pytest.raises(KickServerError, match="Unexpected HTTP redirect"):
             consume()
         assert len(session.calls) == 1
         assert session.calls[0][1]["allow_redirects"] is False
+        assert response.closed
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize("endpoint", ["api", "metadata", "viewers", "realtime"])
+def test_kick_non_history_http_body_is_bounded_before_json(endpoint, monkeypatch):
+    class OversizedResponse(FakeResponse):
+        def iter_content(self, chunk_size):
+            for _ in range(3 * 1024 * 1024 // chunk_size):
+                self.chunks += 1
+                yield b"x" * chunk_size
+            pytest.fail("Oversized body was fully consumed.")
+
+    response = OversizedResponse()
+    response.chunks = 0
+    client, session, consume = http_consumer(endpoint, response)
+    decoder = MagicMock(side_effect=AssertionError("oversized body reached JSON"))
+    monkeypatch.setattr("requests.Response.json", decoder)
+    try:
+        with pytest.raises(
+            KickResourceLimit, match="HTTP response byte resource limit"
+        ):
+            consume()
+        assert session.calls[0][1]["stream"] is True
+        assert response.closed
+        assert response.chunks == 129
+        decoder.assert_not_called()
     finally:
         client.close()
 
@@ -1511,7 +1544,7 @@ def test_shared_socket_cancellation_and_explicit_origin(monkeypatch):
     from chat_downloader.sites.kick import websocket_transport as wt
 
     monkeypatch.setattr(wt, "open_proxied_tls_socket", MagicMock())
-    connector = MagicMock()
+    connector = MagicMock(**{"return_value.getstatus.return_value": 101})
     monkeypatch.setattr(wt, "create_connection", connector)
     wt._default_connector("wss://example.test/", 1, origin="https://kick.com")
 

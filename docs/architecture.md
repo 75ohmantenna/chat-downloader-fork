@@ -344,7 +344,7 @@ module names.
 | `replay_window.py` | Kick replay bounds, record parsing, and skip-diagnostic updates; reverse cursors are constructed in `history.py` |
 | `replay_service.py` | VOD metadata, reverse history spooling, replay-relative timestamps, filtering, and completion diagnostics |
 | `resource_limits.py` | Finite wire/batch/replay budgets, bounded JSON encoding, incremental page hashing, and individual spool record readback |
-| `history_response.py` | Pre-buffering decoded history-response byte caps across Requests, cloudscraper, and curl-cffi |
+| `http_response.py` | Pre-buffering decoded HTTP body caps across Requests, cloudscraper, and curl-cffi |
 | `vod_metadata.py` | Legacy video lookup and validated, origin-isolated current website metadata fallback |
 | `clip_service.py` | Web/mobile clip metadata validation, clip-relative bounds, and source-VOD or absolute-time replay assembly |
 | `history.py` | Bounded reverse startup/reconnect history, cursor construction, ID deduplication, and page validation |

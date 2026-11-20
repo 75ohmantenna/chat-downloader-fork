@@ -23,6 +23,7 @@ from .api_client import (
 )
 from .constants import is_numeric_id
 from .errors import KickError, KickServerError
+from .http_response import fetch_bounded_response
 from .http_session import create_kick_session
 
 if TYPE_CHECKING:
@@ -126,8 +127,11 @@ class KickRealtimeClient:
             "realtime_auth" if path == "/auth/connection" else "realtime_connection"
         )
         try:
-            response = self._session.post(
-                _BASE + path, json=body, timeout=self._timeout, allow_redirects=False
+            response, response_exceeded = fetch_bounded_response(
+                self._session,
+                "POST",
+                _BASE + path,
+                {"json": body, "timeout": self._timeout, "allow_redirects": False},
             )
             status = str(response.status_code)
         except (RequestException, OSError) as error:
@@ -140,7 +144,12 @@ class KickRealtimeClient:
                 status,
                 monotonic() - started,
             )
-        _classify_response(response, context="realtime", resource="realtime")
+        _classify_response(
+            response,
+            context="realtime",
+            resource="realtime",
+            response_exceeded=response_exceeded,
+        )
         data = _decode_json(response, context="realtime", resource="realtime")
         if not isinstance(data, dict):
             msg = "Kick realtime response was not an object."

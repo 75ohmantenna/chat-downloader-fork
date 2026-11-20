@@ -106,8 +106,8 @@ class FakeResponse:
         return self._payload
 
     def iter_content(self, chunk_size=16 * 1024):
-        """Expose a real byte-stream contract for bounded history consumers."""
-        content = b"bad JSON" if self._malformed else self.text.encode("utf-8")
+        """Expose a real byte-stream contract for bounded HTTP consumers."""
+        content = self.text.encode("utf-8") or b"bad JSON"
         for start in range(0, len(content), chunk_size):
             yield content[start : start + chunk_size]
 

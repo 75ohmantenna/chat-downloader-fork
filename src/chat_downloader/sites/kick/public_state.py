@@ -15,6 +15,7 @@ from chat_downloader.utils.json_types import get_dict, get_int, get_list
 
 from .api_client import _classify_response, _decode_json
 from .errors import KickError
+from .http_response import fetch_bounded_response
 from .http_session import create_kick_session
 
 if TYPE_CHECKING:
@@ -61,8 +62,11 @@ class KickPublicState:
         started = monotonic()
         status = "transport_error"
         try:
-            response = self._session.get(
-                url, params=params, timeout=self._timeout, allow_redirects=False
+            response, response_exceeded = fetch_bounded_response(
+                self._session,
+                "GET",
+                url,
+                {"params": params, "timeout": self._timeout, "allow_redirects": False},
             )
             status = str(response.status_code)
         finally:
@@ -72,7 +76,12 @@ class KickPublicState:
                 status,
                 monotonic() - started,
             )
-        _classify_response(response, context="public state", resource="realtime")
+        _classify_response(
+            response,
+            context="public state",
+            resource="realtime",
+            response_exceeded=response_exceeded,
+        )
         return _decode_json(response, context="public state", resource="realtime")
 
     def metadata(self, username: str) -> JSONDict:

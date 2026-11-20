@@ -45,7 +45,7 @@ def test_connector_tunnel_and_handshake_cleanup(monkeypatch, proxy, failure):
     socket = MagicMock()
     tunnel = MagicMock(return_value=socket)
     create = MagicMock(
-        return_value="connection",
+        return_value=MagicMock(**{"getstatus.return_value": 101}),
         side_effect=(WebSocketException("handshake failed") if failure else None),
     )
     monkeypatch.setattr(wt, "open_proxied_tls_socket", tunnel)
@@ -57,12 +57,25 @@ def test_connector_tunnel_and_handshake_cleanup(monkeypatch, proxy, failure):
     else:
         assert (
             wt._default_connector("wss://example.test/socket", 4.0, proxy_url=proxy)
-            == "connection"
+            is create.return_value
         )
         tunnel.assert_called_once_with(
             "example.test", 443, timeout=4.0, proxy_url=proxy
         )
         assert create.call_args.kwargs["socket"] is socket
+        assert create.call_args.kwargs["redirect_limit"] == 0
+
+
+def test_connector_closes_socket_when_handshake_does_not_switch_protocols(monkeypatch):
+    socket = MagicMock()
+    tunnel = MagicMock(return_value=socket)
+    create = MagicMock(**{"return_value.getstatus.return_value": 302})
+    monkeypatch.setattr(wt, "open_proxied_tls_socket", tunnel)
+    monkeypatch.setattr(wt, "create_connection", create)
+    with pytest.raises(WebSocketException, match="did not switch protocols"):
+        wt._default_connector("wss://example.test/socket", 4.0)
+    assert create.call_args.kwargs["redirect_limit"] == 0
+    socket.close.assert_called_once_with()
 
 
 def test_connector_rejects_non_secure_proxied_url():
@@ -76,10 +89,12 @@ def test_direct_connector_supplies_socket_despite_environment_proxy(monkeypatch)
     monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
     direct_socket = MagicMock()
     tunnel = MagicMock(return_value=direct_socket)
-    create = MagicMock(return_value="connected")
+    create = MagicMock(**{"return_value.getstatus.return_value": 101})
     monkeypatch.setattr(wt, "open_proxied_tls_socket", tunnel)
     monkeypatch.setattr(wt, "create_connection", create)
-    assert wt._default_connector("wss://example.test/socket", 2.0) == "connected"
+    assert (
+        wt._default_connector("wss://example.test/socket", 2.0) is create.return_value
+    )
     tunnel.assert_called_once_with("example.test", 443, timeout=2.0, proxy_url=None)
     assert create.call_args.kwargs["socket"] is direct_socket
 
