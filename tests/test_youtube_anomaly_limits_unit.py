@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -10,11 +11,11 @@ import chat_downloader.debugging as debugging
 import chat_downloader.redaction as redaction
 from chat_downloader.sites.youtube.continuation import _log_continuation_debug_info
 from chat_downloader.sites.youtube.continuations import ContinuationParseResult
+from chat_downloader.sites.youtube.parsing import actions_router
 from chat_downloader.sites.youtube.parsing.actions_handlers_validation import (
     _emit_parse_diagnostics,
     validate_and_finalize_message,
 )
-from chat_downloader.sites.youtube.parsing.actions_router import process_action
 from tests.core_third_helpers import restore_loggers
 
 
@@ -35,7 +36,7 @@ def _emit(family, index, value=0):
     renderer = f"futureRenderer{index}"
     payload = {"value": value}
     if family == "unknown-action":
-        process_action({action: payload})
+        actions_router.process_action({action: payload})
     elif family == "unknown-continuation":
         _log_continuation_debug_info(
             ContinuationParseResult(
@@ -62,32 +63,100 @@ def _emit(family, index, value=0):
         )
 
 
-@pytest.mark.parametrize(
-    "family",
-    [
-        "unknown-action",
-        "unknown-continuation",
-        "untyped-action",
-        "unknown-message-type",
-        "empty-action-parse",
-        "missing-keys",
-    ],
-)
-def test_one_hundred_novel_youtube_labels_have_fixed_aggregate_quota(
-    sample_dir, family
+def test_unknown_action_aggregate_quota_publishes_complete_json_files(
+    sample_dir, monkeypatch
 ):
-    for index in range(100):
-        _emit(family, index)
-    files = list(sample_dir.glob("*.json"))
+    _emit("unknown-action", 0)
+
+    def reject_repeat_publication(*_args):
+        pytest.fail("Duplicate action reached sample publication")
+
+    with monkeypatch.context() as repeat:
+        repeat.setattr(
+            redaction, "_write_or_validate_sample", reject_repeat_publication
+        )
+        _emit("unknown-action", 0)
+
+    for index in range(1, 100):
+        _emit("unknown-action", index)
+    files = set(sample_dir.iterdir())
     assert len(files) == 50
-    assert all(path.name.startswith(f"youtube-{family}-") for path in files)
+    actions = set()
+    for path in files:
+        action = json.loads(path.read_bytes())["action"]
+        (name,) = action
+        assert action[name] == {"value": 0}
+        assert path.match(f"youtube-unknown-action-{name.lower()}-*.json")
+        actions.add(name)
+    assert actions == {f"futureAction{index}" for index in range(50)}
     # The aggregate reservation happens first: the rejected fifty labels do
     # not enter either the per-label digest map or the warning-key set.
     assert len(redaction._DEBUG_SAMPLE_DIGESTS) == 51
     assert len(redaction._DEBUG_SAMPLE_LIMIT_WARNED) == 1
     assert sum(map(len, redaction._DEBUG_SAMPLE_DIGESTS.values())) == 100
+
+    sanitize = redaction.sanitize_for_log
+
+    def reject_quota_exhausted_payload(value):
+        assert not isinstance(value, dict), (
+            "Action payload was sanitized after quota filled"
+        )
+        return sanitize(value)
+
+    # Router debug logs also sanitize dicts. Isolate sample sanitization here.
+    monkeypatch.setattr(actions_router, "debug_log", lambda *_: None)
+    monkeypatch.setattr(redaction, "sanitize_for_log", reject_quota_exhausted_payload)
+    _emit("unknown-action", 0)
+    _emit("unknown-action", 100)
+    assert set(sample_dir.iterdir()) == files
+
+
+@pytest.mark.parametrize(
+    ("family", "label_stem"),
+    [
+        ("unknown-continuation", "futureaction"),
+        ("untyped-action", "futureaction"),
+        ("unknown-message-type", "futurerenderer"),
+        ("empty-action-parse", "futureaction"),
+        ("missing-keys", "futurerenderer"),
+    ],
+)
+def test_other_youtube_anomalies_respect_label_and_aggregate_quota(
+    sample_dir, monkeypatch, family, label_stem
+):
+    samples = {}
+
+    def record_sample(path, serialized, _directory_fd):
+        assert samples.setdefault(path, serialized) == serialized
+
+    monkeypatch.setattr(redaction, "_write_or_validate_sample", record_sample)
+    group_name = f"youtube-{family}"
+    directory = str(sample_dir.absolute())
+    group_key = (directory, group_name)
+    first_label = (directory, f"{group_name}-{label_stem}0")
+    digests = redaction._DEBUG_SAMPLE_DIGESTS
+
     _emit(family, 0)
-    assert list(sample_dir.glob("*.json")) == files
+    _emit(family, 0)
+    assert len(samples) == len(digests[first_label]) == len(digests[group_key]) == 1
+
+    for value in range(1, 11):
+        _emit(family, 0, value)
+    assert len(samples) == len(digests[first_label]) == len(digests[group_key]) == 10
+    assert {first_label} == redaction._DEBUG_SAMPLE_LIMIT_WARNED
+
+    for index in range(1, 42):
+        _emit(family, index)
+    assert len(samples) == len(digests[group_key]) == 50
+    assert set(digests) == {group_key} | {
+        (directory, f"{group_name}-{label_stem}{index}") for index in range(41)
+    }
+    assert {first_label, group_key} == redaction._DEBUG_SAMPLE_LIMIT_WARNED
+    assert {path.stem.rsplit("-", 1)[0] for path in samples} == {
+        f"{group_name}-{label_stem}{index}" for index in range(41)
+    }
+    assert all(path.parent == sample_dir and path.suffix == ".json" for path in samples)
+    assert not list(sample_dir.iterdir())
 
 
 def test_youtube_label_limit_is_independent_of_remaining_group_slots(sample_dir):
