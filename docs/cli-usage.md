@@ -564,12 +564,12 @@ to retrieval, including resume overlap, with `time_basis` of `recording` or
 Kick replay windows include provider-side duration clamping. Twitch clips with
 a known source offset retain their clip-relative bounds and default duration.
 `effective_window` is `null` when retrieval setup did not return a chat.
-`recording.start_time` remains the absolute broadcast start and is separate
-from these relative seek bounds. `failure_stage` is `null` on success or names
+`recording.start_time` describes the recording origin separately from these
+relative seek bounds. `failure_stage` is `null` on success or names
 the failed phase: `initialization`, `bootstrap`, `capture`, `shutdown`,
 `verification`, `completion`, or `manifest`.
-For Kick live channels, `recording.start_time` contains the initial livestream
-start time in UTC Unix-epoch microseconds, or `null` when unavailable.
+For Kick, `recording.start_time` contains the absolute livestream, VOD, or
+clip start in UTC Unix-epoch microseconds, or `null` when unavailable.
 `elapsed_seconds` measures initialization through capture shutdown using a
 monotonic clock; output verification and manifest writing are excluded.
 `provider_diagnostics` retains supported bounded YouTube action and

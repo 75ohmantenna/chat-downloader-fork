@@ -310,6 +310,7 @@ def dispatch_event(  # noqa: C901 — protocol, dispatch, and malformed-event ac
         ParsingError,
         ValueError,
         TypeError,
+        OverflowError,
         KeyError,
         IndexError,
     ) as error:

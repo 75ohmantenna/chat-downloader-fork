@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 import subprocess
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ import pytest
 
 from chat_downloader.sites.kick.capture_inspection import inspect_capture
 from chat_downloader.sites.kick.live_service import _KickLiveDiagnostics
+from chat_downloader.utils import atomic_files
 from scripts import smoke_kick_live as smoke
 
 
@@ -475,3 +477,40 @@ def test_realtime_case_rejects_invalid_or_unfrozen_delivery_accounting(
     result = smoke._run_case(tmp_path, "realtime", [], expected_success=True, timeout=1)
     assert result["passed"] is False
     assert "PRIVATE" not in json.dumps(result)
+
+
+def test_stdout_report_survives_failed_atomic_publication(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setattr(smoke, "_run_case", lambda *args, **kwargs: {"passed": True})
+
+    def fail_sync(_descriptor):
+        msg = "failed to sync report"
+        raise OSError(msg)
+
+    monkeypatch.setattr(
+        atomic_files,
+        "os",
+        SimpleNamespace(**(vars(os) | {"fsync": fail_sync})),
+    )
+    directory = tmp_path / "artifacts"
+    with pytest.raises(OSError, match="failed to sync report"):
+        smoke.main(["--run-network", "--artifacts", str(directory)])
+
+    assert json.loads(capsys.readouterr().out)["passed"] is True
+    assert not (directory / "report.json").exists()
+    assert all(path.is_dir() for path in directory.iterdir())
+
+
+def test_atomic_report_survives_failed_stdout(tmp_path, monkeypatch):
+    monkeypatch.setattr(smoke, "_run_case", lambda *args, **kwargs: {"passed": True})
+
+    def fail_print(*args, **kwargs):
+        raise BrokenPipeError
+
+    monkeypatch.setattr(smoke, "print", fail_print, raising=False)
+    directory = tmp_path / "artifacts"
+    with pytest.raises(BrokenPipeError):
+        smoke.main(["--run-network", "--artifacts", str(directory)])
+
+    assert json.loads((directory / "report.json").read_text())["passed"] is True

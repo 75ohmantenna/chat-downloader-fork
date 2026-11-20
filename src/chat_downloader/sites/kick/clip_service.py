@@ -26,6 +26,7 @@ from .constants import (
     is_video_id,
 )
 from .errors import KickCountryBlocked, KickError
+from .history import _epoch_microseconds
 from .replay_service import ReplaySource
 from .replay_window import _apply_request_window
 from .request_retry import fetch_with_retry
@@ -423,6 +424,7 @@ def get_clip_chat(
             start_time=clip_start,
             id=clip_id,
         )
+        chat._recording_start_time = _epoch_microseconds(metadata.started_at)
         chat._request_window = {
             "start_time": clip_start,
             "end_time": clip_end,
@@ -470,6 +472,7 @@ def get_clip_chat(
         start_time=relative_start,
         id=clip_id,
     )
+    chat._recording_start_time = _epoch_microseconds(clip_origin)
     chat._request_window = {
         "start_time": relative_start,
         "end_time": max(0.0, (end_dt - clip_origin).total_seconds()),

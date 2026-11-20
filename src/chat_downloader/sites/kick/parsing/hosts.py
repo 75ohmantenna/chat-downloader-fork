@@ -74,7 +74,7 @@ def _extract_host_metadata(raw_meta: object) -> dict[str, Any]:
 
     num_viewers = raw_meta.get("number_viewers")
     if num_viewers is not None:
-        with contextlib.suppress(ValueError, TypeError):
+        with contextlib.suppress(ValueError, TypeError, OverflowError):
             host_meta["number_viewers"] = int(num_viewers)
 
     optional_message = _opt_str(raw_meta.get("optional_message"))

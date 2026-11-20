@@ -24,12 +24,13 @@ from chat_downloader.utils.time_utils import seconds_to_time
 
 from .constants import MESSAGE_GROUPS
 from .errors import KickError
-from .history import _cursor_after, _message_timestamp, fetch_validated_page
-from .replay_window import (
-    _apply_request_window,
-    _bump,
-    _classify_message,
+from .history import (
+    _cursor_after,
+    _epoch_microseconds,
+    _message_timestamp,
+    fetch_validated_page,
 )
+from .replay_window import _apply_request_window, _bump, _classify_message
 from .request_retry import fetch_with_retry
 from .resource_limits import (
     ReplayBudget,
@@ -140,6 +141,7 @@ def get_vod_chat(
         duration=max(0.0, (end_dt - start_dt).total_seconds()),
         id=video_id,
     )
+    chat._recording_start_time = _epoch_microseconds(vod_start_dt)
     chat._request_window = {
         "start_time": (start_dt - vod_start_dt).total_seconds(),
         "end_time": (end_dt - vod_start_dt).total_seconds(),
@@ -223,6 +225,7 @@ def _iter_reverse_vod_messages(  # noqa: C901 — compatibility protocol guards 
         msg_filter = MessageFilter.from_request(MESSAGE_GROUPS, request)
     if end_dt <= start_dt:
         state["termination_reason"] = "empty_window"
+        state["history_complete"] = True
         return
 
     started = last_progress = monotonic()

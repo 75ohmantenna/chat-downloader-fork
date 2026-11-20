@@ -116,7 +116,7 @@ def parse_pinned_message_created_event(raw: object) -> dict[str, Any]:
 
     duration = raw.get("duration")
     if duration is not None:
-        with contextlib.suppress(ValueError, TypeError):
+        with contextlib.suppress(ValueError, TypeError, OverflowError):
             metadata["duration"] = int(duration)
 
     finish_at = _parse_timestamp(raw.get("finish_at"))

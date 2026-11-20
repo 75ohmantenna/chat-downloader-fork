@@ -308,6 +308,9 @@ class RunManifest:
                     raise ValueError(msg)
                 signature = observed[1]
             artifacts.append({**writer, "sha256": signature})
+        recording_start = getattr(chat, "_recording_start_time", None)
+        if recording_start is None:
+            recording_start = getattr(chat, "start_time", None)
         payload = {
             "schema_version": 1,
             "program_version": __version__,
@@ -330,10 +333,10 @@ class RunManifest:
             "deadline_prefetch_count_complete": result.deadline_prefetch_count_complete,
             "recording": {
                 "site_name": getattr(getattr(chat, "site", None), "_NAME", None),
-                **{
-                    key: getattr(chat, key, None)
-                    for key in ("id", "start_time", "duration", "status")
-                },
+                "id": getattr(chat, "id", None),
+                "start_time": recording_start,
+                "duration": getattr(chat, "duration", None),
+                "status": getattr(chat, "status", None),
             },
             "outputs": artifacts,
         }

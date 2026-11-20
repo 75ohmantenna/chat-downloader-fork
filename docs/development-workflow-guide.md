@@ -301,8 +301,9 @@ environment proxy policy. The runner does not read a proxy config or persist
 proxy arguments in its aggregate report. Shell arguments and history can still
 contain credentials. Raw child logs and chat captures stay in the private
 directory. Stdout and `report.json` contain only case names, exit codes, fixed
-statuses, and validated aggregate counts. Exit zero means every case passed;
-exit one means at least one case failed or required review. A nonempty capture
+statuses, and validated aggregate counts. The runner prints the summary before
+publishing the complete `report.json` atomically. Exit zero means every case
+passed, and exit one means at least one case failed or required review. A nonempty capture
 is required except for quiet and inactivity cases.
 
 The `realtime` case additionally requires a negotiated connection, confirmed

@@ -13,6 +13,8 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from chat_downloader.utils.atomic_files import atomic_text_file
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -328,8 +330,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
     report = {"passed": all(result["passed"] for result in results), "cases": results}
-    (directory / "report.json").write_text(json.dumps(report, indent=2) + "\n", "utf-8")
-    print(json.dumps(report, sort_keys=True))
+    try:
+        print(json.dumps(report, sort_keys=True), flush=True)
+    finally:
+        with atomic_text_file(directory / "report.json") as target:
+            json.dump(report, target, indent=2)
+            target.write("\n")
     return 0 if report["passed"] else 1
 
 

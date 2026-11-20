@@ -426,3 +426,46 @@ def test_compact_host_does_not_repair_invalid_fields(overrides):
 def test_existing_wrapped_host_is_unchanged_with_receive_time():
     frame = pusher_frame(STREAM_HOST_EVENT, load_fixture("stream_host_event.json"))
     assert dispatch_event(frame, received_timestamp=123) == dispatch_event(frame)
+
+
+@pytest.mark.parametrize(("index", "field"), [(0, "duration"), (1, "number_viewers")])
+@pytest.mark.parametrize(
+    ("wire_value", "expected"),
+    [
+        pytest.param("1e309", None, id="infinity"),
+        pytest.param("true", 1, id="boolean"),
+        pytest.param("1.5", 1, id="fraction"),
+        pytest.param("2.0", 2, id="float"),
+        pytest.param(json.dumps("1" * 5000), None, id="oversized-integer-string"),
+        pytest.param("7", 7, id="integer"),
+        pytest.param('"7"', 7, id="integer-string"),
+    ],
+)
+def test_optional_kick_event_integer_fields(index, field, wire_value, expected):
+    frame = load_fixture("invalid_event_integer_fields.json")[index]
+    frame["data"] = frame["data"].replace("1e309", wire_value)
+    message = dispatch_event(frame)
+
+    assert message is not None
+    metadata = message["metadata"]
+    if expected is None:
+        assert field not in metadata
+    else:
+        assert metadata[field] == expected
+
+
+def test_event_parser_overflow_is_counted_and_skipped(monkeypatch, captured):
+    def overflow(_payload):
+        raise OverflowError
+
+    monkeypatch.setitem(events._PARSER_DISPATCH, "stream_host", overflow)
+    diagnostics = []
+    assert (
+        dispatch_event(
+            {"event": STREAM_HOST_EVENT, "data": {}},
+            record_diagnostic=diagnostics.append,
+        )
+        is None
+    )
+    assert diagnostics == ["malformed_event_count", "malformed_event_type:stream_host"]
+    assert len(captured) == 1

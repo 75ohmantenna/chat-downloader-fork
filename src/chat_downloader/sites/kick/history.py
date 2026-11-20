@@ -34,15 +34,15 @@ def _as_utc(timestamp: datetime) -> datetime:
     return timestamp.astimezone(UTC)
 
 
+def _epoch_microseconds(timestamp: datetime) -> int:
+    """Return an exact Unix timestamp in microseconds."""
+    delta = _as_utc(timestamp) - datetime(1970, 1, 1, tzinfo=UTC)
+    return (delta.days * 86_400 + delta.seconds) * 1_000_000 + delta.microseconds
+
+
 def _cursor_after(timestamp: datetime) -> str:
     """Return a reverse cursor after the inclusive, second-granular end."""
-    delta = _as_utc(timestamp) - datetime(1970, 1, 1, tzinfo=UTC)
-    microseconds = (
-        (delta.days * 86_400 + delta.seconds) * 1_000_000
-        + delta.microseconds
-        + 1_000_000
-    )
-    return str(microseconds)
+    return str(_epoch_microseconds(timestamp) + 1_000_000)
 
 
 def _message_timestamp(raw: JSONDict) -> datetime | None:

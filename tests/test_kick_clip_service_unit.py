@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import Mock
 
 import pytest
 
+from chat_downloader import ChatDownloader
 from chat_downloader.errors import CaptchaChallengeRequired, NoChatReplay
 from chat_downloader.models import ChatRequest
 from chat_downloader.runtime.capture_manifest import replay_complete
-from chat_downloader.runtime.runner import RunResult
+from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.kick import clip_service
 from chat_downloader.sites.kick.api_client import KickApiClient
 from chat_downloader.sites.kick.errors import (
@@ -19,6 +21,7 @@ from chat_downloader.sites.kick.errors import (
     KickError,
     KickVideoRestricted,
 )
+from chat_downloader.sites.kick.extractor import KickChatDownloader
 from chat_downloader.sites.kick.replay_service import get_vod_chat
 from tests.kick_helpers import (
     FakeKickSession,
@@ -93,6 +96,59 @@ def _get_chat(client, *, request=None, clip_id=CLIP_ID):
         request or ChatRequest(max_attempts=1, interruptible_retry=False),
         api_client=client,
     )
+
+
+@pytest.mark.parametrize(
+    ("path", "mobile", "offset", "time_basis", "origin"),
+    [
+        pytest.param(
+            f"videos/{VIDEO_ID}", False, 600, "recording", 1787091625000000, id="vod"
+        ),
+        pytest.param(
+            f"clips/{CLIP_ID}", False, 10, "clip", 1787093663000000, id="web-clip"
+        ),
+        pytest.param(
+            f"clips/{CLIP_ID}", True, 10, "clip", 1787093661000000, id="mobile-clip"
+        ),
+    ],
+)
+@pytest.mark.parametrize("empty", [True, False], ids=["empty", "seek"])
+def test_run_manifest_uses_absolute_kick_replay_origin(
+    monkeypatch, tmp_path, path, mobile, offset, time_basis, origin, empty
+):
+    client = _client()
+    if mobile:
+        client.fetch_clip_metadata.side_effect = KickError("web unavailable")
+    monkeypatch.setattr(KickChatDownloader, "_kick_client", property(lambda _: client))
+    manifest = tmp_path / "run.json"
+    start, end = (0, 0) if empty else (offset, offset + 1)
+
+    result = execute_run(
+        ChatDownloader,
+        url=f"https://kick.com/n3on/{path}",
+        start_time=start,
+        end_time=end,
+        max_attempts=1,
+        require_complete=True,
+        run_manifest=str(manifest),
+        quiet=True,
+    )
+
+    assert result.success, result.error_message
+    report = json.loads(manifest.read_text())
+    assert report["replay_complete"] is True
+    assert report["message_count"] == 0
+    assert report["recording"]["start_time"] == origin
+    assert report["effective_window"] == {
+        "start_time": start,
+        "end_time": end,
+        "time_basis": time_basis,
+    }
+    if empty:
+        assert report["termination_reason"] == "empty_window"
+        client.fetch_message_page.assert_not_called()
+    else:
+        client.fetch_message_page.assert_called_once()
 
 
 def test_subscriber_only_source_vod_uses_public_mobile_clip_replay():
