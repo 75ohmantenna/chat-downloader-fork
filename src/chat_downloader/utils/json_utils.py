@@ -13,7 +13,7 @@ _TRUNCATED_KEY = "__chat_downloader_truncated__"
 
 
 def try_parse_json(text: str, default: Any = None) -> Any:
-    """Parse ``text`` as JSON, returning ``default`` on any parse error."""
+    """Parse ``text`` as JSON, returning ``default`` on JSONDecodeError or TypeError."""
     try:
         return json.loads(text)
     except (json.decoder.JSONDecodeError, TypeError):
@@ -57,7 +57,8 @@ def nested_update(
 ) -> dict[str, Any]:
     """Recursively merge mapping ``u`` into dict ``d``, returning ``d``.
 
-    Nested dicts are merged; all other value types in ``u`` overwrite ``d``.
+    Merge an incoming mapping recursively when its key is missing or the target
+    value is a dict. In every other case, assign the incoming value directly.
 
     Args:
         d: Target dict updated in place.

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Unit tests for continuous_write.py to improve coverage."""
+"""File writer selection, record persistence, and cleanup."""
 
 from __future__ import annotations
 

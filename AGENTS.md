@@ -103,7 +103,7 @@ Minimum verification:
 
 ## Code and documentation conventions
 
-- Source files start with `from __future__ import annotations`; Ruff owns the
+- Python modules use `from __future__ import annotations`. Ruff enforces the
   88-column, double-quoted format. Put type-only imports under `TYPE_CHECKING`.
 - Mccabe complexity is capped at 10. Use `# noqa: C901` only for an intrinsically
   branchy function and include a short rationale.
@@ -114,7 +114,7 @@ Minimum verification:
   unexpected data-quality conditions.
 - Update the owning guide with user-facing behavior, public API, project
   structure, or tooling changes. Version changes must update `CHANGELOG.md`;
-  its top release heading must match `metadata.py::__version__`.
+  its top numbered release heading must match `metadata.py::__version__`.
 - Keep architecture package inventories aligned with source. Preserve local
   links, CLI defaults/groups, public imports, facade/request parameter parity,
   Makefile contracts, `Any` density, and module-size ratchets.
@@ -129,10 +129,12 @@ Minimum verification:
 - Do not file fork-originating issues or pull requests upstream. Do not cite or
   link upstream issue/PR discussions in project docs, source, tests, fixtures,
   or release notes; keep regression context self-contained.
-- GitHub Actions is the only hosted CI. Preserve `make ci` on pushes for all
-  branches, pull requests targeting `master`, and manual dispatch across Python
-  3.12–3.14. Preserve the separate weekly and manual Python 3.14
-  `network_replay` job, locked sync, read-only contents permission, concurrency
+- GitHub Actions is the only hosted CI. Preserve `make ci` on branch and tag
+  pushes, pull requests targeting `master`, and manual dispatch across Python
+  3.12–3.14. The separate Python 3.14 `network-replay` job selects the
+  `network_replay` pytest marker on the weekly schedule, on manual dispatch,
+  and on pushes to `75ohmantenna/chat-downloader-fork`. Preserve those
+  triggers, locked sync, read-only contents permission, concurrency
   cancellation, and job timeouts. Do not add other hosted CI configurations.
 - Commit subjects use `topic: imperative summary`, where topic is `build`,
   `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style`, or

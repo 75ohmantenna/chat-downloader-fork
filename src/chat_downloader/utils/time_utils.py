@@ -107,7 +107,7 @@ def seconds_to_time(
     Args:
         seconds: Seconds to convert (may be negative).
         format: Format string with hours, minutes, and seconds elements.
-        remove_leading_zeroes: Remove leading zeroes when seconds > 60.
+        remove_leading_zeroes: Strip a leading ``0:`` and one following zero if present.
     """
     h, remainder = divmod(abs(int(seconds)), SECONDS_PER_HOUR)
     m, s = divmod(remainder, SECONDS_PER_MINUTE)
@@ -144,7 +144,6 @@ def ensure_seconds(time: float | str | None, default: Any = None) -> float | Any
     try:
         seconds = float(time)
     except ValueError:
-        # If float conversion fails, time must be a string timestamp
         if isinstance(time, str):
             try:
                 return time_to_seconds(time)
@@ -188,9 +187,8 @@ def parse_date(
 
     Args:
         datestring: ISO 8601 date string to parse.
-        default_timezone: Used for commonly received timezone-less dates
-            (not strictly correct ISO 8601); defaults to UTC. None returns
-            a naive datetime.
+        default_timezone: Timezone for dates without an explicit offset. The
+            default is UTC. Pass None for a naive datetime.
 
     Raises:
         ValueError: Date parsing or datetime construction fails.

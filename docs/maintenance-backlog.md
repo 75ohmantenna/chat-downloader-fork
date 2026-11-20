@@ -17,7 +17,7 @@ An item needs:
 - links to any decision that constrains the solution.
 
 Do not add scheduled cleanup rounds or stale source metrics. Tests and source
-code are authoritative for line counts, complexity, coverage, and `Any` floors.
+code are authoritative for line counts, complexity, coverage, and per-module `Any` caps.
 
 ## Active watchlist
 

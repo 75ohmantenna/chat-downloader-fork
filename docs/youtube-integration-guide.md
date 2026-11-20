@@ -655,8 +655,8 @@ measure distinct banned users; inspect `action_type`, `target_message_id`, and
 Reviewed captures for all three are
 preserved under `tests/fixtures/youtube/live_events/`.
 
-`deleted_message` (from `markChatItemAsDeletedAction`) is implemented but has
-not yet appeared in any observed live stream capture.
+A synthetic case in `tests/test_youtube_parsing_actions_unit.py` covers
+single-message deletion via `markChatItemAsDeletedAction`.
 
 The parser also recognizes these live-chat renderer shapes from YouTube.js
 coverage, with synthetic regression tests in
@@ -678,7 +678,7 @@ normalizes to `message_type = "deleted_message"`.
 | `removeChatItemAction` | `remove_chat_item` | Removes a specific message; carries `target_message_id` |
 | `removeChatItemByAuthorAction` | `remove_chat_item_by_author` | Author-wide ban; carries `author.id` (`externalChannelId`), `author.name = ""`, `message = null` |
 | `markChatItemsByAuthorAsDeletedAction` | `mark_chat_items_by_author_as_deleted` | Author-wide retroactive delete; carries `author.id` and optionally `message` from `deletedStateMessage.runs[].text` |
-| `markChatItemAsDeletedAction` | `mark_chat_item_as_deleted` | Single-message delete; normalizes to `message_type = "deleted_message"`, not `ban_user`; implemented but not yet observed in live captures |
+| `markChatItemAsDeletedAction` | `mark_chat_item_as_deleted` | Single-message delete with `message_type = "deleted_message"` |
 
 The mapping from wire action key to output `action_type` and `message_type`
 lives in `_KNOWN_REMOVE_ACTION_TYPES` in
@@ -787,5 +787,6 @@ When debugging YouTube breakage, inspect modules in this order:
 ## Testing
 
 Bootstrap, continuation, discovery, and parser coverage is offline by default.
-Reviewed drift fixtures live under `tests/fixtures/youtube/`; live-network
-tests must carry `@pytest.mark.network` and require `--run-network`.
+Reviewed drift fixtures live under `tests/fixtures/youtube/`. External
+pytest cases require `--run-network`, the network and scope markers, and a
+timeout. See the [network test workflow](development-workflow-guide.md#daily-workflow).

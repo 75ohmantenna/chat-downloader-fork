@@ -97,25 +97,21 @@ select = [
     "RET",  # flake8-return
     "RUF",  # ruff-specific
     "SIM",  # flake8-simplify
-    "TRY300",  # flake8-tryceratops: return in else
+    "TRY300",  # tryceratops: return in else
     "TC",   # flake8-type-checking
     "TID",  # flake8-tidy-imports
     "UP",   # pyupgrade
     "W605", # pycodestyle warnings
-    # Round-08.1d: naming conventions (N818 excluded — frozen public API exception names)
     "N",    # pep8-naming
-    # Round-08.1c: error-message & exception discipline
     "EM",   # flake8-errmsg: hoist exception strings to locals
     "S",    # flake8-bandit: security checks
     "TRY",  # flake8-tryceratops
-    # Round-08.1b: low-count mechanical fixes
     "PERF", # perflint
     "G",    # flake8-logging-format
     "BLE",  # flake8-blind-except
     "PLW",  # pylint warnings
     "ARG",  # flake8-unused-arguments
     "A",    # flake8-builtins
-    # Round-08.1a: zero-violation correctness families
     "RSE",  # flake8-raise: unnecessary-paren-on-raise-exception
     "PGH",  # pygrep-hooks: blanket noqa/type-ignore must cite a code
     "ISC",  # flake8-implicit-str-concat
@@ -124,7 +120,6 @@ select = [
     "PLE",  # pylint errors
     "DTZ",  # flake8-datetimez
     "PT",   # flake8-pytest-style
-    # Round-10.5: boolean-argument rules — enabled after keyword-only migration
     "FBT",  # flake8-boolean-trap
 ]
 ignore = [

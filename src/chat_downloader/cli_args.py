@@ -87,7 +87,7 @@ def str2bool(value: str | bool) -> bool:  # noqa: FBT001 — argparse converter;
 
 
 def _build_field_info(dc_class: type[Any]) -> dict[str, _CliFieldInfo]:
-    """Build ``{field_name: {help, default}}`` for fields with ``cli`` metadata."""
+    """Collect help text, defaults, and flag aliases for CLI fields."""
     result: dict[str, _CliFieldInfo] = {}
     for f in dc_fields(dc_class):
         meta = f.metadata.get("cli")

@@ -14,13 +14,14 @@ large refactors, parser reshaping, or tooling changes.
 | YouTube channel, handle, and playlist discovery | `sites/youtube/discovery.py`, `discovery_playlists.py` | YouTube discovery unit and downloader-assembly tests |
 | YouTube bootstrap/profile diagnostics and automatic/offline record/manifest inspection | `sites/youtube/client_requests_bootstrap.py`, `capture_inspection.py`, `scripts/inspect_youtube_capture.py` | challenged-replay composition, bootstrap-counter, mobile summary/timing regression, capture-inspection and capture-verification tests |
 | Twitch live IRC, content-free connection and optional-metadata-degradation diagnostics, typed paid-pin metadata, and current notice groups | `sites/twitch/live_service.py`, `graphql_client.py`, `irc_transport.py`, `irc_diagnostics.py`, `parsing/`, `remappings.py`, `constants.py` | live-service, GraphQL client, transport, current-event fixtures, IRC parser, drift harness tests |
+| Twitch clip, video, and livestream discovery | `sites/twitch/discovery.py`, `url_generation.py` | discovery pagination, cursor progress, and URL generation tests |
 | Twitch VOD and clip replay | `sites/twitch/replay_service.py`, `_replay_vod_loop.py`, `replay_transport.py` | replay service, legacy/mobile replay transport, VOD edge tests |
 | Twitch GraphQL hashes and bounded document fallbacks, badge operation fallbacks, Client-ID | `graphql_client.py`, `badge_client.py`, `constants.py`, `types.py`, `parsing/badges.py` | Twitch client, hash/document fallback, badge-client, and badge-purity tests |
 | Kick anonymous negotiated Pusher/Centrifugo chat and public lifecycle feeds, cached deleted-message text, current pin, snapshots, bounded startup/reconnect backfill, and diagnostics | `sites/kick/live_service.py`, `deleted_message_cache.py`, `public_transport.py`, `centrifugo_transport.py`, `realtime_connection.py`, `public_state.py`, `live_iterator.py`, `history.py`, `websocket_transport.py`, `api_client.py`, `parsing/` | Kick public-realtime, live-service, deleted-message cache, history, transport, api-client, parsing unit tests |
 | Kick VOD and clip replay, including anonymous mobile clip-metadata fallback | `sites/kick/replay_service.py`, `clip_service.py`, `history.py`, `request_retry.py`, `api_client.py` | Kick replay-service, history, request-retry, clip-service, and api-client tests |
 | Kick Pusher key discovery, Cloudflare and country-block handling, event/group maps | `sites/kick/pusher_discovery.py`, `constants.py`, `api_client.py`, `parsing/events.py` | Kick pusher-discovery, extractor, api-client, parsing-events tests |
 | Kick supplemental subscription activity and subscriber-count snapshots with full payload retention | `sites/kick/constants.py`, `parsing/public_events.py`, `formatting/custom_formats.json` | Recorded subscription-activity live composition, group filtering, output parity, and inspection tests |
-| Output formats: JSONL and TXT; placeholder expansion; path/inode deduplication; unsupported extensions rejected | `output/continuous_write.py`, `output/writers.py`, `runtime/chat_pipeline.py`, `sites/output_dispatch.py` | output writer, continuous-write, JSONL UTC, multiple-output and expanded-alias tests |
+| Output formats: JSONL and TXT; placeholder expansion; path/inode deduplication; unsupported extensions rejected | `output/continuous_write.py`, `output/writers.py`, `output/targets.py`, `sites/output_dispatch.py` | output writer, continuous-write, JSONL UTC, multiple-output and expanded-alias tests |
 | Paid/ticker semantic deduplication for formatted outputs; lossless raw output | `sites/_message_dedup.py`, `sites/output_dispatch.py`, `runtime/runner.py` | deduplication, chat-model, runner, and mixed-output tests |
 | Replay shutdown checkpoints with verified request/artifact identity, accepted-record rollback, and event-kind/occurrence overlap accounting | `runtime/capture_checkpoint.py`, `sites/output_dispatch.py` | checkpoint writer-composition and failed-recovery tests |
 | Optional compact stdout for unchanged provider-selected state, with complete file output | `models.RunConfig`, `runtime/runner.py`, `sites/_message_dedup.py`, `sites/base.py`, `sites/kick/extractor.py` | compact-console runtime/file parity, lifecycle, cache bounds, malformed state, CLI and model tests |
@@ -45,9 +46,8 @@ large refactors, parser reshaping, or tooling changes.
 - Do not weaken spelling, coverage, import-linter, Any-density, module-size,
   complexity, build, smoke, or network-separation guardrails without documented
   rationale.
-- Reopen closed maintenance deferrals only with new evidence, such as a third
-  site, a failing capability, or an organic threshold breach during feature
-  work.
+- Reopen closed maintenance deferrals only with new evidence, such as a failing
+  capability or a threshold breach during feature work.
 
 YouTube, Twitch live, and Kick live `--verify_output` combine exact parity with content-free
 provider inspection from their respective `capture_inspection.py` modules. The

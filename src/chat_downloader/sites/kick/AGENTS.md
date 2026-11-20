@@ -9,8 +9,8 @@ Scope: `src/chat_downloader/sites/kick/`.
 - Keep compact-console eligibility in the extractor's `get_console_state`
   capability. Identified prediction snapshots update the display cache;
   creation notices and incomplete snapshots always display. Only unchanged
-  complete updates may be compacted. Capture files retain every event. Text summaries are
-  selected by the bundled format definitions and preserve raw JSONL data.
+  complete updates may be compacted. JSONL retains each accepted prediction event.
+  The bundled formats select how TXT renders it.
 - Use `utils/json_types` accessors for incoming Kick JSON; keep `Any` only for
   opaque transport objects and assembled heterogeneous output.
 - Preserve offline-channel chat, preloaded-history/current-pin ordering,

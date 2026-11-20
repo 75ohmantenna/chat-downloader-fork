@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Comprehensive unit tests for time_utils module to improve coverage."""
+"""Timestamp parsing, offset conversion, and formatting."""
 
 from __future__ import annotations
 
@@ -42,7 +42,6 @@ def test_timestamp_to_microseconds_with_fractional_seconds() -> None:
     assert isinstance(ts2, int)
     assert isinstance(ts3, int)
 
-    # More precision should give larger values
     assert ts2 > ts1
 
 
@@ -52,7 +51,6 @@ def test_timestamp_to_microseconds_preserves_fraction_exactly() -> None:
 
 
 def test_timestamp_to_microseconds_without_fractional_part() -> None:
-    """Test timestamp without fractional seconds (lines 70-83)."""
     # Timestamp without fractional part should work
     result = timestamp_to_microseconds("2020-06-15T12:30:45Z")
     assert isinstance(result, int)
@@ -106,7 +104,7 @@ def test_ensure_seconds_preserves_signed_offsets(text: str, expected: float) -> 
 
 
 def test_timestamp_to_microseconds_comma_decimal_matches_dot() -> None:
-    """Comma is an RFC3339-valid fractional separator and must match the dot."""
+    """Accept comma and dot as equivalent fractional separators."""
     assert timestamp_to_microseconds(
         "2020-01-01T00:00:00,123Z"
     ) == timestamp_to_microseconds("2020-01-01T00:00:00.123Z")
@@ -127,14 +125,12 @@ def test_timestamp_to_microseconds_positive_offset_shifts_epoch() -> None:
 
 
 def test_seconds_to_time_negative() -> None:
-    """Test negative seconds conversion (lines 132-137)."""
     assert seconds_to_time(-90) == "-1:30"
     assert seconds_to_time(-3600) == "-1:00:00"
     assert seconds_to_time(-5) == "-0:05"
 
 
 def test_seconds_to_time_custom_format() -> None:
-    """Test custom format string (lines 133-137)."""
     # Custom format
     result = seconds_to_time(3665, format="{:02}h {:02}m {:02}s")
     assert "h" in result
@@ -143,7 +139,6 @@ def test_seconds_to_time_custom_format() -> None:
 
 
 def test_seconds_to_time_no_remove_leading_zeroes() -> None:
-    """Test without removing leading zeroes (lines 135-137)."""
     assert seconds_to_time(5, remove_leading_zeroes=False) == "0:00:05"
     assert seconds_to_time(65, remove_leading_zeroes=False) == "0:01:05"
     assert seconds_to_time(3665, remove_leading_zeroes=False) == "1:01:05"
@@ -156,27 +151,23 @@ def test_seconds_to_time_float_input() -> None:
 
 
 def test_ensure_seconds_with_none() -> None:
-    """Test ensure_seconds with None (lines 169-170)."""
     assert ensure_seconds(None) is None
     assert ensure_seconds(None, default=0) == 0
     assert ensure_seconds(None, default="default") == "default"
 
 
 def test_ensure_seconds_with_float() -> None:
-    """Test ensure_seconds with float (lines 172-173)."""
     assert ensure_seconds(60) == 60.0
     assert ensure_seconds(90.5) == 90.5
     assert ensure_seconds("120") == 120.0
 
 
 def test_ensure_seconds_with_string_time() -> None:
-    """Test ensure_seconds with time string (lines 174-178)."""
     assert ensure_seconds("1:30") == 90
     assert ensure_seconds("2:00:00") == 7200
 
 
 def test_ensure_seconds_with_invalid_input() -> None:
-    """Test ensure_seconds with invalid input (lines 174-180)."""
     # TypeError/AttributeError cases
     result = ensure_seconds(object(), default=123)
     assert result == 123
@@ -193,12 +184,7 @@ def test_ensure_seconds_with_invalid_input() -> None:
 
 
 def test_ensure_seconds_non_string_value_error() -> None:
-    """Test ensure_seconds line 178: ValueError but value is not a string.
-
-    float() raises ValueError for custom objects with a __float__ that raises.
-    Since the value is not a string, the except ValueError branch hits
-    'return default' (line 178) rather than calling time_to_seconds.
-    """
+    """Use the supplied default when an object's float conversion fails."""
 
     class _RaisesValueError:
         def __float__(self) -> float:
@@ -210,7 +196,6 @@ def test_ensure_seconds_non_string_value_error() -> None:
 
 
 def test_parse_timezone_utc() -> None:
-    """Test parsing UTC timezone (lines 185-187)."""
     matches = {"timezone": "Z"}
     tz = parse_timezone(matches)
     assert tz == UTC
@@ -218,7 +203,6 @@ def test_parse_timezone_utc() -> None:
 
 
 def test_parse_timezone_none() -> None:
-    """Test parsing no timezone (lines 189-190)."""
     matches = {}
     tz = parse_timezone(matches)
     assert tz == UTC
@@ -230,7 +214,6 @@ def test_parse_timezone_none() -> None:
 
 
 def test_parse_timezone_positive_offset() -> None:
-    """Test parsing positive timezone offset (lines 191-200)."""
     matches = {
         "timezone": "+05:30",
         "tz_sign": "+",
@@ -242,7 +225,6 @@ def test_parse_timezone_positive_offset() -> None:
 
 
 def test_parse_timezone_negative_offset() -> None:
-    """Test parsing negative timezone offset (lines 195-198)."""
     matches = {
         "timezone": "-08:00",
         "tz_sign": "-",
@@ -261,7 +243,6 @@ def test_parse_timezone_without_minutes() -> None:
 
 
 def test_parse_date_basic() -> None:
-    """Test basic date parsing (lines 217-241)."""
     parsed_date = parse_date("2020-01-15T10:30:45Z")
     assert parsed_date.year == 2020
     assert parsed_date.month == 1
@@ -272,13 +253,11 @@ def test_parse_date_basic() -> None:
 
 
 def test_parse_date_with_fractional_seconds() -> None:
-    """Test parsing date with fractional seconds (lines 235-237)."""
     parsed_date = parse_date("2020-06-15T12:30:45.123456Z")
     assert parsed_date.microsecond == 123456
 
 
 def test_parse_date_with_timezone_offset() -> None:
-    """Test parsing date with timezone offset (lines 238)."""
     parsed_date = parse_date("2020-06-15T12:30:45+05:30")
     assert parsed_date.tzinfo.utcoffset(None) == dt.timedelta(hours=5, minutes=30)
 
@@ -322,7 +301,6 @@ def test_parse_date_compact_format() -> None:
 
 
 def test_parse_date_invalid_string() -> None:
-    """Test parsing invalid date string (lines 222-223)."""
     with pytest.raises(ValueError):
         parse_date("not a date")
 
@@ -331,7 +309,6 @@ def test_parse_date_invalid_string() -> None:
 
 
 def test_parse_date_type_error() -> None:
-    """Test parsing with TypeError (lines 219-220)."""
     with pytest.raises(ValueError):
         parse_date(None)
 
@@ -340,14 +317,11 @@ def test_parse_date_type_error() -> None:
 
 
 def test_parse_date_overflow_error() -> None:
-    """Test parsing with overflow (lines 240-241)."""
-    # Invalid date that would cause overflow
     with pytest.raises(ValueError):
         parse_date("2020-02-30")  # Invalid day for February
 
 
 def test_parse_iso8601() -> None:
-    """Test ISO8601 parsing to microseconds (line 245)."""
     result = parse_iso8601("2020-01-01T00:00:00Z")
     assert isinstance(result, float)
     assert result > 0

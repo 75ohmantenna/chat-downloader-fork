@@ -1,10 +1,10 @@
 # CLAUDE.md
 
 Follow [`AGENTS.md`](AGENTS.md) for project structure, commands, testing,
-style, and commit conventions. The actual checked-in codebase is the single
-source of truth for documentation of implemented behavior, including this
-file. Verify prose against source code, bundled data, and configuration; tests
-check their contracts. Correct prose when it differs from the implementation.
+style, and commit conventions. When working in a provider package, also follow
+its scoped `AGENTS.md`. Use the
+[documentation source map](docs/development-workflow-guide.md#documentation-ownership)
+to check prose against the implementation.
 
 ## Python tooling
 

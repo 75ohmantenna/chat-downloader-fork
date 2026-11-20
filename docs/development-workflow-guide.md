@@ -308,11 +308,11 @@ uv run python scripts/smoke_kick_live.py --run-network \
 ```
 
 Use `--channel` to override the environment selection for one run.
-The artifact directory must not exist. The runner creates it with mode `0700`,
-runs an all-groups capture and a separate messages-only `realtime` capture, each
-for eight minutes by default, then checks help/version, quiet and compact output,
-text filtering, custom headers, inactivity shutdown, and rejection of unsupported
-output extensions and live replay-only options. Each capture requests JSONL,
+The artifact directory must not exist. The runner creates it with mode `0700` and checks CLI help and version output.
+It runs an all-groups capture and a separate messages-only `realtime` capture,
+each for eight minutes by default. The remaining cases check quiet and compact
+output, text filtering, custom headers, inactivity shutdown, and rejection of
+unsupported output extensions and live replay-only options. Each capture requests JSONL,
 TXT, and a manifest with output verification. A zero-record run can leave
 both output files uncreated. The quiet case checks stdout and the
 five-message cap. The filtered case checks text-only records and sorted JSON
@@ -723,8 +723,8 @@ and update refs.
 ## Hosted CI
 
 GitHub Actions is the only supported hosted CI platform. The workflow defines
-a `test` job for `make ci` on Python 3.12, 3.13, and 3.14 on pushes to every
-branch, pull requests targeting `master`, and manual dispatch. The separate
+a `test` job for `make ci` on Python 3.12, 3.13, and 3.14 on branch and tag pushes,
+pull requests targeting `master`, and manual dispatch. The separate
 Python 3.14 `network-replay` job runs stable replay contracts on the weekly
 schedule, on manual dispatch, and on branch and tag pushes to
 `75ohmantenna/chat-downloader-fork`. Both jobs use locked dependencies, read-only

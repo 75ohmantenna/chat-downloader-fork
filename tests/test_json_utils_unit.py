@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Comprehensive unit tests for json_utils module to improve coverage."""
+"""JSON parsing, flattening, and recursive updates."""
 
 from __future__ import annotations
 
@@ -24,13 +24,11 @@ def test_try_parse_json_valid_array() -> None:
 
 
 def test_try_parse_json_invalid() -> None:
-    """Test parsing invalid JSON (lines 11)."""
     result = try_parse_json("not valid json")
     assert result is None
 
 
 def test_try_parse_json_with_default() -> None:
-    """Test parsing with custom default (line 12)."""
     result = try_parse_json("invalid", default={})
     assert result == {}
 
@@ -42,7 +40,6 @@ def test_try_parse_json_with_default() -> None:
 
 
 def test_try_parse_json_none_input() -> None:
-    """Test parsing None input (line 11)."""
     result = try_parse_json(None)
     assert result is None
 
@@ -51,35 +48,30 @@ def test_try_parse_json_none_input() -> None:
 
 
 def test_try_parse_json_type_error() -> None:
-    """Test TypeError handling (line 11)."""
     # Integer input should trigger TypeError
     result = try_parse_json(123, default="error")
     assert result == "error"
 
 
 def test_flatten_json_simple_dict() -> None:
-    """Test flattening simple dictionary (lines 18-21)."""
     original = {"a": 1, "b": 2, "c": 3}
     result = flatten_json(original)
     assert result == {"a": 1, "b": 2, "c": 3}
 
 
 def test_flatten_json_nested_dict() -> None:
-    """Test flattening nested dictionary (lines 18-21)."""
     original = {"a": {"b": {"c": 1}}}
     result = flatten_json(original)
     assert result == {"a.b.c": 1}
 
 
 def test_flatten_json_with_list() -> None:
-    """Test flattening with lists (lines 22-24)."""
     original = {"items": [1, 2, 3]}
     result = flatten_json(original)
     assert result == {"items.0": 1, "items.1": 2, "items.2": 3}
 
 
 def test_flatten_json_complex() -> None:
-    """Test flattening complex nested structure (lines 18-26)."""
     original = {
         "user": {
             "name": "John",
@@ -115,7 +107,6 @@ def test_flatten_json_empty_list() -> None:
 
 
 def test_flatten_json_list_input() -> None:
-    """Test flattening with list as root (lines 22-24)."""
     original = [{"a": 1}, {"b": 2}, {"c": 3}]
     result = flatten_json(original)
     assert result["0.a"] == 1
@@ -124,7 +115,6 @@ def test_flatten_json_list_input() -> None:
 
 
 def test_flatten_json_mixed_types() -> None:
-    """Test flattening with mixed value types (line 26)."""
     original = {
         "string": "value",
         "number": 42,
@@ -161,7 +151,6 @@ def test_flatten_json_root_truncation_uses_namespaced_key() -> None:
 
 
 def test_nested_update_simple() -> None:
-    """Test simple nested update (lines 34-42)."""
     original = {"a": 1, "b": 2}
     update = {"c": 3}
     result = nested_update(original, update)
@@ -169,7 +158,6 @@ def test_nested_update_simple() -> None:
 
 
 def test_nested_update_overwrite() -> None:
-    """Test nested update with overwrite (line 42)."""
     original = {"a": 1, "b": 2}
     update = {"b": 20}
     result = nested_update(original, update)
@@ -177,7 +165,6 @@ def test_nested_update_overwrite() -> None:
 
 
 def test_nested_update_nested_dict() -> None:
-    """Test nested update with nested dictionaries (lines 35-38)."""
     original = {
         "user": {"name": "John", "age": 30},
         "settings": {"theme": "light"},
@@ -202,7 +189,6 @@ def test_nested_update_nested_dict() -> None:
 
 
 def test_nested_update_replace_non_dict() -> None:
-    """Test nested update replacing non-dict with dict (lines 37-40)."""
     original = {"a": 1, "b": "string"}
     update = {"b": {"nested": "value"}}
     result = nested_update(original, update)
@@ -213,7 +199,6 @@ def test_nested_update_replace_non_dict() -> None:
 
 
 def test_nested_update_replace_dict_with_non_dict() -> None:
-    """Test nested update replacing dict with non-dict (line 42)."""
     original = {"a": 1, "b": {"nested": "value"}}
     update = {"b": "string"}
     result = nested_update(original, update)
@@ -224,7 +209,6 @@ def test_nested_update_replace_dict_with_non_dict() -> None:
 
 
 def test_nested_update_deep_nesting() -> None:
-    """Test nested update with deep nesting (lines 35-38)."""
     original = {"level1": {"level2": {"level3": {"value": 1}}}}
     update = {"level1": {"level2": {"level3": {"value": 2, "new": 3}}}}
 
@@ -259,7 +243,6 @@ def test_nested_update_modifies_original() -> None:
 
 
 def test_nested_update_mapping_check() -> None:
-    """Test nested update with collections.abc.Mapping check (line 35)."""
     from collections import OrderedDict
 
     original = {"a": {"b": 1}}

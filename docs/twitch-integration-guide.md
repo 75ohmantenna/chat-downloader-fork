@@ -99,11 +99,6 @@ finite limits do not require an unused continuation.
 - `replay_transport.py`: replay comment retrieval
 - `discovery.py` and `url_generation.py`: discovery helpers and generated URLs
 
-Clip URL enumeration follows the server's returned edge cursor after its
-initial request. When another page is needed, missing, repeated, or cyclic
-continuation cursors, including empty continuing pages, raise `ParsingError`
-instead of repeating a page.
-
 ### Parsing and shared Twitch data
 
 - `parsing/messages.py`: high-level IRC and replay parsing orchestration
@@ -120,11 +115,6 @@ instead of repeating a page.
 - `constants.py`: persisted-query names and hashes, message groups, IRC
   constants, GraphQL operation payloads, and known-key builders
 
-There is no current `client.py` facade in the Twitch package. Import focused
-modules directly when tests or integrations need patch points:
-`graphql_client.py` for GraphQL, `irc_transport.py` for live IRC,
-`replay_transport.py` for replay comments, and `parsing/` for message shaping.
-
 Each live IRC or replay message receives its own emote image dictionaries.
 The parsers reuse cached image metadata for each emote ID.
 
@@ -136,8 +126,8 @@ control characters remain in JSONL and are handled by text formatting.
 
 ### Metadata first
 
-The live path starts with a GraphQL metadata lookup. That determines whether the
-channel is live, rerunning older content, offline, or upcoming.
+The live path looks up the channel through GraphQL. Live streams and reruns
+receive `Chat.status = "live"`. An offline channel receives `"upcoming"`.
 
 The integration keeps the live-chat entry path available even when the channel
 is not live yet, which allows callers to wait for chat activity.
@@ -146,7 +136,7 @@ is not live yet, which allows callers to wait for chat activity.
 
 Before parsing live traffic, the downloader fetches channel and global badges.
 The result is stored in an instance-owned `BadgeCache`. Provider reuse retains
-at most 128 recently used channel badge collections and 128 lowercase
+at most 128 recently refreshed channel badge collections and 128 lowercase
 login-to-channel-ID mappings; a refresh or mapping lookup updates LRU order.
 This fixed internal cap bounds cache growth and snapshot copying independently
 of the number of channels previously captured.
@@ -184,7 +174,7 @@ fallback, independent of provider-cache eviction. Reconnect restores evicted
 receiving-channel metadata from the capture before refreshing it. It updates
 only receiving-channel and global metadata in a new capture snapshot while
 retaining the original shared-chat source-channel collections. The capture's
-channel key set remains fixed at at most 128 entries; reconnects do not union
+channel key set stays fixed, with at most 128 entries; reconnects do not union
 unrelated newly cached channels. Source-channel metadata is available when
 included in that initial snapshot; evicted channels are fetched again when
 subsequently captured.
@@ -632,8 +622,9 @@ When debugging Twitch breakage, inspect modules in this order:
 ## Testing
 
 Parser, GraphQL, replay, and IRC transport tests are offline by default.
-Reviewed drift fixtures live under `tests/fixtures/twitch/`; live-network tests
-must carry `@pytest.mark.network` and require `--run-network`.
+Reviewed drift fixtures live under `tests/fixtures/twitch/`. External
+pytest cases require `--run-network`, the network and scope markers, and a
+timeout. See the [network test workflow](development-workflow-guide.md#daily-workflow).
 
 For Twitch live channels (including upcoming streams), `--verify_output` also
 runs the Twitch capture inspector after outputs close. `provider_inspection` in

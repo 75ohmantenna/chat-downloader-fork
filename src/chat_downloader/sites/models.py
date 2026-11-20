@@ -41,7 +41,7 @@ def _close_chat_generator(close: Callable[[], object]) -> None:
 
 @dataclass(slots=True)
 class Image:
-    """An image with URL, optional dimensions, and an auto-generated ID."""
+    """An image with a URL, optional dimensions, and an optional ID."""
 
     url: str
     width: int | None = None
@@ -50,7 +50,7 @@ class Image:
     id: str | None = field(default=None, init=False)
 
     def __post_init__(self) -> None:
-        """Normalize protocol-relative URLs and derive a stable image ID."""
+        """Normalize the URL and use the supplied ID or derive one from dimensions."""
         if self.url.startswith("//"):
             self.url = "https:" + self.url
 
@@ -109,7 +109,7 @@ class Chat:
         # Site object that produced this chat — set by configure_chat().
         self.site: BaseChatDownloader | None = None
 
-        # Formatter used by print_formatted() and writer callbacks. The default
+        # Formatter used by print_formatted() and formatted file writers. The default
         # keeps Chat usable without pipeline configuration.
         self._formatter: Callable[[dict[str, Any]], str] = _default_formatter
 

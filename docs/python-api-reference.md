@@ -124,11 +124,9 @@ configures shared logging and signal handlers.
 `exit_on_debug`,
 `pause_on_debug`, `resume`, `verify_output`, `require_complete`,
 `run_manifest`, and `max_seen_message_ids`. These fields are defined by
-`RunConfig` in `chat_downloader.models`. Every field except
-`max_seen_message_ids` is exposed on the CLI. `compact_console=True` affects
-stdout only, currently suppressing identical Kick prediction updates; capture
-files and retrieval counts retain every accepted event. It is a runtime control
-for `run()`, rather than a `get_chat()` request parameter.
+`RunConfig` in `chat_downloader.models`. With `compact_console=True`,
+stdout suppresses unchanged Kick prediction updates. Each accepted prediction
+event still counts toward the message limit and goes to the configured files.
 
 Pass `propagate_interrupt=True` to re-raise `KeyboardInterrupt` instead of
 swallowing it — useful when `run()` is called from within a larger
@@ -331,7 +329,7 @@ finally:
 | `verify_output` | `False` | Verify one JSONL/TXT pair after successful, interrupted, or broken-stdout retrieval with safe cleanup; inspect supported provider captures even after other retrieval errors |
 | `require_complete` | `False` | Fail unless the selected completed replay is exhausted without known record loss |
 | `run_manifest` | `None` | New filename for a JSON outcome, recording, and output-hash report |
-| `max_seen_message_ids` | `10000` | Deduplication cache size for `run()` |
+| `max_seen_message_ids` | `10000` | Maximum number of paid-message and ticker IDs remembered for stdout deduplication |
 | `exit_on_debug` | `False` | Exit when unexpected debug conditions are hit |
 | `pause_on_debug` | `False` | Pause on interactive stdin when selected debug conditions are hit |
 
@@ -759,7 +757,7 @@ review. Resumed captures include checkpoint-verified prior records. Twitch live
 inspection retains its IRC frame and record diagnostics. These reports share
 the run's single deadline-accounting observation.
 
-Kick VOD and clip messages now include `time_in_seconds` and `time_text`,
+Kick VOD and clip messages include `time_in_seconds` and `time_text`,
 relative to the recording or clip origin even when selecting a later start.
 Absolute provider timestamps remain available in `timestamp`.
 

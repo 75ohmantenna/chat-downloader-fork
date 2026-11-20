@@ -21,11 +21,8 @@ ALLOWLIST: frozenset[str] = frozenset(
         "sites/youtube/constants_message.py",
         "sites/twitch/remappings.py",
         "sites/twitch/constants.py",
-        # Cohesive continuation loop: setup + request/response + iteration for
-        # one YouTube chat run. Previously fragmented across six phase-modules
-        # (chat_streams_{context,response,runtime_iteration}, continuation_loop
-        # {,_runtime,_state}); reunified for locality. Pure helpers that don't
-        # need the loop's state live in continuation_helpers.py.
+        # Request/response handling and iteration share one capture's
+        # continuation token, profile fallback, and replay progress state.
         "sites/youtube/continuation.py",
         # Cohesive Kick live service: metadata resolution, preloaded-history
         # assembly, and the bounded WebSocket/key-refresh loop form one stream
@@ -36,7 +33,7 @@ ALLOWLIST: frozenset[str] = frozenset(
         # dependency allocation, install the bounded socket, and own receive/
         # close behavior. Keeping these together exposes the pre-read invariant.
         "sites/kick/websocket_transport.py",
-        # Cohesive capture integrity contract relocated from the offline script:
+        # The offline inspector and live verification share one integrity check:
         # record identity/emote validation and live/replay counter reconciliation
         # share the inspected artifact state and content-free report schema.
         "sites/kick/capture_inspection.py",

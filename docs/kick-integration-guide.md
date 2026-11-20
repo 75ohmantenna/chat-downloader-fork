@@ -10,8 +10,8 @@ The Kick stack is split across two transport families:
   and channel events. Anonymous Centrifugo connection tokens are requested and
   renewed automatically; no account, cookie, OAuth token, or login is needed.
 - Kick's public web JSON endpoints (`api/v2` for channel, clip, and message data,
-  plus `api/v1/video` for VOD metadata) and the anonymous mobile `api/v1/clips`
-  fallback. Primary web API calls can use a URL-decoded bearer value from a
+  plus `api/v1/video` for VOD metadata), the `web.kick.com` VOD metadata
+  fallback, and the `mobile.kick.com` clip metadata fallback. Primary web API calls can use a URL-decoded bearer value from a
   `kick.com` `session_token` cookie applicable to `https://kick.com/`. The
   selector honors cookie port restrictions and requires applicable values to agree.
 
@@ -262,47 +262,18 @@ VOD UUID and deliberately follows its absolute `started_at` contract instead.
   including terminal `KickCountryBlocked`, `KickRealtimeRejected`, and
   `KickVideoRestricted`, plus retryable `KickServerError`.
 
-There is no `client.py` facade in the Kick package. Import focused modules
-directly for patch points: `api_client.py` for REST, `public_transport.py`
-for negotiated live feeds, `websocket_transport.py` for socket/Pusher mechanics,
-and `parsing/` for message shaping.
-
 ## Official Public API reference
 
-The official Kick Dev Docs are useful maintenance references, but they are not
-drop-in replacements for this tool's current capture path.
+The downloader reads Kick's website endpoints and subscribes to negotiated
+chat and channel feeds. For endpoint selection and fallback rules, see
+[`api_client.py`](../src/chat_downloader/sites/kick/api_client.py) and
+[`realtime_connection.py`](../src/chat_downloader/sites/kick/realtime_connection.py).
 
-Use the official [API documentation](https://docs.kick.com/) and
-[documentation changelog](https://github.com/KickEngineering/KickDevDocs/blob/main/changelog.md)
-when reviewing these external surfaces. Runtime behavior remains defined by
-this repository's code and configuration; fixtures and tests verify its contracts.
-
-Relevant documented surfaces:
-
-| Official surface | Usefulness to this project |
-| --- | --- |
-| `GET /public/v1/channels` | Authenticated channel metadata by slug or broadcaster ID. Useful as a field-name reference (`slug`, `broadcaster_user_id`, `stream`, `viewer_count`, `stream_title`) and a possible future authenticated metadata fallback. |
-| `GET /public/v2/livestreams` and `GET /public/v1/users/livestreams` | Authenticated, paginated livestream metadata and per-user live status. These are useful for comparing live-status semantics, but are not needed for unauthenticated capture. The older `GET /public/v1/livestreams` surface is deprecated. |
-| `POST /public/v1/chat` and `DELETE /public/v1/chat/{message_id}` | Write/moderation APIs only. They do not read chat and should not be wired into the downloader's read-only capture flow. |
-| Webhook event `chat.message.sent` | Best official schema reference for message fields (`message_id`, `replies_to`, `sender.identity.badges`, `content`, `emotes`, `created_at`). Use it to verify parser fixtures and output-field expectations. |
-| Webhook events `channel.subscription.*`, `moderation.banned`, `kicks.gifted` | Useful shape references for subscription/moderation/gift-style events. They are webhook payloads, not Pusher payloads, so treat differences as evidence to investigate rather than direct parser contracts. |
-
-Known gaps:
-
-- The official docs do not document `https://kick.com/api/v2/channels/{slug}`,
-  `https://kick.com/api/v2/channels/{id}/messages`,
-  `https://kick.com/api/v2/clips/{clip_id}`,
-  `https://mobile.kick.com/api/v1/clips/{clip_id}`, or the VOD
-  `api/v1/video/{uuid}` endpoint this tool currently uses.
-- The official docs do not document Pusher event names such as
-  `App\Events\ChatMessageEvent`, `App\Events\PinnedMessageCreatedEvent`, or
-  `App\Events\PinnedMessageDeletedEvent`.
-- The official docs do not document the Pusher app-key discovery path
-  (`NEXT_PUBLIC_PUSHER_KEY`) or the anonymous `chatrooms.{id}.v2`
-  subscription channel.
-- A future authenticated mode would need new user-facing init/request fields in
-  `src/chat_downloader/models/` first, so CLI help and the typed API remain in
-  sync.
+Kick documents sending and deleting messages in its [Chat API](https://docs.kick.com/apis/chat).
+When investigating parser drift, compare official webhook fields with the
+captured website event before changing its parser. See the
+[official API documentation](https://docs.kick.com/) and the
+[Public API watchlist](maintenance-backlog.md#kick-official-public-api).
 
 ## Live Capture Details
 
@@ -1021,7 +992,7 @@ KICK_TEST_REPLAY_CASE=tests/fixtures/kick/replay_network_case_sam.json \
 ```
 
 This test uses the `network_environment` scope because the asset must be
-configured and refreshed. It does not run in the weekly stable replay job.
+configured and refreshed. The CI replay job selects only `network_replay`.
 Without a configured contract it reports a skip; with one, expired assets,
 challenge blocks, missing messages, and protocol failures fail the check.
 

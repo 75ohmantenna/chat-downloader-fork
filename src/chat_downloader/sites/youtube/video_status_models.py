@@ -6,9 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-# Statuses that indicate a finished broadcast with a chat replay available.
-# Owned by the YouTube site package (the runtime layer no longer knows YouTube
-# status vocabularies — see BaseChatDownloader.is_live_status).
+# Use replay continuations for these broadcast statuses.
 REPLAY_STATUSES: frozenset[str] = frozenset({"past", "was_live", "post_live"})
 
 # ``post_live`` can expose the replay endpoint while YouTube is still finalizing

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-"""Non-regression floor: no module may exceed its Any-density baseline.
+"""Cap occurrences of Any in each source module.
 
 The baselines are frozen: do not raise them. Tighten a cap when related work
 removes ``Any`` occurrences; no scheduled lowering cadence is required.

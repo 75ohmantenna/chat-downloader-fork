@@ -45,11 +45,10 @@ class _WriterSummary(TypedDict):
 
 
 class _ChatOutputDispatcher:
-    """Manage writer setup, callback dispatch, deduplication, and chat shutdown.
+    """Initialize writers, dispatch records, track writes, and close outputs.
 
-    Superchat/ticker deduplication is an output concern (it prevents the same
-    paid item from being written twice via the chat and ticker surfaces), so the
-    bounded seen-id cache lives here rather than on the result model.
+    Formatted writers share the paid-message deduplication decision and rendered
+    text for each record. Raw writers receive the original item.
     """
 
     def __init__(

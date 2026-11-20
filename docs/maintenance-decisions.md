@@ -107,9 +107,8 @@ narrowing accessors such as `get_str`, `get_int`, `get_dict`, `get_list`, and
 `dict[str, Any]` when a `TypedDict` would require a large optional-field schema
 or fight incremental construction.
 
-The per-module `Any` test is a non-regression floor. Lower a cap when related
-typing work removes occurrences; never raise a cap merely to make a change
-pass.
+The test caps textual occurrences of `Any` in each source module. Lower the
+cap when related typing work removes occurrences.
 
 **Revisit when:** a stable output schema or a low-boilerplate typed accumulator
 can replace an existing heterogeneous boundary.
@@ -143,8 +142,9 @@ the loop's state or downloader/session ownership.
 
 ## Keep transport ownership explicit
 
-**Decision:** Shared HTTP state is downloader-owned and closed through the
-normal chat/downloader lifecycle. Twitch owns its IRC transport and reconnect
+**Decision:** The downloader owns the shared provider sessions and closes
+them in `ChatDownloader.close()`. Each returned `Chat` owns its iterator and
+output writers. Twitch owns its IRC transport and reconnect
 policy; Kick owns its HTTP clients and negotiated Pusher/Centrifugo transports;
 YouTube owns its HTTP continuation retry and profile-fallback behavior.
 Transport-specific recovery is not hidden behind a generic cross-site retry
@@ -179,11 +179,11 @@ duplicated mechanism without absorbing provider-specific policy.
 
 ## Compare output destinations after expansion
 
-**Decision:** Output identity is evaluated only after `{title}` and `{id}`
-metadata placeholders are expanded and the path is canonicalized. The runtime
-pipeline suppresses resolved duplicates while preserving generated-name
-provenance. Generated destinations require exclusive creation even when aliased
-with an explicit path; fixed explicit paths retain overwrite/append semantics.
+**Decision:** Output configuration groups unresolved names by their original
+template. For resolved names it compares device and inode when available,
+falling back to the canonical path. Generated destinations require exclusive
+creation even when aliased with an explicit path. Fixed explicit paths retain
+overwrite/append semantics.
 The dispatcher checks the complete target set before destructive initialization.
 Validated regular files must have exactly one link; symlinks, hard links, and
 unverifiable identities fail closed. Repair, writes, and interrupted rollback
@@ -332,8 +332,8 @@ page order, timestamps and cursors with replaced identities and text.
 
 **Decision:** `RunConfig.compact_console` defaults to false and applies only to
 stdout. Providers select eligible state updates through `get_console_state`;
-the shared runtime stores the latest complete payload fingerprint for each
-selected identity in a per-run LRU cache capped at 128 entries. Kick selects
+the shared runtime stores a fingerprint of the latest serializable payload for
+each selected identity in a per-run LRU cache capped at 128 entries. Kick selects
 identified prediction snapshots. Creation notices and incomplete snapshots
 always display and refresh the cache. Changed payloads remain visible, including
 a return to a previously observed state. Uncomparable

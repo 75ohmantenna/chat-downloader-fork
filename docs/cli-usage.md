@@ -264,10 +264,10 @@ or formatting can produce a record too large for these offline readers.
 
 ## Common Flags
 
-Run `chat_downloader --help` for the complete argument list. CLI help and
-defaults come from metadata on `DownloaderConfig`, `ChatRequest`, and
-`RunConfig` in `src/chat_downloader/models/`; argument registration remains
-explicit in `cli_args.py`.
+Run `chat_downloader --help` for the complete argument list. For options
+shared with the Python API, the parser reads help text and aliases from
+dataclass metadata and defaults from the fields themselves. CLI-only options
+such as `--logging` are defined in `cli_args.py`.
 
 HTTP retries honor valid `Retry-After` integer seconds and HTTP dates as a
 minimum wait, alongside the configured backoff or fixed retry delay. Enter
@@ -290,11 +290,11 @@ Filtering and output:
 - `--compact_console` — opt into suppressing unchanged supported state updates
   on stdout. Currently this suppresses only complete Kick `prediction_updated`
   payloads with a nonblank prediction ID. Creation notices and incomplete
-  snapshots always display and refresh the state cache. Each ID retains its
-  latest payload;
-  changed states, creation notices, ordinary chat, and unidentified updates
-  remain visible. The per-run LRU cache holds at most 128 state fingerprints,
-  so an evicted prediction can display again. JSONL/TXT files, capture counts,
+  snapshots always display. The cache keeps a fingerprint of the latest
+  serializable prediction for each of up to 128 IDs. A changed prediction
+  displays, as does the first update after its ID was evicted. Unidentified
+  updates pass through. An unserializable prediction with an ID displays and
+  clears the cache. JSONL/TXT files, capture counts,
   limits, and output parity are unaffected. `--quiet` suppresses stdout entirely.
 - `--max_messages`, `--start_time`, `--end_time` — bound the capture.
   Time bounds accept seconds or `hh:mm:ss`; an end before the start is rejected.
@@ -555,7 +555,7 @@ have no files because writers initialize lazily. The run summary separately
 reports success, termination reason, parity status, and writer counts. A parity
 pass does not prove complete provider history.
 
-Kick replay TXT now shows recording-relative time, matching the accompanying
+The default Kick replay TXT format shows recording-relative time, matching the accompanying
 `time_in_seconds` and `time_text` JSONL fields. Absolute timestamps remain in
 JSONL. Replay diagnostics report HTTP statuses and latency, pages, raw and
 emitted records, selected and observed time bounds, and the termination reason.

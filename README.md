@@ -24,15 +24,15 @@ others. Accordingly:
 
 Development of this fork has been AI-assisted, primarily with Anthropic's
 Claude and OpenAI's Codex. The GitHub Actions workflow configures the canonical
-`make ci` quality gate for pushes and pull requests. Its locked checks include
-codespell, Ruff lint and format checks, mypy, import-linter, the offline test
-suite with 100% line coverage, a package build, and an isolated installation
-smoke test. These checks do not constitute a security audit and do not replace
-your own review.
-**Use at your own risk.** A separate weekly and manually triggered CI job is
-configured for stable replay network contracts on Python 3.14. Hosted checks
-require GitHub Actions to be enabled; inspect the runs for the commit being
-released rather than treating workflow configuration as a passing result.
+`make ci` quality gate for pushes, pull requests targeting `master`, and manual
+runs. Its checks include codespell, Ruff lint and format checks, mypy,
+import-linter, the offline test suite with 100% line coverage, a package build,
+and an isolated installation smoke test. These checks do not constitute a
+security audit and do not replace your own review.
+**Use at your own risk.** A separate Python 3.14 job checks stable replay network
+contracts weekly, on manual dispatch, and on branch and tag pushes to
+`75ohmantenna/chat-downloader-fork`. Hosted checks require GitHub Actions to be
+enabled. Inspect the runs for the commit being released.
 
 ## Supported Platforms
 

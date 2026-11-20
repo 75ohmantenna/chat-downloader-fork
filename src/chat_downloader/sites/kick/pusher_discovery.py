@@ -2,10 +2,10 @@
 
 """Select and refresh Kick's public Pusher key for anonymous read-only chat.
 
-Normal connections use a compiled-in key. Explicit refresh scans homepage-linked
-Next.js chunks for ``NEXT_PUBLIC_PUSHER_KEY``, caches it for the process lifetime,
-and falls back to the default on failure. Network I/O stays out of constants;
-an injectable HTTP client enables offline tests.
+The standalone Pusher transport uses a cached key or the compiled-in default.
+A forced refresh scans homepage-linked scripts for ``NEXT_PUBLIC_PUSHER_KEY``
+and caches the discovered key or the default. Negotiated public connections
+receive their endpoint from Kick's realtime service.
 """
 
 from __future__ import annotations
@@ -178,8 +178,8 @@ def resolve_pusher_key(
 ) -> str:
     """Return the cached/compiled-in key without I/O, or discover on forced calls.
 
-    Discovery scans at most 15 JS bundles in ten seconds, with three seconds per
-    request; failure uses the default. Resolved keys are cached for the process.
+    Discovery considers up to 15 scripts and checks the remaining ten-second
+    budget before each script request. A failed lookup stores the default key.
 
     Args:
         force_discover: Bypass cache and scan the live page, e.g. after a

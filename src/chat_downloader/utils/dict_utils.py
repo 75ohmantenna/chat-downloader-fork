@@ -95,10 +95,9 @@ def move_to_dict(
 ) -> dict[str, Any]:
     """Collect prefixed keys from *info* into a nested sub-dict.
 
-    All keys in *info* whose name contains *replace_key* (defaults to
-    ``dict_name + "_"``) are removed and their values are placed in a new
-    dict under *info[dict_name]*.  If *info_keys* are given, only those
-    specific keys are checked instead of the entire dict.
+    Remove matching keys from *info* and strip their prefix. Drop values
+    equal to None, an empty list, or an empty dict. Merge the collected
+    entries into *info[dict_name]* if that dict already exists.
 
     Args:
         info: The source dict, mutated in place.
@@ -110,7 +109,7 @@ def move_to_dict(
         info_keys: Restrict processing to these specific keys in *info*.
 
     Returns:
-        The new sub-dict that was inserted (or updated) in *info*.
+        A dict containing only the entries collected by this call.
     """
     if replace_key is None:
         replace_key = dict_name + "_"
