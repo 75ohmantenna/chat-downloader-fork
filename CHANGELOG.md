@@ -8,6 +8,38 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.7.0 — 2026-11-20
+
+### Features
+
+- Record the resolved chat format presets in run manifests, including overrides
+  selected after live discovery, so captures can be audited with the same preset.
+
+### Fixes
+
+- Validate capture destinations together before opening writers, and preserve
+  supported encodings when checking or repairing append output.
+- Certify replay checkpoints only at verified output boundaries and roll back
+  capture outputs together when recovery is needed.
+- Stop expired iterators and retry interrupted cleanup through iterator wrappers.
+- Load UTF-8 cookie files without including their contents in error diagnostics,
+  and redact API keys and YouTube continuation tracking values in logs.
+- Report actionable proxy failures, honor explicit Twitch proxies across
+  transports, and make Twitch IRC reads interruptible through HTTPS proxies.
+- Validate Twitch replay pages and clip windows, isolate per-message emote
+  images, and distinguish intentional cancellation from a disconnect.
+- Bound Kick transport inputs, drain pending live work, and preserve replay
+  integrity in capture reports.
+- Decode complete YouTube bootstrap assignments, distinguish challenge pages
+  from asset errors, and validate replay and discovery responses.
+- Keep provider diagnostics with the capture that produced them, including
+  YouTube bootstrap diagnostics on concurrent runs.
+
+### Compatibility
+
+- Resume existing replay checkpoints with the version that created them. The
+  checkpoint fingerprint includes the package version.
+
 ## 2.6.1 — 2026-11-13
 
 ### Fixes

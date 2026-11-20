@@ -51,13 +51,13 @@ to use a prebuilt curl-cffi wheel.
 The commands below install the tagged release.
 
 ```bash
-uv tool install git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
+uv tool install git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.7.0
 ```
 
 Or with pipx:
 
 ```bash
-pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
+pipx install git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.7.0
 ```
 
 ## Updating
@@ -66,13 +66,13 @@ Use the same tool that owns the existing installation. For an installation
 managed by `uv`:
 
 ```bash
-uv tool install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
+uv tool install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.7.0
 ```
 
 For an installation managed by pipx:
 
 ```bash
-pipx install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.6.1
+pipx install --force git+https://github.com/75ohmantenna/chat-downloader-fork.git@v2.7.0
 ```
 
 **Verify the installed command:**
