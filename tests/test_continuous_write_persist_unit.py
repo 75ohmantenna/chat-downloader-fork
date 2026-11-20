@@ -8,7 +8,7 @@ import json
 import os
 import time
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 
@@ -71,13 +71,15 @@ def test_txt_append(tmp_path, initial, items, expected):
 def test_fsync_runs_at_most_once_per_interval(tmp_path: Path) -> None:
     writer = JsonLinesContinuousWriter(str(tmp_path / "out.jsonl"))
     try:
+        assert writer.file is not None
+        descriptor = writer.file.fileno()
         with patch.object(os, "fsync") as mock_fsync:
             for count, item in enumerate(({"first": True}, {"again": True}), 1):
                 writer._last_fsync_monotonic = (
                     time.monotonic() - _FSYNC_INTERVAL_SECONDS - 1
                 )
                 writer.write(item)
-                assert mock_fsync.call_count == count
+                assert mock_fsync.call_args_list == [call(descriptor)] * count
                 if count == 1:
                     for _ in range(5):
                         writer.write({"more": True})

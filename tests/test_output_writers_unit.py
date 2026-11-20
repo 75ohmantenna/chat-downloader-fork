@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import patch
 
 import pytest
 
@@ -153,19 +154,47 @@ def test_factory_text_output_accepts_json_sort_option(tmp_path, sort_keys, lazy)
     assert path.read_text() == "preserved text order\n"
 
 
-def test_writer_flush_and_periodic_fsync_paths(jsonl_path: str) -> None:
+def test_flush_makes_buffered_data_visible(jsonl_path: str) -> None:
     writer = JsonLinesContinuousWriter(jsonl_path)
-    writer.flush()  # base flush guard passes: file is open
-    writer.file = Mock()
-    writer.file.fileno.side_effect = ValueError("no fd")
-    writer._last_fsync_monotonic = float("-inf")
-    writer._persist_after_write()  # flush succeeds, fsync failure is logged
-    writer.file.fileno.side_effect = None
-    writer._last_fsync_monotonic = float("-inf")
-    writer._persist_after_write()  # real fsync path executes
-    writer.file = None
-    writer.flush()  # file None: base flush guard is a no-op
-    writer._persist_after_write()  # Missing file must also skip persistence.
+    try:
+        assert writer.file is not None
+        writer.file.write('{"buffered": true}\n')
+        writer.flush()
+        assert Path(jsonl_path).read_text(encoding="utf-8") == '{"buffered": true}\n'
+    finally:
+        writer.close()
+
+
+def test_persistence_flushes_without_a_file_descriptor(jsonl_path: str) -> None:
+    writer = JsonLinesContinuousWriter(jsonl_path)
+    writer.close()
+    with io.StringIO() as stream:
+        writer.file = stream
+        writer._last_fsync_monotonic = float("-inf")
+
+        with (
+            patch.object(stream, "flush", wraps=stream.flush) as flush,
+            patch.object(stream, "fileno", wraps=stream.fileno) as fileno,
+            patch.object(os, "fsync") as fsync,
+        ):
+            writer.write({"in_memory": True})
+            flush.assert_called_once_with()
+            fileno.assert_called_once_with()
+            fsync.assert_not_called()
+
+        assert stream.getvalue() == '{"in_memory": true}\n'
+
+
+def test_closed_writer_skips_flush_and_persistence(jsonl_path: str) -> None:
+    writer = JsonLinesContinuousWriter(jsonl_path)
+    writer.close()
+    last_sync = writer._last_fsync_monotonic
+
+    writer.flush()
+    writer._persist_after_write()
+
+    assert writer.file is None
+    assert writer._last_fsync_monotonic == last_sync
 
 
 def test_jsonl_overwrite_true_truncates_existing_file(jsonl_path: str) -> None:
