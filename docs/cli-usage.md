@@ -617,6 +617,14 @@ prevent a capture from qualifying as complete.
 `--run_manifest run.json` writes a JSON report after shutdown with program
 version, recording identity/window, success, completion, termination, parity,
 current/prior run message counts, and output writer counts and SHA-256 hashes.
+`format_names` lists the distinct resolved presets used to render chat during
+the current run, including any live-format override selected after discovery.
+The list is sorted and can be empty, for example when a quiet capture writes
+only JSONL or when a resume adds no records. For a single preset, use that name
+for the standalone parity auditor's `--format` argument. The auditor accepts
+one preset per invocation, while the manifest lists presets for the run as a
+whole. The manifest omits names changed by log sanitization. Keep the original
+`--format_file` if the run used custom templates.
 `selected_window` retains the requested `start_time` and `end_time` as seconds;
 `null` means an unspecified bound. `effective_window` records the bounds passed
 to retrieval, including resume overlap, with `time_basis` of `recording` or

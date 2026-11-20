@@ -10,9 +10,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from chat_downloader.models import ChatRequest
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime.capture_checkpoint import checkpoint_lock
 from chat_downloader.runtime.capture_manifest import RunManifest, is_completed_replay
+from chat_downloader.runtime.chat_pipeline import configure_chat
 from chat_downloader.runtime.runner import RunResult, execute_run
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.twitch.irc_diagnostics import _TwitchLiveDiagnostics
@@ -75,6 +77,7 @@ def test_manifest_certifies_closed_files_and_completed_run(
     assert result.success
     assert report["replay_complete"]
     assert report["parity_status"] == "passed"
+    assert report["format_names"] == ([] if resumed else ["kick"])
     assert report["message_count"] == (0 if resumed else 4)
     assert report["prior_message_count"] == (4 if resumed else 0)
     assert report["recording"]["id"] == "video"
@@ -83,6 +86,64 @@ def test_manifest_certifies_closed_files_and_completed_run(
         artifact = tmp_path / item["file_name"].split("/")[-1]
         assert item["sha256"] == hashlib.sha256(artifact.read_bytes()).hexdigest()
     assert "Record 1" not in (tmp_path / "run.json").read_text()
+
+
+def test_manifest_keeps_presets_rendered_before_metadata_changes(tmp_path, manifest):
+    class StatusChangingDownloader(Downloader):
+        def get_chat(self, **kwargs):
+            def source():
+                chat.status = "live"
+                yield message(1, 10)
+                chat.status = "was_live"
+                yield message(2, 11)
+                chat.status = None
+
+            chat = Chat(source(), id="video")
+            configure_chat(
+                chat,
+                ChatRequest.from_kwargs(**kwargs),
+                SimpleNamespace(
+                    is_live_status=lambda status: status == "live",
+                    resolve_live_format=lambda _: "youtube_live_default",
+                ),
+            )
+            return chat
+
+    result, report = manifest(
+        StatusChangingDownloader,
+        url="https://example.invalid/video",
+        format="youtube",
+        output=str(tmp_path / "chat.txt"),
+        quiet=True,
+    )
+    assert result.success
+    assert report["recording"]["status"] is None
+    assert report["format_names"] == ["youtube", "youtube_live_default"]
+
+
+@pytest.mark.parametrize("sensitive_name", [False, True])
+def test_manifest_reports_only_safe_custom_preset_names(
+    tmp_path, manifest, sensitive_name
+):
+    key = "AIza" + "A" * 35
+    name = f"https://example.invalid/?key={key}." if sensitive_name else "my_preset"
+    formats = tmp_path / "private-presets.json"
+    formats.write_text(json.dumps({name: {"template": "Custom {message}"}}))
+    output = tmp_path / "chat.txt"
+
+    result, report = manifest(
+        url="https://example.invalid/video",
+        format=name,
+        format_file=str(formats),
+        output=str(output),
+        quiet=True,
+    )
+    assert result.success
+    assert output.read_text().splitlines()[0] == "Custom Record 1"
+    assert report["format_names"] == ([] if sensitive_name else [name])
+    content = (tmp_path / "run.json").read_text()
+    assert key not in content
+    assert formats.name not in content
 
 
 @pytest.mark.parametrize("boundary", ["hash", "publish"])

@@ -115,10 +115,10 @@ uv run python scripts/audit_capture_parity.py \
   capture.jsonl capture.txt --format twitch
 ```
 
-`--format` is required because an artifact does not record its resolved
-provider format. Use the resolved name that produced the text, such as
-`twitch`, `kick`, or `youtube_live_default`, rather than the unresolved
-site-default marker. Pass `--format-file path/to/formats.json` when the capture
+`--format` takes the resolved name that produced the text, such as
+`twitch`, `kick`, or `youtube_live_default`. Recent run manifests list these
+names in `format_names`.
+Pass `--format-file path/to/formats.json` when the capture
 used custom formatting. If the capture used a nondefault formatted-message
 dedup cache, pass the same nonnegative value with
 `--max-seen-message-ids`; zero has the production default meaning.

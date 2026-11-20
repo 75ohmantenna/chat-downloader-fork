@@ -295,6 +295,12 @@ class RunManifest:
             "selected_window": self.selected_window,
             "effective_window": _effective_window(chat, self._parameters),
             "parity_status": result.parity_status,
+            # A sanitized preset name would not be usable by the parity auditor.
+            "format_names": sorted(
+                name
+                for name in getattr(chat, "_rendered_format_names", ())
+                if sanitize_for_log(name) == name
+            ),
             "provider_inspection": result.provider_inspection,
             "message_count": result.message_count,
             "prior_message_count": result.provider_diagnostics.get(

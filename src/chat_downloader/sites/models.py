@@ -112,6 +112,7 @@ class Chat:
         # Formatter used by print_formatted() and formatted file writers. The default
         # keeps Chat usable without pipeline configuration.
         self._formatter: Callable[[dict[str, Any]], str] = _default_formatter
+        self._rendered_format_names: set[str] = set()
 
         # Output dispatch (writers, deduplication, and shutdown) is created
         # lazily when the first writer is attached, so this model module stays

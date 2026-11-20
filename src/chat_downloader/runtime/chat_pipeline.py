@@ -139,7 +139,12 @@ def _configure_formatter(
     formatter.validate_format_name(selected_name())
 
     def format_callable(item: dict[str, Any]) -> str:
-        return formatter.format(item, format_name=selected_name())
+        name = selected_name()
+        rendered = formatter.format(item, format_name=name)
+        # Verification also renders records, after the capture has closed.
+        if not chat._closed:
+            chat._rendered_format_names.add(name)
+        return rendered
 
     chat.set_formatter(format_callable)
 

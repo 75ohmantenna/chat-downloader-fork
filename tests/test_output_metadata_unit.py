@@ -9,7 +9,10 @@ from types import SimpleNamespace
 import pytest
 
 from chat_downloader import ChatDownloader
+from chat_downloader.cli import main
+from chat_downloader.formatting import ItemFormatter
 from chat_downloader.models import ChatRequest
+from chat_downloader.output.capture_parity import audit_capture
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime.capture_verification import capture_paths
 from chat_downloader.runtime.chat_pipeline import configure_chat
@@ -19,7 +22,7 @@ from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
 
 @pytest.fixture
 def youtube_metadata(monkeypatch):
-    def configure(title, message):
+    def configure(title, message, *, status="live"):
         monkeypatch.setattr(
             YouTubeChatDownloader,
             "get_user_videos",
@@ -31,7 +34,7 @@ def youtube_metadata(monkeypatch):
             YouTubeChatDownloader,
             "_get_initial_video_info",
             lambda *_args, **_kwargs: (
-                {"title": title, "status": "live", "video_type": "video"},
+                {"title": title, "status": status, "video_type": "video"},
                 {},
             ),
         )
@@ -46,6 +49,65 @@ def youtube_metadata(monkeypatch):
         )
 
     return configure
+
+
+@pytest.mark.parametrize(
+    ("url", "status", "expected"),
+    [
+        ("https://www.youtube.com/watch?v=abcdefghijk", "was_live", "youtube"),
+        (
+            "https://www.youtube.com/watch?v=abcdefghijk",
+            "post_live",
+            "youtube_live_default",
+        ),
+        ("https://www.youtube.com/@audit_channel", "live", "youtube_live_default"),
+    ],
+)
+def test_manifest_resolved_format_reproduces_cli_text(
+    youtube_metadata, tmp_path, url, status, expected
+):
+    youtube_metadata(
+        "Actual Title",
+        {
+            "message_id": "one",
+            "message_type": "text_message",
+            "author": {"name": "Alice"},
+            "message": "hello",
+            "timestamp": 1_700_000_000_000_000,
+            "time_text": "-0:42",
+            "time_in_seconds": -42,
+        },
+        status=status,
+    )
+    raw, formatted, manifest = (
+        tmp_path / name for name in ("chat.jsonl", "chat.txt", "run.json")
+    )
+    main(
+        [
+            url,
+            "--proxy",
+            "",
+            "--quiet",
+            "--max_messages",
+            "1",
+            "--output",
+            str(raw),
+            "--output",
+            str(formatted),
+            "--run_manifest",
+            str(manifest),
+        ]
+    )
+    report = json.loads(manifest.read_text())
+    assert report["format_names"] == [expected]
+    stats = audit_capture(
+        raw,
+        formatted,
+        formatter=ItemFormatter(),
+        format_name=report["format_names"][0],
+    )
+    assert not stats.failed
+    assert stats.txt_lines == 1
 
 
 @pytest.mark.parametrize("suffix", ["jsonl", "txt"])
