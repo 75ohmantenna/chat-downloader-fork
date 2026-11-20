@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import inspect
+from contextlib import closing
+from unittest.mock import Mock
 
 import pytest
 
@@ -12,6 +14,8 @@ from chat_downloader.models import (
     DEFAULT_READ_TIMEOUT,
     ChatRequest,
 )
+from chat_downloader.sites import TwitchChatDownloader, YouTubeChatDownloader
+from chat_downloader.sites.models import Chat
 
 
 def test_chat_downloader_init_defaults_are_canonical_model_defaults() -> None:
@@ -146,3 +150,43 @@ def test_get_chat_request_delegates_to_deep_dispatch_interface(monkeypatch) -> N
 
     assert downloader.get_chat_request(request) is chat
     assert calls == [(downloader, request)]
+
+
+@pytest.mark.parametrize("prefix", ["", "//", "https://"])
+@pytest.mark.parametrize(
+    ("host_path", "provider", "method", "resource_id"),
+    [
+        (
+            "www.youtube.com/watch?v=wXspodtIxYU",
+            YouTubeChatDownloader,
+            "get_chat_by_video_id",
+            "wXspodtIxYU",
+        ),
+        ("twitch.tv/xenova", TwitchChatDownloader, "get_chat_by_stream_id", "xenova"),
+        (
+            "www.twitch.tv/xenova",
+            TwitchChatDownloader,
+            "get_chat_by_stream_id",
+            "xenova",
+        ),
+    ],
+    ids=["youtube-watch", "twitch-bare-host", "twitch-www-host"],
+)
+def test_get_chat_normalizes_and_dispatches_to_provider(
+    monkeypatch, prefix, host_path, provider, method, resource_id
+) -> None:
+    handler = Mock(return_value=Chat(iter(()), id=resource_id))
+    monkeypatch.setattr(provider, method, handler)
+
+    with (
+        closing(ChatDownloader()) as downloader,
+        downloader.get_chat(prefix + host_path, max_messages=10) as chat,
+    ):
+        assert type(chat.site) is provider
+        assert chat.id == resource_id
+        handler.assert_called_once()
+        actual_id, request = handler.call_args.args
+        assert actual_id == resource_id
+        assert isinstance(request, ChatRequest)
+        assert request.url == "https://" + host_path
+        assert request.max_messages == 10

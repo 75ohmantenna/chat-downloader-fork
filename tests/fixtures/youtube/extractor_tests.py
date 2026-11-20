@@ -17,7 +17,7 @@ from chat_downloader.errors import (
     VideoUnplayable,
 )
 from chat_downloader.sites.youtube.constants_message import _MESSAGE_GROUPS
-from tests.fixtures.replay_checks import assert_message_limit, assert_timed_window
+from tests.fixtures.replay_checks import assert_live_delivery, assert_timed_window
 
 if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
@@ -34,11 +34,6 @@ _GIFT_END = _GIFT_START + 11
 def _assert_top_chat(chat: Chat, messages: list[dict[str, Any]]) -> None:
     assert chat.diagnostics.get("chat_view") == "Top chat replay"
     assert_timed_window(messages, start=0, end=20, required_types=("text_message",))
-
-
-def _assert_live_chat_limit(chat: Chat, messages: list[dict[str, Any]]) -> None:
-    assert chat.diagnostics.get("chat_view") == "Live chat replay"
-    assert_message_limit(chat, messages, limit=10)
 
 
 def _assert_replay_events(
@@ -98,6 +93,13 @@ def _has_resolved_livestream_metadata(chat: Chat) -> bool:
     )
 
 
+def _assert_youtube_live_delivery(chat: Chat, messages: list[dict[str, Any]]) -> None:
+    assert_live_delivery(chat, messages, allowed_types=_MESSAGE_GROUPS["messages"])
+    assert chat.status in {"live", "upcoming"}, (
+        f"Expected live or upcoming YouTube chat, received {chat.status!r}."
+    )
+
+
 YOUTUBE_EXTRACTOR_TESTS = [
     # Get top live streams
     # https://www.youtube.com/results?search_query&sp=CAMSAkAB
@@ -112,7 +114,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     # TESTING FOR CORRECT FUNCTIONALITY
     {
         "name": "Discover livestream metadata using channel id.",
-        "network_live": True,
+        "scope": "live",
         "params": {
             "url": "https://www.youtube.com/channel/UCSJ4gkVC6NrvII8umztf0Ow",
             "timeout": 20,
@@ -124,7 +126,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Discover livestream metadata using custom url (1).",
-        "network_live": True,
+        "scope": "live",
         "params": {
             "url": "https://www.youtube.com/c/lofigirl",
             "timeout": 20,
@@ -136,7 +138,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Discover livestream metadata using custom url (2).",
-        "network_live": True,
+        "scope": "live",
         "params": {
             "url": "https://www.youtube.com/lofigirl",
             "timeout": 20,
@@ -148,7 +150,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Discover livestream metadata using user id.",
-        "network_live": True,
+        "scope": "live",
         "params": {
             "url": "https://www.youtube.com/user/YellowBrickCinema",
             "timeout": 20,
@@ -160,30 +162,20 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Deliver chat messages from a discovered livestream.",
-        "network_live": True,
+        "scope": "live",
         "requires_env": "YOUTUBE_TEST_CHANNEL_ID",
         "params": {
             "url": "https://www.youtube.com/channel/{channel}",
             "timeout": 30,
+            "max_messages": 1,
         },
         "expected_result": {
-            "messages_condition": lambda messages: len(messages) > 0,
-        },
-    },
-    {
-        "name": "Get chat messages from live chat replay",
-        "params": {
-            "url": "https://www.youtube.com/watch?v=wXspodtIxYU",
-            "max_messages": 10,
-        },
-        "expected_result": {
-            "message_types": ["text_message"],
-            "action_types": ["add_chat_item"],
-            "after_capture": _assert_live_chat_limit,
+            "after_capture": _assert_youtube_live_delivery,
         },
     },
     {
         "name": "Get top chat messages from live chat replay",
+        "scope": "replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=wXspodtIxYU",
             "start_time": 0,
@@ -198,6 +190,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Get superchat and ticker messages from live chat replay",
+        "scope": "replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=UlemRwXYWHg",
             "start_time": 0,
@@ -219,11 +212,13 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Get all messages from live chat replay",
+        "scope": "replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=97w16cYskVI",
             "start_time": 0,
             "end_time": 50,
             "message_types": ["all"],
+            "youtube_replay_poll_interval": 1.0,
         },
         "expected_result": {
             "after_capture": partial(
@@ -240,6 +235,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Get messages from a premiere",  # Premiere
+        "scope": "replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=zVCs9Cug_qM",
             "max_messages": 3,
@@ -252,6 +248,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Chat replay with Super Chat messages",
+        "scope": "replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=UlemRwXYWHg",
             "start_time": 0,
@@ -270,6 +267,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Chat replay with membership gifts",
+        "scope": "replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=cb0h-KbpDo8",
             "start_time": _GIFT_START,
@@ -290,6 +288,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Get chat messages from an unplayable stream.",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=V2Afni3S-ok",
             "start_time": 10,
@@ -304,6 +303,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     # TESTING FOR ERRORS
     {
         "name": "Video does not exist",
+        "scope": "replay",
         "params": {
             "url": "https://www.youtube.com/watch?v=xxxxxxxxxxx",
         },
@@ -316,6 +316,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "This video is no longer available due to a copyright claim by "
             "International Olympic Committee."
         ),
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=cjk2UKkzY0g",
         },
@@ -324,7 +325,8 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
     },
     {
-        "name": "This video is not available.",  # YouTube Premium
+        "name": "YouTube Premium video is unavailable.",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=i1Ko8UG-Tdo",
         },
@@ -333,7 +335,8 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
     },
     {
-        "name": "This video is not available.",  # Rental video preview
+        "name": "Rental video preview is unavailable.",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=yYr8q0y5Jfg",
         },
@@ -349,6 +352,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "hate speech. Learn more about combating hate speech in your "
             "country."
         ),
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=6SJNVb0GnPI",
         },
@@ -358,6 +362,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Former members-only content with replay chat",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=vprErlL1w2E",
             "max_messages": 3,
@@ -370,6 +375,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Chat is disabled for this live stream",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=XWq5kBlakcQ",
         },
@@ -379,6 +385,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Live chat replay has been turned off for this video",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=7lGZvbasx6A",
         },
@@ -388,6 +395,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Video is private",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=ijFMXqa-N0c",
         },
@@ -396,16 +404,8 @@ YOUTUBE_EXTRACTOR_TESTS = [
         },
     },
     {
-        "name": ("The uploader has not made this video available in your country."),
-        "params": {
-            "url": "https://www.youtube.com/watch?v=sJL6WA-aGkQ",
-        },
-        "expected_result": {
-            "error": VideoUnplayable,
-        },
-    },
-    {
         "name": "This live stream recording is not available.",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=68kru9DqUS4",
         },
@@ -420,6 +420,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "Sign in to confirm your age. This video may be inappropriate "
             "for some users."
         ),
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=WaOKSUlf4TM",
         },
@@ -434,6 +435,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "Sign in to confirm your age. This video may be inappropriate "
             "for some users (secondary watch page)."
         ),
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/watch?v=_8W6Aoql-yk",
         },
@@ -444,6 +446,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     # Clips
     {
         "name": "Chat replay of clip (past broadcast)",
+        "scope": "replay",
         "params": {
             "url": f"https://www.youtube.com/clip/{_PAST_CLIP_ID}",
             "start_time": 0,
@@ -456,6 +459,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Chat replay of clip (premiere)",
+        "scope": "replay",
         "params": {
             "url": f"https://www.youtube.com/clip/{_PREMIERE_CLIP_ID}",
             "start_time": 0,
@@ -468,6 +472,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Clip does not have a chat replay.",
+        "scope": "environment",
         "params": {
             "url": "https://www.youtube.com/clip/UgwVu73xQ5FUiGnteZJ4AaABCQ",
         },
@@ -480,6 +485,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
             "Clip not available. The clip can be unavailable if it was "
             "deleted, or if the video it's based on was removed or edited."
         ),
+        "scope": "environment",
         "params": {
             "url": "https://youtube.com/clip/UgxJiPo-4EeSYDfrYp94AaABCQ",
         },
@@ -489,6 +495,7 @@ YOUTUBE_EXTRACTOR_TESTS = [
     },
     {
         "name": "Clip does not exist",
+        "scope": "replay",
         "params": {
             "url": "https://youtube.com/clip/x",
         },

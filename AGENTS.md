@@ -75,7 +75,7 @@ make setup
 uv run pytest tests/FILE.py -q
 uv run pytest tests/FILE.py::test_name -q
 uv run pytest -q -p no:rerunfailures -m "not network"
-uv run pytest -v -m network --run-network
+uv run pytest -v -rs -m network --run-network
 make lint
 make spell
 make fmt-check
@@ -85,8 +85,12 @@ make ci
 ```
 
 `make setup` installs pre-commit/pre-push hooks and runs `uv sync`. Network tests
-are opt-in locally. `make ci` is canonical validation: lock check, lint, spelling,
-format check, type checking, 100% offline line coverage, build, and smoke test.
+are opt-in locally. For delivery checks, select active chat channels with
+`TWITCH_TEST_CHANNEL`, `YOUTUBE_TEST_CHANNEL_ID`, and `KICK_TEST_CHANNEL`.
+Set `KICK_TEST_REPLAY_CASE` to an independently recorded contract for a
+currently available Kick recording. The canonical `make ci` target checks the
+lockfile, lint, spelling, formatting, types, and 100% offline line coverage,
+then builds and smoke-tests the package.
 
 Minimum verification:
 

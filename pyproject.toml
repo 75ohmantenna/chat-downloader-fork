@@ -242,7 +242,7 @@ markers = [
     "network: tests that require external network access (opt-in locally)",
     "network_replay: stable replay and immutable-resource network contracts",
     "network_live: volatile channel discovery, live delivery, and WebSocket smoke checks",
-    "network_environment: external checks requiring operator-selected resources",
+    "network_environment: operator-selected resources and mutable access or asset availability checks",
 ]
 filterwarnings = [
     "error::DeprecationWarning",

@@ -12,7 +12,12 @@ from chat_downloader.errors import (
     UserNotFound,
     VideoUnavailable,
 )
-from tests.fixtures.replay_checks import assert_message_limit, assert_timed_window
+from chat_downloader.sites.twitch.constants import MESSAGE_GROUPS
+from tests.fixtures.replay_checks import (
+    assert_live_delivery,
+    assert_message_limit,
+    assert_timed_window,
+)
 
 if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
@@ -47,46 +52,10 @@ def _has_twitch_channel_metadata(chat: Chat) -> bool:
     )
 
 
-BASE_EXTRACTOR_TESTS: list[dict[str, Any]] = [
-    {
-        "name": "Discover Twitch channel metadata using the bare hostname.",
-        "network_live": True,
-        "params": {
-            "url": "https://twitch.tv/xenova",
-            "timeout": 5,
-        },
-        "expected_result": {
-            "chat_condition": _has_twitch_channel_metadata,
-        },
-    },
-    {
-        "name": "Get a limited number of messages from a YouTube replay.",
-        "params": {
-            "url": "https://www.youtube.com/watch?v=wXspodtIxYU",
-            "max_messages": 10,
-            "timeout": 60,
-        },
-        "expected_result": {
-            "after_capture": partial(assert_message_limit, limit=10),
-        },
-    },
-    {
-        "name": "Scheme not supplied",
-        "params": {
-            "url": "www.youtube.com/watch?v=wXspodtIxYU",
-            "max_messages": 10,
-            "timeout": 60,
-        },
-        "expected_result": {
-            "after_capture": partial(assert_message_limit, limit=10),
-        },
-    },
-]
-
 TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     {
         "name": "Discover livestream metadata.",
-        "network_live": True,
+        "scope": "live",
         "params": {"url": "https://www.twitch.tv/xenova", "timeout": 5},
         "expected_result": {
             "chat_condition": _has_twitch_channel_metadata,
@@ -94,18 +63,22 @@ TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     },
     {
         "name": "Deliver chat messages from a livestream.",
-        "network_live": True,
+        "scope": "live",
         "requires_env": "TWITCH_TEST_CHANNEL",
         "params": {
             "url": "https://www.twitch.tv/{channel}",
             "timeout": 30,
+            "max_messages": 1,
         },
         "expected_result": {
-            "messages_condition": lambda messages: len(messages) > 0,
+            "after_capture": partial(
+                assert_live_delivery, allowed_types=MESSAGE_GROUPS["messages"]
+            ),
         },
     },
     {
         "name": "Past broadcast with chat replay.",
+        "scope": "replay",
         "params": {
             "url": "https://www.twitch.tv/videos/87136772",
             "max_messages": 30,
@@ -119,6 +92,7 @@ TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     },
     {
         "name": "Clip with chat replay.",
+        "scope": "replay",
         "params": {
             "url": f"https://clips.twitch.tv/{_TWITCH_CLIP_ID}",
             "start_time": 0,
@@ -134,6 +108,7 @@ TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
             "This clip's past broadcast has expired and chat replay is no longer "
             "available."
         ),
+        "scope": "environment",
         "params": {
             "url": "https://clips.twitch.tv/AverageSparklyTortoisePeoplesChamp",
         },
@@ -141,6 +116,7 @@ TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     },
     {
         "name": "Sorry. Unless you've got a time machine, that content is unavailable.",
+        "scope": "replay",
         "params": {"url": "https://www.twitch.tv/videos/1"},
         "expected_result": {"error": VideoUnavailable},
     },
@@ -149,7 +125,7 @@ TWITCH_EXTRACTOR_TESTS: list[dict[str, Any]] = [
 KICK_EXTRACTOR_TESTS: list[dict[str, Any]] = [
     {
         "name": "Missing Kick channel raises UserNotFound.",
-        "network_live": True,
+        "scope": "live",
         "params": {"url": "https://kick.com/somelikelyofflinechannel"},
         "expected_result": {"error": UserNotFound},
     },

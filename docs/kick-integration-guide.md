@@ -961,9 +961,7 @@ inspection uses the offline command with one debug log per appended run.
 The Kick suite is offline by default. The WebSocket connector, frame iterator,
 and HTTP session are injectable, so the live and replay paths run without
 network access. Fixtures live under `tests/fixtures/kick/`; shared fakes live in
-`tests/kick_helpers.py`. Live-network smoke tests are marked
-`@pytest.mark.network` in `tests/test_kick_network.py` and run only with
-`--run-network`.
+`tests/kick_helpers.py`.
 
 `kicks_gifted_event_recorded.json` retains an observed gift payload from a live
 JSONL capture. Its provenance records the source line and hash, replaced user
@@ -980,6 +978,28 @@ To add coverage for a new event type:
 3. Write the parser under `parsing/` and register it in
    `events.py::_PARSER_DISPATCH`.
 4. Add a parser unit test and run `make ci`.
+
+### Public realtime validation
+
+Choose a currently active public channel with people posting in chat. Replace
+`your-active-channel` with its slug when running the strict realtime check:
+
+```bash
+KICK_TEST_CHANNEL=your-active-channel \
+  uv run pytest -q tests/test_kick_network.py --run-network
+```
+
+Without `KICK_TEST_CHANNEL`, the test skips before making a request. A configured
+channel that Kick cannot find fails the check. Kick challenge blocks and a
+realtime HTTP 403 are environmental skips. The test requires confirmation of
+the public socket subscription and receipt of an application publication. A
+missing confirmation and a confirmed subscription without a publication produce
+different failures. History and REST-recovered records cannot prove delivery.
+
+The CLI smoke matrix accepts the same `KICK_TEST_CHANNEL` setting or an explicit
+`--channel`, which takes precedence. It requires `--run-network` and a fresh
+`--artifacts` directory. The directory is created with mode `0700`. Keep its
+captures and logs private and use the aggregate report to share results.
 
 ### External replay validation
 
@@ -1004,11 +1024,72 @@ This test uses the `network_environment` scope because the asset must be
 configured and refreshed. It does not run in the weekly stable replay job.
 Without a configured contract it reports a skip; with one, expired assets,
 challenge blocks, missing messages, and protocol failures fail the check.
-Refresh the contract from independently fetched provider responses rather than
-using downloader output as its own expected result. Observed history
-timestamps have second precision, so checks require chronological timestamps
-and exactly one occurrence of each expected ID without imposing an order on
-equal times.
+
+### Renew the external example
+
+Choose a recently completed public VOD and a short, chat-active interval.
+Replace the selected slug, website video ID, and inclusive recording offsets
+in the example below. These commands use Bash, GNU `date`, `jq`, and direct
+`curl-cffi` HTTP requests. The temporary directory stores private responses.
+
+```bash
+umask 077
+kick_case_dir=$(mktemp -d)
+slug=sam
+video_id=01a1f339-d8e8-736b-bf17-aba704594bb3
+begin=714
+end=734
+
+kick_get() {
+  uv run python -c 'import sys; from curl_cffi import requests
+response = requests.get(sys.argv[1], impersonate="chrome", timeout=20)
+response.raise_for_status()
+sys.stdout.buffer.write(response.content)' "$1"
+}
+
+kick_get "https://kick.com/api/v2/channels/$slug" > "$kick_case_dir/channel.json"
+channel_id=$(jq -er --arg slug "$slug" 'select(.slug == $slug) | .id' "$kick_case_dir/channel.json")
+metadata="https://web.kick.com/api/v1/channels/$channel_id/videos/$video_id"
+kick_get "$metadata" > "$kick_case_dir/video.json"
+origin=$(jq -er --arg id "$video_id" --argjson end "$end" '
+  .data | select(.id == $id and .status == "public" and .is_live == false and .duration >= $end)
+  | .start_time' "$kick_case_dir/video.json")
+origin=$(date -u -d "$origin" '+%FT%T.%6NZ')
+
+history="https://kick.com/api/v2/channels/$channel_id/messages"
+cursor=$(date -u -d "$origin + $((end + 1)) seconds" '+%s%6N')
+kick_get "$history?cursor=$cursor" > "$kick_case_dir/reverse-$cursor.json"
+
+for ((offset=begin; offset<=end; offset+=5)); do
+  start_time=$(date -u -d "$origin + $offset seconds" '+%FT%TZ')
+  kick_get "$history?start_time=$start_time" > "$kick_case_dir/forward-$offset.json"
+done
+```
+
+The metadata start time is the UTC origin. The first reverse cursor is the
+inclusive end in Unix microseconds plus one second. If the first reverse
+page does not reach a message earlier than the selected start, read the
+page's `.data.cursor` and repeat the reverse request. Stop after crossing
+the start or reaching a page with no cursor. A repeated cursor or an empty
+page with continuation leaves completeness unverified.
+
+The forward requests cover consecutive five-second windows using UTC
+`YYYY-MM-DDTHH:MM:SSZ` start times. Check that each response covers its
+requested window. Treat a page with 25 or more messages as potentially
+truncated. If a page may be incomplete or the two directions disagree,
+choose a quieter interval.
+If Kick returns HTTP 403 or a challenge page, retry from a network where
+the public endpoints are accessible.
+
+Filter both sets to the inclusive window and compare exact message IDs,
+UTC timestamps, and text. In the contract, store timestamps as Unix
+microseconds and `time_in_seconds` as seconds since the metadata start.
+Keep a few innocuous text probes keyed by their expected IDs. Record the
+asset URL, capture time, and source endpoints, then run the test against
+your curated contract before updating the checked-in example. Keep raw
+responses private. The test requires chronological timestamps and exactly
+one occurrence of each expected ID. Same-second messages can arrive in any
+relative order.
 
 For external validation, capture a bounded window with `--require_complete`,
 `--verify_output`, `--run_manifest`, and debug logging, then inspect it with

@@ -277,6 +277,9 @@ def test_documented_cli_examples_parse_and_match_supported_urls() -> None:
         )
         for block in blocks:
             for command in block.replace("\\\n", "").splitlines():
+                # Other tools in a recipe can contain multiline quoted programs.
+                if "chat_downloader" not in command:
+                    continue
                 invocation = re.split(r"\s+\d*>>?\s*", command, maxsplit=1)[0]
                 tokens = shlex.split(invocation, comments=True)
                 if "chat_downloader" not in tokens:

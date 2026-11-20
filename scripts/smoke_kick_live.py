@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -341,18 +342,27 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run explicitly authorized network cases and print aggregate results."""
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument("--run-network", action="store_true", required=True)
-    parser.add_argument("--channel", default="xqc")
+    parser.add_argument(
+        "--channel",
+        default=os.environ.get("KICK_TEST_CHANNEL") or None,
+        help="Active public Kick slug (or KICK_TEST_CHANNEL).",
+    )
     parser.add_argument("--duration", type=_seconds, default=480.0)
     parser.add_argument("--case-duration", type=_seconds, default=10.0)
     parser.add_argument("--proxy", action="append", default=[])
     parser.add_argument("--artifacts", type=Path, required=True)
     args = parser.parse_args(argv)
-    if re.fullmatch(r"[A-Za-z0-9_-]{1,100}", args.channel) is None:
+    channel = args.channel
+    if channel is None:
+        parser.error(
+            "Select an active public Kick channel with --channel or KICK_TEST_CHANNEL."
+        )
+    if re.fullmatch(r"[A-Za-z0-9_-]{1,100}", channel) is None:
         parser.error("Use a Kick channel slug.")
     directory = args.artifacts.absolute()
     # Exclusive creation prevents accidental replacement of existing captures.
     directory.mkdir(mode=0o700)
-    url = f"https://kick.com/{args.channel}"
+    url = f"https://kick.com/{channel}"
     results = []
     for name, options, success in _cases(args.duration):
         case_dir = directory / name

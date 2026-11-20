@@ -83,13 +83,17 @@ def _manifest(
     return data
 
 
+@pytest.mark.parametrize("channel_options", [[], ["--channel", "chosen"]])
 def test_matrix_uses_bounded_children_private_artifacts_and_content_free_report(
-    tmp_path, monkeypatch, capsys
+    tmp_path, monkeypatch, capsys, channel_options
 ):
     calls = []
+    monkeypatch.setenv("KICK_TEST_CHANNEL", "selected")
+    channel = "chosen" if channel_options else "selected"
 
     def child(command, **kwargs):
         calls.append((command, kwargs))
+        assert command[3] == f"https://kick.com/{channel}"
         directory = kwargs["cwd"]
         assert kwargs["stdin"] == subprocess.DEVNULL
         if directory.name == "inactivity":
@@ -141,6 +145,7 @@ def test_matrix_uses_bounded_children_private_artifacts_and_content_free_report(
         smoke.main(
             [
                 "--run-network",
+                *channel_options,
                 "--duration",
                 "1",
                 "--case-duration",
@@ -176,13 +181,35 @@ def test_matrix_rejects_unbounded_duration_before_creating_artifacts(tmp_path, v
     assert not directory.exists()
 
 
-@pytest.mark.parametrize("options", [[], ["--run-network", "--channel", "../PRIVATE"]])
-def test_network_opt_in_and_channel_validation_are_required(tmp_path, options):
+@pytest.mark.parametrize(
+    ("options", "environment", "reason"),
+    [
+        ([], "selected", "required: --run-network"),
+        (["--run-network"], None, "with --channel or KICK_TEST_CHANNEL"),
+        (["--run-network"], "", "with --channel or KICK_TEST_CHANNEL"),
+        (["--run-network"], "../PRIVATE", "Use a Kick channel slug."),
+        (
+            ["--run-network", "--channel", "../PRIVATE"],
+            "selected",
+            "Use a Kick channel slug.",
+        ),
+    ],
+)
+def test_network_opt_in_and_channel_validation_are_required(
+    tmp_path, monkeypatch, capsys, options, environment, reason
+):
+    if environment is None:
+        monkeypatch.delenv("KICK_TEST_CHANNEL", raising=False)
+    else:
+        monkeypatch.setenv("KICK_TEST_CHANNEL", environment)
     directory = tmp_path / "artifacts"
     with pytest.raises(SystemExit) as exc:
         smoke.main([*options, "--artifacts", str(directory)])
     assert exc.value.code == 2
     assert not directory.exists()
+    captured = capsys.readouterr()
+    assert reason in captured.err
+    assert "PRIVATE" not in captured.err
 
 
 @pytest.mark.parametrize(
@@ -718,7 +745,9 @@ def test_stdout_report_survives_failed_atomic_publication(
     )
     directory = tmp_path / "artifacts"
     with pytest.raises(OSError, match="failed to sync report"):
-        smoke.main(["--run-network", "--artifacts", str(directory)])
+        smoke.main(
+            ["--run-network", "--channel", "selected", "--artifacts", str(directory)]
+        )
 
     assert json.loads(capsys.readouterr().out)["passed"] is True
     assert not (directory / "report.json").exists()
@@ -734,6 +763,8 @@ def test_atomic_report_survives_failed_stdout(tmp_path, monkeypatch):
     monkeypatch.setattr(smoke, "print", fail_print, raising=False)
     directory = tmp_path / "artifacts"
     with pytest.raises(BrokenPipeError):
-        smoke.main(["--run-network", "--artifacts", str(directory)])
+        smoke.main(
+            ["--run-network", "--channel", "selected", "--artifacts", str(directory)]
+        )
 
     assert json.loads((directory / "report.json").read_text())["passed"] is True

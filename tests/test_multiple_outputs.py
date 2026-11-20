@@ -16,6 +16,7 @@ from chat_downloader.formatting.format import ItemFormatter
 from chat_downloader.output.capture_parity import audit_capture
 from chat_downloader.sites.models import Chat
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
+from tests.fixtures.replay_checks import assert_message_contract, assert_message_limit
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
 
 _VIDEO_URL = "https://www.youtube.com/watch?v=wXspodtIxYU"
+_REPLAY_LIMIT = 10
 
 
 def _assert_outputs(
@@ -57,16 +59,22 @@ def test_multiple_output_formats(tmp_path) -> None:
     with closing(ChatDownloader(connect_timeout=5, read_timeout=10)) as downloader:
         with downloader.get_chat(
             url=_VIDEO_URL,
-            max_messages=5,
+            max_messages=_REPLAY_LIMIT,
             timeout=30,
             max_attempts=2,
+            interruptible_retry=False,
             retry_timeout=1,
             output=[str(jsonl_output), str(txt_output)],
         ) as chat:
             messages = list(chat)
         assert chat.write_error_count == 0
 
-    assert 0 < len(messages) <= 5
+    assert type(chat.site) is YouTubeChatDownloader
+    assert chat.diagnostics["chat_view"] == "Live chat replay"
+    assert_message_limit(chat, messages, limit=_REPLAY_LIMIT)
+    assert_message_contract(chat, messages)
+    assert {message["message_type"] for message in messages} == {"text_message"}
+    assert {message.get("action_type") for message in messages} == {"add_chat_item"}
     _assert_outputs(messages, jsonl_output, txt_output)
 
 

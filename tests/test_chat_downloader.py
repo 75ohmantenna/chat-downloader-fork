@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import math
 import os
 from typing import TYPE_CHECKING, Any, cast
 
@@ -21,12 +20,11 @@ from chat_downloader.sites import (
     get_all_sites,
 )
 from chat_downloader.sites.youtube.extractor import YouTubeChatDownloader
-from chat_downloader.sites.youtube.video_status_models import REPLAY_STATUSES
 from tests.fixtures.extractor_tests import (
-    BASE_EXTRACTOR_TESTS,
     KICK_EXTRACTOR_TESTS,
     TWITCH_EXTRACTOR_TESTS,
 )
+from tests.fixtures.replay_checks import assert_message_contract
 from tests.fixtures.youtube.extractor_tests import YOUTUBE_EXTRACTOR_TESTS
 
 if TYPE_CHECKING:
@@ -35,20 +33,27 @@ if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
 
 _SITE_TESTS: dict[type[BaseChatDownloader], list[dict[str, Any]]] = {
-    BaseChatDownloader: BASE_EXTRACTOR_TESTS,
     KickChatDownloader: KICK_EXTRACTOR_TESTS,
     TwitchChatDownloader: TWITCH_EXTRACTOR_TESTS,
     YouTubeChatDownloader: YOUTUBE_EXTRACTOR_TESTS,
 }
 
+_SCOPE_MARKS = {
+    "replay": pytest.mark.network_replay,
+    "live": pytest.mark.network_live,
+    "environment": pytest.mark.network_environment,
+}
+
 
 def _case_marks(test: dict[str, Any]) -> tuple[pytest.MarkDecorator, ...]:
-    kind = (
-        pytest.mark.network_live
-        if test.get("network_live")
-        else pytest.mark.network_replay
-    )
-    return pytest.mark.network, kind, pytest.mark.timeout(90)
+    scope = test.get("scope")
+    if not isinstance(scope, str) or scope not in _SCOPE_MARKS:
+        msg = f"Network scenario {test['name']!r}: invalid or missing scope {scope!r}"
+        raise ValueError(msg)
+    if scope == "replay" and test.get("requires_env"):
+        msg = f"Replay CI scenario {test['name']!r} requires operator input."
+        raise ValueError(msg)
+    return pytest.mark.network, _SCOPE_MARKS[scope], pytest.mark.timeout(90)
 
 
 _ALL_SITE_TESTS = [
@@ -58,7 +63,7 @@ _ALL_SITE_TESTS = [
         id=f"{site.__name__}-{test['name']}",
         marks=_case_marks(test),
     )
-    for site in get_all_sites(include_parent=True)
+    for site in get_all_sites()
     for test in _SITE_TESTS[site]
 ]
 
@@ -72,43 +77,10 @@ def _expected_errors(expected_result: dict[str, Any]) -> tuple[type[Exception], 
     return (errors,)
 
 
-def _check_text_timing(chat: Chat, message: dict[str, Any]) -> None:
-    timestamp = message.get("timestamp")
-    if timestamp is not None:
-        assert type(timestamp) is int, "Invalid source timestamp."
-        assert timestamp >= 0, "Invalid source timestamp."
-        return
-
-    assert isinstance(chat.site, YouTubeChatDownloader), "Missing source timestamp."
-    if chat.status not in REPLAY_STATUSES:
-        received = message.get("received_timestamp")
-        assert type(received) is int, "Missing valid receive time."
-        assert received >= 0, "Invalid receive time."
-        return
-
-    offset = message.get("time_in_seconds")
-    assert isinstance(offset, (int, float)), "Missing provider replay offset."
-    assert not isinstance(offset, bool), "Invalid provider replay offset."
-    assert not isinstance(offset, float) or math.isfinite(offset), (
-        "Invalid provider replay offset."
-    )
-    timing = message.get("timing")
-    assert isinstance(timing, dict), "Missing replay timing provenance."
-    assert timing.get("offset_source") == "provider_replay"
-    assert timing.get("absolute_timestamp_available") is False
-    assert timing.get("zero_offset_ambiguous") is (offset == 0)
-
-
 def _check_scenario_outcome(
     chat: Chat, messages: list[dict[str, Any]], expected_result: dict[str, Any]
 ) -> None:
-    for message in messages:
-        assert isinstance(message.get("message_type"), str)
-        if message["message_type"] == "text_message":
-            assert message.get("message_id")
-            _check_text_timing(chat, message)
-            assert isinstance(message.get("author"), dict)
-            assert isinstance(message.get("message"), str)
+    assert_message_contract(chat, messages)
 
     checked_outcomes = {
         "chat_condition",

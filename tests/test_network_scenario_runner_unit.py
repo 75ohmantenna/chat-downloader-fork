@@ -24,10 +24,67 @@ from chat_downloader.sites import (
     YouTubeChatDownloader,
 )
 from chat_downloader.sites.models import Chat
-from tests.fixtures.extractor_tests import BASE_EXTRACTOR_TESTS, TWITCH_EXTRACTOR_TESTS
+from tests.conftest import _check_network_marks
+from tests.fixtures.extractor_tests import TWITCH_EXTRACTOR_TESTS
 from tests.fixtures.youtube.extractor_tests import YOUTUBE_EXTRACTOR_TESTS
-from tests.test_chat_downloader import _run_site_integration
+from tests.test_chat_downloader import _case_marks, _run_site_integration
 from tests.test_youtube_mobile_replay_unit import _replay
+
+
+@pytest.mark.parametrize("scope", [{}, {"scope": "stable"}, {"scope": []}])
+def test_network_scenarios_require_an_explicit_valid_scope(scope) -> None:
+    with pytest.raises(ValueError, match="invalid or missing scope"):
+        _case_marks({"name": "unclassified replay", **scope})
+
+
+def test_network_replay_scope_rejects_operator_selected_delivery() -> None:
+    scenario = {
+        **TWITCH_EXTRACTOR_TESTS[1],
+        "scope": "replay",
+    }
+
+    with pytest.raises(ValueError, match="requires operator input"):
+        _case_marks(scenario)
+
+
+@pytest.mark.parametrize(
+    ("marks", "error"),
+    [
+        ([], None),
+        (
+            [pytest.mark.network_live, pytest.mark.timeout(90)],
+            "network scope",
+        ),
+        ([pytest.mark.network], "network scope"),
+        (
+            [pytest.mark.network, pytest.mark.network_live, pytest.mark.network_replay],
+            "network scope",
+        ),
+        ([pytest.mark.network, pytest.mark.network_replay], "network test timeout"),
+        (
+            [
+                pytest.mark.network,
+                pytest.mark.network_environment,
+                pytest.mark.timeout(0),
+            ],
+            "network test timeout",
+        ),
+        (
+            [pytest.mark.network, pytest.mark.network_live, pytest.mark.timeout(90)],
+            None,
+        ),
+    ],
+)
+def test_collection_requires_one_network_scope_and_a_hard_timeout(marks, error):
+    item = Mock(spec=pytest.Item)
+    item.nodeid = "test_network.py::test_example"
+    collection_marks = {mark.name: mark.mark for mark in marks}
+    item.iter_markers.return_value = iter(collection_marks.values())
+    item.get_closest_marker.side_effect = collection_marks.get
+
+    outcome = pytest.raises(pytest.UsageError, match=error) if error else nullcontext()
+    with outcome:
+        _check_network_marks(item)
 
 
 class _SuccessfulDownloader:
@@ -328,7 +385,6 @@ def test_network_runner_requires_positive_outcome_check() -> None:
 @pytest.mark.parametrize(
     ("site", "scenario"),
     [
-        pytest.param(BaseChatDownloader, BASE_EXTRACTOR_TESTS[0], id="base-twitch"),
         pytest.param(TwitchChatDownloader, TWITCH_EXTRACTOR_TESTS[0], id="twitch"),
         *(
             pytest.param(YouTubeChatDownloader, scenario, id=scenario["name"])
@@ -378,20 +434,17 @@ def test_network_runner_rejects_unresolved_youtube_selector() -> None:
     downloader.close.assert_called_once_with()
 
 
+_DELIVERY_SCENARIOS = [
+    scenario
+    for scenario in [*TWITCH_EXTRACTOR_TESTS, *YOUTUBE_EXTRACTOR_TESTS]
+    if scenario.get("requires_env")
+]
+
+
 @pytest.mark.parametrize(
-    ("scenario", "expected_url"),
-    [
-        (TWITCH_EXTRACTOR_TESTS[1], "https://www.twitch.tv/active-channel"),
-        (
-            YOUTUBE_EXTRACTOR_TESTS[4],
-            "https://www.youtube.com/channel/active-channel",
-        ),
-    ],
-    ids=["twitch", "youtube"],
+    "scenario", _DELIVERY_SCENARIOS, ids=lambda scenario: scenario["requires_env"]
 )
-def test_network_runner_rejects_empty_delivery_stream(
-    scenario, expected_url, monkeypatch
-):
+def test_network_runner_rejects_empty_delivery_stream(scenario, monkeypatch):
     monkeypatch.setenv(scenario["requires_env"], "active-channel")
     downloader = _SuccessfulDownloader()
 
@@ -399,20 +452,22 @@ def test_network_runner_rejects_empty_delivery_stream(
         monkeypatch.setenv(scenario["requires_env"], "changed-after-selection")
         return downloader
 
-    with pytest.raises(AssertionError, match="message delivery check failed"):
+    with pytest.raises(AssertionError, match="Expected 1 messages, received 0"):
         _run_site_integration(
             BaseChatDownloader,
             scenario,
             downloader_factory=create_downloader,
         )
     assert downloader.closed
-    assert downloader.params["url"] == expected_url
+    assert downloader.params["url"] == scenario["params"]["url"].format(
+        channel="active-channel"
+    )
+    assert downloader.params["max_messages"] == 1
+    assert downloader.params["timeout"] == 30
 
 
 @pytest.mark.parametrize(
-    "scenario",
-    [TWITCH_EXTRACTOR_TESTS[1], YOUTUBE_EXTRACTOR_TESTS[4]],
-    ids=lambda scenario: scenario["name"],
+    "scenario", _DELIVERY_SCENARIOS, ids=lambda scenario: scenario["requires_env"]
 )
 def test_network_runner_skips_delivery_without_an_operator_selected_channel(
     scenario, monkeypatch
@@ -424,3 +479,75 @@ def test_network_runner_skips_delivery_without_an_operator_selected_channel(
             scenario,
             downloader_factory=lambda: pytest.fail("Missing channel must skip setup."),
         )
+
+
+@pytest.mark.parametrize(
+    ("message_types", "termination", "failure"),
+    [
+        (["highlighted_message"], "message_limit", None),
+        (["announcement"], "message_limit", None),
+        (["room_state"], "message_limit", "Unexpected live message type"),
+        (["announcement"], "timeout", "message_limit"),
+        (["announcement", "highlighted_message"], "message_limit", "received 2"),
+    ],
+)
+def test_twitch_one_message_delivery_checks_application_records(
+    message_types, termination, failure, monkeypatch
+):
+    scenario = next(
+        case
+        for case in _DELIVERY_SCENARIOS
+        if case["requires_env"] == "TWITCH_TEST_CHANNEL"
+    )
+    monkeypatch.setenv(scenario["requires_env"], "active-channel")
+    chat = Chat(iter({"message_type": kind} for kind in message_types))
+    chat.diagnostics["termination_reason"] = termination
+    downloader = Mock(spec=ChatDownloader)
+    downloader.get_chat.return_value = chat
+
+    outcome = pytest.raises(AssertionError, match=failure) if failure else nullcontext()
+    with outcome:
+        _run_site_integration(
+            BaseChatDownloader, scenario, downloader_factory=lambda: downloader
+        )
+    downloader.close.assert_called_once_with()
+
+
+def test_youtube_live_delivery_rejects_replay(monkeypatch) -> None:
+    scenario = next(
+        case
+        for case in _DELIVERY_SCENARIOS
+        if case["requires_env"] == "YOUTUBE_TEST_CHANNEL_ID"
+    )
+    monkeypatch.setenv(scenario["requires_env"], "active-channel")
+    chat = Chat(
+        iter(
+            [
+                {
+                    "message_type": "text_message",
+                    "message_id": "fixture-message",
+                    "timestamp": 123,
+                    "author": {},
+                    "message": "hello",
+                }
+            ]
+        ),
+        status="was_live",
+    )
+    chat.diagnostics["termination_reason"] = "message_limit"
+    downloader = Mock(spec=ChatDownloader)
+    downloader.get_chat.return_value = chat
+
+    with pytest.raises(AssertionError, match="Expected live or upcoming YouTube chat"):
+        _run_site_integration(
+            BaseChatDownloader, scenario, downloader_factory=lambda: downloader
+        )
+
+
+def test_youtube_replay_pacing_override_is_limited_to_all_message_window() -> None:
+    overrides = [
+        (scenario["params"]["url"], scenario["params"]["youtube_replay_poll_interval"])
+        for scenario in YOUTUBE_EXTRACTOR_TESTS
+        if "youtube_replay_poll_interval" in scenario["params"]
+    ]
+    assert overrides == [("https://www.youtube.com/watch?v=97w16cYskVI", 1.0)]

@@ -58,13 +58,15 @@ streams and escape characters that the destination cannot encode.
 4. Run the standard validation appropriate to the changed surface.
 5. Update the document that owns any changed behavior or public contract.
 
-Network tests remain opt-in locally. Every external check carries
+Network tests remain opt-in locally. Each external pytest case carries
 `@pytest.mark.network`, one scope marker (`network_replay`, `network_live`, or
 `network_environment`), and a hard timeout. Parser and transport regressions
 should normally use curated fixtures under `tests/fixtures/`. GitHub Actions runs
 stable `network_replay` contracts weekly, on manual dispatch, and on pushes to
-`75ohmantenna/chat-downloader-fork`. Volatile live and environment checks remain
-opt-in. An unavailable-asset scenario must raise its expected error during
+`75ohmantenna/chat-downloader-fork`. Each provider scenario declares its scope.
+Use `network_environment` for checks that depend on an account's access, the
+continued availability of an asset, or an operator-selected replay contract.
+An unavailable-asset scenario must raise its expected error during
 setup or before the first delivered record. The scenario runner propagates
 `CaptchaChallengeRequired`, even when the asset allows `LoginRequired`.
 The dedicated Kick socket probe reports a recognized challenge or handshake
@@ -74,17 +76,21 @@ YouTube channel discovery requires a resolved video after iteration. A quiet
 chat can pass once its video metadata is available. The separate streams-tab
 checks exercise channel aliases directly. YouTube text records can carry a
 provider replay offset or a live receive timestamp when the source timestamp
-is absent. The multiple-output replay probe checks JSONL against delivered
-records and audits TXT rendering with duplicate suppression.
+is absent. The default-view replay probe checks the message limit, compares
+JSONL with the delivered records, and audits TXT rendering with duplicate
+suppression. The 50-second all-message replay window uses a one-second poll
+interval. Other replay probes exercise the provider's default pacing.
 
-Offline timed-generator tests check inactivity against a blocked source. The Kick
-missing-channel probe expects `UserNotFound` for a missing slug. Separate
-Twitch and YouTube delivery scenarios require `TWITCH_TEST_CHANNEL`
-and `YOUTUBE_TEST_CHANNEL_ID`, respectively, naming active public channels.
-Missing settings explicitly skip those delivery scenarios; configured scenarios
-fail if no messages arrive within their thirty-second capture window. The Kick
-live check uses `KICK_TEST_CHANNEL` (default `xqc`) and requires a confirmed
-subscription plus an application record from the default negotiated transport.
+Select channels with recent public chat activity before running the delivery
+probes. Set `TWITCH_TEST_CHANNEL` to a Twitch channel login,
+`YOUTUBE_TEST_CHANNEL_ID` to a YouTube channel ID, and `KICK_TEST_CHANNEL` to
+a Kick channel slug. Each probe skips when its setting is missing. Twitch and
+YouTube stop after one application message and allow up to thirty seconds of
+iteration. Kick requires a confirmed subscription and a socket publication.
+Preloaded history alone leaves the Kick delivery check unsatisfied.
+
+The separate Kick missing-channel probe expects `UserNotFound` for a missing
+slug. Offline timed-generator tests check inactivity against a blocked source.
 
 Offline initialization tests use a loopback HTTPS origin and HTTP proxy to
 verify proxy behavior, custom headers, and cookies on the wire. Invalid,
@@ -293,13 +299,15 @@ occurred. Filters, deduplication, and deadline prefetch can make parsed counts
 differ from output; a count gap is
 evidence to investigate, not proof of message loss.
 
-For an opt-in live CLI smoke matrix, run:
+For the opt-in Kick CLI smoke matrix, set `KICK_TEST_CHANNEL` to a channel
+with active public chat and run:
 
 ```bash
-uv run python scripts/smoke_kick_live.py --run-network --channel xqc \
+uv run python scripts/smoke_kick_live.py --run-network \
   --duration 480 --artifacts /tmp/kick-smoke-new
 ```
 
+Use `--channel` to override the environment selection for one run.
 The artifact directory must not exist. The runner creates it with mode `0700`,
 runs an all-groups capture and a separate messages-only `realtime` capture, each
 for eight minutes by default, then checks help/version, quiet and compact output,
@@ -396,11 +404,11 @@ uv run pytest -v -m network_replay --run-network
 # Volatile live-channel and WebSocket smoke checks
 uv run pytest -v -m network_live --run-network
 
-# Operator-selected external resources such as KICK_TEST_REPLAY_CASE
+# Asset and access conditions, including the KICK_TEST_REPLAY_CASE contract
 uv run pytest -v -m network_environment --run-network
 
-# Every external check
-uv run pytest -v -m network --run-network
+# All network pytest cases, including reasons for skipped probes
+uv run pytest -v -rs -m network --run-network
 ```
 
 ### Make targets

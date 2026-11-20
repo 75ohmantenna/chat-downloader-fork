@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -11,6 +12,8 @@ if TYPE_CHECKING:
 
 
 import requests
+
+_NETWORK_SCOPES = {"network_replay", "network_live", "network_environment"}
 
 
 @pytest.fixture
@@ -63,16 +66,34 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     )
 
 
+def _check_network_marks(item: pytest.Item) -> None:
+    scopes = [mark for mark in item.iter_markers() if mark.name in _NETWORK_SCOPES]
+    network = item.get_closest_marker("network") is not None
+    if not network and not scopes:
+        return
+    if not network or len(scopes) != 1:
+        msg = f"{item.nodeid} must have the network mark and exactly one network scope."
+        raise pytest.UsageError(msg)
+
+    timeout = item.get_closest_marker("timeout")
+    seconds = None
+    if timeout is not None:
+        seconds = timeout.args[0] if timeout.args else timeout.kwargs.get("timeout")
+    if type(seconds) not in (int, float) or not (0 < seconds < math.inf):
+        msg = f"{item.nodeid} must have a positive, finite network test timeout."
+        raise pytest.UsageError(msg)
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(
     config: pytest.Config,
     items: list[pytest.Item],
 ) -> None:
-    if config.getoption("--run-network"):
-        return
-
     skip_network = pytest.mark.skip(
         reason="network tests are opt-in: pass --run-network to enable",
     )
+    run_network = config.getoption("--run-network")
     for item in items:
-        if item.get_closest_marker("network") is not None:
+        _check_network_marks(item)
+        if not run_network and item.get_closest_marker("network") is not None:
             item.add_marker(skip_network)
