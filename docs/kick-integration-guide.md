@@ -342,12 +342,16 @@ increment control counters without a debug line for every keepalive. Recovery
 logs report the actual UTC history window, clock offset, and page bound.
 
 `public_transport.py` owns the primary chat connection, its single reader, and a
-publication queue bounded to 1,024 frames. It adds the independent global
+publication queue bounded to 1,024 frames and 64 MiB of wire payload. It adds the independent global
 connection, its reader, and one REST polling worker when the selected filters
 accept events beyond `text_message`. Changed REST snapshots use a separate queue
 bounded to two frames; a slow consumer backpressures polling rather than growing
-pending state. Receiving already queued socket publications never performs or
-waits for a metadata/viewer HTTP request. Text-only captures retain chat
+pending state. Each snapshot endpoint honors its own Retry-After delay while
+the other endpoint continues its usual cadence. Snapshot cooldowns survive
+reconnects within the capture. While metadata is throttled, reconnect setup
+uses the last channel observation to select category feeds. Receiving already
+queued socket publications never performs or waits for a metadata/viewer HTTP
+request. Text-only captures retain chat
 subscription confirmation, heartbeats, cancellation, and reconnect history
 recovery without a polling worker or public-state requests. They do not require
 public lifecycle events for termination; timeout, inactivity, message limits,
@@ -426,13 +430,16 @@ metadata polling supplies snapshots of livestream changes. Reconnect history
 recovers chat and the current pin; the public APIs do not provide equivalent
 history for arbitrary lifecycle events, so transitions during an outage can be
 missed. Category changes and reader failures stop further socket reads and
-drain accepted publications, including frames waiting for queue space, before
-the consumer receives the reconnect or access error. A separate polling stop
+drain accepted publications, including decoded Centrifugo frames and frames
+waiting for queue space. The consumer receives accepted REST snapshots and
+publications before the reconnect or access error. A separate polling stop
 signal prevents new observations after reconnect or cancellation without
 interrupting that publication drain. A stalled HTTP poll does not hold terminal
 error delivery after the socket readers finish. Close signals and briefly joins
-the polling worker; if an HTTP request is still in flight, the worker retains
-its session and closes it in its final cleanup after the request returns.
+the polling worker and logs at debug level if the worker is still running after
+the 0.2-second join. An in-flight request can overlap the replacement transport.
+The worker retains its session and closes it in its final cleanup after the
+request returns.
 Setup metadata uses a separate setup-local session, closed by that request's
 owner in `finally`; cancellation never waits for the setup request or closes its
 session from another thread. The polling worker constructs and closes its own
@@ -574,6 +581,7 @@ spool checks expansion limits before writing.
 | WebSocket frames per completed data message | 4,096 |
 | Centrifugo entries per batch | 4,096 |
 | Centrifugo queued publications | 4,096 |
+| Merged socket publication queue | 1,024 frames and 64 MiB of wire payload |
 | Decoded history HTTP response | 8 MiB |
 | Decoded metadata, snapshot, or realtime HTTP response | 2 MiB |
 | Serialized replay record, including newline | 16 MiB |

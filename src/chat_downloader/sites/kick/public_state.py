@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from threading import Lock
 from time import monotonic
 from typing import TYPE_CHECKING
 
@@ -14,7 +15,7 @@ from chat_downloader.debugging import logger
 from chat_downloader.utils.json_types import get_dict, get_int, get_list
 
 from .api_client import _classify_response, _decode_json
-from .errors import KickError
+from .errors import KickError, KickServerError
 from .http_response import fetch_bounded_response
 from .http_session import create_kick_session
 
@@ -34,6 +35,34 @@ def category_feeds(channel: JSONDict) -> list[str]:
     return [f"drops_category_{value}" for value in sorted(ids) if value > 0]
 
 
+class PublicSnapshotRetry:
+    """Retain endpoint cooldowns across transports for a single live capture."""
+
+    def __init__(self) -> None:
+        """Start without a server-imposed wait."""
+        self._lock = Lock()
+        self.metadata_at = 0.0
+        self.viewers_at = 0.0
+        self._cached_channel: JSONDict | None = None
+
+    def cached_channel(self) -> JSONDict | None:
+        """Reuse the last observation for setup while its endpoint is throttled."""
+        with self._lock:
+            return self._cached_channel if monotonic() < self.metadata_at else None
+
+    def defer_metadata(self, retry_at: float, channel: JSONDict) -> None:
+        """Remember the minimum wait and a channel snapshot for reconnect setup."""
+        with self._lock:
+            if retry_at > self.metadata_at:
+                self.metadata_at = retry_at
+                self._cached_channel = channel
+
+    def defer_viewers(self, retry_at: float) -> None:
+        """Honor all minimum delays observed for the viewer endpoint."""
+        with self._lock:
+            self.viewers_at = max(self.viewers_at, retry_at)
+
+
 class KickPublicState:
     """Own anonymous GETs for information that the website periodically polls."""
 
@@ -44,6 +73,7 @@ class KickPublicState:
         trust_env: bool = True,
         timeout: tuple[float, float] = (10.0, 30.0),
         session: _KickSession | None = None,
+        snapshot_retry: PublicSnapshotRetry | None = None,
     ) -> None:
         """Create an isolated public snapshot session."""
         self._session = session or create_kick_session(proxy=proxy, trust_env=trust_env)
@@ -52,6 +82,20 @@ class KickPublicState:
         self._channel: JSONDict = {}
         self._last_metadata: JSONDict | None = None
         self._last_viewers: tuple[JSONList, bool] | None = None
+        self._snapshot_retry = snapshot_retry or PublicSnapshotRetry()
+
+    def next_poll_at(self, cadence: float) -> float:
+        """Delay the worker when no endpoint can be polled at its usual cadence."""
+        return max(
+            cadence,
+            min(self._snapshot_retry.metadata_at, self._snapshot_retry.viewers_at),
+        )
+
+    @staticmethod
+    def _retry_at(error: Exception) -> float:
+        if isinstance(error, KickServerError) and error.retry_after is not None:
+            return monotonic() + error.retry_after
+        return 0.0
 
     def _get(
         self, url: str, *, resource: str, params: dict[str, str] | None = None
@@ -112,10 +156,13 @@ class KickPublicState:
     def _poll_metadata(
         self, username: str, record_diagnostic: Callable[[str], None]
     ) -> JSONDict | None:
+        if monotonic() < self._snapshot_retry.metadata_at:
+            return None
         try:
             channel = self.metadata(username)
         except (RequestException, OSError, KickError, ValueError, TypeError) as error:
             record_diagnostic("public_state_poll_failure_count")
+            self._snapshot_retry.defer_metadata(self._retry_at(error), self._channel)
             logger.debug("Kick public metadata poll failed (%s).", type(error).__name__)
             return None
         record_diagnostic("public_state_poll_count")
@@ -177,18 +224,28 @@ class KickPublicState:
                 yield metadata
         if stopped.is_set():
             return
-        try:
-            viewers = self._viewer_snapshot()
-            if stopped.is_set():
-                return
-            if viewers is not None:
-                yield viewers
-        except (RequestException, OSError, KickError, ValueError, TypeError) as error:
-            record_diagnostic("public_state_poll_failure_count")
-            logger.debug("Kick public viewer poll failed (%s).", type(error).__name__)
+        if (viewers := self._poll_viewers(stopped, record_diagnostic)) is not None:
+            yield viewers
         if category_changed:
             msg = "Kick public category feeds changed."
             raise ConnectionError(msg)
+
+    def _poll_viewers(
+        self, stopped: Event, record_diagnostic: Callable[[str], None]
+    ) -> JSONDict | None:
+        if (
+            monotonic() < self._snapshot_retry.viewers_at
+            and get_int(get_dict(self._channel, "livestream"), "id") > 0
+        ):
+            return None
+        try:
+            viewers = self._viewer_snapshot()
+            return None if stopped.is_set() else viewers
+        except (RequestException, OSError, KickError, ValueError, TypeError) as error:
+            self._snapshot_retry.defer_viewers(self._retry_at(error))
+            record_diagnostic("public_state_poll_failure_count")
+            logger.debug("Kick public viewer poll failed (%s).", type(error).__name__)
+            return None
 
     def close(self) -> None:
         """Close the isolated session on its request-owning thread."""

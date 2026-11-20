@@ -27,7 +27,7 @@ from .resource_limits import (
     MAX_CENTRIFUGO_BATCH_ENTRIES,
     MAX_CENTRIFUGO_QUEUED_FRAMES,
 )
-from .websocket_transport import KickPusherTransport
+from .websocket_transport import KickPusherTransport, _wire_size
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -72,7 +72,8 @@ class KickCentrifugoTransport(KickPusherTransport):
         self.client = client
         self._commands: dict[int, tuple[str, str, float]] = {}
         self._next_id = 0
-        self._frames: deque[JSONDict] = deque()
+        self._frames: deque[tuple[JSONDict, int]] = deque()
+        self._pending_error: ConnectionError | KickRealtimeRejected | None = None
         self._resource_error: KickResourceLimit | None = None
         self._refresh_at = float("inf")
         self._heartbeat_at = float("inf")
@@ -93,6 +94,7 @@ class KickCentrifugoTransport(KickPusherTransport):
         """Open the socket and authenticate only its anonymous connection."""
         self._commands.clear()
         self._frames.clear()
+        self._pending_error = None
         self._resource_error = None
         self._next_id = 0
         self._refresh_at = float("inf")
@@ -117,8 +119,18 @@ class KickCentrifugoTransport(KickPusherTransport):
 
     def send_pong(self) -> None:
         """Centrifugo ping is an empty JSON object, answered when requested."""
-        if self._pong_required:
-            self._send({})
+        if self._pong_required and self._pending_error is None:
+            try:
+                self._send({})
+            except ConnectionError as error:
+                # A failed pong must not overtake decoded publications.
+                if not self._frames:
+                    raise
+                self._pending_error = error
+
+    def has_buffered_input(self) -> bool:
+        """Report decoded frames or a terminal error from the current batch."""
+        return bool(self._frames or self._pending_error is not None)
 
     def _lease(self, result: JSONDict) -> None:
         if get_bool(result, "expires"):
@@ -186,11 +198,11 @@ class KickCentrifugoTransport(KickPusherTransport):
             "channel": get_str(push, "channel"),
         }
 
-    def _queue_frame(self, frame: JSONDict) -> None:
+    def _queue_frame(self, frame: JSONDict, wire_bytes: int) -> None:
         if len(self._frames) >= MAX_CENTRIFUGO_QUEUED_FRAMES:
             msg = "Kick realtime queue resource limit exceeded; capture is incomplete."
             raise KickResourceLimit(msg)
-        self._frames.append(frame)
+        self._frames.append((frame, wire_bytes))
 
     def _decode(self, raw: str | bytes) -> None:
         for line in _batch_lines(raw):
@@ -206,7 +218,10 @@ class KickCentrifugoTransport(KickPusherTransport):
                 else:
                     frame = self._publication(get_dict(item, "push"))
                 if frame is not None:
-                    self._queue_frame(frame)
+                    self._queue_frame(frame, _wire_size(line))
+            except (ConnectionError, KickRealtimeRejected) as error:
+                self._pending_error = error
+                return
             except (ValueError, TypeError):
                 # Do not sample wire frames: connect/refresh replies can contain tokens.
                 self._record_diagnostic("invalid_websocket_frame_count")
@@ -227,8 +242,8 @@ class KickCentrifugoTransport(KickPusherTransport):
         """Read batches, enforce command/heartbeat deadlines, and renew the lease."""
         if self._resource_error is not None:
             raise self._resource_error
-        if self._frames:
-            return self._frames.popleft()
+        if self.has_buffered_input():
+            return self._next_frame()
         now = time.monotonic()
         if now >= self._heartbeat_at or any(
             now >= deadline for _kind, _channel, deadline in self._commands.values()
@@ -244,4 +259,12 @@ class KickCentrifugoTransport(KickPusherTransport):
                 raise ConnectionError(msg) from error
             self._command("refresh", {"token": token})
         self._receive_batch()
-        return self._frames.popleft() if self._frames else None
+        return self._next_frame()
+
+    def _next_frame(self) -> JSONDict | None:
+        if self._frames:
+            frame, self.received_wire_bytes = self._frames.popleft()
+            return frame
+        if self._pending_error is not None:
+            raise self._pending_error
+        return None

@@ -382,6 +382,11 @@ def test_kick_guide_resource_limits_match_runtime_budgets() -> None:
         label: f"{limit // (1024 * 1024)} MiB" for label, limit in byte_limits.items()
     }
     expected.update({label: f"{limit:,}" for label, limit in count_limits.items()})
+    queue_mib = kick_limits.MAX_PUBLICATION_QUEUE_BYTES // (1024 * 1024)
+    expected["Merged socket publication queue"] = (
+        f"{kick_limits.MAX_PUBLICATION_QUEUE_FRAMES:,} frames and "
+        f"{queue_mib} MiB of wire payload"
+    )
     assert documented == expected
 
 

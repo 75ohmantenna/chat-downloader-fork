@@ -54,6 +54,7 @@ from .parsing.events import (
 )
 from .parsing.messages import iter_preloaded_messages
 from .parsing.pins import parse_pinned_message_created_event
+from .public_state import PublicSnapshotRetry
 from .public_transport import KickPublicTransport
 from .websocket_transport import (
     _MIN_RECEIVE_TIMEOUT_SECONDS,
@@ -342,13 +343,15 @@ def _open_subscribed_transport(  # noqa: C901 — retry, cancellation, and clean
                 request.message_receive_timeout,
                 _MIN_RECEIVE_TIMEOUT_SECONDS,
             )
+            applied_timeout = transport.set_timeout(effective_receive_timeout)
+            if applied_timeout is not None:
+                effective_receive_timeout = applied_timeout
             log(
                 "debug",
                 "Kick WebSocket receive timeout: "
                 f"requested={request.message_receive_timeout}s, "
                 f"effective={effective_receive_timeout}s.",
             )
-            transport.set_timeout(effective_receive_timeout)
         except ConnectionError as error:
             transport.close()
             if control is not None and control.stopped.is_set():
@@ -614,6 +617,7 @@ def _iter_chat_messages(  # noqa: C901 — live reconnect and key-refresh paths 
             )
             or None,
             diagnostic_callback=diagnostics.increment,
+            snapshot_retry=PublicSnapshotRetry() if public_events else None,
         )
     frame_iterator = frame_iterator or read_frames
 

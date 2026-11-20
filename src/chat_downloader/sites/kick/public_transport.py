@@ -8,20 +8,22 @@ import time
 from contextlib import suppress
 from functools import partial
 from queue import Empty, Full, Queue
-from threading import Event, Lock, Thread
+from threading import TIMEOUT_MAX, Event, Lock, Thread
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 from requests.exceptions import RequestException
 
+from chat_downloader.debugging import logger
 from chat_downloader.sites.proxy import resolve_session_proxy
 from chat_downloader.utils.json_types import get_str
 
 from .centrifugo_transport import KickCentrifugoTransport
 from .constants import PUSHER_SUBSCRIPTION_SUCCEEDED
 from .errors import KickServerError
-from .public_state import KickPublicState, category_feeds
+from .public_state import KickPublicState, PublicSnapshotRetry, category_feeds
 from .realtime_connection import KickRealtimeClient
+from .resource_limits import PublicationBuffer
 from .websocket_transport import KickPusherTransport, _default_connector, read_frames
 
 if TYPE_CHECKING:
@@ -88,6 +90,7 @@ class KickPublicTransport:
         trust_env: bool = True,
         http_timeout: tuple[float, float] = (10.0, 30.0),
         proxy: dict[str, str] | None = None,
+        snapshot_retry: PublicSnapshotRetry | None = None,
     ) -> None:
         """Initialize ownership, bounded buffering, and snapshot state."""
         self._diagnostic_callback = diagnostic_callback
@@ -100,7 +103,7 @@ class KickPublicTransport:
         self._stopped = Event()
         self._reconnect_requested = Event()
         self._reader_errors: Queue[Exception] = Queue()
-        self._queue: Queue[JSONDict | Exception] = Queue(maxsize=1024)
+        self._queue = PublicationBuffer()
         self._pending: Queue[JSONDict] = Queue(maxsize=2)
         self._workers: list[Thread] = []
         self._poll_worker: Thread | None = None
@@ -109,6 +112,7 @@ class KickPublicTransport:
         self._transports: list[KickPusherTransport] = []
         self._clients: list[KickRealtimeClient] = []
         self._state: KickPublicState | None = None
+        self._snapshot_retry = snapshot_retry or PublicSnapshotRetry()
         self._channel: JSONDict = {}
         self._next_poll = 0.0
         self._receive_timeout = 1.0
@@ -122,23 +126,13 @@ class KickPublicTransport:
             msg = "Kick public transport was stopped."
             raise ConnectionError(msg)
 
-    def _put(self, item: JSONDict | Exception) -> None:
-        while not self._stopped.is_set():
-            try:
-                self._queue.put(item, timeout=0.1)
-            except Full:
-                continue
-            else:
-                return
-
     def _put_state(self, frame: JSONDict) -> None:
         while not self._poll_stopped.is_set():
-            try:
-                self._pending.put(frame, timeout=0.1)
-            except Full:
-                continue
-            else:
+            with self._poll_lock, suppress(Full):
+                if not self._poll_stopped.is_set():
+                    self._pending.put_nowait(frame)
                 return
+            self._poll_stopped.wait(0.1)
 
     def _read(
         self, transport: KickPusherTransport, client: KickRealtimeClient | None = None
@@ -149,8 +143,11 @@ class KickPublicTransport:
                     break
                 if frame.get("event") == PUSHER_SUBSCRIPTION_SUCCEEDED:
                     self._record_diagnostic("public_subscription_count")
-                self._put(frame)
-                if self._reconnect_requested.is_set():
+                self._queue.put(frame, transport.received_wire_bytes)
+                if self._reconnect_requested.is_set() and not (
+                    isinstance(transport, KickCentrifugoTransport)
+                    and transport.has_buffered_input()
+                ):
                     break
         except Exception as error:  # noqa: BLE001 — transfer worker failures to the consumer
             if not (
@@ -166,8 +163,9 @@ class KickPublicTransport:
     def _request_reconnect(self, error: Exception) -> None:
         """Stop reads while allowing each accepted publication to finish queuing."""
         self._reader_errors.put_nowait(error)
-        self._reconnect_requested.set()
-        self._poll_stopped.set()
+        with self._poll_lock:
+            self._poll_stopped.set()
+            self._reconnect_requested.set()
         for transport in self._transports:
             transport.request_stop()
 
@@ -179,14 +177,7 @@ class KickPublicTransport:
             proxy = self._configured_proxy
             # Explicit arguments keep transport/session ownership typed and isolated.
             if self._public_events:
-                state = KickPublicState(
-                    proxy=proxy, trust_env=self._trust_env, timeout=self._http_timeout
-                )
-                try:
-                    self._channel = state.metadata(self.username)
-                finally:
-                    state.close()
-                self._record_diagnostic("public_state_poll_count")
+                self._channel = self._setup_metadata()
                 self._check_stopped()
             scopes = (
                 (self.channel_id, None) if self._public_events else (self.channel_id,)
@@ -237,6 +228,21 @@ class KickPublicTransport:
             self.close()
             raise
 
+    def _setup_metadata(self) -> JSONDict:
+        if (channel := self._snapshot_retry.cached_channel()) is not None:
+            return channel
+        state = KickPublicState(
+            proxy=self._configured_proxy,
+            trust_env=self._trust_env,
+            timeout=self._http_timeout,
+        )
+        try:
+            channel = state.metadata(self.username)
+        finally:
+            state.close()
+        self._record_diagnostic("public_state_poll_count")
+        return channel
+
     def subscribe(self, chatroom_id: str) -> None:
         """Subscribe to public feeds using the website connection scopes."""
         self._check_stopped()
@@ -259,7 +265,7 @@ class KickPublicTransport:
             ]
         )
 
-    def set_timeout(self, timeout: float | None) -> None:
+    def set_timeout(self, timeout: float | None) -> float:
         """Start socket readers and, for public events, one owned REST worker."""
         self._check_stopped()
         self._receive_timeout = min(timeout or 1.0, 1.0)
@@ -281,6 +287,7 @@ class KickPublicTransport:
                 worker.start()
                 self._poll_worker = worker
                 self._check_stopped()
+        return self._receive_timeout
 
     def _poll_loop(self) -> None:
         """Create, use, and release a snapshot session on its worker thread."""
@@ -292,11 +299,12 @@ class KickPublicTransport:
                 proxy=self._configured_proxy,
                 trust_env=self._trust_env,
                 timeout=self._http_timeout,
+                snapshot_retry=self._snapshot_retry,
             )
             self._state = state
             self._poll(initial=True)
             while not self._poll_stopped.wait(
-                max(0.0, self._next_poll - time.monotonic())
+                min(TIMEOUT_MAX, max(0.0, self._next_poll - time.monotonic()))
             ):
                 self._poll()
         except Exception as error:  # noqa: BLE001 — transfer construction failures
@@ -322,6 +330,7 @@ class KickPublicTransport:
                 initial_channel=self._channel if initial else None,
             ):
                 self._put_state(frame)
+            self._next_poll = self._state.next_poll_at(self._next_poll)
         except Exception as error:  # noqa: BLE001 — transfer worker failures to the consumer
             if not self._stopped.is_set():
                 self._request_reconnect(error)
@@ -332,21 +341,18 @@ class KickPublicTransport:
         with suppress(Empty):
             return self._pending.get_nowait()
         try:
-            item = self._queue.get(timeout=self._receive_timeout)
+            return self._queue.get(timeout=self._receive_timeout)
         except Empty:
             if self._reconnect_requested.is_set() and not any(
                 worker.is_alive() for worker in self._workers
             ):
-                # A reader may publish and exit just after the timed get failed.
-                try:
-                    item = self._queue.get_nowait()
-                except Empty:
-                    item = self._reader_error()
-            else:
-                return None
-        if isinstance(item, Exception):
-            raise item
-        return item
+                # Workers may enqueue after the initial check or timed get.
+                with suppress(Empty):
+                    return self._pending.get_nowait()
+                with suppress(Empty):
+                    return self._queue.get(timeout=0)
+                raise self._reader_error() from None
+            return None
 
     def _reader_error(self) -> Exception:
         """Retain the terminal outcome, preferring access errors over reconnects."""
@@ -367,10 +373,7 @@ class KickPublicTransport:
             return
         self._stopped.set()
         self._poll_stopped.set()
-        with suppress(Full):
-            self._queue.put_nowait(
-                ConnectionError("Kick public transport was stopped.")
-            )
+        self._queue.stop()
         for transport in self._transports:
             transport.request_stop()
 
@@ -383,6 +386,10 @@ class KickPublicTransport:
             poll_worker = self._poll_worker
         if poll_worker is not None:
             poll_worker.join(timeout=0.2)
+            if poll_worker.is_alive():
+                logger.debug(
+                    "Kick public snapshot worker is still running after shutdown wait."
+                )
         for transport in self._transports:
             transport.close()
         for index, client in enumerate(self._clients):

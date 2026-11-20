@@ -99,7 +99,7 @@ class _KickTransport(Protocol):
         self, timeout: float | None, *, force_discover: bool = False
     ) -> None: ...
     def subscribe(self, chatroom_id: str) -> None: ...
-    def set_timeout(self, timeout: float | None) -> None: ...
+    def set_timeout(self, timeout: float | None) -> float | None: ...
     def recv(self) -> JSONDict | None: ...
     def send_pong(self) -> None: ...
     def request_stop(self) -> None: ...
@@ -232,6 +232,10 @@ def _default_connector(
     return cast("_WebSocketConnection", connection)
 
 
+def _wire_size(raw: str | bytes) -> int:
+    return len(raw.encode("utf-8")) if isinstance(raw, str) else len(raw)
+
+
 class KickPusherTransport:
     """Manage a Kick Pusher WebSocket connection (framing/IO only)."""
 
@@ -260,6 +264,7 @@ class KickPusherTransport:
         self._pusher_http_client = pusher_http_client
         self._diagnostic_callback = diagnostic_callback
         self._ws: _WebSocketConnection | None = None
+        self.received_wire_bytes = 0
 
     def _record_diagnostic(self, name: str) -> None:
         """Record a transport diagnostic when a callback is configured."""
@@ -388,6 +393,7 @@ class KickPusherTransport:
             )
             logger.debug("Discarding non-object Kick WebSocket frame.")
             return None
+        self.received_wire_bytes = _wire_size(raw)
         return cast("JSONDict", frame)
 
     def request_stop(self) -> None:

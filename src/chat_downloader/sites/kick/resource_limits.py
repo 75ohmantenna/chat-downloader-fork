@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import deque
+from queue import Empty
+from threading import Condition
 from typing import TYPE_CHECKING, cast
 
 from .errors import KickResourceLimit
@@ -30,6 +33,8 @@ if TYPE_CHECKING:
 
 MAX_WEBSOCKET_MESSAGE_BYTES = 8 * 1024 * 1024
 MAX_WEBSOCKET_MESSAGE_FRAMES = 4096
+MAX_PUBLICATION_QUEUE_FRAMES = 1024
+MAX_PUBLICATION_QUEUE_BYTES = 64 * 1024 * 1024
 MAX_CENTRIFUGO_BATCH_ENTRIES = 4096
 MAX_CENTRIFUGO_QUEUED_FRAMES = 4096
 MAX_REPLAY_SPOOL_BYTES = 512 * 1024 * 1024
@@ -191,3 +196,56 @@ class ReplayBudget:
             raise KickResourceLimit(msg)
         spool.write(chunk.encode("ascii"))
         self.spool_bytes += len(chunk)
+
+
+class PublicationBuffer:
+    """Bound a negotiated transport's FIFO by item count and wire bytes."""
+
+    def __init__(self, max_items: int = MAX_PUBLICATION_QUEUE_FRAMES) -> None:
+        """Start with no retained publications."""
+        self._items: deque[tuple[JSONDict, int]] = deque()
+        self._max_items = max_items
+        self._wire_bytes = 0
+        self._changed = Condition()
+        self._stopped = False
+
+    def put(self, frame: JSONDict, wire_bytes: int) -> None:
+        """Wait for both bounds, or retire the publication on cancellation."""
+        with self._changed:
+            self._changed.wait_for(
+                lambda: (
+                    self._stopped
+                    or (
+                        len(self._items) < self._max_items
+                        and self._wire_bytes + wire_bytes <= MAX_PUBLICATION_QUEUE_BYTES
+                    )
+                )
+            )
+            if not self._stopped:
+                self._items.append((frame, wire_bytes))
+                self._wire_bytes += wire_bytes
+                self._changed.notify_all()
+
+    def get(self, timeout: float) -> JSONDict:
+        """Pop a publication, releasing its byte charge and waking producers."""
+        with self._changed:
+            self._changed.wait_for(
+                lambda: self._stopped or bool(self._items), timeout=timeout
+            )
+            if self._stopped:
+                msg = "Kick public transport was stopped."
+                raise ConnectionError(msg)
+            if not self._items:
+                raise Empty
+            frame, wire_bytes = self._items.popleft()
+            self._wire_bytes -= wire_bytes
+            self._changed.notify_all()
+            return frame
+
+    def stop(self) -> None:
+        """Release retained frames and wake blocked producers and consumers."""
+        with self._changed:
+            self._stopped = True
+            self._items.clear()
+            self._wire_bytes = 0
+            self._changed.notify_all()

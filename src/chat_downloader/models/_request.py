@@ -245,7 +245,7 @@ class ChatRequest:
         default=DEFAULT_MESSAGE_RECEIVE_TIMEOUT,
         metadata=_cli_metadata(
             "Live socket receive polling timeout in seconds "
-            "(minimum 1 for Twitch and Kick)",
+            "(Twitch minimum 1, Kick public transport uses 1)",
             group="live_transport",
         ),
     )

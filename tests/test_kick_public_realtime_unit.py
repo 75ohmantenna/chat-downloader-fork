@@ -5,7 +5,7 @@ import json
 import time
 from functools import partial
 from queue import Empty, Full, Queue
-from threading import Event, Thread, get_ident
+from threading import TIMEOUT_MAX, Event, Thread, get_ident
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -15,6 +15,7 @@ from requests.exceptions import RequestException
 
 from chat_downloader.errors import CaptchaChallengeRequired
 from chat_downloader.models import ChatRequest
+from chat_downloader.sites import retry as site_retry
 from chat_downloader.sites.kick import live_service
 from chat_downloader.sites.kick import public_state as ps
 from chat_downloader.sites.kick import public_transport as pt
@@ -30,6 +31,7 @@ from chat_downloader.sites.kick.constants import (
 from chat_downloader.sites.kick.errors import (
     KickCountryBlocked,
     KickError,
+    KickRealtimeRejected,
     KickResourceLimit,
     KickServerError,
 )
@@ -37,6 +39,11 @@ from chat_downloader.sites.kick.live_iterator import KickLiveIterator
 from chat_downloader.sites.kick.parsing.events import dispatch_event
 from chat_downloader.sites.kick.parsing.public_events import PUBLIC_MESSAGE_TYPES
 from chat_downloader.sites.kick.public_state import KickPublicState, category_feeds
+from chat_downloader.sites.kick.resource_limits import (
+    MAX_PUBLICATION_QUEUE_BYTES,
+    MAX_WEBSOCKET_MESSAGE_BYTES,
+    PublicationBuffer,
+)
 from chat_downloader.sites.kick.websocket_transport import KickPusherTransport
 from chat_downloader.utils.timed_generator import TimedGenerator
 from tests.kick_helpers import (
@@ -313,7 +320,8 @@ def test_centrifugo_renewal_transient_failure_reconnects():
 def test_centrifugo_reconnect_clears_pending_commands_frames_and_old_lease():
     transport, first_socket, _client = centrifugo()
     transport.subscribe_channels(["old-feed"])
-    transport._frames.append({"event": "stale"})
+    transport._frames.append(({"event": "stale"}, 18))
+    transport._pending_error = ConnectionError("old error")
     transport._refresh_at = 0
     transport._pong_required = True
     second_socket = FakeWebSocket([json.dumps({"id": 1, "connect": {}})])
@@ -333,10 +341,116 @@ def test_viewer_poll_failure_preserves_successful_metadata_and_chat():
     counters = []
     transport._diagnostic_callback = counters.append
     transport._poll()
-    transport._queue.put({"event": "chat"})
+    transport._queue.put({"event": "chat"}, 18)
     assert transport.recv()["event"] == "kick:public_state"
     assert transport.recv()["event"] == "chat"
     assert counters == ["public_state_poll_count", "public_state_poll_failure_count"]
+
+
+def test_public_poll_honors_each_endpoints_retry_after(monkeypatch):
+    now = [1.0]
+    monkeypatch.setattr(ps, "monotonic", lambda: now[0])
+    monkeypatch.setattr(pt.time, "monotonic", lambda: now[0])
+    throttle_metadata = FakeResponse(429)
+    throttle_metadata.headers["Retry-After"] = "180"
+    throttle_viewers = FakeResponse(429)
+    throttle_viewers.headers["Retry-After"] = "180"
+    channel = {"livestream": {"id": 123}}
+    session = FakeKickSession(
+        [
+            FakeResponse(payload=channel),
+            FakeResponse(payload=[]),
+            throttle_metadata,
+            FakeResponse(payload=[{"viewers": 42}]),
+            throttle_viewers,
+            FakeResponse(payload=channel),
+        ]
+    )
+    transport = public_state_transport()
+    transport._state = KickPublicState(session=session)
+    metadata_url = "https://kick.com/api/v2/channels/slug"
+    viewer_url = "https://kick.com/current-viewers"
+
+    transport._poll()
+    transport._pending.get_nowait()
+    transport._pending.get_nowait()
+    now[0] = 61
+    transport._poll()
+    transport._pending.get_nowait()
+    now[0] = 121
+    transport._poll()
+    assert session.requested_urls == [
+        metadata_url,
+        viewer_url,
+        metadata_url,
+        viewer_url,
+        viewer_url,
+    ]
+    assert transport._next_poll == 241
+    now[0] = 181
+    transport._poll()
+    assert len(session.calls) == 5
+    now[0] = 241
+    transport._poll()
+    assert session.requested_urls[-1] == metadata_url
+    assert len(session.calls) == 6
+
+
+def test_reconnect_reuses_channel_and_viewer_cooldowns(monkeypatch):
+    monkeypatch.setattr(ps, "monotonic", lambda: 1)
+    retry = ps.PublicSnapshotRetry()
+    first = FakeKickSession([])
+    state = KickPublicState(session=first, snapshot_retry=retry)
+    channel = {"livestream": {"id": 123, "categories": [{"id": 7}]}}
+    state.metadata = MagicMock(side_effect=KickServerError("limited", retry_after=120))
+    state.viewers = MagicMock(side_effect=KickServerError("limited", retry_after=240))
+    assert (
+        len(
+            list(
+                state.snapshots(
+                    "slug", Event(), lambda _: None, initial_channel=channel
+                )
+            )
+        )
+        == 1
+    )
+    assert list(state.snapshots("slug", Event(), lambda _: None)) == []
+    second = pt.KickPublicTransport(
+        username="slug", channel_id="123", snapshot_retry=retry
+    )
+    constructor = MagicMock()
+    monkeypatch.setattr(pt, "KickPublicState", constructor)
+    assert second._setup_metadata() == channel
+    constructor.assert_not_called()
+    replacement = KickPublicState(session=FakeKickSession([]), snapshot_retry=retry)
+    assert (
+        len(
+            list(
+                replacement.snapshots(
+                    "slug", Event(), lambda _: None, initial_channel=channel
+                )
+            )
+        )
+        == 1
+    )
+    assert replacement.next_poll_at(61) == 121
+
+
+def test_public_worker_clamps_wait_without_shortening_retry_deadline(monkeypatch):
+    transport = public_state_transport()
+    interval = TIMEOUT_MAX * 2
+
+    def poll(*, initial=False):
+        assert initial
+        transport._next_poll = pt.time.monotonic() + interval
+
+    monkeypatch.setattr(pt, "KickPublicState", MagicMock(return_value=transport._state))
+    monkeypatch.setattr(transport, "_poll", poll)
+    wait = MagicMock(return_value=True)
+    monkeypatch.setattr(transport._poll_stopped, "wait", wait)
+    transport._poll_loop()
+    wait.assert_called_once_with(TIMEOUT_MAX)
+    assert transport._next_poll - pt.time.monotonic() > TIMEOUT_MAX
 
 
 def test_public_state_challenge_keeps_access_policy():
@@ -365,7 +479,7 @@ def test_public_http_redirect_poll_preserves_other_snapshot_and_chat(redirect_at
     counters = []
     transport._diagnostic_callback = counters.append
     transport._poll()
-    transport._queue.put({"event": "chat"})
+    transport._queue.put({"event": "chat"}, 18)
     try:
         snapshot = transport.recv()
         if redirect_at == "metadata":
@@ -478,6 +592,60 @@ def test_centrifugo_surfaces_rejected_commands_and_disconnects(reply, error):
     transport, _ws, _client = centrifugo([json.dumps(reply)])
     with pytest.raises(error):
         transport.recv()
+
+
+@pytest.mark.parametrize(
+    ("close_push", "code", "error"),
+    [
+        ("disconnect", 3000, ConnectionError),
+        ("unsubscribe", 4500, KickRealtimeRejected),
+    ],
+)
+def test_centrifugo_drains_publications_before_terminal_push(close_push, code, error):
+    publication = json.dumps(
+        {"push": {"channel": "channel", "pub": {"data": {"event": "published"}}}}
+    )
+    closing = json.dumps({"push": {close_push: {"code": code}}})
+    transport, _ws, _client = centrifugo([f"{publication}\n{closing}\n{publication}"])
+    assert transport.recv()["event"] == "published"
+    assert transport.received_wire_bytes == len(publication) + 1
+    with pytest.raises(error, match="closed a public feed"):
+        transport.recv()
+
+
+def test_centrifugo_avoids_pong_before_draining_terminal_batch():
+    transport, ws, _client = centrifugo(
+        [
+            '{"id":1,"connect":{"pong":true}}',
+            (
+                '{}\n{"push":{"pub":{"data":{"event":"published"}}}}\n'
+                '{"push":{"disconnect":{"code":3500}}}'
+            ),
+        ]
+    )
+    frames = pt.read_frames(transport)
+    assert next(frames)["event"] == PUSHER_CONNECTION_ESTABLISHED
+    assert next(frames)["event"] == PUSHER_PING
+    assert len(ws.sent) == 1
+    assert next(frames)["event"] == "published"
+    with pytest.raises(KickRealtimeRejected):
+        next(frames)
+
+
+@pytest.mark.parametrize("buffered_publication", [False, True])
+def test_centrifugo_failed_pong_preserves_buffered_publication(buffered_publication):
+    batch = "{}"
+    if buffered_publication:
+        batch += '\n{"push":{"pub":{"data":{"event":"published"}}}}'
+    transport, ws, _client = centrifugo(['{"id":1,"connect":{"pong":true}}', batch])
+    frames = pt.read_frames(transport)
+    assert next(frames)["event"] == PUSHER_CONNECTION_ESTABLISHED
+    ws.send = MagicMock(side_effect=OSError("peer closed"))
+    if buffered_publication:
+        assert next(frames)["event"] == PUSHER_PING
+        assert next(frames)["event"] == "published"
+    with pytest.raises(ConnectionError, match="while sending"):
+        next(frames)
 
 
 @pytest.mark.parametrize(
@@ -772,18 +940,31 @@ def test_public_setup_failure_releases_partial_sessions(monkeypatch, error, expe
     state.close.assert_called_once()
 
 
-@pytest.mark.parametrize("redirect_at", ["metadata", "chat", "global"])
-def test_live_opener_retries_public_http_redirect_then_subscribes(
-    monkeypatch, redirect_at
+@pytest.mark.parametrize(
+    ("failure_at", "status"),
+    [
+        ("metadata", 302),
+        ("chat", 302),
+        ("global", 302),
+        ("metadata", 429),
+        ("metadata", 503),
+    ],
+)
+def test_live_opener_retries_public_http_failure_then_subscribes(
+    monkeypatch, failure_at, status
 ):
-    redirect = FakeResponse(
-        302, text="<html>redirect is not a challenge</html>", malformed=True
-    )
-    redirect.headers["Location"] = "https://foreign.invalid/redirect"
+    failure = FakeResponse(status)
+    if status == 302:
+        failure = FakeResponse(status, text="<html>redirect</html>", malformed=True)
+        failure.headers["Location"] = "https://foreign.invalid/redirect"
+    else:
+        failure.headers["Retry-After"] = "120"
+    sleep = MagicMock()
+    monkeypatch.setattr(site_retry, "polling_sleep", sleep)
     descriptor = connection("pusher", app_key="publickey", cluster="us2")
     state_sessions = [
         FakeKickSession(
-            [redirect if redirect_at == "metadata" else FakeResponse(200, {})]
+            [failure if failure_at == "metadata" else FakeResponse(200, {})]
         ),
         FakeKickSession([FakeResponse(200, {})]),
     ]
@@ -800,18 +981,14 @@ def test_live_opener_retries_public_http_redirect_then_subscribes(
     realtime_sessions = [
         *(
             []
-            if redirect_at == "metadata"
+            if failure_at == "metadata"
             else [
                 PostSession(
-                    [
-                        redirect
-                        if redirect_at == "chat"
-                        else FakeResponse(200, descriptor)
-                    ]
+                    [failure if failure_at == "chat" else FakeResponse(200, descriptor)]
                 )
             ]
         ),
-        *([PostSession([redirect])] if redirect_at == "global" else []),
+        *([PostSession([failure])] if failure_at == "global" else []),
         PostSession([FakeResponse(200, descriptor)]),
         PostSession([FakeResponse(200, descriptor)]),
     ]
@@ -821,7 +998,7 @@ def test_live_opener_retries_public_http_redirect_then_subscribes(
     monkeypatch.setattr(rc, "create_kick_session", realtime_factory)
     sockets = [
         BlockingSocket([json.dumps({"event": PUSHER_CONNECTION_ESTABLISHED})])
-        for _ in range(3 if redirect_at == "global" else 2)
+        for _ in range(3 if failure_at == "global" else 2)
     ]
     connector = MagicMock(side_effect=sockets)
     monkeypatch.setattr(pt, "_default_connector", connector)
@@ -844,6 +1021,7 @@ def test_live_opener_retries_public_http_redirect_then_subscribes(
         )
         assert len(attempts) == 2
         assert opened is attempts[1]
+        sleep.assert_called_once_with(0 if status == 302 else 120)
         assert snapshot_created.wait(1)
         assert attempts[0]._stopped.is_set()
         assert state_sessions[0].close_calls == 1
@@ -905,6 +1083,8 @@ def test_public_poll_cannot_delay_queued_chat_or_close_its_inflight_session(
             )
 
     session = BlockedSession([])
+    debug = MagicMock()
+    monkeypatch.setattr(pt.logger, "debug", debug)
     transport = pt.KickPublicTransport(username="slug", channel_id="123")
     monkeypatch.setattr(ps, "create_kick_session", lambda **_kwargs: session)
     transport._channel = channel
@@ -914,7 +1094,7 @@ def test_public_poll_cannot_delay_queued_chat_or_close_its_inflight_session(
         assert entered.wait(1)
         assert transport._workers == []
         assert transport._poll_worker.is_alive()
-        transport._put({"event": "chat", "data": {"id": "queued"}})
+        transport._queue.put({"event": "chat", "data": {"id": "queued"}}, 44)
         for _ in range(3):
             frame = transport.recv()
             if frame["event"] == "chat":
@@ -932,6 +1112,9 @@ def test_public_poll_cannot_delay_queued_chat_or_close_its_inflight_session(
         assert session.close_calls == 0
         assert transport._poll_worker.is_alive()
         assert transport._poll_stopped.is_set()
+        debug.assert_any_call(
+            "Kick public snapshot worker is still running after shutdown wait."
+        )
     finally:
         transport.close()
         release.set()
@@ -1008,7 +1191,7 @@ def test_category_poll_stops_worker_and_drains_snapshots_and_accepted_chat(monke
         return {"livestream": {"categories": [{"id": 2}]}}
 
     state.metadata.side_effect = metadata
-    transport._put({"event": "accepted chat"})
+    transport._queue.put({"event": "accepted chat"}, 26)
     monkeypatch.setattr(pt, "_PUBLIC_STATE_POLL_INTERVAL", 0)
     try:
         transport.set_timeout(0.001)
@@ -1260,9 +1443,9 @@ def test_public_snapshots_only_emit_changed_values_and_restart_changed_categorie
     assert transport.recv()["event"] == "kick:public_state"
     with pytest.raises(ConnectionError, match="category feeds changed"):
         transport.recv()
-    transport._queue.put({"event": "publication"})
+    transport._queue.put({"event": "publication"}, 24)
     assert transport.recv()["event"] == "publication"
-    transport._queue.put(KickError("rejected"))
+    transport._request_reconnect(KickError("rejected"))
     with pytest.raises(KickError, match="rejected"):
         transport.recv()
     transport.close()
@@ -1302,7 +1485,7 @@ def test_public_poll_failure_is_visible_and_does_not_drop_chat():
     counters = []
     transport._diagnostic_callback = counters.append
     transport._poll()
-    transport._queue.put({"event": "chat"})
+    transport._queue.put({"event": "chat"}, 18)
     assert transport.recv()["event"] == "kick:viewer_count"
     assert transport.recv()["event"] == "chat"
     assert counters == ["public_state_poll_failure_count"]
@@ -1313,12 +1496,12 @@ def test_public_poll_failure_is_visible_and_does_not_drop_chat():
 def test_bounded_queue_shutdown_interrupts_backpressure_and_socket_errors(monkeypatch):
     transport = pt.KickPublicTransport(username="slug", channel_id="123")
     for _ in range(1024):
-        transport._queue.put({"event": "buffered"})
+        transport._queue.put({"event": "buffered"}, 21)
     entered = Event()
 
     def write():
         entered.set()
-        transport._put({"event": "extra"})
+        transport._queue.put({"event": "extra"}, 18)
 
     worker = Thread(target=write)
     worker.start()
@@ -1327,7 +1510,6 @@ def test_bounded_queue_shutdown_interrupts_backpressure_and_socket_errors(monkey
     worker.join(1)
     assert not worker.is_alive()
     transport._stopped.clear()
-    transport._queue.get()
     monkeypatch.setattr(
         pt, "read_frames", MagicMock(side_effect=ConnectionError("lost"))
     )
@@ -1338,6 +1520,89 @@ def test_bounded_queue_shutdown_interrupts_backpressure_and_socket_errors(monkey
     monkeypatch.setattr(pt, "read_frames", lambda _transport: iter([{}]))
     transport._read(child)
     assert child.close.call_count == 2
+
+
+@pytest.mark.timeout(5)
+def test_publication_byte_budget_backpressures_and_releases_on_receive():
+    transport = public_state_transport()
+    frame = {"event": "buffered"}
+    charge = MAX_WEBSOCKET_MESSAGE_BYTES
+    for _ in range(MAX_PUBLICATION_QUEUE_BYTES // charge):
+        transport._queue.put(frame, charge)
+    entered, written = Event(), Event()
+
+    def write():
+        entered.set()
+        transport._queue.put({"event": "extra"}, charge)
+        written.set()
+
+    worker = Thread(target=write, daemon=True)
+    worker.start()
+    try:
+        assert entered.wait(1)
+        assert not written.wait(0.05)
+        assert transport.recv() == frame
+        assert written.wait(1)
+    finally:
+        transport.close()
+        worker.join(1)
+
+
+def test_stop_wakes_consumer_waiting_for_publication(monkeypatch):
+    transport = public_state_transport()
+    transport._receive_timeout = 5
+    entered = Event()
+    original_wait = transport._queue._changed.wait
+
+    def wait(timeout=None):
+        entered.set()
+        return original_wait(timeout)
+
+    monkeypatch.setattr(transport._queue._changed, "wait", wait)
+    errors = []
+
+    def receive():
+        try:
+            transport.recv()
+        except ConnectionError as error:
+            errors.append(str(error))
+
+    worker = Thread(target=receive, daemon=True)
+    worker.start()
+    try:
+        assert entered.wait(1)
+        transport.request_stop()
+        worker.join(1)
+        assert not worker.is_alive()
+        assert errors == ["Kick public transport was stopped."]
+    finally:
+        transport.close()
+
+
+def test_public_receive_timeout_debug_reports_applied_cap(monkeypatch):
+    transport = pt.KickPublicTransport(
+        username="slug", channel_id="123", public_events=False
+    )
+    monkeypatch.setattr(transport, "connect", MagicMock())
+    monkeypatch.setattr(transport, "subscribe", MagicMock())
+    log_message = MagicMock()
+    monkeypatch.setattr(live_service, "log", log_message)
+    try:
+        assert (
+            live_service._open_subscribed_transport(
+                FakeDownloader(),
+                "456",
+                ChatRequest(message_receive_timeout=5.0),
+                lambda: transport,
+            )
+            is transport
+        )
+        assert transport._receive_timeout == 1.0
+        log_message.assert_called_once_with(
+            "debug", "Kick WebSocket receive timeout: requested=5.0s, effective=1.0s."
+        )
+    finally:
+        transport.close()
 
 
 def test_worker_access_failure_reaches_consumer_and_closes_its_http_owner(monkeypatch):
@@ -1359,7 +1624,7 @@ def test_category_reconnect_drains_recorded_prediction_before_resuming_live_chat
     first._channel = {"livestream": {"categories": [{"id": 1}]}}
     first._state.metadata.return_value = {"livestream": {"categories": [{"id": 2}]}}
     prediction = load_fixture("predictions_recorded.json")["events"][0]["frame"]
-    first._queue.put(prediction)
+    first._queue.put(prediction, 100)
     first.connect = lambda *_args, **_kwargs: None
     first.subscribe = lambda *_args: None
     first.set_timeout = lambda *_args: None
@@ -1406,15 +1671,15 @@ def test_category_reconnect_drains_recorded_prediction_before_resuming_live_chat
 @pytest.mark.timeout(5)
 def test_category_reconnect_drains_full_queue_and_inflight_publication(monkeypatch):
     transport = public_state_transport()
-    transport._queue = Queue(maxsize=1)
-    transport._queue.put({"event": "first"})
+    transport._queue = PublicationBuffer(max_items=1)
+    transport._queue.put({"event": "first"}, 18)
     transport._state.metadata.return_value = {"livestream": {"categories": [{"id": 7}]}}
     entering_put = Event()
-    original_put = transport._put
+    original_put = transport._queue.put
 
-    def put(item):
+    def put(item, wire_bytes):
         entering_put.set()
-        original_put(item)
+        original_put(item, wire_bytes)
 
     reads = []
 
@@ -1423,9 +1688,9 @@ def test_category_reconnect_drains_full_queue_and_inflight_publication(monkeypat
         yield {"event": "second"}
         reads.append("unexpected extra read")
 
-    monkeypatch.setattr(transport, "_put", put)
+    monkeypatch.setattr(transport._queue, "put", put)
     monkeypatch.setattr(pt, "read_frames", frames)
-    child = MagicMock()
+    child = MagicMock(received_wire_bytes=19)
     transport._transports.append(child)
     worker = Thread(target=transport._read, args=(child,))
     transport._workers.append(worker)
@@ -1446,12 +1711,41 @@ def test_category_reconnect_drains_full_queue_and_inflight_publication(monkeypat
         transport.close()
 
 
+def test_sibling_reconnect_drains_decoded_centrifugo_batch(monkeypatch):
+    transport = public_state_transport()
+    child, ws, _client = centrifugo(
+        [
+            (
+                '{"push":{"pub":{"data":{"event":"first"}}}}\n'
+                '{"push":{"pub":{"data":{"event":"second"}}}}\n'
+                '{"push":{"unsubscribe":{"code":4500}}}'
+            ),
+        ]
+    )
+    original_put = transport._queue.put
+
+    def put(frame, wire_bytes):
+        original_put(frame, wire_bytes)
+        if frame["event"] == "first":
+            transport._request_reconnect(ConnectionError("sibling stopped"))
+
+    monkeypatch.setattr(transport._queue, "put", put)
+    transport._transports.append(child)
+    transport._read(child)
+    assert ws.closed
+    assert transport.recv()["event"] == "first"
+    assert transport.recv()["event"] == "second"
+    with pytest.raises(KickRealtimeRejected):
+        transport.recv()
+    transport.close()
+
+
 def test_category_reconnect_preserves_terminal_reader_error_after_publications(
     monkeypatch,
 ):
     transport = public_state_transport()
     transport._state = None
-    transport._queue.put({"event": "accepted"})
+    transport._queue.put({"event": "accepted"}, 21)
     transport._request_reconnect(ConnectionError("category change"))
     monkeypatch.setattr(
         pt, "read_frames", MagicMock(side_effect=CaptchaChallengeRequired("blocked"))
@@ -1465,22 +1759,25 @@ def test_category_reconnect_preserves_terminal_reader_error_after_publications(
     transport.close()
 
 
-def test_reconnect_rechecks_publications_after_reader_exits_during_queue_timeout():
-    class LateQueue(Queue):
-        late = True
-
-        def get(self, block=True, timeout=None):
-            if timeout is not None and self.late:
-                self.late = False
-                self.put_nowait({"event": "last accepted publication"})
-                raise Empty
-            return super().get(block=block, timeout=timeout)
-
+@pytest.mark.parametrize("snapshot", [False, True])
+def test_reconnect_rechecks_events_arriving_during_queue_timeout(monkeypatch, snapshot):
     transport = public_state_transport()
     transport._state = None
-    transport._queue = LateQueue()
-    transport._request_reconnect(ConnectionError("category change"))
-    assert transport.recv() == {"event": "last accepted publication"}
+    pending = {"event": "last accepted observation"}
+    original_get = transport._queue.get
+
+    def get(timeout):
+        if timeout > 0 and not transport._reconnect_requested.is_set():
+            if snapshot:
+                transport._put_state(pending)
+            else:
+                transport._queue.put(pending, 38)
+            transport._request_reconnect(ConnectionError("category change"))
+            raise Empty
+        return original_get(timeout)
+
+    monkeypatch.setattr(transport._queue, "get", get)
+    assert transport.recv() == pending
     for _ in range(2):
         with pytest.raises(ConnectionError, match="category change"):
             transport.recv()
