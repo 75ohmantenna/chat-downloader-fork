@@ -737,19 +737,19 @@ To turn a captured drift sample into a permanent regression anchor:
      `test_remapping_contributor_sets_are_disjoint` will catch any duplicate
      between `build_remapping()` and `_KEYS_TO_IGNORE`.
 4. Save the raw InnerTube continuation JSON that triggered the drift in
-   `tests/fixtures/youtube/live_events/` with a descriptive name.
+   `tests/fixtures/youtube/live_events/` with a descriptive name. Record the
+   expected message type or intentional suppression for each action in
+   `tests/test_youtube_drift_harness_unit.py`.
 5. Run the drift harness, then the canonical validation:
    ```bash
    uv run pytest -q tests/test_youtube_drift_harness_unit.py
    make ci
    ```
-   It parameterizes over every dictionary-shaped `live_events/*.json` file and
-   asserts no drift sentinel fires. A passing harness protects those fixture
-   shapes; also verify the affected behavior through its composition tests.
-
-The four sentinel phrases checked by the harness are `"Unknown action"`,
-`"Unknown message type"`, `"Missing keys found"`, and
-`"Parse of action returned empty"`.
+   The harness checks that each raw continuation retains its actions, produces
+   the expected outcomes in order, and emits no unexpected-data diagnostics
+   during message parsing. Recorded event lists have behavioral assertions in
+   `tests/test_youtube_live_event_fixtures_unit.py`. Verify the affected
+   behavior through its composition tests.
 
 ## Common Failure Points
 

@@ -594,7 +594,9 @@ To turn a captured drift sample into a permanent regression anchor:
    - GraphQL hash rotation → update `OPERATION_HASHES` in `constants.py`; see
      [GraphQL hash rotation](#graphql-hash-rotation).
 4. Promote reviewed IRC samples into `tests/fixtures/twitch/live_events/` and
-   replay samples into `tests/fixtures/twitch/graphql/`. Protocol-derived
+   replay samples into `tests/fixtures/twitch/graphql/`. Record the expected
+   IRC message type or replay message ID in
+   `tests/test_twitch_drift_harness_unit.py`. Protocol-derived
    synthetic IRC fixtures are also accepted when they are intentionally built
    from reviewed client evidence. The drift harness runs both fixture families
    through their real parser composition.
@@ -603,8 +605,8 @@ To turn a captured drift sample into a permanent regression anchor:
    uv run pytest -q tests/test_twitch_drift_harness_unit.py
    make ci
    ```
-   It replays every fixture and asserts no drift report fires. A passing harness
-   makes the fix a permanent regression anchor.
+   The harness checks each parsed IRC message type and replay message ID and
+   verifies that parsing emits no drift diagnostics.
 
 ## Common Failure Points
 

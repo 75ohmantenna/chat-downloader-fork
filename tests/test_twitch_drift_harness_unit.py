@@ -2,14 +2,11 @@
 
 r"""Drift regression harness for Twitch IRC and GraphQL chat parsing.
 
-Each fixture in ``tests/fixtures/twitch/live_events/`` that contains a raw
-IRC message string (JSON object with a ``"raw"`` key) is replayed through
-the full IRC parser. The test asserts that the spy-patched ``debug_log`` is
-**never** called, so previously-fixed drift becomes a permanent regression
-anchor.
+Each fixture in ``tests/fixtures/twitch/live_events/`` supplies a raw IRC
+message. Parsing must produce the expected message type without logging drift.
 
 Each fixture in ``tests/fixtures/twitch/graphql/`` is likewise replayed through
-the real VOD edge processor and must yield without any drift report.
+the VOD edge processor and must yield its message ID without logging drift.
 
 Workflow for new drift
 ----------------------
@@ -18,7 +15,7 @@ Workflow for new drift
 3. Fix the parsing code.
 4. Add the reviewed fixture to the matching ``live_events/`` or ``graphql/``
    directory and name it descriptively.
-5. Run this harness — it must pass before merging.
+5. Record the expected IRC message type or replay message ID and run this harness.
 
 GraphQL hash-rotation guard
 ---------------------------
@@ -42,28 +39,50 @@ import chat_downloader.sites.twitch.parsing.message_emotes as _me
 import chat_downloader.sites.twitch.parsing.message_irc_resolve as _mir
 import chat_downloader.sites.twitch.parsing.messages as _messages
 import chat_downloader.sites.twitch.replay_service as _replay
+from chat_downloader.sites.filters import MessageFilter, TimeRangeFilter
 from chat_downloader.sites.twitch.constants import (
+    MESSAGE_GROUPS,
     MESSAGE_REGEX,
     OPERATION_HASHES,
     build_known_irc_keys,
 )
 from chat_downloader.sites.twitch.types import BadgeSet
+from chat_downloader.utils.json_types import dig
 
 _FX_DIR = Path(__file__).resolve().parent / "fixtures" / "twitch" / "live_events"
 _GQL_FX_DIR = Path(__file__).resolve().parent / "fixtures" / "twitch" / "graphql"
 
 
-def _raw_irc_fixtures() -> list[Path]:
-    """Return all live_events fixtures that carry a raw IRC message."""
-    paths = []
-    for path in sorted(_FX_DIR.glob("*.json")):
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):  # pragma: no cover
-            continue
-        if isinstance(payload, dict) and "raw" in payload:
-            paths.append(path)
-    return paths
+_EXPECTED_IRC_TYPES = {
+    "irc-clearchat-timeout.json": "ban_user",
+    "irc-clearmsg-deleted-message.json": "delete_message",
+    "irc-privmsg-action.json": "text_message",
+    "irc-privmsg-animated-message.json": "animated-message",
+    "irc-privmsg-crowd-chant.json": "text_message",
+    "irc-privmsg-gif.json": "text_message",
+    "irc-privmsg-japanese-badge.json": "text_message",
+    "irc-privmsg-paid-pinned-chat.json": "text_message",
+    "irc-privmsg-shared-chat.json": "text_message",
+    "irc-privmsg-with-emotes.json": "text_message",
+    "irc-roomstate-follower-slow.json": "room_state",
+    "irc-usernotice-announcement.json": "announcement",
+    "irc-usernotice-charity-donation.json": "charity_donation",
+    "irc-usernotice-gift-sub-base-match.json": "gift_subscription_match",
+    "irc-usernotice-moderator-anniversary.json": "moderator_anniversary",
+    "irc-usernotice-modiversary.json": "moderator_anniversary",
+    "irc-usernotice-one-tap-breakpoint.json": "one_tap_breakpoint_achieved",
+    "irc-usernotice-one-tap-gift-redeemed.json": "one_tap_gift_redeemed",
+    "irc-usernotice-one-tap-streak-expired.json": "one_tap_streak_expired",
+    "irc-usernotice-one-tap-streak-started.json": "one_tap_streak_started",
+    "irc-usernotice-social-sharing-badge.json": "social_sharing_badge",
+    "irc-usernotice-subscription-goal-multimonth.json": "subscription",
+}
+
+_EXPECTED_REPLAY_IDS = {
+    "replay-comment-badge-id.json": "badge-id-message",
+    "replay-comment-basic.json": "message-1",
+    "replay-comment-mobile.json": "mobile-message-1",
+}
 
 
 @pytest.fixture
@@ -82,49 +101,46 @@ def drift_recorder(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    "path",
-    _raw_irc_fixtures(),
-    ids=lambda p: p.name,
+    "name",
+    sorted({path.name for path in _FX_DIR.glob("*.json")} | _EXPECTED_IRC_TYPES.keys()),
 )
-def test_irc_fixture_parses_without_drift(
-    path: Path, drift_recorder: list[str]
-) -> None:
+def test_irc_fixture_parses_without_drift(name: str, drift_recorder: list[str]) -> None:
     """All curated IRC fixtures must parse without triggering drift logs."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    raw: str = payload["raw"]
+    payload = json.loads((_FX_DIR / name).read_text(encoding="utf-8"))
+    assert isinstance(payload, dict), f"{name} must contain a fixture object"
+    raw = dig(payload, "raw")
+    assert isinstance(raw, str), f"{name} must contain a raw IRC string"
+    assert name in _EXPECTED_IRC_TYPES, f"{name} needs an expected message type"
     match = MESSAGE_REGEX.search(raw)
     if match is None:
-        pytest.fail(f"{path.name}: MESSAGE_REGEX did not match the raw string")
+        pytest.fail(f"{name}: MESSAGE_REGEX did not match the raw string")
     badge_set = BadgeSet(global_badges={}, channel_badges={})
     parsed = _messages._parse_irc_item(match, badge_set=badge_set)
     unexpected_keys = parsed.keys() - build_known_irc_keys()
-    assert not drift_recorder, f"{path.name} triggered drift log(s):\n" + "\n".join(
+    assert not drift_recorder, f"{name} triggered drift log(s):\n" + "\n".join(
         f"  {line}" for line in drift_recorder
     )
     assert not unexpected_keys, (
-        f"{path.name} produced unexpected parsed keys: {sorted(unexpected_keys)}"
+        f"{name} produced unexpected parsed keys: {sorted(unexpected_keys)}"
     )
-
-
-class _AllowAll:
-    def check(self, _data: dict[str, Any]) -> str:
-        return "yield"
-
-    def should_add(self, _data: dict[str, Any]) -> bool:
-        return True
+    assert parsed.get("message_type") == _EXPECTED_IRC_TYPES[name]
 
 
 @pytest.mark.parametrize(
-    "path",
-    sorted(_GQL_FX_DIR.glob("*.json")),
-    ids=lambda p: p.name,
+    "name",
+    sorted(
+        {path.name for path in _GQL_FX_DIR.glob("*.json")} | _EXPECTED_REPLAY_IDS.keys()
+    ),
 )
 def test_graphql_fixture_parses_without_drift(
-    path: Path,
+    name: str,
     drift_recorder: list[str],
 ) -> None:
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    edge = payload["raw"]
+    payload = json.loads((_GQL_FX_DIR / name).read_text(encoding="utf-8"))
+    assert isinstance(payload, dict), f"{name} must contain a fixture object"
+    edge = payload.get("raw")
+    assert isinstance(edge, dict), f"{name} must contain a raw GraphQL edge"
+    assert name in _EXPECTED_REPLAY_IDS, f"{name} needs an expected replay message ID"
 
     drift_logger = logging.getLogger("twitch-drift-harness")
     drift_logger.setLevel(logging.DEBUG)
@@ -133,14 +149,15 @@ def test_graphql_fixture_parses_without_drift(
         offset=0.0,
         creator_channel_id="123",
         badge_set=BadgeSet(global_badges={}, channel_badges={}),
-        time_filter=_AllowAll(),
-        msg_filter=_AllowAll(),
+        time_filter=TimeRangeFilter(),
+        msg_filter=MessageFilter(MESSAGE_GROUPS, groups_to_add=["all"]),
         logger_obj=drift_logger,
     )
 
     assert disposition == "yield"
     assert data is not None
-    assert not drift_recorder, f"{path.name} triggered drift log(s): {drift_recorder}"
+    assert data.get("message_id") == _EXPECTED_REPLAY_IDS[name]
+    assert not drift_recorder, f"{name} triggered drift log(s): {drift_recorder}"
     expected_badges = payload.get("expected_author_badges")
     if expected_badges is not None:
         author = data.get("author")
