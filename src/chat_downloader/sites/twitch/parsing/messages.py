@@ -103,7 +103,9 @@ def _parse_message_info(message: object) -> dict[str, Any]:
                 emote_locations[emote_id] = []
                 emotes[emote_id] = {
                     "id": emote_id,
-                    "images": _generate_emote_image_list(emote_id),
+                    "images": tuple(
+                        image.copy() for image in _generate_emote_image_list(emote_id)
+                    ),
                     "name": message_text[begin : end + 1],
                 }
 

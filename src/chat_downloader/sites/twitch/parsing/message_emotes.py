@@ -46,9 +46,8 @@ def _parse_author_images(original_url: str) -> list[dict[str, Any]]:
 def _generate_emote_image_list(emote_id: str) -> tuple[dict[str, Any], ...]:
     """Generate the canonical, lru-cached image list for a Twitch emote ID.
 
-    Returns an immutable tuple of six image dicts (three sizes by two
-    themes); tuples serialize as JSON arrays so output is unchanged.
-    Callers must not mutate the individual dicts.
+    Returns a tuple of six image dictionaries (three sizes by two themes).
+    Copy the dictionaries before attaching them to a message.
     """
     images = []
     for theme in _EMOTE_IMAGE_THEMES:
@@ -84,7 +83,9 @@ def _parse_emotes(text: str) -> list[dict[str, Any]]:
         emote = {
             "id": emote_id,
             "locations": match[1].split(","),
-            "images": _generate_emote_image_list(emote_id),
+            "images": tuple(
+                image.copy() for image in _generate_emote_image_list(emote_id)
+            ),
         }
         emotes.append(emote)
 

@@ -125,6 +125,9 @@ modules directly when tests or integrations need patch points:
 `graphql_client.py` for GraphQL, `irc_transport.py` for live IRC,
 `replay_transport.py` for replay comments, and `parsing/` for message shaping.
 
+Each live IRC or replay message receives its own emote image dictionaries.
+The parsers reuse cached image metadata for each emote ID.
+
 ## Live Capture Details
 
 IRC ACTION messages remove both framing delimiters before emote lookup and

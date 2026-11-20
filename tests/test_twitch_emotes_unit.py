@@ -1,18 +1,51 @@
 # SPDX-License-Identifier: MIT
 
-"""Isolated unit tests for message_emotes pure helper functions."""
+"""Twitch emote helpers and message parsing contracts."""
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
+from chat_downloader.sites.twitch.constants import MESSAGE_REGEX
 from chat_downloader.sites.twitch.parsing.message_emotes import (
     _add_text_for_emotes,
     _generate_emote_image_list,
     _parse_emotes,
 )
+from chat_downloader.sites.twitch.parsing.messages import _parse_irc_item, _parse_item
+
+_FIXTURE_DIR = Path(__file__).parent / "fixtures" / "twitch"
+_KAPPA_IMAGE_URL = "https://static-cdn.jtvnw.net/emoticons/v2/25/default/light/1.0"
+
+
+def test_irc_messages_own_emote_images(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = _FIXTURE_DIR / "live_events" / "irc-privmsg-with-emotes.json"
+    frame = json.loads(fixture.read_text(encoding="utf-8"))["raw"]
+    match = MESSAGE_REGEX.search(frame)
+    assert match is not None
+
+    images = _parse_irc_item(match)["emotes"][0]["images"]
+    assert isinstance(images, tuple)
+    assert images[0]["url"] == _KAPPA_IMAGE_URL
+    monkeypatch.setitem(images[0], "url", "https://example.invalid/edited.png")
+
+    assert _parse_irc_item(match)["emotes"][0]["images"][0]["url"] == _KAPPA_IMAGE_URL
+
+
+def test_replay_messages_own_emote_images(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixture = _FIXTURE_DIR / "graphql" / "replay-comment-mobile.json"
+    comment = json.loads(fixture.read_text(encoding="utf-8"))["raw"]["node"]
+
+    images = _parse_item(comment, offset=0.0)["emotes"][0]["images"]
+    assert isinstance(images, tuple)
+    assert images[0]["url"] == _KAPPA_IMAGE_URL
+    monkeypatch.setitem(images[0], "url", "https://example.invalid/edited.png")
+
+    next_message = _parse_item(comment, offset=0.0)
+    assert next_message["emotes"][0]["images"][0]["url"] == _KAPPA_IMAGE_URL
 
 
 @pytest.mark.parametrize("emote_id", ["25", "1902"])
