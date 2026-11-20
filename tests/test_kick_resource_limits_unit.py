@@ -536,7 +536,7 @@ def test_configured_message_limit_preserves_collected_history(tracked_spools):
         diagnostics=state,
     )
     chat = Chat(source, diagnostics=state, id="video", status="past")
-    configure_chat(chat, request, SimpleNamespace())
+    configure_chat(chat, request, Mock(is_live_status=Mock(return_value=False)))
     assert [row["message_id"] for row in chat] == ["older"]
     assert state["termination_reason"] == "message_limit"
     assert state["history_complete"] is True
@@ -570,7 +570,7 @@ def test_late_fetch_cancellation_preserves_configured_deadline(
         diagnostics=state,
     )
     chat = Chat(source, diagnostics=state, id="video", status="past")
-    configure_chat(chat, request, SimpleNamespace())
+    configure_chat(chat, request, Mock(is_live_status=Mock(return_value=False)))
     timed = chat.chat
     try:
         assert entered.wait(2)

@@ -107,7 +107,7 @@ class ContinuousWriter:
             self._writer = None
             if self._prepared_file is not None:
                 prepared, self._prepared_file = self._prepared_file, None
-                prepared.close()
+                prepared.close(discard=True)
             raise
 
     def _get_extension(self, file_name: str | None) -> str:
@@ -173,7 +173,7 @@ class ContinuousWriter:
                 self._file_identity = (prepared.info.st_dev, prepared.info.st_ino)
         except BaseException:
             if prepared is not None:
-                prepared.close()
+                prepared.close(discard=True)
             raise
 
     def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
@@ -196,7 +196,7 @@ class ContinuousWriter:
         writer = self._writer
         if self._prepared_file is not None:
             prepared, self._prepared_file = self._prepared_file, None
-            prepared.close()
+            prepared.close(discard=True)
         if writer is not None:
             writer.close()
 

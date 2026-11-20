@@ -12,6 +12,7 @@ from chat_downloader._shared_defaults import DEFAULT_MAX_SEEN_MESSAGE_IDS
 from chat_downloader.debugging import log
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.output.targets import ChatOutputWriter, _OutputTargets
+from chat_downloader.output.writers import TextContinuousWriter
 
 from ._message_dedup import _FormattedMessageDeduplicator
 
@@ -19,7 +20,9 @@ if TYPE_CHECKING:
     from collections.abc import Generator
     from pathlib import Path
 
+    from chat_downloader.output.writers import ContinuousFileWriter
     from chat_downloader.sites.models import Chat
+    from chat_downloader.utils.json_types import JSONDict
 
 
 class _ChatHost(Protocol):
@@ -68,8 +71,10 @@ class _ChatOutputDispatcher:
             max_seen_message_ids,
         )
 
-    def _initialise_writers(self) -> None:
-        """Initialize each attached writer once before dispatch begins."""
+    def _initialise_writers(self, item: JSONDict) -> tuple[str | None, bool | None]:
+        """Prepare outputs and render the initial record before activation."""
+        formatted: str | None = None
+        emit_formatted: bool | None = None
         self._targets.resolve(title=self._chat.title, video_id=self._chat.id)
         pending = [
             writer
@@ -80,14 +85,18 @@ class _ChatOutputDispatcher:
             for writer in pending:
                 if isinstance(writer, ContinuousWriter):
                     writer._prepare_output()
-            self._snapshot_records()
-            self._transfer_writers(pending)
-            # Collective validation is the commit boundary. Activation below
-            # uses pinned descriptors, never another rejecting namespace lookup.
-            for writer in pending:
-                if isinstance(writer, ContinuousWriter) and writer.writer is not None:
-                    writer.writer._initialize_file()
-                self._initialised_writer_ids.add(id(writer))
+            concrete_writers = self._transfer_writers(pending)
+            if self._has_pending_formatted_output(concrete_writers):
+                emit_formatted = self._formatted_deduplicator.should_emit(item)
+                if emit_formatted:
+                    formatted = self._chat.format(item)
+            # All namespace and tail checks succeeded. Activation uses the
+            # same descriptors and can still raise on filesystem I/O.
+            for concrete in concrete_writers:
+                concrete._initialize_file()
+            for concrete in concrete_writers:
+                concrete._commit_reservation()
+            self._initialised_writer_ids.update(map(id, pending))
         except BaseException:
             self.close()
             raise
@@ -95,8 +104,19 @@ class _ChatOutputDispatcher:
             for writer in pending:
                 if isinstance(writer, ContinuousWriter):
                     writer._defer_initialization = False
+        return formatted, emit_formatted
 
-    def _transfer_writers(self, pending: list[ChatOutputWriter]) -> None:
+    def _has_pending_formatted_output(
+        self, concrete_writers: list[ContinuousFileWriter]
+    ) -> bool:
+        """Pre-render when a built-in group will activate a formatted output."""
+        return any(
+            isinstance(concrete, TextContinuousWriter) for concrete in concrete_writers
+        ) and all(isinstance(writer, ContinuousWriter) for writer in self.writers)
+
+    def _transfer_writers(
+        self, pending: list[ChatOutputWriter]
+    ) -> list[ContinuousFileWriter]:
         """Transfer and validate all streams before any destructive setup."""
         for writer in pending:
             if not writer.is_initialised():
@@ -104,11 +124,14 @@ class _ChatOutputDispatcher:
                 if isinstance(writer, ContinuousWriter):
                     writer._defer_initialization = True
                 writer.initialize()
+        concrete_writers = []
         for writer in pending:
             if isinstance(writer, ContinuousWriter) and writer.writer is not None:
                 concrete = writer.writer
                 if concrete._prepared_file is not None:
                     concrete._prepared_file.validate(concrete._pending_file)
+                    concrete_writers.append(concrete)
+        return concrete_writers
 
     def output_paths(self) -> list[Path]:
         """Observe selected output paths without opening files or freezing metadata."""
@@ -126,9 +149,37 @@ class _ChatOutputDispatcher:
         if not self.writers:
             return
 
-        self._initialise_writers()
-        formatted_item: str | None = None
-        emit_formatted: bool | None = None
+        formatted_item, emit_formatted = self._initialise_writers(item)
+        if self._record_snapshots is not None:
+            self._snapshot_records(self._record_snapshots)
+            self._write_item(item, formatted_item, emit_formatted=emit_formatted)
+        elif len(self.writers) > 1 and all(
+            isinstance(writer, ContinuousWriter) for writer in self.writers
+        ):
+            with self.record_transaction():
+                try:
+                    self._write_item(
+                        item, formatted_item, emit_formatted=emit_formatted
+                    )
+                except BaseException:
+                    # Closing can flush buffered bytes. Finish it before
+                    # restoring the prefixes through the duplicated descriptors.
+                    with suppress(Exception):
+                        self.close()
+                    raise
+        else:
+            self._write_item(item, formatted_item, emit_formatted=emit_formatted)
+
+    def _write_item(
+        self,
+        item: JSONDict,
+        formatted_item: str | None,
+        *,
+        emit_formatted: bool | None,
+    ) -> None:
+        """Dispatch one item after output activation."""
+        if emit_formatted is False:
+            self._formatted_duplicates_suppressed += 1
         for writer in self.writers:
             if writer.output_mode != "formatted":
                 writer.write(item, flush=True)
@@ -146,47 +197,39 @@ class _ChatOutputDispatcher:
             writer.write(formatted_item, flush=True)
             self._records_written_by_writer[id(writer)] += 1
 
-    def _snapshot_records(self) -> None:
+    def _snapshot_records(self, snapshots: dict[int, tuple[int, int]]) -> None:
         """Hold independent descriptors so shutdown cannot redirect rollback."""
-        if self._record_snapshots is None:
-            return
         for writer in self.writers:
-            if id(writer) in self._record_snapshots:
+            if id(writer) in snapshots:
                 continue
             if not isinstance(writer, ContinuousWriter):
                 msg = "Checkpoint rollback requires descriptor-backed output writers."
                 raise TypeError(msg)
             concrete = writer.writer
-            prepared = writer._prepared_file
-            stream = (
-                concrete.file
-                if concrete is not None
-                else prepared.stream
-                if prepared is not None
-                else None
-            )
+            stream = concrete.file if concrete is not None else None
             if stream is not None:
                 size = os.fstat(stream.fileno()).st_size
-                self._record_snapshots[id(writer)] = (os.dup(stream.fileno()), size)
+                snapshots[id(writer)] = (os.dup(stream.fileno()), size)
 
     @contextmanager
     def record_transaction(self) -> Generator[None, None, None]:
         """Restore descriptor-pinned prefixes/counts after a torn emission.
 
-        Checkpointed iteration stops after a failed record, so the formatted
-        deduplication cache is discarded with the capture rather than reused.
+        Iteration stops after a failed record, so the formatted deduplication
+        cache is discarded with the capture rather than reused.
         """
-        self._record_snapshots = {}
+        snapshots: dict[int, tuple[int, int]] = {}
+        self._record_snapshots = snapshots
         counts = dict(self._records_written_by_writer)
         duplicates = self._formatted_duplicates_suppressed
         try:
-            self._snapshot_records()
+            self._snapshot_records(snapshots)
             yield
         except StopIteration:
             raise
         except BaseException:
             try:
-                for descriptor, previous_size in self._record_snapshots.values():
+                for descriptor, previous_size in snapshots.values():
                     os.ftruncate(descriptor, previous_size)
                     os.fsync(descriptor)
             except BaseException:
@@ -196,7 +239,7 @@ class _ChatOutputDispatcher:
             self._formatted_duplicates_suppressed = duplicates
             raise
         finally:
-            for descriptor, _size in self._record_snapshots.values():
+            for descriptor, _size in snapshots.values():
                 with suppress(OSError):
                     os.close(descriptor)
             self._record_snapshots = None

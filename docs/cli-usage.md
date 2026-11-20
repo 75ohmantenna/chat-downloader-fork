@@ -200,6 +200,10 @@ YouTube JSONL retains both the main and ticker forms of paid events; replay
 pairs share the precise provider offset even when the ticker's nested display
 text is rounded to whole seconds. TXT output emits one semantic paid event.
 
+Capture setup checks the selected format name and validates the structure of
+custom presets before opening output files. Built-in formatted outputs render
+the initial record before applying truncations or repairs.
+
 Output names may contain `{title}` and `{id}` placeholders; use `{{` and `}}`
 for literal braces. Other fields, conversions, and format specifications are
 rejected when the request is validated. Metadata is sanitized before
@@ -212,23 +216,30 @@ Fixed explicit paths retain overwrite and append behavior, including names with
 escaped literal braces. Capture destinations must be regular files with one
 link: symbolic links, hard links, special files, and unverifiable file identities
 are rejected before repair or truncation. New files are created with mode `0600`
-where POSIX permissions apply.
+where POSIX permissions apply. On setup failure, the capture tries to release
+unused generated names that still identify the empty files it created.
 
 Every record is flushed to the OS as it is written. A write also synchronizes
 the file to disk when at least 60 seconds have elapsed since the previous sync;
 writers perform a final `fsync` during normal shutdown. A power loss can lose
 records written since the last sync. A flush or sync failure is reported as an
-output error instead of allowing the capture to
-appear successful. When appending to JSONL, a crash-truncated final record is
-removed before new records are written; a complete final record missing only
+output error. For captures using multiple built-in writers, a failed record
+triggers rollback to the previous record boundary. All destinations and append
+tails are checked before activation. Append activation rejects files whose size
+or modification time changed after tail inspection. A filesystem failure while
+applying the initial truncations or repairs can leave earlier destinations changed. When
+appending to JSONL, a crash-truncated final record is removed before new records
+are written; a complete final record missing only
 its newline is kept and terminated. JSONL tail repair bounds its backward search
 to one 16 MiB record, an optional trailing CR, and a preceding LF boundary byte.
 It additionally inspects up to two bytes at that boundary to identify LF or
-CRLF, then rereads only the bounded final record for validation. An unterminated
-tail over that limit or containing an encoding signature or raw null byte
-raises an error before any existing bytes are changed. Total capture size is
-independent of this tail-read cap. Text append mode also terminates an existing
-final line and searches up to 16 MiB for the previous line ending. Append retains
+CRLF, then rereads only the bounded final record for validation. Appending also
+checks the first four and last 8,192 bytes for common encoding signatures or raw
+null bytes, including when the file appears to end with LF. A detected encoding
+error or an unterminated tail over the limit leaves existing bytes intact.
+Total capture size is independent of this tail-read cap. Text append mode also
+terminates an existing final line and searches up to 16 MiB for the previous
+line ending. Append retains
 the last LF or CRLF found for both repair and new records, even on a host with
 different native line endings. If the search finds no terminator, the host
 convention is used. A trailing CR establishes CRLF in that case. A partial

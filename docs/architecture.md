@@ -128,10 +128,11 @@ text append mode also terminates an existing final line before appending. Output
 path aliases resolving to the same file are attached only once after metadata
 expansion. Generated destinations use exclusive creation; existing generated
 targets are errors rather than overwrite/append targets. Explicit-path files
-must be regular, singly linked, and identity-verifiable. Writers validate before
-truncation and retain one descriptor for repair and output; checkpoint rollback
-uses held descriptors rather than reopening paths. Manifests reject replaced
-output identities before hashing.
+must be regular, singly linked, and identity-verifiable. Writers check all
+destination identities and append tails before applying repairs or truncations.
+They retain the inspected streams for repair and output. Built-in multi-output
+captures and checkpointed captures restore failed records using held descriptors.
+Manifests reject replaced output identities before hashing.
 Input inspection and parity reads cap physical record content at 16 MiB,
 excluding LF/CRLF. JSONL append repair applies the same cap to unterminated
 tails before decoding or changing bytes; these are read limits, not a general
@@ -207,6 +208,7 @@ module names.
 
 | Module | Purpose |
 |--------|---------|
+| `_append_tail.py` | Bounded append inspection, encoding and newline checks, and descriptor-pinned repairs |
 | `_secure_file.py` | Non-destructive regular-file acquisition, pinned directory/file identity checks, and exclusive private capture creation |
 | `capture_parity.py` | Internal provider-neutral streaming audit state machine for JSONL/TXT formatting, deduplication, physical-newline, input-identity, and content-safety parity checks |
 | `continuous_write.py` | `ContinuousWriter` factory; re-exports writer types |

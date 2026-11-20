@@ -10,143 +10,25 @@ import json
 import os
 import time
 from abc import ABC, abstractmethod
-from codecs import BOM_UTF8, BOM_UTF16_BE, BOM_UTF16_LE
 from typing import TYPE_CHECKING, Any
 
 from chat_downloader.debugging import log
-from chat_downloader.output._secure_file import _OutputFile
-from chat_downloader.utils._bounded_records import (
-    MAX_CAPTURE_RECORD_BYTES,
-    CaptureRecordLimitError,
+from chat_downloader.output._append_tail import (
+    _FileActivation,
+    _inspect_jsonl_final_line,
+    _inspect_text_final_line,
 )
+from chat_downloader.output._secure_file import _OutputFile
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from typing import IO, BinaryIO
 
-# Monotonic seconds between write-triggered fsync()s. Per-record flush moves
-# records into the OS; fsync requests durable storage for those written so far.
 _FSYNC_INTERVAL_SECONDS = 60.0
-_TAIL_SCAN_BYTES = 8192
-
-
-def _newline_at(file: BinaryIO, end: int) -> str:
-    """Identify the terminator ending at this byte offset."""
-    file.seek(max(0, end - 2))
-    return "\r\n" if file.read(min(2, end)) == b"\r\n" else "\n"
-
-
-def _terminate_final_line(file: BinaryIO, end: int, newline: str) -> None:
-    """Replace a partial CR terminator rather than duplicating it."""
-    file.seek(end - 1)
-    if file.read(1) == b"\r":
-        file.truncate(end - 1)
-    file.seek(0, os.SEEK_END)
-    file.write(newline.encode("ascii"))
-
-
-def _repair_text_final_line(file: BinaryIO, file_name: str) -> str:
-    """Terminate the final line and retain the last existing newline style."""
-    end = file.seek(0, os.SEEK_END)
-    if not end:
-        return os.linesep
-    file.seek(end - 1)
-    last_byte = file.read(1)
-    if last_byte == b"\n":
-        return _newline_at(file, end)
-    newline: str = "\r\n" if last_byte == b"\r" else os.linesep
-    scan_start = max(0, end - MAX_CAPTURE_RECORD_BYTES)
-    position = end
-    while position > scan_start:
-        start = max(scan_start, position - _TAIL_SCAN_BYTES)
-        file.seek(start)
-        index = file.read(position - start).rfind(b"\n")
-        if index >= 0:
-            newline = _newline_at(file, start + index + 1)
-            break
-        position = start
-    _terminate_final_line(file, end, newline)
-    file.flush()
-    os.fsync(file.fileno())
-    log(
-        "warning",
-        f"Terminated the final text line in {file_name} before append.",
-    )
-    return newline
-
-
-def _repair_jsonl_final_line(file: BinaryIO, file_name: str) -> str:
-    r"""Repair a missing or crash-truncated final newline on the same handle.
-
-    Scan at most one bounded record plus a preceding newline, then validate only
-    that trailing record. Oversized tails fail without changing existing bytes.
-    Never reopen an inspected destination by pathname.
-    """
-    end = file.seek(0, os.SEEK_END)
-    if not end:
-        return os.linesep
-    file.seek(end - 1)
-    last_byte = file.read(1)
-    if last_byte == b"\n":
-        return _newline_at(file, end)
-
-    # Allow a partial CR terminator outside the record's content-byte limit.
-    tail_limit = MAX_CAPTURE_RECORD_BYTES + (last_byte == b"\r")
-    scan_start = max(0, end - tail_limit - 1)
-    position = end
-    truncate_at = 0
-    while position > scan_start:
-        chunk_start = max(scan_start, position - _TAIL_SCAN_BYTES)
-        file.seek(chunk_start)
-        chunk = file.read(position - chunk_start)
-        newline_index = chunk.rfind(b"\n")
-        if newline_index >= 0:
-            truncate_at = chunk_start + newline_index + 1
-            break
-        position = chunk_start
-
-    if end - truncate_at > tail_limit:
-        raise CaptureRecordLimitError
-    newline = (
-        _newline_at(file, truncate_at)
-        if truncate_at
-        else "\r\n"
-        if last_byte == b"\r"
-        else os.linesep
-    )
-
-    file.seek(truncate_at)
-    tail = file.read(end - truncate_at)
-    # UTF-16/32 JSON syntax contains raw NULs, which UTF-8 JSON never emits.
-    # Their BOMs start with a UTF-16 BOM or a raw NUL.
-    if b"\0" in tail or tail.startswith((BOM_UTF8, BOM_UTF16_BE, BOM_UTF16_LE)):
-        msg = f"Unterminated JSONL record in {file_name} must be UTF-8 without a BOM."
-        raise ValueError(msg)
-    try:
-        json.loads(tail.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        file.truncate(truncate_at)
-        action = "Removed an incomplete trailing JSONL record from"
-    else:
-        _terminate_final_line(file, end, newline)
-        action = "Terminated the final JSONL record in"
-    file.flush()
-    os.fsync(file.fileno())
-    log(
-        "warning",
-        f"{action} {file_name} before append.",
-    )
-    return newline
 
 
 def _assert_utc_aware(item: Any) -> None:
-    """Give top-level naive datetimes a specific serialization error.
-
-    JSON does not encode ``datetime`` objects. This cheap scan explains the
-    particularly ambiguous naive case before the standard JSON encoder rejects
-    other unsupported values. Callers must convert datetimes to UTC integer
-    microseconds or strings before writing.
-    """
+    """Explain ambiguous naive datetimes before JSON serialization fails."""
     if not isinstance(item, dict):
         return
     for key, value in item.items():
@@ -182,9 +64,11 @@ class ContinuousFileWriter(ABC):
         self._prepared_file = _prepared_file
         self._defer_initialization = _defer_initialization
         self._pending_file: BinaryIO | None = None
-        self._repair_final_line: Callable[[BinaryIO, str], str] | None = None
+        self._activation: _FileActivation | None = None
 
-    def _open_file(self, repair: Callable[[BinaryIO, str], str]) -> None:
+    def _open_file(
+        self, inspect_tail: Callable[[BinaryIO, str], _FileActivation]
+    ) -> None:
         """Transfer a validated stream, optionally deferring destructive setup."""
         prepared = self._prepared_file or _OutputFile(
             self.file_name, append=not self.overwrite, exclusive=False
@@ -192,52 +76,60 @@ class ContinuousFileWriter(ABC):
         self._prepared_file = prepared
         try:
             self._pending_file = prepared.detach()
-            self._repair_final_line = repair
+            self._activation = (
+                _FileActivation(truncate_at=0)
+                if self.overwrite
+                else _FileActivation.inspect_append(
+                    self._pending_file, self.file_name, inspect_tail
+                )
+            )
             if not self._defer_initialization:
                 prepared.validate(self._pending_file)
                 self._initialize_file()
+                self._commit_reservation()
         except BaseException:
             self.close()
-            prepared.close()
-            self._prepared_file = None
             raise
 
     def _initialize_file(self) -> None:
-        """Commit an already-validated, pinned stream without namespace lookups."""
+        """Activate an already-validated, pinned stream."""
         stream = self._pending_file
-        prepared = self._prepared_file
-        repair = self._repair_final_line
-        if stream is None or prepared is None or repair is None:
+        activation = self._activation
+        if (
+            stream is None or activation is None
+        ):  # pragma: no cover — only transferred writers activate
             return
+        activation.apply(stream, self.file_name)
+        self.file = io.TextIOWrapper(
+            stream, encoding="utf-8", newline=activation.newline
+        )
         self._pending_file = None
-        self._prepared_file = None
-        self._repair_final_line = None
-        try:
-            newline: str = os.linesep
-            if self.overwrite:
-                stream.truncate(0)
-                stream.seek(0)
-            else:
-                newline = repair(stream, self.file_name)
-                stream.seek(0, os.SEEK_END)
-            self.file = io.TextIOWrapper(stream, encoding="utf-8", newline=newline)
-        except BaseException:
-            stream.close()
-            raise
-        finally:
+        self._activation = None
+
+    def _commit_reservation(self) -> None:
+        """Release the namespace guard after the group has activated."""
+        prepared, self._prepared_file = self._prepared_file, None
+        if prepared is not None:
             prepared.close()
 
     def close(self) -> None:
         """Durably flush and close the underlying file handle if open."""
+        prepared = getattr(self, "_prepared_file", None)
+        try:
+            if prepared is not None and prepared.directory_fd is not None:
+                prepared.discard_empty_reservation()
+            self._close_stream()
+        finally:
+            if prepared is not None:
+                self._prepared_file = None
+                prepared.close(discard=True)
+
+    def _close_stream(self) -> None:
+        """Close the pending binary stream or the activated text stream."""
         pending = getattr(self, "_pending_file", None)
         if pending is not None:
             self._pending_file = None
-            try:
-                pending.close()
-            finally:
-                prepared, self._prepared_file = self._prepared_file, None
-                if prepared is not None:
-                    prepared.close()
+            pending.close()
         if self.file:
             if getattr(self.file, "closed", False) is True:
                 self.file = None
@@ -315,7 +207,7 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
             _defer_initialization=_defer_initialization,
         )
         self.sort_keys = sort_keys
-        self._open_file(_repair_jsonl_final_line)
+        self._open_file(_inspect_jsonl_final_line)
 
     def write(self, item: Any, *, flush: bool = False) -> None:
         """Write *item* as a single JSON line."""
@@ -349,7 +241,7 @@ class TextContinuousWriter(ContinuousFileWriter):
             _prepared_file=_prepared_file,
             _defer_initialization=_defer_initialization,
         )
-        self._open_file(_repair_text_final_line)
+        self._open_file(_inspect_text_final_line)
 
     def write(self, item: Any, *, flush: bool = False) -> None:
         """Write *item* as a string line."""

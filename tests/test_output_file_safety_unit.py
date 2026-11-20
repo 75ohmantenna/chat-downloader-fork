@@ -22,6 +22,10 @@ from chat_downloader.output.writers import (
 )
 from chat_downloader.runtime.runner import execute_run
 from chat_downloader.sites.models import Chat
+from chat_downloader.utils._bounded_records import (
+    MAX_CAPTURE_RECORD_BYTES,
+    CaptureRecordLimitError,
+)
 from tests.test_capture_checkpoint_unit import Downloader, parameters
 
 _SECRET = "synthetic-private-output-sentinel"  # noqa: S105 — synthetic capture data
@@ -493,6 +497,178 @@ def test_prepared_handle_is_closed_when_later_preflight_fails(tmp_path, monkeypa
     assert first.read_text() == _SECRET
     assert prepared
     assert all(stream.closed for stream in prepared)
+
+
+def test_append_validates_every_tail_before_repair(tmp_path):
+    first, second = tmp_path / "first.jsonl", tmp_path / "second.jsonl"
+    original = b'{"prior":true}\n{"partial":'
+    first.write_bytes(original)
+    second.write_bytes(b"x" * (MAX_CAPTURE_RECORD_BYTES + 1))
+    chat = Chat(iter([{"message_id": "one"}]))
+    for path in (first, second):
+        chat.attach_writer(
+            ContinuousWriter(str(path), overwrite=False, lazy_initialise=True)
+        )
+
+    with pytest.raises(CaptureRecordLimitError):
+        next(chat)
+
+    assert first.read_bytes() == original
+    assert second.stat().st_size == MAX_CAPTURE_RECORD_BYTES + 1
+
+
+def test_group_append_rejects_a_changed_tail_before_repair(tmp_path, monkeypatch):
+    first, second = tmp_path / "first.jsonl", tmp_path / "second.jsonl"
+    first.write_bytes(b'{"prior":true}\n{"partial":')
+    second.write_bytes(b'{"second":true}\n{"partial":')
+    initialize = ContinuousWriter.initialize
+
+    def append_during_setup(writer):
+        if writer.file_name == str(second):
+            with ContinuousWriter(str(first), overwrite=False) as concurrent:
+                concurrent.write({"concurrent": True})
+        initialize(writer)
+
+    monkeypatch.setattr(ContinuousWriter, "initialize", append_during_setup)
+    chat = Chat(iter([{"message_id": "one"}]))
+    for path in (first, second):
+        chat.attach_writer(
+            ContinuousWriter(str(path), overwrite=False, lazy_initialise=True)
+        )
+
+    with pytest.raises(OSError, match="changed during append setup"):
+        next(chat)
+
+    assert first.read_bytes() == b'{"prior":true}\n{"concurrent": true}\n'
+    assert second.read_bytes() == b'{"second":true}\n{"partial":'
+
+
+@pytest.mark.parametrize("change", ["none", "replace", "populate", "remove"])
+def test_failed_preflight_releases_only_unchanged_empty_reservation(
+    tmp_path, monkeypatch, change
+):
+    first = tmp_path / "stream.jsonl"
+    outputs = [tmp_path / "{title}.jsonl", tmp_path / "second.txt"]
+    original_prepare = ContinuousWriter._prepare_output
+
+    def fail_second(writer):
+        if writer.file_name == str(outputs[1]):
+            if change in {"replace", "remove"}:
+                first.rename(tmp_path / "moved.jsonl")
+            if change == "replace":
+                first.touch()
+            if change == "populate":
+                first.write_text(_SECRET)
+            raise OSError("synthetic second output failure")
+        original_prepare(writer)
+
+    monkeypatch.setattr(ContinuousWriter, "_prepare_output", fail_second)
+    result = execute_run(_TitledDownloader, **_options(outputs))
+    assert not result.success
+    assert "synthetic second output failure" in result.error_message
+    if change == "replace":
+        assert first.read_bytes() == b""
+    elif change == "populate":
+        assert first.read_text() == _SECRET
+    else:
+        assert not first.exists()
+    if change == "none":
+        monkeypatch.undo()
+        assert execute_run(_TitledDownloader, **_options(outputs)).success
+
+
+@pytest.mark.parametrize("path_fallback", [False, True])
+def test_failed_activation_releases_earlier_generated_output(
+    tmp_path, monkeypatch, path_fallback
+):
+    if path_fallback:
+        monkeypatch.setattr(_secure_file, "_SUPPORTS_DIRECTORY_FD", False)
+    first = tmp_path / "stream.jsonl"
+    second = tmp_path / "second.txt"
+    second.write_text(_SECRET)
+    original_activate = ContinuousFileWriter._initialize_file
+
+    def fail_second(writer):
+        if writer.file_name == str(second):
+            assert first.exists()
+            raise OSError("synthetic second output activation failure")
+        original_activate(writer)
+
+    monkeypatch.setattr(ContinuousFileWriter, "_initialize_file", fail_second)
+    result = execute_run(
+        _TitledDownloader, **_options([tmp_path / "{title}.jsonl", second])
+    )
+    assert not result.success
+    assert "synthetic second output activation failure" in result.error_message
+    assert not first.exists()
+    assert second.read_text() == _SECRET
+
+
+def test_path_fallback_preserves_reservation_when_parent_changes(tmp_path, monkeypatch):
+    monkeypatch.setattr(_secure_file, "_SUPPORTS_DIRECTORY_FD", False)
+    parent = tmp_path / "capture"
+    output = parent / "stream.jsonl"
+    prepared = _secure_file._OutputFile(str(output), append=False, exclusive=True)
+    moved = parent.rename(tmp_path / "moved")
+    parent.mkdir()
+
+    prepared.close(discard=True)
+
+    assert (moved / output.name).exists()
+
+
+def test_ordinary_multi_output_restores_prefixes_after_later_write_fails(
+    tmp_path, monkeypatch
+):
+    raw, text = tmp_path / "chat.jsonl", tmp_path / "chat.txt"
+    raw.write_text('{"prior":true}\n{"torn":')
+    text.write_text("old text")
+    original_write = ContinuousWriter.write
+
+    def fail_later_output(writer, item, *, flush=False):
+        if writer.file_name == str(text) and item == "second":
+            writer.writer.file.write("unflushed text\n")
+            raise OSError("synthetic text write failure")
+        original_write(writer, item, flush=flush)
+
+    monkeypatch.setattr(ContinuousWriter, "write", fail_later_output)
+    chat = Chat(iter([{"message": "first"}, {"message": "second"}]))
+    chat.set_formatter(lambda item: item["message"])
+    for path in (raw, text):
+        chat.attach_writer(
+            ContinuousWriter(str(path), overwrite=False, lazy_initialise=True)
+        )
+
+    assert next(chat) == {"message": "first"}
+    with pytest.raises(OSError, match="synthetic text write failure"):
+        next(chat)
+
+    assert raw.read_text().splitlines() == [
+        '{"prior":true}',
+        '{"message": "first"}',
+    ]
+    assert text.read_text().splitlines() == ["old text", "first"]
+    assert [
+        entry["records_written"] for entry in chat._output_dispatcher.writer_summaries
+    ] == [1, 1]
+
+
+def test_late_text_output_does_not_render_duplicates_during_activation(tmp_path):
+    first, second = tmp_path / "first.txt", tmp_path / "second.txt"
+    paid_message = {"message_id": "paid", "message_type": "paid_message"}
+    chat = Chat(iter([paid_message, paid_message]))
+    formatter = Mock(return_value="rendered")
+    chat.set_formatter(formatter)
+    chat.attach_writer(ContinuousWriter(str(first), lazy_initialise=True))
+    assert next(chat) == paid_message
+
+    chat.attach_writer(ContinuousWriter(str(second), lazy_initialise=True))
+    assert next(chat) == paid_message
+    chat.close()
+
+    formatter.assert_called_once_with(paid_message)
+    assert first.read_text() == "rendered\n"
+    assert second.read_bytes() == b""
 
 
 def test_missing_path_after_exclusive_race_fails_closed(tmp_path, monkeypatch):

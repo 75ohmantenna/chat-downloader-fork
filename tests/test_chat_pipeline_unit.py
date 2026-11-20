@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from chat_downloader.errors import FormatError, FormatNotFound
 from chat_downloader.models import ChatRequest, SiteDefault
 from chat_downloader.output.continuous_write import ContinuousWriter
 from chat_downloader.runtime import chat_pipeline
@@ -140,6 +141,78 @@ def test_formatter_resolves_live_overrides_and_custom_file(
         chat.site = cast("Any", _FakeSite(live=True))
     configure_formatter(chat, str(formats), format_name)
     assert chat.format({"message": "hello"}) == expected
+
+
+@pytest.mark.parametrize(
+    ("presets", "format_name", "error", "message"),
+    [
+        ({}, "typo", FormatNotFound, "Format not found"),
+        ([], "custom", FormatError, "JSON object"),
+        ({"custom": []}, "custom", FormatError, "at least one choice"),
+        ({"custom": [123]}, "custom", FormatError, "nonempty objects"),
+        ({"custom": {"template": 123}}, "custom", FormatError, "string template"),
+        (
+            {"custom": {"template": "{message}", "keys": []}},
+            "custom",
+            FormatError,
+            "object for keys",
+        ),
+        (
+            {"custom": {"inherit": "missing"}},
+            "custom",
+            FormatError,
+            "inherits an unknown preset",
+        ),
+    ],
+)
+def test_invalid_formats_fail_during_configuration(
+    tmp_path, presets, format_name, error, message
+):
+    raw, formatted = tmp_path / "chat.jsonl", tmp_path / "chat.txt"
+    raw.write_text('{"existing":true}\n')
+    formatted.write_text("existing\n")
+    formats = tmp_path / "formats.json"
+    formats.write_text(json.dumps(presets))
+    chat = Chat(iter([{"message": "new"}]))
+    request = ChatRequest(
+        output=[str(raw), str(formatted)],
+        format=format_name,
+        format_file=str(formats),
+    )
+
+    with pytest.raises(error, match=message):
+        configure_chat(chat, request, cast("Any", _FakeSite()))
+
+    assert raw.read_text() == '{"existing":true}\n'
+    assert formatted.read_text() == "existing\n"
+
+
+@pytest.mark.parametrize(
+    ("preset", "error"),
+    [
+        ({"inherit": "custom"}, ValueError),
+        ({"template": "{message}", "keys": {"message": {"template": 123}}}, TypeError),
+    ],
+)
+def test_initial_record_formatting_fails_before_activation(tmp_path, preset, error):
+    raw, formatted = tmp_path / "chat.jsonl", tmp_path / "chat.txt"
+    raw.write_text('{"existing":true}\n')
+    formatted.write_text("existing\n")
+    formats = tmp_path / "formats.json"
+    formats.write_text(json.dumps({"custom": preset}))
+    chat = Chat(iter([{"message": "new"}]))
+    request = ChatRequest(
+        output=[str(raw), str(formatted)],
+        format="custom",
+        format_file=str(formats),
+    )
+    configure_chat(chat, request, cast("Any", _FakeSite()))
+
+    with pytest.raises(error):
+        next(chat)
+
+    assert raw.read_text() == '{"existing":true}\n'
+    assert formatted.read_text() == "existing\n"
 
 
 def test_output_options_preserve_append_sort_order_and_multiple_formats(

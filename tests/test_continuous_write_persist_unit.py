@@ -13,6 +13,7 @@ from unittest.mock import patch
 import pytest
 
 import chat_downloader.output.writers as writers_module
+from chat_downloader.output import _append_tail
 from chat_downloader.output.continuous_write import (
     JsonLinesContinuousWriter,
     TextContinuousWriter,
@@ -144,11 +145,42 @@ def test_jsonl_append_rejects_foreign_encoded_tail(tmp_path, encoding, prefix):
     assert path.read_bytes() == original
 
 
+@pytest.mark.parametrize("prefix", [b"", b'{"preserved": true}\n'])
+@pytest.mark.parametrize(
+    "foreign",
+    [
+        '{"message": "foreign"}\n'.encode("utf-16-be"),
+        '{"message": "foreign"}\n'.encode("utf-32-be"),
+        '{"message": "foreign"}\n'.encode("utf-8-sig"),
+        '{"message": "\u0a41'.encode("utf-16-le"),
+        '{"message": "\u0a41'.encode("utf-16-le") + b"x",
+    ],
+)
+def test_jsonl_append_rejects_encoded_tail_with_apparent_lf(tmp_path, prefix, foreign):
+    path = tmp_path / "capture.jsonl"
+    original = prefix + foreign
+    path.write_bytes(original)
+    with pytest.raises(ValueError, match="must be UTF-8 without a BOM"):
+        JsonLinesContinuousWriter(str(path), overwrite=False)
+    assert path.read_bytes() == original
+
+
+def test_jsonl_append_checks_entire_unterminated_tail_for_encoding(tmp_path):
+    path = tmp_path / "capture.jsonl"
+    initial = b'{"preserved":true}\n{"partial": "\0' + b"x" * 8192
+    path.write_bytes(initial)
+
+    with pytest.raises(ValueError, match="must be UTF-8 without a BOM"):
+        JsonLinesContinuousWriter(str(path), overwrite=False)
+
+    assert path.read_bytes() == initial
+
+
 @pytest.mark.parametrize("final_cr", [b"", b"\r"])
 def test_text_append_bounds_newline_search(tmp_path, monkeypatch, final_cr):
     limit = 64
-    monkeypatch.setattr(writers_module, "MAX_CAPTURE_RECORD_BYTES", limit)
-    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    monkeypatch.setattr(_append_tail, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(_append_tail, "_TAIL_SCAN_BYTES", 8)
     monkeypatch.setattr(os, "linesep", "\n")
     path = tmp_path / "capture.txt"
     initial = b"start\r\n" + b"x" * (limit + 1)
@@ -185,9 +217,9 @@ def test_jsonl_append_accepts_exact_record_limit(
     tmp_path, monkeypatch, prefix, terminal_cr
 ):
     limit = 128
-    monkeypatch.setattr(writers_module, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(_append_tail, "MAX_CAPTURE_RECORD_BYTES", limit)
     monkeypatch.setattr(_bounded_records, "MAX_CAPTURE_RECORD_BYTES", limit)
-    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    monkeypatch.setattr(_append_tail, "_TAIL_SCAN_BYTES", 8)
     header, footer = b'{"message":"', b'"}'
     tail = header + b"x" * (limit - len(header) - len(footer)) + footer
     path = tmp_path / "exact.jsonl"
@@ -209,7 +241,7 @@ def test_append_preserves_origin_newlines(
     tmp_path, monkeypatch, host_newline, origin_newline, tail, kind
 ):
     monkeypatch.setattr(os, "linesep", host_newline)
-    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    monkeypatch.setattr(_append_tail, "_TAIL_SCAN_BYTES", 8)
     records = [{"message": word} for word in ("first", "second", "third")]
     lines = [
         json.dumps(record) if kind == "jsonl" else record["message"]
@@ -267,9 +299,9 @@ def test_jsonl_append_rejects_one_byte_excess_without_repair_or_handle_leak(
     tmp_path, monkeypatch, prefix, terminal_cr
 ):
     limit = 128
-    monkeypatch.setattr(writers_module, "MAX_CAPTURE_RECORD_BYTES", limit)
+    monkeypatch.setattr(_append_tail, "MAX_CAPTURE_RECORD_BYTES", limit)
     monkeypatch.setattr(_bounded_records, "MAX_CAPTURE_RECORD_BYTES", limit)
-    monkeypatch.setattr(writers_module, "_TAIL_SCAN_BYTES", 8)
+    monkeypatch.setattr(_append_tail, "_TAIL_SCAN_BYTES", 8)
     header, footer = b'{"private":"', b'"}'
     tail = header + b"x" * (limit + 1 - len(header) - len(footer)) + footer
     original = prefix + tail + terminal_cr
@@ -299,7 +331,8 @@ def test_jsonl_append_rejects_one_byte_excess_without_repair_or_handle_leak(
     assert path.read_bytes() == original
     assert opened
     assert all(stream.closed for stream in opened)
-    assert sum(read_sizes) <= limit + len(terminal_cr) + 2
+    # Includes the four-byte prefix and one eight-byte suffix encoding sample.
+    assert sum(read_sizes) <= limit + len(terminal_cr) + 13
 
 
 def test_jsonl_tail_read_error_preserves_records_and_closes_input(

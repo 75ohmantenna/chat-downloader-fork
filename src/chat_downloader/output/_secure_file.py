@@ -105,6 +105,7 @@ class _OutputFile:
         self.path = Path(file_name).absolute()
         self.stream: BinaryIO | None = None
         self.directory_fd: int | None = None
+        self._reserved = False
         descriptor = -1
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -117,14 +118,17 @@ class _OutputFile:
                 self.path, self.directory_fd, append=append, exclusive=exclusive
             )
             self.info = os.fstat(descriptor)
+            self._reserved = exclusive
             _validate_regular(self.info, before)
             self.stream = os.fdopen(descriptor, "r+b")
             descriptor = -1
             self.validate()
         except BaseException:
             if descriptor >= 0:
+                if self.directory_fd is not None:
+                    self.discard_empty_reservation()
                 os.close(descriptor)
-            self.close()
+            self.close(discard=True)
             raise
 
     def validate(self, stream: BinaryIO | None = None) -> None:
@@ -159,18 +163,39 @@ class _OutputFile:
         self.stream = None
         return stream
 
+    def discard_empty_reservation(self) -> None:
+        """Release an unused generated name if it still identifies our file."""
+        if not self._reserved:
+            return
+        self._reserved = False
+        with suppress(OSError):
+            if self.directory_fd is None and (
+                _identity(self.path.parent.stat()) != _identity(self.parent_info)
+            ):
+                return
+            current = _entry_info(self.path, self.directory_fd)
+            if current is None or current.st_size:
+                return
+            _validate_regular(current, self.info)
+            name = self.path if self.directory_fd is None else self.path.name
+            os.unlink(name, dir_fd=self.directory_fd)
+
     def _close_directory(self) -> None:
         """Release the parent descriptor after validation or on failure."""
         if self.directory_fd is not None:
             descriptor, self.directory_fd = self.directory_fd, None
             os.close(descriptor)
 
-    def close(self) -> None:
-        """Release resources without changing any destination bytes."""
+    def close(self, *, discard: bool = False) -> None:
+        """Release resources and optionally discard an unused reservation."""
         try:
+            if discard and self.directory_fd is not None:
+                self.discard_empty_reservation()
             if self.stream is not None:
                 stream, self.stream = self.stream, None
                 stream.close()
         finally:
+            if discard and self.directory_fd is None:
+                self.discard_empty_reservation()
             with suppress(OSError):
                 self._close_directory()

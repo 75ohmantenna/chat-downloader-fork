@@ -11,7 +11,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from chat_downloader.errors import FormatFileNotFound, FormatNotFound
+from chat_downloader.errors import FormatError, FormatFileNotFound, FormatNotFound
 from chat_downloader.formatting.summaries import (
     format_count,
     format_goal,
@@ -162,7 +162,47 @@ class ItemFormatter:
                 raise FormatFileNotFound(msg)
 
             with Path(path).open(encoding="utf-8") as custom_formats:
-                self.format_file.update(json.load(custom_formats))
+                presets = json.load(custom_formats)
+            if not isinstance(presets, dict):
+                msg = "Custom formats must be a JSON object keyed by preset name."
+                raise FormatError(msg)
+            self.format_file.update(presets)
+            for name, preset in presets.items():
+                self._validate_preset(name, preset)
+
+    def _validate_preset(self, name: str, preset: Any) -> None:
+        """Validate each choice without choosing a message type."""
+        choices = preset if isinstance(preset, list) else [preset]
+        if not choices:
+            msg = f"Format {name!r} must contain at least one choice."
+            raise FormatError(msg)
+        for choice in choices:
+            if not isinstance(choice, dict) or not choice:
+                msg = f"Format {name!r} must contain nonempty objects."
+                raise FormatError(msg)
+            if not isinstance(choice.get(self.KEY_TEMPLATE, ""), str):
+                msg = f"Format {name!r} requires a string template."
+                raise FormatError(msg)
+            if not isinstance(choice.get(self.KEY_KEYS, {}), dict):
+                msg = f"Format {name!r} requires an object for keys."
+                raise FormatError(msg)
+            if self.KEY_INHERIT in choice:
+                inherit = choice[self.KEY_INHERIT]
+                if not isinstance(inherit, str) or inherit not in self.format_file:
+                    msg = f"Format {name!r} inherits an unknown preset: {inherit!r}."
+                    raise FormatError(msg)
+
+    def _named_format(self, name: str) -> Any:
+        """Look up a preset by name without selecting a message type."""
+        selected = self.format_file.get(name)
+        if not selected and name != self.DEFAULT_FORMAT_NAME:
+            msg = f'Format not found: "{name}"'
+            raise FormatNotFound(msg)
+        return selected
+
+    def validate_format_name(self, name: str) -> None:
+        """Check that the selected preset exists before configuring outputs."""
+        self._named_format(name)
 
     def format(
         self,
@@ -177,10 +217,7 @@ class ItemFormatter:
         """
         selected = format_object
         if format_object is None:
-            selected = self.format_file.get(format_name)
-            if not selected and format_name != self.DEFAULT_FORMAT_NAME:
-                msg = f'Format not found: "{format_name}"'
-                raise FormatNotFound(msg)
+            selected = self._named_format(format_name)
 
         selected = self._resolve_format(selected, item.get(self.KEY_MESSAGE_TYPE))
         if not selected:
