@@ -30,6 +30,10 @@ def test_generated_help_preserves_key_argument_groups() -> None:
     assert ".jsonl/.txt" in normalized_help
     assert "Other extensions are not supported" in normalized_help
     assert "use .jsonl for structured output" in normalized_help
+    assert "Use --quiet to suppress stdout" in normalized_help
+    assert "Timed YouTube request retries wait out their delay" in normalized_help
+    assert "Video IDs to skip during YouTube channel discovery" in normalized_help
+    assert "The /live shortcut resolves directly to a video" in normalized_help
     assert "Twitch and Kick channel URLs cannot seek" in normalized_help
     assert "mutually exclusive with --message_groups" in normalized_help
     assert "seconds without an emitted message" in normalized_help

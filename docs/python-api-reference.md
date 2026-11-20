@@ -223,7 +223,7 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `end_time` | `None` | Replay end offset; supported by YouTube, Twitch replay, and Kick VOD/clip URLs |
 | `max_attempts` | `15` | Maximum attempts per retry loop, including the initial attempt; reconnect recovery uses a consecutive-failure budget |
 | `retry_timeout` | `None` | Delay before retry; `None` uses exponential backoff, while a negative value requires an interactive terminal |
-| `interruptible_retry` | `True` | Allow an interactive user to trigger a waiting retry immediately; redirected stdin uses the full delay |
+| `interruptible_retry` | `True` | Let Enter skip supported timed retry waits in a terminal. Timed YouTube request retries and runs with redirected stdin wait out the delay. |
 | `timeout` | `None` | Message-retrieval duration limit after chat configuration; provider setup and finalization can extend total wall time |
 | `inactivity_timeout` | `None` | Stop when the configured message iterator yields no message within this period; filtered provider traffic does not reset it |
 | `max_messages` | `None` | Stop after this many messages |
@@ -235,7 +235,7 @@ and default below with the dataclass definitions used by the facade and CLI:
 | `format` | site default | Text-format template override |
 | `format_file` | `None` | Custom formatter definition |
 | `chat_type` | `"live"` | YouTube chat mode: `"live"` or `"top"` |
-| `ignore` | `None` | YouTube video IDs to skip during discovery |
+| `ignore` | `None` | YouTube video IDs to skip during channel discovery. Explicit video URLs and `/live` shortcuts select a video directly. |
 | `youtube_replay_poll_interval` | `None` | Optional completed-replay polling override in seconds from `0.5` through `8`; `None` respects YouTube's delay hint |
 | `message_receive_timeout` | `1.0` | Live receive-poll timeout. Twitch and legacy standalone Kick enforce a one-second minimum. Kick's negotiated public transport uses one second for socket and queue polls. |
 | `buffer_size` | `4096` | Twitch IRC receive-buffer size in bytes |

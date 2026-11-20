@@ -135,7 +135,8 @@ class ChatRequest:
     interruptible_retry: bool = field(
         default=True,
         metadata=_cli_metadata(
-            "Allow skipping wait to retry immediately",
+            "Allow Enter to skip supported timed retry waits in a terminal. "
+            "Timed YouTube request retries wait out their delay.",
             group="retry",
         ),
     )
@@ -185,11 +186,9 @@ class ChatRequest:
     output: str | list[str] | None = field(
         default=None,
         metadata=_cli_metadata(
-            "Output file path (None = print to stdout). Extension "
-            "determines"
-            " format (.jsonl/.txt). Other extensions are not supported;"
-            " use .jsonl for structured output. Repeat --output to write"
-            " multiple files.",
+            "Output file path. Extension determines format (.jsonl/.txt). "
+            "Other extensions are not supported; use .jsonl for structured output. "
+            "Repeat --output to write multiple files. Use --quiet to suppress stdout.",
             group="output",
             flags=["-o"],
         ),
@@ -230,7 +229,11 @@ class ChatRequest:
     )
     ignore: list[str] | None = field(
         default=None,
-        metadata=_cli_metadata("List of video IDs to ignore", group="youtube"),
+        metadata=_cli_metadata(
+            "Video IDs to skip during YouTube channel discovery. "
+            "The /live shortcut resolves directly to a video.",
+            group="youtube",
+        ),
     )
     youtube_replay_poll_interval: float | None = field(
         default=None,

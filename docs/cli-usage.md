@@ -286,8 +286,10 @@ such as `--logging` are defined in `cli_args.py`.
   backoff. Use `0` to retry immediately or a negative value to wait for input
   from an interactive terminal.
 - `--interruptible_retry` defaults to true and lets an interactive user press
-  Enter to skip the remaining delay. Pass `--interruptible_retry false` to
-  disable that shortcut.
+  Enter to skip supported timed retry waits. Pass `--interruptible_retry false`
+  to disable that shortcut. Timed YouTube HTTP request retries wait out their
+  delay regardless of this setting. A negative `--retry_timeout` still prompts
+  for Enter in an interactive terminal.
 
 HTTP retries honor valid `Retry-After` integer seconds and HTTP dates as a
 minimum wait, alongside the configured backoff or fixed retry delay. Enter
@@ -306,7 +308,8 @@ Filtering and output:
   In typed API requests, a nonempty `ChatRequest.message_types` list overrides
   `message_groups`, including the `all` group. An empty list uses groups.
 - `--format` or `--format_file` — change rendered text output.
-- `--output` — write one or more files (repeatable).
+- `--output` writes one or more files and can be repeated. Formatted chat still
+  goes to stdout unless `--quiet` is set.
 - `--sort_keys` defaults to true for JSONL output. Pass `--sort_keys false` to
   write keys in insertion order.
 - `--compact_console` — opt into suppressing unchanged supported state updates
@@ -357,8 +360,10 @@ Request control:
   overrides can cause HTTP 400; retry with profile defaults to isolate them.
 - `--chat_type` selects YouTube's `live` chat by default. Use `--chat_type top`
   for Top Chat.
-- `--ignore` skips YouTube video IDs during channel discovery. Pass multiple
-  IDs as one comma-separated argument.
+- `--ignore` skips YouTube video IDs when a plain channel, handle, or user URL
+  searches for live or upcoming streams. Pass multiple IDs as one comma-separated
+  argument. Use the URL without `/live` to apply this filter. The `/live`
+  shortcut and explicit video URLs resolve directly to a video.
 - `--youtube_replay_poll_interval` — explicitly override completed YouTube
   replay polling with an interval from 0.5 through 8 seconds. The default
   respects the provider delay; faster polling is opt-in and can be rate-limited.
