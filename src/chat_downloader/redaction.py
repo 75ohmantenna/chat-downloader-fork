@@ -45,7 +45,14 @@ _SENSITIVE_KEY_COMPONENTS = frozenset(
     }
 )
 _COMPACT_SENSITIVE_KEYS = frozenset(
-    {"apikey", "authuser", "continuation", "visitordata"}
+    {
+        "apikey",
+        "authuser",
+        "clicktrackingparams",
+        "continuation",
+        "trackingparams",
+        "visitordata",
+    }
 )
 _KEY_COMPONENT_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|[0-9]+")
 _AUTH_HEADER_VALUE_RE = re.compile(r"(?i)^\s*(?:basic|bearer|oauth|sapisidhash)\s+\S+")

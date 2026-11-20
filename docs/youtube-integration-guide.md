@@ -600,8 +600,9 @@ and do not outlive the source cookie. Public name-only cookie introspection does
 not control authentication selection.
 
 Malformed continuation JSON reports attempt and response-length diagnostics,
-not body text. Debug response samples remain separately opted in and private;
-visitor tokens in provider name/value tracking entries are redacted.
+not body text. Debug logs report whether continuation click tracking is
+present. Debug response samples remain separately opted in and private, with
+click tracking values and visitor tokens redacted.
 
 ## Observed Live Message Types
 

@@ -463,6 +463,37 @@ def test_chat_iteration_updates_headers_and_handles_no_actions(monkeypatch, poll
     ]
 
 
+@pytest.mark.parametrize(
+    ("kind", "field"),
+    [
+        ("timedContinuationData", "clickTrackingParams"),
+        ("futureContinuationData", "trackingParams"),
+    ],
+)
+def test_continuation_tracking_reaches_next_request_but_not_logs(
+    polling, caplog, kind, field
+):
+    caplog.set_level("DEBUG")
+    tracking = "PRIVATE_CLICK_TRACKING_VALUE"
+    polling.fetch.side_effect = [
+        _response(
+            [],
+            continuations=[
+                {kind: {"continuation": "next", "timeoutMs": 250, field: tracking}}
+            ],
+        ),
+        _response([]),
+    ]
+
+    assert list(_messages(polling.downloader, _video_info())) == []
+    second_request = polling.fetch.call_args.kwargs["json"]
+    assert second_request["context"]["clickTracking"]["clickTrackingParams"] == tracking
+    assert "click_tracking_present=False" in caplog.text
+    assert "click_tracking_present=True" in caplog.text
+    assert kind in caplog.text
+    assert tracking not in caplog.text
+
+
 @pytest.mark.parametrize("missing_body", [False, True])
 def test_chat_iteration_incomplete_response(monkeypatch, polling, missing_body):
     _stub_loop(monkeypatch)

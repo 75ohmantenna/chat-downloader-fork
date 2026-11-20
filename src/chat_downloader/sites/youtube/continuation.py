@@ -240,7 +240,9 @@ def _log_continuation_debug_info(cont_result: ContinuationParseResult) -> None:
 
     log(
         "debug",
-        f"Continuation info: {cont_debug.get('continuation_entry')}",
+        f"Continuation info: type={cont_debug.get('continuation_key')}, "
+        f"timeout_ms={cont_result.timeout_ms}, "
+        f"click_tracking_present={bool(cont_result.click_tracking_params)}",
     )
 
 
@@ -428,18 +430,15 @@ class _ContinuationLoop:
             self.downloader.update_session_headers({"x-goog-visitor-id": visitor_data})
             log("debug", "Updated visitor data")
 
-        debug_info = {
-            "click_tracking": multi_get(
-                continuation_params,
-                "context",
-                "clickTracking",
-            ),
-            "continuation": multi_get(continuation_params, "continuation"),
-        }
+        has_click_tracking = bool(
+            multi_get(
+                continuation_params, "context", "clickTracking", "clickTrackingParams"
+            )
+        )
         log(
             "debug",
             [
-                f"Continuation parameters: {debug_info}",
+                f"Continuation request: click_tracking_present={has_click_tracking}",
                 f"Session headers: {', '.join(self.downloader.session.headers.keys())}",
             ],
         )

@@ -95,7 +95,14 @@ def test_redacts_nested_sensitive_keys_in_sequences() -> None:
     ("key", "expected"),
     [
         (key, red.REDACTED)
-        for key in ["accessToken", "feedbackToken", "refresh_token", "password"]
+        for key in [
+            "accessToken",
+            "feedbackToken",
+            "refresh_token",
+            "password",
+            "clickTrackingParams",
+            "tracking_params",
+        ]
     ]
     + [
         (key, "VISIBLE")
@@ -114,7 +121,7 @@ def test_sensitive_key_classifier(key, expected):
 
 @pytest.mark.parametrize(
     "key",
-    ["x-api-key", "x-goog-visitor-id", "continuation"],
+    ["x-api-key", "x-goog-visitor-id", "continuation", "clickTrackingParams"],
 )
 def test_sensitive_key_classifier_redacts_valid_url_queries(key: str) -> None:
     rendered = red.render_for_log(f"https://example.invalid/?{key}=QUERY_SECRET")
@@ -353,7 +360,14 @@ def test_capture_debug_sample_writes_sanitized_json_deterministically(sample_dir
 
 @pytest.mark.parametrize(
     "semantic_key",
-    ["visitor_data", "visitorData", "x-goog-visitor-id", "access_token"],
+    [
+        "visitor_data",
+        "visitorData",
+        "x-goog-visitor-id",
+        "access_token",
+        "clickTrackingParams",
+        "trackingParams",
+    ],
 )
 @pytest.mark.parametrize("label_field", ["key", "name"])
 def test_sample_redacts_semantic_tracking_values(sample_dir, semantic_key, label_field):
