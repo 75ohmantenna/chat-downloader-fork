@@ -64,7 +64,9 @@ Network tests remain opt-in locally. Every external check carries
 should normally use curated fixtures under `tests/fixtures/`. GitHub Actions runs
 stable `network_replay` contracts weekly, on manual dispatch, and on pushes to
 `75ohmantenna/chat-downloader-fork`. Volatile live and environment checks remain
-opt-in.
+opt-in. A provider CAPTCHA challenge during setup or capture fails the network
+probe with `CaptchaChallengeRequired`, even when the scenario allows an
+asset-specific `LoginRequired` error.
 
 Live discovery and inactivity scenarios may succeed without chat messages.
 Separate Twitch and YouTube delivery scenarios require `TWITCH_TEST_CHANNEL`

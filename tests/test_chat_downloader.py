@@ -4,12 +4,21 @@
 
 from __future__ import annotations
 
+import json
 import os
+from contextlib import nullcontext
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
+from unittest.mock import MagicMock, Mock
 
 import pytest
 
 from chat_downloader import ChatDownloader
+from chat_downloader.errors import (
+    CaptchaChallengeRequired,
+    LoginRequired,
+    VideoUnavailable,
+)
 from chat_downloader.sites import (
     BaseChatDownloader,
     KickChatDownloader,
@@ -105,6 +114,8 @@ def _run_site_integration(
             try:
                 chat = cast("Chat", downloader.get_chat(**params))
                 list(chat)
+            except CaptchaChallengeRequired:
+                raise
             except expected_errors:
                 return
             error_names = ", ".join(error.__name__ for error in expected_errors)
@@ -187,6 +198,142 @@ def test_network_runner_requires_expected_exception() -> None:
         )
 
     assert downloader.closed
+
+
+@pytest.mark.parametrize("phase", ["setup", "iteration"])
+@pytest.mark.parametrize(
+    ("error_type", "expected_outcome"),
+    [
+        (LoginRequired, nullcontext()),
+        (CaptchaChallengeRequired, pytest.raises(CaptchaChallengeRequired)),
+    ],
+    ids=["asset-login-required", "provider-challenge"],
+)
+def test_network_runner_distinguishes_provider_challenges(
+    phase, error_type, expected_outcome
+):
+    chat = MagicMock(spec=Chat)
+    downloader = Mock(spec=ChatDownloader)
+    downloader.get_chat.return_value = chat
+    if phase == "setup":
+        downloader.get_chat.side_effect = error_type
+    else:
+        chat.__iter__.side_effect = lambda: chat
+        chat.__next__.side_effect = error_type
+
+    scenario = {
+        "params": {"url": "https://www.youtube.com/watch?v=test"},
+        "expected_result": {"error": LoginRequired},
+    }
+
+    with expected_outcome:
+        _run_site_integration(
+            YouTubeChatDownloader,
+            scenario,
+            downloader_factory=lambda: downloader,
+        )
+
+    downloader.close.assert_called_once_with()
+    if phase == "setup":
+        chat.close.assert_not_called()
+    else:
+        chat.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        scenario
+        for scenario in YOUTUBE_EXTRACTOR_TESTS
+        if scenario["name"].startswith("Sign in to confirm your age.")
+    ],
+    ids=lambda scenario: scenario["name"],
+)
+@pytest.mark.parametrize(
+    "playability",
+    [
+        "age-gate",
+        "captcha",
+        "captcha-without-status",
+        "captcha-generic-unplayable",
+        "captcha-recovered",
+    ],
+)
+def test_youtube_age_replay_runner_rejects_player_captcha(
+    scenario, playability, monkeypatch
+):
+    fixture = (
+        Path(__file__).parent / "fixtures/youtube/errors/player_captcha_synthetic.json"
+    )
+    player = json.loads(fixture.read_text())
+    status = player["playabilityStatus"]
+    if playability == "age-gate":
+        del status["errorScreen"]
+    elif playability == "captcha-without-status":
+        del status["status"]
+    elif playability in {"captcha-generic-unplayable", "captcha-recovered"}:
+        status.update(status="UNPLAYABLE", reason="Video unavailable")
+
+    watch_bootstrap = Mock(return_value=({}, {}, player))
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.video_metadata._get_initial_info",
+        watch_bootstrap,
+    )
+    _, _, video_id = scenario["params"]["url"].partition("?v=")
+    fallback_data = {"contents": {}}
+    fallback_player = {
+        "playabilityStatus": {
+            "status": "LOGIN_REQUIRED",
+            "reason": "Sign in to confirm your age",
+        },
+        "videoDetails": {"videoId": video_id},
+    }
+    if playability == "captcha-recovered":
+        fallback_data["_chat_downloader_continuation_info"] = {
+            "Live chat replay": "replay-token"
+        }
+        fallback_player["playabilityStatus"] = {"status": "OK"}
+        fallback_player["videoDetails"]["isLiveContent"] = True
+        message = {
+            "message_type": "text_message",
+            "message_id": "synthetic-message",
+            "timestamp": 0,
+            "author": {},
+            "message": "Replay recovered",
+        }
+        monkeypatch.setattr(
+            YouTubeChatDownloader,
+            "_get_chat_messages",
+            Mock(return_value=iter([message])),
+        )
+        scenario = {
+            **scenario,
+            "expected_result": {
+                "messages_condition": lambda result: result == [message]
+            },
+        }
+    mobile_bootstrap = Mock(return_value=(fallback_data, {}, fallback_player))
+    monkeypatch.setattr(
+        "chat_downloader.sites.youtube.video_metadata.get_innertube_video_bootstrap",
+        mobile_bootstrap,
+    )
+    if playability in {"age-gate", "captcha-recovered"}:
+        _run_site_integration(YouTubeChatDownloader, scenario)
+    else:
+        with pytest.raises(
+            CaptchaChallengeRequired, match="CAPTCHA verification"
+        ) as exc:
+            _run_site_integration(YouTubeChatDownloader, scenario)
+        assert isinstance(exc.value, VideoUnavailable)
+    watch_bootstrap.assert_called_once()
+    if playability in {
+        "captcha-without-status",
+        "captcha-generic-unplayable",
+        "captcha-recovered",
+    }:
+        mobile_bootstrap.assert_called_once()
+    else:
+        mobile_bootstrap.assert_not_called()
 
 
 def test_network_runner_requires_positive_outcome_check() -> None:

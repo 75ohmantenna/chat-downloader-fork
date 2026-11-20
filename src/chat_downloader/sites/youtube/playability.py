@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from chat_downloader.debugging import debug_log, log
 from chat_downloader.errors import (
+    CaptchaChallengeRequired,
     ChatDisabled,
     LoginRequired,
     NoChatReplay,
@@ -21,6 +22,10 @@ from .parsing.message_content_text_parser import _parse_runs
 
 if TYPE_CHECKING:
     from chat_downloader.utils.json_types import JSONDict
+
+
+class _PlayerCaptchaChallenge(CaptchaChallengeRequired, VideoUnavailable):
+    """Identify a player CAPTCHA while preserving the legacy catch contract."""
 
 
 def is_age_gated(player_response_info: JSONDict) -> bool:
@@ -83,12 +88,22 @@ def _build_error_message(
     return message.strip()
 
 
+def _player_captcha_error(error_screen: JSONDict) -> CaptchaChallengeRequired | None:
+    """Classify an explicit player CAPTCHA screen."""
+    if "playerCaptchaViewModel" not in error_screen:
+        return None
+    return _PlayerCaptchaChallenge(
+        "YouTube requires CAPTCHA verification before playback. "
+        "Please verify the CAPTCHA in your browser and try again with "
+        "fresh cookies."
+    )
+
+
 def _raise_for_early_playability(
     playability_status: JSONDict,
     player_response_info: JSONDict,
-    error_screen: JSONDict,
 ) -> None:
-    """Raise for age-gate, unplayable, and CAPTCHA before error-screen parse."""
+    """Raise for age-gate and unplayable before error-screen parse."""
     if is_age_gated(player_response_info):
         debug_log("Video detected as age-gated")
         msg = (
@@ -101,14 +116,6 @@ def _raise_for_early_playability(
         debug_log("Video detected as unplayable")
         reason = playability_status.get("reason", "Video is unplayable")
         raise VideoUnplayable(reason)
-
-    if "playerCaptchaViewModel" in error_screen:
-        msg = (
-            "YouTube requires CAPTCHA verification before playback. "
-            "Please verify the CAPTCHA in your browser and try again with "
-            "fresh cookies."
-        )
-        raise VideoUnavailable(msg)
 
 
 def _raise_for_status(
@@ -142,7 +149,9 @@ def _raise_for_error_screen(
     """Raise for age-gated or status-based error-screen cases."""
     error_screen = get_dict(playability_status, "errorScreen")
 
-    _raise_for_early_playability(playability_status, player_response_info, error_screen)
+    if challenge := _player_captcha_error(error_screen):
+        raise challenge
+    _raise_for_early_playability(playability_status, player_response_info)
 
     if not error_screen:
         return
@@ -218,8 +227,12 @@ def _raise_for_replay_unavailable(yt_initial_data: JSONDict) -> None:
 def raise_if_playability_error(
     player_response_info: JSONDict,
     yt_initial_data: JSONDict,
+    *,
+    player_captcha: CaptchaChallengeRequired | None = None,
 ) -> None:
     """Inspect playability state and raise the mapped domain exception."""
+    if player_captcha is not None:
+        raise player_captcha
     playability_status = get_dict(player_response_info, "playabilityStatus")
 
     _raise_for_error_screen(playability_status, player_response_info)

@@ -1,0 +1,9 @@
+{
+  "playabilityStatus": {
+    "status": "LOGIN_REQUIRED",
+    "reason": "Sign in to confirm your age",
+    "errorScreen": {
+      "playerCaptchaViewModel": {}
+    }
+  }
+}

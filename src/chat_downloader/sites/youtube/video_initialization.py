@@ -27,7 +27,7 @@ from .constants_patterns import (
     _YT_LIVE_CHAT_URL,
 )
 from .helpers import extract_chat_submenu_continuations
-from .playability import raise_if_playability_error
+from .playability import _player_captcha_error, raise_if_playability_error
 from .video_status_models import REPLAY_STATUSES
 
 if TYPE_CHECKING:
@@ -103,6 +103,7 @@ class YouTubeVideoInitializationMixin:
         proto = cast("YouTubeDownloaderProto", self)
         attempted_profiles: set[str] = set()
         bootstrap = BootstrapRequests.for_request(self, params)
+        player_captcha = None
 
         while True:
             bootstrap.profile(getattr(proto, "_request_profile", None) or "youtube_web")
@@ -123,16 +124,20 @@ class YouTubeVideoInitializationMixin:
                 ),
             }
 
+            playability = get_dict(player_response_info, "playabilityStatus")
+            player_captcha = (
+                _player_captcha_error(get_dict(playability, "errorScreen"))
+                or player_captcha
+            )
             unknown_status = details["status"] == "unknown"
             if (
                 unknown_status
-                and get_str(
-                    get_dict(player_response_info, "playabilityStatus"), "status"
-                )
-                not in {"", "OK"}
+                and get_str(playability, "status") not in {"", "OK"}
                 and not _has_generic_unplayable_reason(player_response_info)
             ):
-                raise_if_playability_error(player_response_info, yt_initial_data)
+                raise_if_playability_error(
+                    player_response_info, yt_initial_data, player_captcha=player_captcha
+                )
             if not unknown_status and not yt_initial_data.get(
                 "_chat_downloader_continuation_info"
             ):
@@ -214,8 +219,10 @@ class YouTubeVideoInitializationMixin:
                         "Try a fresh retrieval with --request_profile youtube_android "
                         "or youtube_ios, or another proxy."
                     )
-                    raise ParsingError(msg)
-                raise_if_playability_error(player_response_info, yt_initial_data)
+                    raise player_captcha or ParsingError(msg)
+                raise_if_playability_error(
+                    player_response_info, yt_initial_data, player_captcha=player_captcha
+                )
                 return details, ytcfg
 
             attempted_profiles.add(next_profile)

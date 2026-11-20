@@ -179,6 +179,11 @@ challenges stop that request's retry loop with `CaptchaChallengeRequired`; the
 watch-page owner can still activate its documented InnerTube fallback. Ordinary
 HTTP retry rules remain endpoint-specific.
 
+A player error screen containing `playerCaptchaViewModel` is retained across
+request profile changes. If bootstrap ends without usable chat metadata, the
+screen takes precedence over age and playability errors. The resulting exception
+is catchable as both `CaptchaChallengeRequired` and `VideoUnavailable`.
+
 Channel and user chat methods accept either `ChatRequest` or a parameter
 dictionary, normalized before lazy retrieval starts. Channel Shorts discovery
 accepts `shortsLockupViewModel`, using its reel endpoint for the video ID and
