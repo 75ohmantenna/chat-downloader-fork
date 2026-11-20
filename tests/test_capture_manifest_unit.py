@@ -31,7 +31,7 @@ def _intercept_manifest_open(monkeypatch, replacement):
     def write(manifest, *args, **kwargs):
         with monkeypatch.context() as scoped:
             scoped.setattr(
-                "chat_downloader.runtime.capture_manifest.os",
+                "chat_downloader.runtime.capture_verification.os",
                 SimpleNamespace(**(vars(os) | {"open": replacement})),
             )
             return original_write(manifest, *args, **kwargs)

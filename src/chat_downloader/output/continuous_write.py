@@ -55,6 +55,7 @@ class ContinuousWriter:
         self._prepared_file: _OutputFile | None = None
         self._file_identity: tuple[int, int] | None = None
         self._require_new_file = False
+        self._checkpointed = False
         self._defer_initialization = False
         self._sort_keys = sort_keys
         self._validate_extension(file_name)
@@ -169,6 +170,8 @@ class ContinuousWriter:
                 _defer_initialization=self._defer_initialization,
                 **options,
             )
+            if self._checkpointed:
+                self._writer._track_checkpoint_writes()
             if prepared is not None:
                 self._file_identity = (prepared.info.st_dev, prepared.info.st_ino)
         except BaseException:

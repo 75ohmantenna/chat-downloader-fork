@@ -14,7 +14,7 @@ import pytest
 
 from chat_downloader.cli import _install_cli_signal_handlers
 from chat_downloader.output.continuous_write import ContinuousWriter
-from chat_downloader.runtime import capture_checkpoint, runner
+from chat_downloader.runtime import capture_checkpoint, capture_manifest, runner
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint
 from chat_downloader.runtime.capture_manifest import RunManifest
 from chat_downloader.runtime.runner import execute_run
@@ -46,14 +46,15 @@ def test_signal_finishes_record_and_all_counters_before_shutdown(
         params.pop("resume")
     _install_cli_signal_handlers()
     if target == "observe":
-        original_observe = CaptureCheckpoint.observe
+        original_observe = CaptureCheckpoint._observe
+        second_event = capture_checkpoint._event_identity(Downloader.records[1])
 
-        def observe(checkpoint, item):
-            original_observe(checkpoint, item)
-            if item["message_id"] == "2":
+        def observe(checkpoint, offset, event):
+            original_observe(checkpoint, offset, event)
+            if event == second_event:
                 os.kill(os.getpid(), signum)
 
-        monkeypatch.setattr(CaptureCheckpoint, "observe", observe)
+        monkeypatch.setattr(CaptureCheckpoint, "_observe", observe)
     else:
         original_write = ContinuousWriter.write
 
@@ -347,7 +348,7 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
             writing_manifest = False
 
     monkeypatch.setattr(RunManifest, "write", manifest)
-    original_digest = capture_checkpoint.hashlib.file_digest
+    original_digest = capture_manifest._artifact_signature
 
     def digest(*args, **kwargs):
         value = original_digest(*args, **kwargs)
@@ -355,7 +356,7 @@ def test_first_shutdown_signal_preserves_resume_and_reports_interruption(
             interrupt()
         return value
 
-    monkeypatch.setattr(capture_checkpoint.hashlib, "file_digest", digest)
+    monkeypatch.setattr(capture_manifest, "_artifact_signature", digest)
     original_dumps = json.dumps
 
     def dumps(*args, **kwargs):

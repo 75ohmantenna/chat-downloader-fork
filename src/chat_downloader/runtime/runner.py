@@ -438,7 +438,8 @@ def _execute_run(  # noqa: C901 — one capture error/finalization lifecycle
         if run_config.verify_output:
             validate_verification(chat_params, resume=bool(run_config.resume))
         if run_config.resume:
-            checkpoint_resources.enter_context(checkpoint_lock(run_config.resume))
+            with defer_interrupts():
+                checkpoint_resources.enter_context(checkpoint_lock(run_config.resume))
             checkpoint = CaptureCheckpoint(run_config.resume, chat_params)
             if checkpoint.limit is not None:
                 log(

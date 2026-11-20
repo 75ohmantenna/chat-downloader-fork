@@ -4,10 +4,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
-import stat
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,14 +15,15 @@ from chat_downloader.sites.proxy import TLS_DIAGNOSTIC_CIPHERS, TLS_DIAGNOSTIC_V
 from chat_downloader.utils.atomic_files import atomic_text_file
 from chat_downloader.utils.time_utils import ensure_seconds
 
+from .capture_verification import _artifact_signature
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from chat_downloader.sites.models import Chat
 
+    from .capture_verification import _ArtifactSignature
     from .runner import RunResult
-
-type _ArtifactSignature = tuple[tuple[int, int], str]
 
 
 def is_completed_replay(chat: Chat | None) -> bool:
@@ -201,30 +199,6 @@ def _effective_window(
         **_time_window(window),
         "time_basis": "clip" if window.get("time_basis") == "clip" else "recording",
     }
-
-
-def _artifact_signature(
-    path: Path, expected: tuple[int, int] | None = None
-) -> _ArtifactSignature:
-    """Hash a validated regular file and retain the identity actually read."""
-    before = path.lstat()
-    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
-        msg = "Capture artifacts must be regular files with exactly one link."
-        raise ValueError(msg)
-    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
-    with os.fdopen(descriptor, "rb") as source:
-        opened = os.fstat(source.fileno())
-        identity = (opened.st_dev, opened.st_ino)
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or opened.st_nlink != 1
-            or identity != (before.st_dev, before.st_ino)
-            or (expected is not None and identity != expected)
-        ):
-            msg = "Manifest artifact identity changed after capture."
-            raise ValueError(msg)
-        return identity, hashlib.file_digest(source, "sha256").hexdigest()
 
 
 class RunManifest:

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -15,6 +16,7 @@ import pytest
 from chat_downloader.errors import ChatDownloaderError
 from chat_downloader.formatting import format as format_module
 from chat_downloader.models import ChatRequest
+from chat_downloader.runtime import capture_checkpoint as checkpoints
 from chat_downloader.runtime.capture_checkpoint import CaptureCheckpoint, _atomic_json
 from chat_downloader.runtime.capture_replay_order import ordered_initial_preroll
 from chat_downloader.runtime.capture_verification import capture_paths, verify_capture
@@ -378,10 +380,9 @@ def test_live_rejected_before_output(tmp_path, monkeypatch, checkpoint, params):
     ("records", "boundary_limit", "count", "offset"),
     [
         ([{"message_id": "1", "message_type": "text_message"}], 10_000, 0, None),
-        ([message(1, 11), message(2, 10)], 10_000, 1, 11),
         (Downloader.records, 1, 1, 10),
     ],
-    ids=["missing-offset", "backwards-offset", "timestamp-capacity"],
+    ids=["missing-offset", "timestamp-capacity"],
 )
 def test_invalid_replay_checkpoints_only_safe_prefix(
     tmp_path, monkeypatch, records, boundary_limit, count, offset, params
@@ -467,14 +468,15 @@ def test_interrupted_record_rolls_back_before_resume(
 
         monkeypatch.setattr(ContinuousWriter, "write", interrupted_write)
     else:
-        original_observe = CaptureCheckpoint.observe
+        original_observe = CaptureCheckpoint._observe
+        second_event = checkpoints._event_identity(Downloader.records[1])
 
-        def interrupted_observe(checkpoint, item):
-            original_observe(checkpoint, item)
-            if item["message_id"] == "2":
+        def interrupted_observe(checkpoint, offset, event):
+            original_observe(checkpoint, offset, event)
+            if event == second_event:
                 raise KeyboardInterrupt
 
-        monkeypatch.setattr(CaptureCheckpoint, "observe", interrupted_observe)
+        monkeypatch.setattr(CaptureCheckpoint, "_observe", interrupted_observe)
 
     first = execute_run(Downloader, **params)
     assert first.interrupted
@@ -999,3 +1001,297 @@ def test_new_checkpoint_rejects_output_created_before_first_record(tmp_path, par
         Path(name).read_text(encoding="utf-8") == "UNRELATED_CAPTURE"
         for name in params["output"]
     )
+
+
+@pytest.mark.parametrize("resumed", [False, True])
+def test_backwards_offset_never_publishes_new_boundary(tmp_path, params, resumed):
+    class Backwards(Downloader):
+        records: ClassVar[list] = [
+            message(1, 10),
+            message(2, 11),
+            message(3, 9),
+            message(4, 12),
+        ]
+
+    path = Path(params["resume"])
+    if resumed:
+        assert execute_run(Backwards, **params, max_messages=1).success
+    previous = path.read_bytes() if resumed else None
+
+    first = execute_run(Backwards, **params)
+    assert not first.success
+    assert "offsets moved backwards" in first.error_message
+    assert (path.read_bytes() if path.exists() else None) == previous
+
+    second = execute_run(Backwards, **params)
+    assert not second.success
+    assert second.message_count == 0
+    assert "requires absent output files" in second.error_message or (
+        "Capture files changed since the checkpoint" in second.error_message
+    )
+
+
+def test_checkpoint_destination_that_aliases_opened_output_is_rejected(
+    tmp_path, params, monkeypatch
+):
+    path = Path(params["resume"])
+    output = Path(params["output"][0])
+    identity = checkpoints.output_path_identity
+
+    def case_insensitive_alias(candidate):
+        return identity(output if candidate == path and output.exists() else candidate)
+
+    monkeypatch.setattr(checkpoints, "output_path_identity", case_insensitive_alias)
+    result = execute_run(Downloader, **params)
+    assert not result.success
+    assert "paths must be distinct" in result.error_message
+    assert not path.exists()
+    assert len(output.read_text().splitlines()) == len(Downloader.records)
+
+
+@pytest.mark.parametrize("resumed", [False, True])
+def test_checkpoint_preserves_destination_substituted_during_capture(
+    tmp_path, params, resumed
+):
+    path = Path(params["resume"])
+    if resumed:
+        assert execute_run(Downloader, **params, max_messages=1).success
+
+    class Substituted(Downloader):
+        def close(self):
+            replacement = tmp_path / "replacement"
+            replacement.write_text("unrelated")
+            replacement.replace(path)
+
+    result = execute_run(Substituted, **params)
+    assert not result.success
+    assert path.read_text() == "unrelated"
+
+
+def test_lock_close_interrupt_releases_lock(tmp_path, monkeypatch):
+    path = tmp_path / "checkpoint"
+    close = os.close
+
+    def interrupt(descriptor):
+        close(descriptor)
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "close", interrupt)
+        with pytest.raises(KeyboardInterrupt), checkpoints.checkpoint_lock(str(path)):
+            pytest.fail("The lock close should have interrupted entry.")
+    assert not path.with_suffix(".lock").exists()
+
+
+def test_lock_creation_signal_is_deferred_until_entry_is_registered(
+    tmp_path, params, monkeypatch
+):
+    from chat_downloader.utils.interrupts import raise_or_defer_interrupt
+
+    lock = params["resume"] + ".lock"
+    open_file = os.open
+
+    def interrupt(path, *args, **kwargs):
+        descriptor = open_file(path, *args, **kwargs)
+        if str(path) == lock:
+            raise_or_defer_interrupt()
+        return descriptor
+
+    monkeypatch.setattr(os, "open", interrupt)
+    result = execute_run(Downloader, **params)
+    assert result.interrupted
+    assert not Path(lock).exists()
+    assert not (tmp_path / "chat.jsonl").exists()
+
+
+@pytest.mark.parametrize("replacement", ["", "other content " * 100])
+def test_resumed_writer_rejects_changes_to_verified_prefix(params, replacement):
+    assert execute_run(Downloader, **params, max_messages=1).success
+    path = Path(params["resume"])
+    previous = path.read_bytes()
+
+    class Rewritten(Downloader):
+        def close(self):
+            Path(params["output"][0]).write_text(replacement)
+
+    result = execute_run(Rewritten, **{**params, "verify_output": False})
+    assert not result.success
+    assert "Capture files changed after checkpoint verification" in result.error_message
+    assert path.read_bytes() == previous
+
+
+def test_checkpoint_syncs_new_output_directory_before_publication(
+    tmp_path, params, monkeypatch
+):
+    capture = tmp_path / "capture" / "nested"
+    params["output"] = [str(capture / Path(name).name) for name in params["output"]]
+    path = Path(params["resume"])
+    syncs = []
+    monkeypatch.setattr(
+        checkpoints,
+        "sync_directory",
+        lambda parent: syncs.append((parent, path.exists())),
+    )
+
+    assert execute_run(Downloader, **params, max_messages=1).success
+    assert syncs == [
+        (capture, False),
+        (capture.parent, False),
+        (tmp_path, False),
+        (tmp_path, True),
+    ]
+    syncs.clear()
+    assert execute_run(Downloader, **params).success
+    assert syncs == [(tmp_path, True)]
+
+
+def test_resume_rejects_oversized_sparse_checkpoint_before_parsing(params, monkeypatch):
+    path = Path(params["resume"])
+    with path.open("wb") as checkpoint:
+        checkpoint.truncate(checkpoints._CHECKPOINT_SIZE_LIMIT + 1)
+
+    def unexpected_parse(*args):
+        pytest.fail("Oversized checkpoints should never reach the JSON parser.")
+
+    monkeypatch.setattr(checkpoints.json, "loads", unexpected_parse)
+    result = execute_run(Downloader, **params)
+    assert not result.success
+    assert "checkpoint exceeds the size limit" in result.error_message
+
+
+@pytest.mark.parametrize("rewrite", ["truncate", "same_length", "append"])
+def test_first_checkpoint_rejects_modified_capture(params, rewrite):
+    path = Path(params["resume"])
+
+    class Modified(Downloader):
+        def close(self):
+            output = Path(params["output"][0])
+            original = output.read_bytes()
+            replacement = {
+                "truncate": b"",
+                "same_length": original.replace(b"Record 1", b"Replaced"),
+                "append": original + original,
+            }[rewrite]
+            assert original != replacement
+            output.write_bytes(replacement)
+
+    result = execute_run(Modified, **{**params, "verify_output": False})
+    assert not result.success
+    assert "Capture files changed after checkpoint verification" in result.error_message
+    assert not path.exists()
+
+
+def test_checkpoint_restores_existing_identity_count_on_interrupt(params, monkeypatch):
+    class Repeated(Downloader):
+        records: ClassVar[list] = [message(1, 10), message(1, 10), message(2, 10)]
+
+    observe = CaptureCheckpoint._observe
+
+    def interrupt(checkpoint, offset, event):
+        observe(checkpoint, offset, event)
+        if checkpoint.events[event] == 2:
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr(CaptureCheckpoint, "_observe", interrupt)
+    result = execute_run(Repeated, **params)
+    assert result.interrupted
+    state = load_json(Path(params["resume"]))
+    assert state["total"] == 1
+    assert state["events"] == {checkpoints._event_identity(Repeated.records[0]): 1}
+
+    monkeypatch.undo()
+    assert execute_run(Repeated, **params).success
+    assert load_json(Path(params["resume"]))["total"] == 3
+
+
+def test_atomic_checkpoint_refuses_to_publish_oversized_state(tmp_path, monkeypatch):
+    path = tmp_path / "checkpoint.json"
+    monkeypatch.setattr(checkpoints, "_CHECKPOINT_SIZE_LIMIT", 16)
+    with pytest.raises(ValueError, match="exceeds the size limit"):
+        _atomic_json(path, {"value": "a" * 16})
+    assert not path.exists()
+    assert not list(tmp_path.glob(".capture-*"))
+
+
+def test_checkpoint_read_is_bounded_if_file_grows_after_open(params, monkeypatch):
+    path = Path(params["resume"])
+    path.touch()
+    open_artifact = checkpoints._open_artifact
+    monkeypatch.setattr(checkpoints, "_CHECKPOINT_SIZE_LIMIT", 16)
+
+    @contextmanager
+    def grow_after_open(candidate, *args, **kwargs):
+        with open_artifact(candidate, *args, **kwargs) as (source, opened):
+            if candidate == path:
+                path.write_bytes(b"x" * 100)
+            yield source, opened
+
+    monkeypatch.setattr(checkpoints, "_open_artifact", grow_after_open)
+    result = execute_run(Downloader, **params)
+    assert not result.success
+    assert "checkpoint exceeds the size limit" in result.error_message
+
+
+def test_resume_requires_checkpoint_destination_distinct_from_output(params):
+    result = execute_run(Downloader, **{**params, "resume": params["output"][0]})
+    assert not result.success
+    assert "paths must be distinct" in result.error_message
+    assert not Path(params["output"][0]).exists()
+
+
+def test_checkpoint_format_signature_checks_custom_format_changes(tmp_path, params):
+    path = tmp_path / "format.json"
+    path.write_text("{}")
+    kwargs = {"output": params["output"], "format_file": str(path)}
+    first = CaptureCheckpoint(params["resume"], kwargs.copy())
+    path.unlink()
+    second = CaptureCheckpoint(params["resume"], kwargs.copy())
+    assert first.fingerprint != second.fingerprint
+
+
+def test_backwards_offset_during_overlap_is_rejected(params):
+    class Backwards(Downloader):
+        records: ClassVar[list] = [message(1, 11), message(2, 10), message(3, 12)]
+
+    assert execute_run(Backwards, **params, max_messages=1).success
+    path = Path(params["resume"])
+    previous = path.read_bytes()
+
+    result = execute_run(Backwards, **params)
+    assert not result.success
+    assert result.message_count == 0
+    assert "offsets moved backwards" in result.error_message
+    assert path.read_bytes() == previous
+
+
+def test_checkpoint_hashes_actual_utf8_and_crlf_bytes(params, monkeypatch):
+    class Multiline(Downloader):
+        records: ClassVar[list] = [
+            {**message(1, 10), "message": "Récord 1\ncontinued"},
+            {**message(2, 11), "message": "Récord 2\ncontinued"},
+        ]
+
+    monkeypatch.setattr(os, "linesep", "\r\n")
+    assert execute_run(Multiline, **params, max_messages=1).success
+    assert execute_run(Multiline, **params).success
+    for name in params["output"]:
+        assert Path(name).read_bytes().endswith(b"\r\n")
+
+
+def test_resumed_checkpoint_rejects_changes_to_new_records(params):
+    assert execute_run(Downloader, **params, max_messages=1).success
+    path = Path(params["resume"])
+    previous = path.read_bytes()
+
+    class Rewritten(Downloader):
+        def close(self):
+            output = Path(params["output"][0])
+            original = output.read_bytes()
+            replacement = original.replace(b"Record 4", b"Replaced")
+            assert replacement != original
+            output.write_bytes(replacement)
+
+    result = execute_run(Rewritten, **{**params, "verify_output": False})
+    assert not result.success
+    assert "Capture files changed after checkpoint verification" in result.error_message
+    assert path.read_bytes() == previous

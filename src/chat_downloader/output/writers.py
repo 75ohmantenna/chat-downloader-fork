@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import io
 import json
 import os
@@ -21,6 +22,7 @@ from chat_downloader.output._append_tail import (
 from chat_downloader.output._secure_file import _OutputFile
 
 if TYPE_CHECKING:
+    from _hashlib import HASH
     from collections.abc import Callable
     from typing import IO, BinaryIO
 
@@ -65,6 +67,8 @@ class ContinuousFileWriter(ABC):
         self._defer_initialization = _defer_initialization
         self._pending_file: BinaryIO | None = None
         self._activation: _FileActivation | None = None
+        self._checkpoint_digest: HASH | None = None
+        self._line_ending: str = os.linesep
 
     def _open_file(
         self, inspect_tail: Callable[[BinaryIO, str], _FileActivation]
@@ -104,6 +108,7 @@ class ContinuousFileWriter(ABC):
             stream, encoding="utf-8", newline=activation.newline
         )
         self._pending_file = None
+        self._line_ending = activation.newline
         self._activation = None
 
     def _commit_reservation(self) -> None:
@@ -153,6 +158,18 @@ class ContinuousFileWriter(ABC):
                 raise
             finally:
                 self.file = None
+
+    def _track_checkpoint_writes(self) -> None:
+        """Collect a digest of this run's serialized capture records."""
+        self._checkpoint_digest = hashlib.sha256()
+
+    def _write_line(self, file: IO[Any], line: str) -> None:
+        """Write a line and mirror the stream's newline and UTF-8 encoding."""
+        file.write(line)
+        if self._checkpoint_digest is not None:
+            self._checkpoint_digest.update(
+                line.replace("\n", self._line_ending).encode("utf-8")
+            )
 
     @abstractmethod
     def write(self, item: dict[str, Any] | str, *, flush: bool = False) -> None:
@@ -215,8 +232,9 @@ class JsonLinesContinuousWriter(ContinuousFileWriter):
             msg = "File must be initialized before use"
             raise RuntimeError(msg)
         _assert_utc_aware(item)
-        self.file.write(
-            json.dumps(item, sort_keys=self.sort_keys, allow_nan=False) + "\n"
+        self._write_line(
+            self.file,
+            json.dumps(item, sort_keys=self.sort_keys, allow_nan=False) + "\n",
         )
         self._persist_after_write()
         if flush:
@@ -248,7 +266,7 @@ class TextContinuousWriter(ContinuousFileWriter):
         if self.file is None:
             msg = "File must be initialized before use"
             raise RuntimeError(msg)
-        self.file.write(str(item) + "\n")
+        self._write_line(self.file, str(item) + "\n")
         self._persist_after_write()
         if flush:
             self.file.flush()

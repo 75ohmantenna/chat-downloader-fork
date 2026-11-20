@@ -20,14 +20,15 @@ from chat_downloader.formatting import format as format_module
 from chat_downloader.metadata import __version__
 from chat_downloader.models import ChatRequest
 from chat_downloader.output.continuous_write import ContinuousWriter
+from chat_downloader.utils.atomic_files import sync_directory
 from chat_downloader.utils.filename_utils import output_path_identity
 
 from .capture_manifest import (
-    _artifact_signature,
     has_record_loss,
     is_completed_replay,
 )
 from .capture_replay_order import ordered_initial_preroll
+from .capture_verification import _artifact_signature, _open_artifact
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Mapping
@@ -35,9 +36,12 @@ if TYPE_CHECKING:
     from chat_downloader.sites.models import Chat
     from chat_downloader.utils.json_types import JSONDict
 
-    from .capture_manifest import _ArtifactSignature
+    from .capture_verification import _ArtifactSignature
 
 _BOUNDARY_LIMIT = 10_000
+# Allow substantial reset history beyond the roughly 1 MiB event boundary.
+_CHECKPOINT_SIZE_LIMIT = 16 * 1024 * 1024
+_EMPTY_SIGNATURE = hashlib.sha256().hexdigest()
 
 
 def _event_identity(item: JSONDict) -> str:
@@ -57,11 +61,15 @@ def _valid_offset(value: object) -> TypeGuard[int | float]:
 
 
 def _file_state(
-    path: Path, expected: tuple[int, int] | None = None
+    path: Path,
+    expected: tuple[int, int] | None = None,
+    *,
+    prefix: _ArtifactSignature | None = None,
+    appended: str | None = None,
 ) -> _ArtifactSignature | None:
     """Read a regular artifact without following a substituted pathname."""
     try:
-        return _artifact_signature(path, expected)
+        return _artifact_signature(path, expected, prefix=prefix, appended=appended)
     except FileNotFoundError:
         return None
 
@@ -76,10 +84,16 @@ def _verified_file_state(
     path: Path,
     writer_identity: tuple[int, int] | None,
     previous: _ArtifactSignature | None,
+    appended: str,
 ) -> _ArtifactSignature | None:
     """Require the opened artifact, or the unchanged verified resumed prefix."""
     expected = writer_identity or (previous[0] if previous else None)
-    current = _file_state(path, expected)
+    current = _file_state(
+        path,
+        expected,
+        prefix=previous if writer_identity is not None else None,
+        appended=appended if writer_identity is not None else None,
+    )
     if (
         (writer_identity is not None and current is None)
         or (writer_identity is None and current != previous)
@@ -88,6 +102,24 @@ def _verified_file_state(
         msg = "Capture files changed after checkpoint verification."
         raise ValueError(msg)
     return current
+
+
+def _output_directories(path: Path) -> Generator[Path, None, None]:
+    """Yield directories to sync if a lazy writer creates its capture here."""
+    for directory in path.parents:
+        yield directory
+        if directory.is_dir():
+            break
+
+
+def _written_signature(writer: object) -> str:
+    """Return the observed digest at the current record transaction boundary."""
+    digest = (
+        writer.writer._checkpoint_digest
+        if isinstance(writer, ContinuousWriter) and writer.writer is not None
+        else None
+    )
+    return digest.hexdigest() if digest is not None else _EMPTY_SIGNATURE
 
 
 def _builtin_format_signature() -> str:
@@ -101,16 +133,28 @@ def _builtin_format_signature() -> str:
         raise ValueError(msg) from error
 
 
-def _atomic_json(path: Path, data: Mapping[str, object]) -> None:
+def _atomic_json(
+    path: Path, data: Mapping[str, object], expected: tuple[int, int] | None = None
+) -> None:
     """Commit a checkpoint only after its capture writers have closed."""
     descriptor, temporary = tempfile.mkstemp(prefix=".capture-", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
             json.dump(data, stream, ensure_ascii=True, allow_nan=False)
             stream.write("\n")
+            if stream.tell() > _CHECKPOINT_SIZE_LIMIT:
+                msg = "Resume checkpoint exceeds the size limit."
+                raise ValueError(msg)
             stream.flush()
             os.fsync(stream.fileno())
-        Path(temporary).replace(path)
+        if expected is None:
+            os.link(temporary, path)
+            Path(temporary).unlink()
+        else:
+            with _open_artifact(path, expected):
+                pass
+            Path(temporary).replace(path)
+        sync_directory(path.parent)
     finally:
         if Path(temporary).exists():
             Path(temporary).unlink()
@@ -123,12 +167,14 @@ def checkpoint_lock(name: str) -> Generator[None, None, None]:
     if not lock.parent.is_dir():
         msg = f"Resume checkpoint parent directory must already exist: {lock.parent}"
         raise ValueError(msg)
-    descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    os.close(descriptor)
+    descriptor = None
     try:
+        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(descriptor)
         yield
     finally:
-        lock.unlink()
+        if descriptor is not None:
+            lock.unlink()
 
 
 class _CheckpointSource:
@@ -174,7 +220,6 @@ class CaptureCheckpoint:
     def __init__(self, name: str, parameters: dict[str, Any]) -> None:
         """Validate checkpoint identity before any output can be opened."""
         self.path = Path(name).absolute()
-        _file_signature(self.path)
         request = ChatRequest.from_kwargs(strict=True, **parameters)
         outputs = request.output
         names = outputs if isinstance(outputs, list) else [outputs] if outputs else []
@@ -186,6 +231,10 @@ class CaptureCheckpoint:
             path = Path(name).absolute()
             unique.setdefault((output_path_identity(path), path.suffix.lower()), path)
         self.outputs = list(unique.values())
+        self._output_directories = {
+            path: tuple(_output_directories(path)) for path in self.outputs
+        }
+        self._written_signatures: dict[Path, str] = {}
         identities = [output_path_identity(path) for path in [self.path, *self.outputs]]
         if len(set(identities)) != len(identities):
             msg = "Checkpoint and output paths must be distinct."
@@ -221,6 +270,8 @@ class CaptureCheckpoint:
         self.chat_id: str | None = None
         self.completed = False
         self.loaded = False
+        self.ordering_failed = False
+        self._checkpoint_identity: tuple[int, int] | None = None
         self.record_loss = False
         self.limit = request.max_messages
         self._prior_offset: float | None = None
@@ -234,9 +285,10 @@ class CaptureCheckpoint:
         self._initial_signatures = [
             state[1] if state is not None else None for state in initial_files
         ]
-        if self.path.exists():
-            self._load()
-        elif any(value is not None for value in self._initial_signatures):
+        self._load()
+        if not self.loaded and any(
+            value is not None for value in self._initial_signatures
+        ):
             msg = "A new checkpoint requires absent output files."
             raise ValueError(msg)
         self._prior_offset, self._prior_events = self.offset, self.events.copy()
@@ -247,8 +299,18 @@ class CaptureCheckpoint:
             parameters["start_time"] = math.floor(resume_offset) - 1
 
     def _load(self) -> None:
-        with self.path.open(encoding="utf-8") as stream:
-            state = json.load(stream)
+        try:
+            with _open_artifact(self.path) as (source, opened):
+                if opened.st_size > _CHECKPOINT_SIZE_LIMIT:
+                    msg = "Resume checkpoint exceeds the size limit."
+                    raise ValueError(msg)
+                payload = source.read(_CHECKPOINT_SIZE_LIMIT + 1)
+        except FileNotFoundError:
+            return
+        if len(payload) > _CHECKPOINT_SIZE_LIMIT:
+            msg = "Resume checkpoint exceeds the size limit."
+            raise ValueError(msg)
+        state = json.loads(payload.decode("utf-8"))
         if (
             not isinstance(state, dict)
             or state.get("version") != 2
@@ -297,6 +359,7 @@ class CaptureCheckpoint:
         ):
             msg = "Invalid checkpoint identity or output boundaries."
             raise ValueError(msg)
+        self._checkpoint_identity = (opened.st_dev, opened.st_ino)
         self.loaded = True
 
     def bind(self, chat: Chat) -> None:  # noqa: C901 — replay boundary validation and source lifecycle
@@ -314,13 +377,14 @@ class CaptureCheckpoint:
         dispatcher = chat._output_dispatcher
         if dispatcher is not None:
             for path, writer in zip(self.outputs, dispatcher.writers, strict=True):
-                if path not in self.artifacts and isinstance(writer, ContinuousWriter):
-                    writer._require_new_file = True
+                if isinstance(writer, ContinuousWriter):
+                    writer._checkpointed = True
+                    writer._require_new_file = path not in self.artifacts
         source = chat.chat
 
         def remaining() -> Generator[JSONDict, None, None]:
             emitted = 0
-            last_offset = self._prior_offset
+            last_offset: int | float | None = None
             overlap = self._prior_events.copy()
             try:
                 for item in ordered_initial_preroll(source, _BOUNDARY_LIMIT):
@@ -344,12 +408,17 @@ class CaptureCheckpoint:
                     ):
                         msg = "Resume requires message IDs and finite replay offsets."
                         raise ValueError(msg)
+                    if last_offset is not None and offset < last_offset:
+                        self.ordering_failed = True
+                        msg = "Replay offsets moved backwards; checkpoint not advanced."
+                        raise ValueError(msg)
                     identity = _event_identity(item)
                     if self._prior_offset is not None and (
                         offset < self._prior_offset
                         or (offset == self._prior_offset and overlap[identity] > 0)
                     ):
                         if offset == self._prior_offset:
+                            last_offset = offset
                             overlap[identity] -= 1
                         chat.diagnostics["checkpoint_overlap_suppressed"] = (
                             cast(
@@ -358,9 +427,6 @@ class CaptureCheckpoint:
                             + 1
                         )
                         continue
-                    if last_offset is not None and offset < last_offset:
-                        msg = "Replay offsets moved backwards; checkpoint not advanced."
-                        raise ValueError(msg)
                     if (
                         offset == self.offset
                         and identity not in self.events
@@ -385,12 +451,11 @@ class CaptureCheckpoint:
 
         chat.chat = _CheckpointSource(source, remaining())
 
-    def observe(self, item: JSONDict) -> None:
+    def _observe(self, offset: float, identity: str) -> None:
         """Advance state only after all attached writers accepted a record."""
-        offset = float(cast("float", item["time_in_seconds"]))
         if offset != self.offset:
             self.offset, self.events = offset, Counter()
-        self.events[_event_identity(item)] += 1
+        self.events[identity] += 1
 
     def advance(self, chat: Chat, counter: _RecordCounter) -> JSONDict:
         """Consume one fully emitted record or restore its pre-emission state."""
@@ -398,14 +463,31 @@ class CaptureCheckpoint:
         if dispatcher is None:
             msg = "Resume requires attached output writers."
             raise ChatDownloaderError(msg)
-        offset, events = self.offset, self.events.copy()
+        offset, events = self.offset, self.events
+        identity = None
+        previous_count = 0
         count = counter.message_count
         with dispatcher.record_transaction():
             try:
                 item = next(chat)
-                self.observe(item)
+                item_offset = float(cast("float", item["time_in_seconds"]))
+                event = _event_identity(item)
+                if item_offset == offset:
+                    identity, previous_count = event, events[event]
+                self._observe(item_offset, event)
                 counter.message_count += 1
+                self._written_signatures = {
+                    path: _written_signature(writer)
+                    for path, writer in zip(
+                        self.outputs, dispatcher.writers, strict=True
+                    )
+                }
             except BaseException:
+                if identity is not None:
+                    if previous_count:
+                        events[identity] = previous_count
+                    else:
+                        events.pop(identity, None)
                 self.offset, self.events = offset, events
                 counter.message_count = count
                 raise
@@ -421,6 +503,8 @@ class CaptureCheckpoint:
 
     def save(self, chat: Chat, count: int) -> None:
         """Keep partial-writer failures from becoming valid resume points."""
+        if self.ordering_failed:
+            return
         dispatcher = chat._output_dispatcher
         if (
             dispatcher is None
@@ -432,12 +516,28 @@ class CaptureCheckpoint:
         artifacts = {}
         for path, writer in zip(self.outputs, dispatcher.writers, strict=True):
             state = _verified_file_state(
-                path, getattr(writer, "_file_identity", None), self.artifacts.get(path)
+                path,
+                getattr(writer, "_file_identity", None),
+                self.artifacts.get(path),
+                self._written_signatures.get(path, _EMPTY_SIGNATURE),
             )
             if state is not None:
                 artifacts[path] = state
-        self.resets = list(self.reset_positions(count))
-        self.total += count
+        checkpoint_identity = output_path_identity(self.path)
+        if any(
+            checkpoint_identity == ("inode", *state[0]) for state in artifacts.values()
+        ):
+            msg = "Checkpoint and output paths must be distinct."
+            raise ValueError(msg)
+        directories = {
+            directory
+            for path in artifacts.keys() - self.artifacts.keys()
+            for directory in self._output_directories[path]
+        }
+        for directory in sorted(directories, key=lambda path: (-len(path.parts), path)):
+            sync_directory(directory)
+        resets = list(self.reset_positions(count))
+        total = self.total + count
         record_loss = has_record_loss(chat.diagnostics)
         _atomic_json(
             self.path,
@@ -447,8 +547,8 @@ class CaptureCheckpoint:
                 "chat_id": self.chat_id,
                 "offset": self.offset,
                 "events": dict(sorted(self.events.items())),
-                "total": self.total,
-                "resets": self.resets,
+                "total": total,
+                "resets": resets,
                 "completed": self.completed and not record_loss,
                 "record_loss": record_loss,
                 "artifacts": [
@@ -456,5 +556,6 @@ class CaptureCheckpoint:
                     for path in self.outputs
                 ],
             },
+            self._checkpoint_identity,
         )
-        self.artifacts = artifacts
+        self.total, self.resets, self.artifacts = total, resets, artifacts

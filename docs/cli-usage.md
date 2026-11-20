@@ -528,6 +528,11 @@ its integrity checks. If capture already failed, its original error remains
 reported.
 If file rollback fails, the checkpoint also stays unchanged even when writer
 counts match; the torn artifacts require inspection before resuming.
+If replay offsets move backwards after reaching the saved timestamp or accepting
+a new record, the run fails and leaves the previous checkpoint in place.
+Before publishing the next checkpoint, the run checks the previously verified
+output prefix and hashes newly written bytes against the records it emitted.
+Checkpoint files are limited to 16 MiB.
 
 A process crash, power failure, or shutdown failure that withholds a
 checkpoint can leave output newer than its checkpoint.

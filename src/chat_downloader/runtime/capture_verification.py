@@ -4,7 +4,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 import sqlite3
+import stat
+from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,10 +18,78 @@ from chat_downloader.utils.dict_utils import copy_containers
 from chat_downloader.utils.filename_utils import output_path_identity
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from typing import BinaryIO
+
     from chat_downloader.sites.models import Chat
     from chat_downloader.utils.json_types import JSONDict
 
     from .runner import RunResult
+
+
+type _ArtifactSignature = tuple[tuple[int, int], str, int]
+
+
+@contextmanager
+def _open_artifact(
+    path: Path, expected: tuple[int, int] | None = None
+) -> Iterator[tuple[BinaryIO, os.stat_result]]:
+    """Open a regular artifact and reject aliases or substituted paths."""
+    before = path.lstat()
+    if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+        msg = "Capture artifacts must be regular files with exactly one link."
+        raise ValueError(msg)
+    flags = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as source:
+        opened = os.fstat(source.fileno())
+        identity = (opened.st_dev, opened.st_ino)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or identity != (before.st_dev, before.st_ino)
+            or (expected is not None and identity != expected)
+        ):
+            msg = "Manifest artifact identity changed after capture."
+            raise ValueError(msg)
+        yield source, opened
+
+
+def _artifact_signature(
+    path: Path,
+    expected: tuple[int, int] | None = None,
+    *,
+    prefix: _ArtifactSignature | None = None,
+    appended: str | None = None,
+) -> _ArtifactSignature:
+    """Hash an artifact and verify any previously committed prefix as we read."""
+    with _open_artifact(path, expected) as (source, opened):
+        digest = hashlib.sha256()
+        if prefix is not None:
+            remaining = prefix[2]
+            while remaining:
+                chunk = source.read(min(remaining, 262_144))
+                if not chunk:
+                    break
+                digest.update(chunk)
+                remaining -= len(chunk)
+            if remaining or digest.hexdigest() != prefix[1]:
+                msg = "Capture files changed after checkpoint verification."
+                raise ValueError(msg)
+        suffix = (
+            hashlib.sha256() if prefix is not None and appended is not None else None
+        )
+        while chunk := source.read(262_144):
+            digest.update(chunk)
+            if suffix is not None:
+                suffix.update(chunk)
+        signature = digest.hexdigest()
+        if appended is not None and appended != (
+            suffix.hexdigest() if suffix is not None else signature
+        ):
+            msg = "Capture files changed after checkpoint verification."
+            raise ValueError(msg)
+        return (opened.st_dev, opened.st_ino), signature, source.tell()
 
 
 class _ChatFormatter:
