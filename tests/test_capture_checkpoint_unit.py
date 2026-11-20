@@ -888,6 +888,73 @@ def test_checkpoint_source_preserves_deadline_summary_and_unstarted_close(
     assert source.closed
 
 
+@pytest.mark.parametrize("started", [False, True])
+def test_checkpoint_source_retries_interrupted_provider_close(tmp_path, started):
+    class Source:
+        close_calls = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            return message(1, 1)
+
+        def close(self):
+            self.close_calls += 1
+            chat.close()
+            if self.close_calls == 1:
+                raise KeyboardInterrupt
+
+    source = Source()
+    chat = Chat(source, status="completed", id="id")
+    chat.site = SimpleNamespace(
+        is_completed_replay_status=lambda status: status == "completed"
+    )
+    checkpoint = CaptureCheckpoint(
+        str(tmp_path / "checkpoint"), {"output": str(tmp_path / "chat.jsonl")}
+    )
+    checkpoint.bind(chat)
+    if started:
+        assert next(chat) == message(1, 1)
+
+    with pytest.raises(KeyboardInterrupt):
+        chat.close()
+    assert source.close_calls == 1
+    chat.close()
+    chat.close()
+    assert source.close_calls == 2
+
+
+def test_runner_retries_interrupted_checkpoint_source_close(tmp_path, params):
+    class Replay(Downloader):
+        source_close_calls = 0
+
+        def get_chat(self, **kwargs):
+            chat = super().get_chat(**kwargs)
+
+            class Source:
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    return next(source)
+
+                def close(self):
+                    Replay.source_close_calls += 1
+                    if Replay.source_close_calls == 1:
+                        raise KeyboardInterrupt
+                    source.close()
+
+            source = chat.chat
+            chat.chat = Source()
+            return chat
+
+    result = execute_run(Replay, **params)
+
+    assert result.interrupted
+    assert Replay.source_close_calls == 2
+
+
 @pytest.mark.parametrize("attached", [False, True])
 def test_verification_rejects_aliased_paths_without_writing(tmp_path, attached, params):
     params.pop("resume")

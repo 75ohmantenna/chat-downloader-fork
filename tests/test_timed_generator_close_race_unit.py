@@ -5,6 +5,9 @@ from __future__ import annotations
 import threading
 from unittest.mock import patch
 
+import pytest
+
+from chat_downloader.sites.models import Chat
 from chat_downloader.utils.timed_generator import TimedGenerator
 
 
@@ -191,3 +194,29 @@ def test_close_releases_timer_lock_before_reentrant_stop_request() -> None:
         assert timer.call_count == 2
         assert not tg._timeout_expired.is_set()
         assert not tg._inactivity_expired.is_set()
+
+
+def test_chat_retries_interrupted_timed_source_close() -> None:
+    class Source(QueueBlockingIterator):
+        def __next__(self):
+            raise StopIteration
+
+        def close(self):
+            super().close()
+            if self.close_calls == 1:
+                raise KeyboardInterrupt
+
+    source = Source()
+    timed = TimedGenerator(source)
+    # Exhaust the worker first so Chat.close() owns source cleanup.
+    timed._worker.join(timeout=1)
+    assert not timed._worker.is_alive()
+    chat = Chat(timed)
+
+    with pytest.raises(KeyboardInterrupt):
+        chat.close()
+    assert source.close_calls == 1
+
+    chat.close()
+    chat.close()
+    assert source.close_calls == 2

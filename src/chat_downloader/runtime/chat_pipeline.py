@@ -34,6 +34,7 @@ class _MessageLimitIterator[Message]:
         self._remaining = limit
         self._diagnostics = diagnostics
         self._closed = False
+        self._source_close_started = False
 
     def __iter__(self) -> _MessageLimitIterator[Message]:
         return self
@@ -53,12 +54,17 @@ class _MessageLimitIterator[Message]:
         return item
 
     def close(self) -> None:
-        if self._closed:
-            return
         self._closed = True
-        close = getattr(self._source, "close", None)
-        if callable(close):
-            close()
+        if self._source_close_started:
+            return
+        try:
+            self._source_close_started = True
+            close = getattr(self._source, "close", None)
+            if callable(close):
+                close()
+        except KeyboardInterrupt:
+            self._source_close_started = False
+            raise
 
     def request_stop(self) -> None:
         """Preserve cooperative cancellation through the message-limit wrapper."""

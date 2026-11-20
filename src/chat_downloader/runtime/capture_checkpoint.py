@@ -184,25 +184,31 @@ class _CheckpointSource:
         self, source: object, remaining: Generator[JSONDict, None, None]
     ) -> None:
         self.source, self.remaining = source, remaining
-        self.started = False
         self.closed = False
 
     def __iter__(self) -> _CheckpointSource:
         return self
 
     def __next__(self) -> JSONDict:
-        self.started = True
         return next(self.remaining)
 
     def close(self) -> None:
         if self.closed:
             return
-        self.closed = True
         self.remaining.close()
-        if not self.started:
+        self._close_source()
+
+    def _close_source(self) -> None:
+        if self.closed:
+            return
+        try:
+            self.closed = True
             close = getattr(self.source, "close", None)
             if callable(close):
                 close()
+        except KeyboardInterrupt:
+            self.closed = False
+            raise
 
     def deadline_prefetch_summary(self) -> tuple[int, bool]:
         summary = getattr(self.source, "deadline_prefetch_summary", None)
@@ -445,11 +451,10 @@ class CaptureCheckpoint:
                     == "completed"
                 )
             finally:
-                close = getattr(source, "close", None)
-                if callable(close):
-                    close()
+                checkpoint_source._close_source()
 
-        chat.chat = _CheckpointSource(source, remaining())
+        checkpoint_source = _CheckpointSource(source, remaining())
+        chat.chat = checkpoint_source
 
     def _observe(self, offset: float, identity: str) -> None:
         """Advance state only after all attached writers accepted a record."""

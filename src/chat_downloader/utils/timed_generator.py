@@ -234,9 +234,12 @@ class TimedGenerator:
             if not callable(close):
                 self._generator_closed = True
                 return
-            self._generator_closed = True
             try:
+                self._generator_closed = True
                 close()
+            except KeyboardInterrupt:
+                self._generator_closed = False
+                raise
             except (RuntimeError, StopIteration, ValueError) as error:
                 if self._is_reentrant_generator_close_error(error):
                     self._generator_closed = False

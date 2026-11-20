@@ -60,6 +60,26 @@ def test_message_limit_closes_source_once(interrupted):
     source.close.assert_called_once()
 
 
+def test_message_limit_retries_interrupted_source_close():
+    source = MagicMock()
+    chat = Chat(source)
+    apply_message_limit(chat, 1)
+    limited = chat.chat
+
+    def close():
+        limited.close()
+        if source.close.call_count == 1:
+            raise KeyboardInterrupt
+
+    source.close.side_effect = close
+    with pytest.raises(KeyboardInterrupt):
+        chat.close()
+
+    chat.close()
+    chat.close()
+    assert source.close.call_count == 2
+
+
 @pytest.mark.parametrize(("timeout", "inactivity"), [(5, 7), (None, 7), (5, None)])
 def test_timeout_callbacks_record_termination(monkeypatch, timeout, inactivity) -> None:
     class FakeTimedGenerator:
