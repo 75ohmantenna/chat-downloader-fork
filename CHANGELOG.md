@@ -8,6 +8,15 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
+## 2.7.1 — 2026-11-21
+
+### Fixes
+
+- Capture YouTube replay participation notices, such as subscribers-only chat
+  and slow mode, with their text, icons, and replay offsets when available.
+- Report YouTube's members-only access reason when no usable chat continuation
+  is available, without switching request profiles or pausing in testing mode.
+
 ## 2.7.0 — 2026-11-20
 
 ### Features
