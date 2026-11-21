@@ -8,7 +8,7 @@ behavior, compatibility, packaging, validation, or contributor workflow.
 
 ## Unreleased
 
-## 2.7.1 — 2026-11-21
+## 2.7.2 — 2026-11-21
 
 ### Fixes
 
@@ -16,6 +16,11 @@ behavior, compatibility, packaging, validation, or contributor workflow.
   and slow mode, with their text, icons, and replay offsets when available.
 - Report YouTube's members-only access reason when no usable chat continuation
   is available, without switching request profiles or pausing in testing mode.
+
+### Validation
+
+- Audit YouTube JSONL and TXT replay output with the expected preset for each
+  replay status, including the live timestamp preset for post-live DVR.
 
 ## 2.7.0 — 2026-11-20
 
