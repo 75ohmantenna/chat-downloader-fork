@@ -29,16 +29,20 @@ _REPLAY_LIMIT = 10
 
 
 def _assert_outputs(
-    messages: list[JSONDict], jsonl_output: Path, txt_output: Path
+    chat: Chat, messages: list[JSONDict], jsonl_output: Path, txt_output: Path
 ) -> AuditStats:
     with jsonl_output.open(encoding="utf-8") as stream:
         records = [json.loads(line) for line in stream]
     assert records == messages, "JSONL differs from the yielded messages"
 
+    # Post-live DVR uses replay continuations and the live timestamp preset.
+    format_name = "youtube_live_default" if chat.status == "post_live" else "youtube"
     stats = audit_capture(
-        jsonl_output, txt_output, formatter=ItemFormatter(), format_name="youtube"
+        jsonl_output, txt_output, formatter=ItemFormatter(), format_name=format_name
     )
-    assert not stats.failed, f"TXT parity audit failed: {stats}"
+    assert not stats.failed, (
+        f"TXT parity audit failed for {chat.status=} with {format_name=}: {stats}"
+    )
     assert stats.comparison_complete
     assert not stats.jsonl_missing
     assert not stats.txt_missing
@@ -75,9 +79,13 @@ def test_multiple_output_formats(tmp_path) -> None:
     assert_message_contract(chat, messages)
     assert {message["message_type"] for message in messages} == {"text_message"}
     assert {message.get("action_type") for message in messages} == {"add_chat_item"}
-    _assert_outputs(messages, jsonl_output, txt_output)
+    _assert_outputs(chat, messages, jsonl_output, txt_output)
 
 
+@pytest.mark.parametrize(
+    ("status", "time_prefix"),
+    [("was_live", "0:05"), ("post_live", "12:00:00")],
+)
 @pytest.mark.parametrize(
     ("corrupt", "error"),
     [
@@ -86,7 +94,7 @@ def test_multiple_output_formats(tmp_path) -> None:
     ],
 )
 def test_multiple_outputs_detect_corrupt_content(
-    tmp_path, monkeypatch, corrupt, error
+    tmp_path, monkeypatch, status, time_prefix, corrupt, error
 ) -> None:
     """Exercise output checks with deterministic TXT suppression and corruption."""
     source = [
@@ -104,12 +112,14 @@ def test_multiple_outputs_detect_corrupt_content(
             "message_id": "regular",
             "message_type": "text_message",
             "message": "Hello!",
+            "time_text": "0:05",
+            "timestamp": 43_200_000_000,
         },
     ]
     monkeypatch.setattr(
         YouTubeChatDownloader,
         "get_chat_by_video_id",
-        Mock(return_value=Chat(iter(source))),
+        Mock(return_value=Chat(iter(source), status=status)),
     )
     jsonl_output = tmp_path / "output.jsonl"
     txt_output = tmp_path / "output.txt"
@@ -124,9 +134,11 @@ def test_multiple_outputs_detect_corrupt_content(
 
     assert chat.write_error_count == 0
     assert messages == source
-    stats = _assert_outputs(messages, jsonl_output, txt_output)
+    stats = _assert_outputs(chat, messages, jsonl_output, txt_output)
     assert stats.suppressed_duplicates == 1
     assert stats.txt_lines == 2
+    text = txt_output.read_text(encoding="utf-8")
+    assert text.splitlines()[-1] == f"{time_prefix} | : Hello!"
 
     if corrupt == "jsonl":
         # Retain the original line count and rendered text.
@@ -136,9 +148,7 @@ def test_multiple_outputs_detect_corrupt_content(
         )
     else:
         # Retain nonempty TXT and its original line count.
-        text = txt_output.read_text(encoding="utf-8")
-        assert "Hello!" in text
         txt_output.write_text(text.replace("Hello!", "Goodbye!"), encoding="utf-8")
 
     with pytest.raises(AssertionError, match=error):
-        _assert_outputs(messages, jsonl_output, txt_output)
+        _assert_outputs(chat, messages, jsonl_output, txt_output)
